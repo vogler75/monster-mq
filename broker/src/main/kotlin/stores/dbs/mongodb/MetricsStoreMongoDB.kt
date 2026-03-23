@@ -46,6 +46,20 @@ class MetricsStoreMongoDB(
         try {
             val clientSettings = MongoClientSettings.builder()
                 .applyConnectionString(ConnectionString(connectionString))
+                .applyToConnectionPoolSettings { builder ->
+                    builder.maxSize(50)
+                    builder.minSize(10)
+                    builder.maxWaitTime(2, TimeUnit.SECONDS)
+                    builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
+                    builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
+                }
+                .applyToSocketSettings { builder ->
+                    builder.connectTimeout(5, TimeUnit.SECONDS)
+                    builder.readTimeout(10, TimeUnit.SECONDS)
+                }
+                .applyToClusterSettings { builder ->
+                    builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
+                }
                 .writeConcern(WriteConcern.MAJORITY.withWTimeout(5000, TimeUnit.MILLISECONDS))
                 .build()
 

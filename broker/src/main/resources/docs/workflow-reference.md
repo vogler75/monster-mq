@@ -110,6 +110,8 @@ The node script is executed every time the node receives input. Your script has 
 - `state` - Persistent node-level storage
 - `flow` - Flow instance variables
 - `console` - Logging functions
+- `archive` - Query last values and historical data from archive stores
+- `dbs` - Access database nodes for SQL queries
 
 ---
 
@@ -366,6 +368,169 @@ Logging functions:
 - `console.log(...args)` - Log informational messages
 - `console.warn(...args)` - Log warning messages
 - `console.error(...args)` - Log error messages
+
+### archive Object
+
+Query the broker's archive stores for last values and historical data. Requires a configured archive group (defaults to "Default").
+
+#### archive.getLastValue(topic, archiveGroup?)
+
+Get the last known value for a specific topic. Returns `{ topic, value, timestamp, qos }` or `null`.
+
+```javascript
+const val = archive.getLastValue("sensors/temp1");
+if (val) {
+    console.log("Last value:", val.value, "at", val.timestamp);
+}
+
+// Query a specific archive group
+const prodVal = archive.getLastValue("sensors/temp1", "Production");
+```
+
+#### archive.getLastValues(topicFilter, limit?, archiveGroup?)
+
+Get last values for topics matching a wildcard filter. Returns array of `{ topic, value, timestamp, qos }`.
+
+```javascript
+const values = archive.getLastValues("sensors/#", 50);
+for (let i = 0; i < values.length; i++) {
+    console.log(values[i].topic, "=", values[i].value);
+}
+```
+
+#### archive.getHistory(topicFilter, startTime?, endTime?, limit?, archiveGroup?)
+
+Query historical messages for a topic within a time range. Times are ISO-8601 strings. Returns array of `{ topic, timestamp, qos, client_id, payload_json }`.
+
+```javascript
+const history = archive.getHistory(
+    "sensors/temp1",
+    "2024-01-01T00:00:00Z",  // startTime (ISO-8601)
+    null,                      // endTime (null = now)
+    50                         // limit
+);
+console.log("History count:", history.length);
+```
+
+#### archive.getAggregatedHistory(topics, interval, startTime, endTime, functions?, fields?, archiveGroup?)
+
+Get time-bucketed aggregated data for charting and analytics. Returns `{ columns: [...], rows: [[timestamp, val1, ...], ...] }`.
+
+- **topics**: Array of exact topic strings (no wildcards)
+- **interval**: `"1m"`, `"5m"`, `"15m"`, `"1h"`, `"1d"`
+- **startTime/endTime**: ISO-8601 strings (required)
+- **functions**: Array of `"AVG"`, `"MIN"`, `"MAX"`, `"COUNT"` (default: `["AVG"]`)
+- **fields**: Optional JSON field paths, e.g. `["temperature", "sensor.value"]`
+
+```javascript
+const agg = archive.getAggregatedHistory(
+    ["sensors/temp1", "sensors/temp2"],
+    "5m",
+    "2024-01-15T08:00:00Z",
+    "2024-01-15T12:00:00Z",
+    ["AVG", "MAX"]
+);
+console.log("Columns:", JSON.stringify(agg.columns));
+console.log("Rows:", agg.rows.length);
+```
+
+### dbs Object
+
+Access database nodes defined in the flow. Database nodes allow executing SQL queries against external databases (PostgreSQL, MySQL, SQLite, etc.) from within your flow scripts.
+
+#### dbs.get(nodeId)
+
+Get a database node proxy by its node ID. Returns a database proxy object, or `null` if the node doesn't exist.
+
+```javascript
+const db = dbs.get("my-database-node");
+```
+
+#### db.open()
+
+Open the database connection. Returns `true` on success, `false` on failure. The connection is automatically opened on the first `execute()` call if not already open.
+
+```javascript
+const db = dbs.get("my-database-node");
+db.open();
+```
+
+#### db.execute(sql, arguments?)
+
+Execute a SQL query. Returns a result object.
+
+- **sql**: SQL string with `?` placeholders for parameters
+- **arguments**: Optional array of parameter values, or an object whose values are used as parameters
+
+**For SELECT queries**, returns:
+```javascript
+{
+    success: true,
+    rows: [
+        ["col1", "col2", ...],       // column names
+        ["varchar", "int4", ...],     // column types
+        ["value1", 123, ...],         // data row 1
+        ["value2", 456, ...]          // data row 2
+    ]
+}
+```
+
+**For INSERT/UPDATE/DELETE queries**, returns:
+```javascript
+{
+    success: true,
+    affectedRows: 3
+}
+```
+
+**On error**, returns:
+```javascript
+{
+    success: false,
+    error: "error message"
+}
+```
+
+**Examples:**
+
+```javascript
+const db = dbs.get("my-database-node");
+
+// Simple query
+const result = db.execute("SELECT * FROM sensors WHERE location = ?", ["warehouse"]);
+if (result.success) {
+    const columnNames = result.rows[0];  // First row is column names
+    const columnTypes = result.rows[1];  // Second row is column types
+    for (let i = 2; i < result.rows.length; i++) {
+        console.log("Row:", JSON.stringify(result.rows[i]));
+    }
+}
+
+// Insert with parameters
+const insert = db.execute(
+    "INSERT INTO readings (topic, value, timestamp) VALUES (?, ?, ?)",
+    [msg.topic, msg.value, new Date().toISOString()]
+);
+console.log("Inserted rows:", insert.affectedRows);
+```
+
+#### db.close()
+
+Close the database connection. Call this when you're done with the database to free resources.
+
+```javascript
+db.close();
+```
+
+#### Database Node Configuration
+
+Database nodes require the following configuration in the flow visual editor:
+
+- **jdbcUrl**: JDBC connection string (e.g., `jdbc:postgresql://localhost:5432/mydb`)
+- **username**: Database username
+- **password**: Database password
+
+The JDBC driver is automatically inferred from the URL.
 
 ---
 

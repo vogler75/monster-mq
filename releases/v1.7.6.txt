@@ -1,0 +1,29 @@
+Release v1.7.6
+Built from commit: 3938bbb
+Date: 2026-03-07 18:11:12
+
+Changes since v1.7.5:
+---
+3938bbb feat: rework PrometheusServer metrics — two unified metric names with labels
+92b33a9 Add Prometheus badge and feature card
+d2f4eb8 Revert "feat(dashboard): show Prometheus and MCP badges dynamically on homepage"
+eabe5b1 feat(dashboard): show Prometheus and MCP badges dynamically on homepage
+d80b206 feat(prometheus): downsample raw query results to Grafana step interval
+ec67091 feat(prometheus): add query logging and fix aggregation interval snapping
+03c8515 Use Anonymous user entity for anonymous access
+a5b97b5 feat: replace GrafanaServer with Prometheus-compatible metrics server
+b7e4add feat: add MQTT 5.0 and Kafka integration highlights to homepage and dashboard
+75ec587 feat: dashboard rework and broker configuration page
+b138fbf feat: add TopicKeyRegex/TopicKeyReplacement to Kafka client (#109)
+8afe233 docs: consolidate mqtt5 docs and update kafka docs
+706b707 Update kafka.md
+70708de fix: Kafka client cleanup and payload format improvements (#106, #107)
+de26736 Add Claude skills and update CLAUDE.md
+c20ce65 Merge pull request #105 from KevinJoosten/6-add-pkcs12pfx-certificate-support-for-ssltls-connections
+cd03127 fix: reduce I3X request log level from INFO to FINE (closes #101)
+ec83408 fix: mount I3X API routes under /i3x base path (closes #100)
+061aae5 fix: guest/read-only mode and GraphQL mutation authorization (#104)
+76ac929 fix: store creation_time in MongoDB queued messages to prevent NPE on reconnect
+c6ae76b Merge branch 'main' into 6-add-pkcs12pfx-certificate-support-for-ssltls-connections
+e8959ba Extract buildKeyCertOptions helper and add unit tests
+90ba64c Add PKCS12/PFX certificate support for SSL/TLS connections

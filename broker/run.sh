@@ -1,51 +1,105 @@
 #!/bin/bash
 
 # MonsterMQ Run Script
-# Usage: ./run.sh [OPTIONS] [MONSTER_OPTIONS]
+# Usage: ./run.sh [SCRIPT_OPTIONS] [-- MONSTER_OPTIONS]
 #
-# Script Options:
+# Script Options (before --):
 #   -build    Build the project with Maven before starting
-#   -dev      Run in development mode (serves dashboard from filesystem)
 #
-# Monster Options:
-#   All remaining arguments are passed to MonsterMQ
+# Monster Options (after --):
+#   All arguments after -- are passed to MonsterMQ
 #   See: java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -help
 #
 # Examples:
-#   ./run.sh                           # Start with default config
-#   ./run.sh -build                    # Build first, then start  
-#   ./run.sh -dev                      # Development mode
-#   ./run.sh -dev -config test.yaml    # Development mode with custom config
-#   ./run.sh -build -dev -cluster      # Build, dev mode, cluster enabled
+#   ./run.sh                                              # Start with default config
+#   ./run.sh -build                                       # Build first, then start
+#   ./run.sh -- -cluster -log FINE                        # Start with monster options
+#   ./run.sh -build -- -cluster                           # Build and start in cluster mode
+#   ./run.sh -build -- -archiveConfigs archives.json       # Build and import archive configs
 
-# Check for options
+# Parse script options (before --) and monster options (after --)
 BUILD_FIRST=false
-DEV_MODE=false
+NO_RUN=false
 REMAINING_ARGS=()
+FOUND_SEPARATOR=false
 
 for arg in "$@"; do
-    case $arg in
-        -build)
-            BUILD_FIRST=true
-            ;;
-        -dev)
-            DEV_MODE=true
-            ;;
-        *)
-            REMAINING_ARGS+=("$arg")
-            ;;
-    esac
+    if [ "$FOUND_SEPARATOR" = true ]; then
+        REMAINING_ARGS+=("$arg")
+    elif [ "$arg" = "--" ]; then
+        FOUND_SEPARATOR=true
+    else
+        case $arg in
+            -build|-b)
+                BUILD_FIRST=true
+                ;;
+            -norun|-n)
+                NO_RUN=true
+                ;;
+            -help|--help|-h)
+                echo "MonsterMQ Run Script"
+                echo ""
+                echo "Usage: ./run.sh [SCRIPT_OPTIONS] [-- MONSTER_OPTIONS]"
+                echo ""
+                echo "Script Options (before --):"
+                echo "  -build, -b          Build dashboard and broker with Maven before starting"
+                echo "  -norun, -n          Do not run the broker (useful with -b for build-only)"
+                echo "  -help, --help, -h   Show this help message"
+                echo ""
+                echo "Monster Options (after --):"
+                echo "  All arguments after -- are passed directly to MonsterMQ."
+                echo "  Use -- -help to see MonsterMQ options."
+                echo ""
+                echo "Examples:"
+                echo "  ./run.sh                                        Start with default config"
+                echo "  ./run.sh -b                                     Build first, then start"
+                echo "  ./run.sh -b -n                                  Build only, do not start"
+                echo "  ./run.sh -- -cluster -log FINE                  Start with broker options"
+                echo "  ./run.sh -b -- -cluster                         Build and start in cluster mode"
+                echo "  ./run.sh -b -- -archiveConfigs archives.json    Build and import configs"
+                echo "  ./run.sh -- -help                               Show MonsterMQ help"
+                exit 0
+                ;;
+            *)
+                REMAINING_ARGS+=("$arg")
+                ;;
+        esac
+    fi
 done
 
-# If -build option is specified, run Maven build first
+# If -build option is specified, build dashboard and broker
 if [ "$BUILD_FIRST" = true ]; then
+    # Build the dashboard
+    DASHBOARD_DIR="$(cd "$(dirname "$0")/../dashboard" && pwd)"
+    RESOURCES_DIR="$(cd "$(dirname "$0")" && pwd)/src/main/resources/dashboard"
+    if [ -f "$DASHBOARD_DIR/package.json" ]; then
+        echo "Building dashboard..."
+        (cd "$DASHBOARD_DIR" && npm install && npm run build)
+        if [ $? -ne 0 ]; then
+            echo "Dashboard build failed!"
+            exit 1
+        fi
+        echo "Copying dashboard to broker resources..."
+        rm -rf "$RESOURCES_DIR"
+        cp -r "$DASHBOARD_DIR/dist" "$RESOURCES_DIR"
+        echo "Dashboard build completed."
+    else
+        echo "Dashboard not found, skipping."
+    fi
+
+    # Build the broker
     echo "Building MonsterMQ..."
-    mvn clean package
+    mvn package
     if [ $? -ne 0 ]; then
         echo "Build failed!"
         exit 1
     fi
     echo "Build completed successfully."
+fi
+
+# Exit if -norun is set
+if [ "$NO_RUN" = true ]; then
+    exit 0
 fi
 
 # Kill any existing MonsterMQ instances
@@ -99,13 +153,6 @@ JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
 
 # Note: Protobuf version upgraded to 4.28.3 for Java 21+ compatibility
 
-# Prepare development options
-DEV_OPTS=""
-if [ "$DEV_MODE" = true ]; then
-    echo "Running in development mode - serving dashboard from filesystem"
-    DEV_OPTS="-dashboardPath src/main/resources/dashboard"
-fi
-
 # Start MonsterMQ
-echo java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt $DEV_OPTS "${REMAINING_ARGS[@]}"
-java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt $DEV_OPTS "${REMAINING_ARGS[@]}"
+echo java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt "${REMAINING_ARGS[@]}"
+java $JAVA_OPTS -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt "${REMAINING_ARGS[@]}"

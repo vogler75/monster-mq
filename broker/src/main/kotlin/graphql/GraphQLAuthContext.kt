@@ -17,8 +17,30 @@ class GraphQLAuthContext(
         private val logger: Logger = Utils.getLogger(GraphQLAuthContext::class.java)
         private const val CONTEXT_KEY = "authContext"
         
-        // Operations that don't require authentication
+        // Operations that don't require authentication (always public)
         private val PUBLIC_OPERATIONS = setOf("login")
+
+        // Mutations that require authentication (write-protected).
+        // publish / publishBatch are NOT in this set — their ACL is enforced by the resolver itself.
+        private val WRITE_PROTECTED_MUTATIONS = setOf(
+            "purgeQueuedMessages",
+            "user",
+            "session",
+            "archiveGroup",
+            "importDevices",
+            "opcUaDevice",
+            "opcUaServer",
+            "mqttClient",
+            "kafkaClient",
+            "natsClient",
+            "winCCOaDevice",
+            "winCCUaDevice",
+            "plc4xDevice",
+            "neo4jClient",
+            "jdbcLogger",
+            "sparkplugBDecoder",
+            "flow"
+        )
     }
 
     /**
@@ -63,7 +85,9 @@ class GraphQLAuthContext(
             "getAllUsers", "getUser", 
             // ACL Management operations require admin
             "createAclRule", "updateAclRule", "deleteAclRule", 
-            "getAllAclRules", "getUserAclRules" -> true
+            "getAllAclRules", "getUserAclRules",
+            // Destructive / device-import operations require admin
+            "purgeQueuedMessages", "importDevices" -> true
             else -> false
         }
     }
@@ -154,8 +178,25 @@ class GraphQLAuthContext(
         if (!userManager.isUserManagementEnabled()) {
             return AuthorizationResult.allowed() // No user management, allow everything
         }
-        
-        // Check if admin access is required
+
+        // Always allow public operations (login)
+        if (fieldName in PUBLIC_OPERATIONS) {
+            return AuthorizationResult.allowed()
+        }
+
+        // publish / publishBatch: delegate ACL check entirely to the resolver
+        if (fieldName == "publish" || fieldName == "publishBatch") {
+            return AuthorizationResult.allowed()
+        }
+
+        // Write-protected mutations require a valid auth context
+        if (fieldName in WRITE_PROTECTED_MUTATIONS) {
+            if (authContext == null) {
+                return AuthorizationResult.denied("Login required")
+            }
+        }
+
+        // Admin-only fields require an authenticated admin
         if (requiresAdmin(fieldName)) {
             if (authContext == null) {
                 return AuthorizationResult.denied("Authentication required")
@@ -164,12 +205,8 @@ class GraphQLAuthContext(
                 return AuthorizationResult.denied("Admin privileges required")
             }
         }
-        
-        // For non-admin operations, just check if user is authenticated
-        if (fieldName !in PUBLIC_OPERATIONS && authContext == null) {
-            return AuthorizationResult.denied("Authentication required")
-        }
-        
+
+        // Everything else (queries, subscriptions, non-write mutations) is allowed
         return AuthorizationResult.allowed()
     }
 }

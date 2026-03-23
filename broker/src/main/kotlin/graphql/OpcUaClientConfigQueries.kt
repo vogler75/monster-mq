@@ -120,7 +120,8 @@ class OpcUaClientConfigQueries(
                 "monitoringParameters" to mapOf(
                     "bufferSize" to config.monitoringParameters.bufferSize,
                     "samplingInterval" to config.monitoringParameters.samplingInterval,
-                    "discardOldest" to config.monitoringParameters.discardOldest
+                    "discardOldest" to config.monitoringParameters.discardOldest,
+                    "monitoredItemsBatchSize" to config.monitoringParameters.monitoredItemsBatchSize
                 ),
                 "addresses" to config.addresses.map { address ->
                     mapOf(
@@ -142,6 +143,15 @@ class OpcUaClientConfigQueries(
                     "keystorePassword" to config.certificateConfig.keystorePassword,
                     "validateServerCertificate" to config.certificateConfig.validateServerCertificate,
                     "autoAcceptServerCertificates" to config.certificateConfig.autoAcceptServerCertificates
+                ),
+                "writeConfig" to mapOf(
+                    "enabled" to config.writeConfig.enabled,
+                    "requestResponseEnabled" to config.writeConfig.requestResponseEnabled,
+                    "topicPrefix" to config.writeConfig.topicPrefix,
+                    "requestTopicPrefix" to config.writeConfig.requestTopicPrefix,
+                    "responseTopicPrefix" to config.writeConfig.responseTopicPrefix,
+                    "qos" to config.writeConfig.qos,
+                    "writeTimeout" to config.writeConfig.writeTimeout
                 )
             ),
             "enabled" to device.enabled,

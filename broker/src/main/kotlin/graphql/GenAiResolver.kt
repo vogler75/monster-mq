@@ -8,7 +8,6 @@ import at.rocworks.genai.IGenAiProvider
 import at.rocworks.handlers.ArchiveHandler
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
-import io.vertx.core.json.JsonObject
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -25,66 +24,8 @@ class GenAiResolver(
 ) {
     private val logger: Logger = Utils.getLogger(GenAiResolver::class.java)
 
-    // System prompt for topic analysis - loaded from config or uses fallback
-    private val topicAnalysisSystemPrompt: String
-
     init {
         logger.level = Const.DEBUG_LEVEL
-        topicAnalysisSystemPrompt = loadSystemPromptFromConfig()
-    }
-
-    /**
-     * Load system prompt from ai-prompts.json config file
-     */
-    private fun loadSystemPromptFromConfig(): String {
-        val fallbackPrompt = """
-You are an MQTT topic tree analyst helping users understand their IoT data.
-The data below shows MQTT topics and their current values in a hierarchical tree format.
-
-**Output format:** Use Markdown formatting in your responses:
-- Use ## headings for sections
-- Use **bold** for emphasis
-- Use `code` for topic names and values
-- Use bullet lists for findings
-- Use tables when comparing data
-
-**Important rules:**
-- NEVER reproduce the raw input data table in your response
-- Do NOT echo back the topic tree structure you received
-- Avoid long sequences of dashes (---) or other separator characters
-- Focus on analysis and insights, not data reproduction
-
-When analyzing:
-- Identify naming patterns and hierarchy structure
-- Spot anomalies or unusual values
-- Recognize IoT patterns (Sparkplug, Homie, etc.)
-- Provide concise, actionable insights
-
-Topic data:
-""".trimIndent()
-
-        return try {
-            val configPath = "dashboard/config/ai-prompts.json"
-            val stream = this::class.java.classLoader.getResourceAsStream(configPath)
-            if (stream != null) {
-                val content = stream.bufferedReader().use { it.readText() }
-                val json = JsonObject(content)
-                val prompt = json.getString("systemPrompt")
-                if (!prompt.isNullOrBlank()) {
-                    logger.info("Loaded AI system prompt from $configPath")
-                    prompt
-                } else {
-                    logger.info("No systemPrompt in $configPath, using fallback")
-                    fallbackPrompt
-                }
-            } else {
-                logger.info("Config file $configPath not found, using fallback system prompt")
-                fallbackPrompt
-            }
-        } catch (e: Exception) {
-            logger.warning("Error loading AI config: ${e.message}, using fallback system prompt")
-            fallbackPrompt
-        }
     }
 
     /**
@@ -314,7 +255,7 @@ Topic data:
                 }
 
                 // Build prompt - always include topic data, add chat history for follow-ups
-                val systemPrompt = if (!customSystemPrompt.isNullOrBlank()) customSystemPrompt else topicAnalysisSystemPrompt
+                val systemPrompt = if (!customSystemPrompt.isNullOrBlank()) customSystemPrompt else "You are an MQTT topic analyst."
 
                 val fullPrompt = if (isFollowUp) {
                     // Follow-up question: include topic data AND chat history
@@ -359,13 +300,13 @@ User question: $question
                 genAiProvider.generate(request)
                     .thenAccept { response ->
                         // Log full LLM response for debugging truncation issues
-                        logger.info("=== LLM Response Received ===")
-                        logger.info("Model: ${response.model}")
-                        logger.info("Error: ${response.error}")
-                        logger.info("Response length: ${response.response.length} chars")
-                        logger.info("=== FULL LLM RESPONSE START ===")
-                        logger.info(response.response)
-                        logger.info("=== FULL LLM RESPONSE END ===")
+                        logger.fine("=== LLM Response Received ===")
+                        logger.fine("Model: ${response.model}")
+                        logger.fine("Error: ${response.error}")
+                        logger.fine("Response length: ${response.response.length} chars")
+                        logger.fine("=== FULL LLM RESPONSE START ===")
+                        logger.fine(response.response)
+                        logger.fine("=== FULL LLM RESPONSE END ===")
 
                         future.complete(TopicAnalysisResponseGraphQL(
                             response = response.response,

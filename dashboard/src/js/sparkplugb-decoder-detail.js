@@ -1,0 +1,455 @@
+// SparkplugB Decoder Detail View
+
+let isEditMode = false;
+let currentDecoderName = null;
+let subscriptions = [];
+let rules = [];
+
+// GraphQL wrapper
+async function graphqlQuery(query, variables = {}) {
+    try {
+        return await window.graphqlClient.query(query, variables);
+    } catch (e) {
+        console.error('GraphQL error:', e);
+        throw e;
+    }
+}
+
+async function init() {
+    // Load cluster nodes first
+    await loadClusterNodes();
+
+    const params = new URLSearchParams(window.location.search);
+    currentDecoderName = params.get('name');
+
+    if (currentDecoderName) {
+        isEditMode = true;
+        document.getElementById('pageTitle').textContent = '⚡ Edit SparkplugB Decoder';
+        document.getElementById('name').disabled = true; // Name cannot be changed in edit mode
+        await loadDecoder();
+    } else {
+        // Create mode - add one default rule
+        addRule();
+    }
+}
+
+async function loadClusterNodes() {
+    try {
+        const query = `
+            query GetBrokers {
+                brokers {
+                    nodeId
+                    isCurrent
+                }
+            }
+        `;
+
+        const result = await graphqlQuery(query);
+        const clusterNodes = result.brokers || [];
+
+        // Populate node selector
+        const nodeSelect = document.getElementById('nodeId');
+        if (nodeSelect) {
+            nodeSelect.innerHTML = '<option value="">Select Node...</option>';
+            clusterNodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node.nodeId;
+                option.textContent = node.nodeId + (node.isCurrent ? ' (Current)' : '');
+                nodeSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading cluster nodes:', error);
+    }
+}
+
+async function loadDecoder() {
+    try {
+        const query = `
+            query {
+                sparkplugBDecoders(name: "${escapeGraphQL(currentDecoderName)}") {
+                    name
+                    namespace
+                    nodeId
+                    enabled
+                    config {
+                        sourceNamespace
+                        subscriptions {
+                            nodeId
+                            deviceIds
+                        }
+                        rules {
+                            name
+                            nodeIdRegex
+                            deviceIdRegex
+                            destinationTopic
+                            transformations
+                        }
+                    }
+                }
+            }
+        `;
+
+        const result = await graphqlQuery(query);
+        const decoders = result.sparkplugBDecoders || [];
+
+        if (decoders.length === 0) {
+            showError('Decoder not found');
+            window.spaLocation.href = '/pages/sparkplugb-decoders.html';
+            return;
+        }
+
+        const decoder = decoders[0];
+        populateForm(decoder);
+    } catch (error) {
+        console.error('Error loading decoder:', error);
+        showError('Failed to load decoder: ' + error.message);
+    }
+}
+
+function populateForm(decoder) {
+    document.getElementById('name').value = decoder.name;
+    document.getElementById('namespace').value = decoder.namespace;
+    document.getElementById('nodeId').value = decoder.nodeId;
+    document.getElementById('enabled').checked = decoder.enabled;
+    document.getElementById('sourceNamespace').value = decoder.config.sourceNamespace || 'spBv1.0';
+
+    subscriptions = decoder.config.subscriptions || [];
+    rules = decoder.config.rules || [];
+
+    renderSubscriptions();
+    renderRules();
+}
+
+// Subscription Management Functions
+function renderSubscriptions() {
+    const container = document.getElementById('subscriptionsList');
+
+    if (subscriptions.length === 0) {
+        container.innerHTML = `
+            <div style="background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+                <p style="color: var(--text-primary); margin: 0; display: flex; align-items: start; gap: 0.5rem;">
+                    <svg width="20" height="20" fill="var(--monster-purple)" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px;">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                    </svg>
+                    <span><strong>No subscriptions configured.</strong> The decoder will subscribe to ALL nodes and devices using wildcards. Add specific subscriptions below to filter which messages are received.</span>
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = subscriptions.map((sub, index) => `
+        <div class="rule-item">
+            <div class="rule-header">
+                <h3>Subscription: ${escapeHtml(sub.nodeId || `Subscription ${index + 1}`)}</h3>
+                <button type="button" class="btn btn-icon btn-remove" onclick="removeSubscription(${index})" title="Remove Subscription">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="rule-fields">
+                <div class="form-group">
+                    <label>Node ID *</label>
+                    <input type="text" value="${escapeHtml(sub.nodeId || '')}" oninput="updateSubscriptionNodeId(${index}, this.value)" required>
+                    <span class="help-text">Specific SparkplugB node ID to subscribe to</span>
+                </div>
+                <div class="form-group">
+                    <label>Device IDs (optional)</label>
+                    <input type="text" value="${escapeHtml((sub.deviceIds || []).join(', '))}" oninput="updateSubscriptionDeviceIds(${index}, this.value)" placeholder="Device1, Device2, Device3">
+                    <span class="help-text">Comma-separated device IDs. Leave empty to subscribe to all devices for this node.</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function addSubscription() {
+    subscriptions.push({
+        nodeId: '',
+        deviceIds: []
+    });
+    renderSubscriptions();
+}
+
+function removeSubscription(index) {
+    if (confirm('Are you sure you want to remove this subscription?')) {
+        subscriptions.splice(index, 1);
+        renderSubscriptions();
+    }
+}
+
+function updateSubscriptionNodeId(index, value) {
+    subscriptions[index].nodeId = value.trim();
+}
+
+function updateSubscriptionDeviceIds(index, value) {
+    // Split by comma, trim whitespace, and filter out empty strings
+    subscriptions[index].deviceIds = value
+        .split(',')
+        .map(id => id.trim())
+        .filter(id => id.length > 0);
+}
+
+function renderRules() {
+    const container = document.getElementById('rulesList');
+
+    if (rules.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 1rem;">No rules configured. Click "Add Rule" to create one.</p>';
+        return;
+    }
+
+    container.innerHTML = rules.map((rule, index) => `
+        <div class="rule-item">
+            <div class="rule-header">
+                <h3>Rule: ${escapeHtml(rule.name || `Rule ${index + 1}`)}</h3>
+                <button type="button" class="btn btn-icon btn-remove" onclick="removeRule(${index})" title="Remove Rule">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="rule-fields">
+                <div class="form-group">
+                    <label>Rule Name *</label>
+                    <input type="text" value="${escapeHtml(rule.name || '')}" oninput="updateRuleName(${index}, this.value)" required>
+                    <span class="help-text">Unique identifier for this rule</span>
+                </div>
+                <div class="form-group">
+                    <label>Node ID Regex *</label>
+                    <input type="text" value="${escapeHtml(rule.nodeIdRegex || '')}" oninput="updateRuleField(${index}, 'nodeIdRegex', this.value)" required>
+                    <span class="help-text">Regex: "Siemens" (exact), ".*Siemens.*" (contains), "Siemens.*" (starts with), ".*" (all)</span>
+                </div>
+                <div class="form-group">
+                    <label>Device ID Regex *</label>
+                    <input type="text" value="${escapeHtml(rule.deviceIdRegex || '')}" oninput="updateRuleField(${index}, 'deviceIdRegex', this.value)" required>
+                    <span class="help-text">Regex: "Device1" (exact), ".*Device1.*" (contains), ".*" (all including empty)</span>
+                </div>
+                <div class="form-group">
+                    <label>Destination Topic Template *</label>
+                    <input type="text" value="${escapeHtml(rule.destinationTopic || '')}" oninput="updateRuleField(${index}, 'destinationTopic', this.value)" required>
+                    <span class="help-text">Topic template with variables: $nodeId, $deviceId (e.g., "factory/decoded/$nodeId/$deviceId")</span>
+                </div>
+                <div class="form-group">
+                    <label>Transformations</label>
+                    <div id="transformations-${index}">
+                        ${renderTransformations(rule.transformations || {}, index)}
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="addTransformation(${index})">Add Transformation</button>
+                    <span class="help-text">Optional regex transformations on variables (e.g., s/\\./\\//g to convert dots to slashes)</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderTransformations(transformations, ruleIndex) {
+    const entries = Object.entries(transformations);
+
+    if (entries.length === 0) {
+        return '<p style="color: var(--text-secondary); font-size: 0.875rem; margin: 0.5rem 0;">No transformations configured</p>';
+    }
+
+    return entries.map(([key, value], transformIndex) => `
+        <div class="transformation-item">
+            <select onchange="updateTransformationKey(${ruleIndex}, ${transformIndex}, this.value, '${escapeHtml(key)}')">
+                <option value="nodeId" ${key === 'nodeId' ? 'selected' : ''}>nodeId</option>
+                <option value="deviceId" ${key === 'deviceId' ? 'selected' : ''}>deviceId</option>
+            </select>
+            <input type="text" value="${escapeHtml(value)}" oninput="updateTransformationValue(${ruleIndex}, '${escapeHtml(key)}', this.value)" placeholder="s/pattern/replacement/flags">
+            <button type="button" class="btn btn-icon btn-remove" onclick="removeTransformation(${ruleIndex}, '${escapeHtml(key)}')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+    `).join('');
+}
+
+function addRule() {
+    rules.push({
+        name: `Rule ${rules.length + 1}`,
+        nodeIdRegex: '.*',
+        deviceIdRegex: '.*',
+        destinationTopic: 'decoded/$nodeId/$deviceId',
+        transformations: {}
+    });
+    renderRules();
+}
+
+function removeRule(index) {
+    if (confirm('Are you sure you want to remove this rule?')) {
+        rules.splice(index, 1);
+        renderRules();
+    }
+}
+
+function updateRuleName(index, value) {
+    rules[index].name = value;
+}
+
+function updateRuleField(index, field, value) {
+    rules[index][field] = value;
+}
+
+function addTransformation(ruleIndex) {
+    if (!rules[ruleIndex].transformations) {
+        rules[ruleIndex].transformations = {};
+    }
+
+    // Find the next available key
+    let key = 'nodeId';
+    if (rules[ruleIndex].transformations.hasOwnProperty('nodeId')) {
+        key = 'deviceId';
+    }
+
+    rules[ruleIndex].transformations[key] = 's/\\\\./_/g';
+    renderRules();
+}
+
+function removeTransformation(ruleIndex, key) {
+    delete rules[ruleIndex].transformations[key];
+    renderRules();
+}
+
+function updateTransformationKey(ruleIndex, transformIndex, newKey, oldKey) {
+    const transformations = rules[ruleIndex].transformations;
+    const value = transformations[oldKey];
+    delete transformations[oldKey];
+    transformations[newKey] = value;
+    renderRules();
+}
+
+function updateTransformationValue(ruleIndex, key, value) {
+    rules[ruleIndex].transformations[key] = value;
+}
+
+async function saveDecoder(event) {
+    event.preventDefault();
+
+    const name = document.getElementById('name').value.trim();
+    const namespace = document.getElementById('namespace').value.trim();
+    const nodeId = document.getElementById('nodeId').value.trim();
+    const enabled = document.getElementById('enabled').checked;
+    const sourceNamespace = document.getElementById('sourceNamespace').value.trim() || 'spBv1.0';
+
+    // Validation
+    if (!name || !namespace || !nodeId) {
+        showError('Please fill in all required fields');
+        return;
+    }
+
+    if (rules.length === 0) {
+        showError('Please add at least one decoder rule');
+        return;
+    }
+
+    // Validate all rules
+    for (const rule of rules) {
+        if (!rule.name || !rule.nodeIdRegex || !rule.deviceIdRegex || !rule.destinationTopic) {
+            showError('Please fill in all required fields for each rule');
+            return;
+        }
+    }
+
+    try {
+        const input = {
+            name: name,
+            namespace: namespace,
+            nodeId: nodeId,
+            enabled: enabled,
+            config: {
+                sourceNamespace: sourceNamespace,
+                subscriptions: subscriptions.filter(sub => sub.nodeId && sub.nodeId.trim().length > 0).map(sub => ({
+                    nodeId: sub.nodeId,
+                    deviceIds: sub.deviceIds || []
+                })),
+                rules: rules.map(rule => ({
+                    name: rule.name,
+                    nodeIdRegex: rule.nodeIdRegex,
+                    deviceIdRegex: rule.deviceIdRegex,
+                    destinationTopic: rule.destinationTopic,
+                    transformations: Object.keys(rule.transformations || {}).length > 0 ? rule.transformations : null
+                }))
+            }
+        };
+
+        const mutation = isEditMode
+            ? `mutation UpdateSparkplugBDecoder($name: String!, $input: SparkplugBDecoderInput!) {
+                sparkplugBDecoder {
+                    update(name: $name, input: $input) {
+                        success
+                        errors
+                        decoder {
+                            name
+                        }
+                    }
+                }
+            }`
+            : `mutation CreateSparkplugBDecoder($input: SparkplugBDecoderInput!) {
+                sparkplugBDecoder {
+                    create(input: $input) {
+                        success
+                        errors
+                        decoder {
+                            name
+                        }
+                    }
+                }
+            }`;
+
+        const variables = isEditMode
+            ? { name: currentDecoderName, input: input }
+            : { input: input };
+
+        const result = await graphqlQuery(mutation, variables);
+        const response = isEditMode ? result.sparkplugBDecoder?.update : result.sparkplugBDecoder?.create;
+
+        if (response?.success) {
+            showSuccess('Decoder saved successfully');
+            setTimeout(() => { window.spaLocation.href = '/pages/sparkplugb-decoders.html'; }, 800);
+        } else {
+            showError('Failed to save decoder: ' + (response?.errors?.join(', ') || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error saving decoder:', error);
+        showError('Failed to save decoder: ' + error.message);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function escapeGraphQL(text) {
+    return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+}
+
+function showSuccess(message) {
+    var existing = document.getElementById('success-toast'); if (existing) existing.remove();
+    var toast = document.createElement('div'); toast.id = 'success-toast';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+    toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+    if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
+    document.body.appendChild(toast);
+    setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 3000);
+}
+
+function showError(message) {
+    var existing = document.getElementById('error-toast'); if (existing) existing.remove();
+    var toast = document.createElement('div'); toast.id = 'error-toast';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
+    toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
+    if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
+    document.body.appendChild(toast);
+    setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 8000);
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    document.getElementById('decoderForm').addEventListener('submit', saveDecoder);
+});

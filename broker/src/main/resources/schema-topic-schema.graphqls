@@ -1,0 +1,170 @@
+# Topic Schema Governance - JSON Schema-based payload validation for MQTT topics
+#
+# Model:
+#   TopicSchemaPolicy  = reusable JSON Schema definition
+#   TopicNamespace     = binds an MQTT topic filter to a schema policy (the assignment layer)
+
+# A reusable JSON Schema definition for payload validation
+type TopicSchemaPolicy {
+    # Unique schema identifier (e.g., "sensor-reading-v1")
+    name: String!
+    # The JSON Schema definition
+    jsonSchema: JSON!
+    # Payload type (currently only "JSON")
+    payloadType: String!
+    # Optional MIME content type hint (e.g., "application/json")
+    contentType: String
+    # Optional schema version string (e.g., "1.0.0")
+    version: String
+    # Human-readable description
+    description: String
+    # Optional example payloads for documentation
+    examples: [String!]
+    # When this schema was created
+    createdAt: String!
+    # When this schema was last updated
+    updatedAt: String!
+}
+
+# Binds an MQTT topic filter to a schema policy for enforcement
+type TopicNamespace {
+    # Unique namespace identifier (e.g., "sensor-ns")
+    name: String!
+    # MQTT topic filter this namespace governs (supports + and # wildcards)
+    topicFilter: String!
+    # Name of the TopicSchemaPolicy to enforce
+    schemaPolicyName: String!
+    # Whether enforcement is active
+    enabled: Boolean!
+    # Enforcement mode: "REJECT" drops invalid messages (v1 only)
+    enforcementMode: String!
+    # Human-readable description
+    description: String
+    # Optional labels for categorization
+    tags: [String!]
+    # When this namespace was created
+    createdAt: String!
+    # When this namespace was last updated
+    updatedAt: String!
+}
+
+# Result of validating a payload against a schema policy
+type SchemaPolicyValidationResult {
+    # Name of the policy used for validation
+    policyName: String!
+    # Topic filter of the matching namespace (empty if validated directly)
+    topicFilter: String!
+    # Whether the payload is valid
+    valid: Boolean!
+    # Error category if invalid: PARSE_ERROR or SCHEMA_ERROR
+    errorCategory: String
+    # Detailed error message if invalid
+    errorDetail: String
+}
+
+# Result type for schema policy mutation operations
+type TopicSchemaPolicyResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected policy (null if operation failed)
+    policy: TopicSchemaPolicy
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Result type for namespace mutation operations
+type TopicNamespaceResult {
+    # Whether the operation succeeded
+    success: Boolean!
+    # The affected namespace (null if operation failed)
+    namespace: TopicNamespace
+    # Error messages if operation failed
+    errors: [String!]!
+}
+
+# Input for creating or updating a schema policy (reusable schema definition)
+input TopicSchemaPolicyInput {
+    # Unique schema name
+    name: String!
+    # The JSON Schema object for validation
+    jsonSchema: JSON!
+    # Payload type (default: "JSON")
+    payloadType: String
+    # Optional MIME content type
+    contentType: String
+    # Optional schema version
+    version: String
+    # Human-readable description
+    description: String
+    # Optional example payloads
+    examples: [String!]
+}
+
+# Input for creating or updating a namespace (topic filter -> schema binding)
+input TopicNamespaceInput {
+    # Unique namespace name
+    name: String!
+    # MQTT topic filter (e.g., "sensors/#", "machines/+/status")
+    topicFilter: String!
+    # Name of the schema policy to enforce
+    schemaPolicyName: String!
+    # Whether enforcement is active (default: true)
+    enabled: Boolean
+    # Enforcement mode (default: "REJECT")
+    enforcementMode: String
+    # Human-readable description
+    description: String
+    # Optional labels
+    tags: [String!]
+}
+
+# Extend Queries for Topic Schema Governance
+extend type Query {
+    # List all topic schema policies (reusable schema definitions)
+    topicSchemaPolicies: [TopicSchemaPolicy!]!
+
+    # Get a specific schema policy by name
+    topicSchemaPolicy(name: String!): TopicSchemaPolicy
+
+    # Validate a payload against a named schema policy
+    topicSchemaValidate(policyName: String!, payload: String!): SchemaPolicyValidationResult!
+
+    # List all topic namespaces (topic filter -> schema bindings)
+    topicNamespaces: [TopicNamespace!]!
+
+    # Get a specific namespace by name
+    topicNamespace(name: String!): TopicNamespace
+
+    # Find the namespace that would match a given concrete topic
+    topicNamespaceMatch(topic: String!): TopicNamespace
+}
+
+# Grouped mutations for topic schema policies
+type TopicSchemaPolicyMutations {
+    # Create a new schema policy
+    create(input: TopicSchemaPolicyInput!): TopicSchemaPolicyResult!
+    # Update an existing schema policy
+    update(name: String!, input: TopicSchemaPolicyInput!): TopicSchemaPolicyResult!
+    # Delete a schema policy
+    delete(name: String!): Boolean!
+}
+
+# Grouped mutations for topic namespaces
+type TopicNamespaceMutations {
+    # Create a new namespace (binds topic filter to schema)
+    create(input: TopicNamespaceInput!): TopicNamespaceResult!
+    # Update an existing namespace
+    update(name: String!, input: TopicNamespaceInput!): TopicNamespaceResult!
+    # Delete a namespace
+    delete(name: String!): Boolean!
+    # Toggle namespace enforcement on/off
+    toggle(name: String!, enabled: Boolean!): TopicNamespaceResult!
+}
+
+# Extend Mutations for Topic Schema Governance
+extend type Mutation {
+    # Access schema policy management operations
+    topicSchemaPolicy: TopicSchemaPolicyMutations!
+    # Access namespace management operations
+    topicNamespace: TopicNamespaceMutations!
+}

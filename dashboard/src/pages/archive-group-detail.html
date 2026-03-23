@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Archive Group Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); margin-bottom: 2rem; box-shadow: var(--card-shadow); }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); border-radius: 12px 12px 0 0; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-content { padding: 1.5rem; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; }
+        .form-group small { display: block; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.8rem; }
+        .form-control, input[type="text"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); box-sizing: border-box; font-family: inherit; font-size: 0.875rem; }
+        .form-control:focus, input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); }
+        textarea { resize: vertical; min-height: 100px; font-family: 'JetBrains Mono', monospace; }
+        input:disabled, select:disabled { opacity: 0.6; cursor: not-allowed; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; }
+        .checkbox-group input[type="checkbox"] { accent-color: var(--monster-purple); width: 16px; height: 16px; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
+        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .info-value { color: var(--text-primary); font-weight: 600; }
+        .status-badge { display: inline-flex; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .status-enabled { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color: white; }
+        .btn-secondary { background: var(--dark-surface-2); border: 1px solid var(--dark-border); color: var(--text-primary); }
+        .btn-danger { background: var(--monster-red); color: white; }
+        .btn-success { background: var(--monster-green); color: white; }
+        .btn-warning { background: var(--monster-orange); color: white; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 480px; width: 100%; }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-body { padding: 2rem; color: var(--text-secondary); }
+        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
+        .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--monster-green); color: white; padding: 1rem 1.5rem; border-radius: 8px; z-index: 9999; display: none; font-weight: 600; box-shadow: var(--card-shadow); }
+        .connection-indicators { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
+        .connection-item { display: flex; align-items: center; gap: 0.25rem; }
+        .connection-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .connection-dot.connected { background-color: var(--monster-green); box-shadow: 0 0 4px rgba(16,185,129,0.5); }
+        .connection-dot.disconnected { background-color: var(--monster-red); box-shadow: 0 0 4px rgba(239,68,68,0.5); }
+        .connection-label { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; }
+        @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="page-title">Archive Group</h1>
+                        <p class="page-subtitle" id="page-subtitle"></p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" style="white-space:nowrap;" onclick="archiveGroupDetail.goBack()">← Back to Archives</button>
+                        <button class="btn btn-danger" id="delete-btn" onclick="archiveGroupDetail.showDeleteModal()" style="display:none;">Delete</button>
+                        <button class="btn btn-warning" id="toggle-btn" onclick="archiveGroupDetail.toggleEnabled()" style="display:none;">Enable</button>
+                        <button class="btn btn-primary" onclick="archiveGroupDetail.saveGroup()" id="save-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                            </svg>
+                            Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+
+            <!-- Basic Settings -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title"><h2>Basic Settings</h2></div>
+                    <span class="status-badge" id="status-badge" style="display:none;"></span>
+                </div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label for="group-name">Name *</label>
+                        <input type="text" id="group-name" placeholder="e.g., Default" required>
+                        <small>Unique identifier for the archive group</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="group-topic-filter">Topic Filters *</label>
+                        <textarea id="group-topic-filter" placeholder="home/sensors/+/temperature&#10;office/+/status&#10;data/#" required></textarea>
+                        <small>One topic filter per line. Use + for single-level wildcards, # for multi-level wildcards</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="group-retained-only">
+                            <label for="group-retained-only">Archive only retained messages</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Storage Configuration -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title"><h2>Storage Configuration</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="group-last-val-type">Last Value Type *</label>
+                            <select id="group-last-val-type" required onchange="archiveGroupDetail.updateLastValRetentionHelp()">
+                                <option value="NONE">None</option>
+                                <option value="MEMORY">Memory</option>
+                                <option value="HAZELCAST">Hazelcast</option>
+                                <option value="POSTGRES">PostgreSQL</option>
+                                <option value="CRATEDB">CrateDB</option>
+                                <option value="MONGODB">MongoDB</option>
+                                <option value="SQLITE">SQLite</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="group-archive-type">Archive Type *</label>
+                            <select id="group-archive-type" required>
+                                <option value="NONE">None</option>
+                                <option value="POSTGRES">PostgreSQL</option>
+                                <option value="CRATEDB">CrateDB</option>
+                                <option value="MONGODB">MongoDB</option>
+                                <option value="KAFKA">Kafka</option>
+                                <option value="SQLITE">SQLite</option>
+                            </select>
+                            <small>MEMORY is only available for Last Value Type, not Archive Type</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="group-payload-format">Payload Format</label>
+                            <select id="group-payload-format">
+                                <option value="DEFAULT">DEFAULT (binary-safe)</option>
+                                <option value="JSON">JSON (store as JSON text)</option>
+                                <option value="TEXT">TEXT (raw UTF-8 text)</option>
+                                <option value="BINARY">BINARY (raw bytes)</option>
+                            </select>
+                            <small>Select how payload bytes are stored; DEFAULT is recommended</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Retention Settings -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title"><h2>Retention Settings</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="group-last-val-retention">Last Value Retention</label>
+                            <input type="text" id="group-last-val-retention" placeholder="50k">
+                            <small id="last-val-retention-help">Size-based (MEMORY): 50k, 100000k | Time-based (others): 7d, 24h, 60m</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="group-archive-retention">Archive Retention</label>
+                            <input type="text" id="group-archive-retention" placeholder="1y">
+                            <small>Format: 1y, 365d, 8760h</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="group-purge-interval">Purge Interval</label>
+                            <input type="text" id="group-purge-interval" placeholder="1h">
+                            <small>Format: 1h, 60m, 3600s</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status (edit mode only) -->
+            <div class="section-card" id="status-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Status</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid" id="status-info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Enabled</div>
+                            <div class="info-value" id="status-enabled">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Deployed</div>
+                            <div class="info-value" id="status-deployed">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Created At</div>
+                            <div class="info-value" id="status-created-at">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Updated At</div>
+                            <div class="info-value" id="status-updated-at">-</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem;" id="connection-status-section">
+                        <div class="info-label" style="margin-bottom: 0.5rem;">Connection Status</div>
+                        <div class="connection-indicators" id="connection-indicators"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="archiveGroupDetail.hideDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the archive group "<strong id="delete-group-name"></strong>"?</p>
+                <p style="margin-top: 0.75rem;">This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="archiveGroupDetail.hideDeleteModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="archiveGroupDetail.confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Toast -->
+    <div id="success-toast" class="toast"></div>
+
+    <script src="/js/archive-group-detail.js"></script>
+    </ix-application>
+</body>
+</html>

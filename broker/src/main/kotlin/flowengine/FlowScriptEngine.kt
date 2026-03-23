@@ -1,12 +1,17 @@
 package at.rocworks.flowengine
 
+import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.data.BrokerMessage
+import at.rocworks.handlers.ArchiveGroup
+import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.devices.FlowClass
 import at.rocworks.stores.devices.FlowNode
 import at.rocworks.stores.devices.DatabaseConnectionConfig
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import org.graalvm.polyglot.Context
+import java.time.Instant
 import java.util.logging.Logger
 
 /**
@@ -122,6 +127,10 @@ class FlowScriptEngine {
                 }
                 bindings.putMember("dbs", dbsWrapper)
             }
+
+            // Archive store helper (for querying last values and history from scripts)
+            val archiveProxy = ArchiveProxy()
+            bindings.putMember("archive", archiveProxy)
 
             // Get or compile the script function
             val scriptFunction = compiledScripts.getOrPut(script) {
@@ -446,6 +455,146 @@ class FlowScriptEngine {
                 } catch (e: Exception) {
                     false
                 }
+            }
+        }
+    }
+
+    /**
+     * Proxy for querying archive stores (last values and history) from scripts.
+     *
+     * Usage:
+     *   archive.getLastValue("test/topic")
+     *   archive.getLastValues("test/#", 50)
+     *   archive.getHistory("test/topic", "2024-01-01T00:00:00Z", null, 100)
+     *   archive.getAggregatedHistory(["test/topic"], "5m", "2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
+     */
+    class ArchiveProxy {
+
+        private fun getArchiveGroups(): Map<String, ArchiveGroup> {
+            return Monster.getArchiveHandler()?.getDeployedArchiveGroups() ?: emptyMap()
+        }
+
+        private fun brokerMessageToJson(msg: BrokerMessage): JsonObject {
+            val obj = JsonObject()
+                .put("topic", msg.topicName)
+                .put("timestamp", msg.time.toEpochMilli())
+                .put("qos", msg.qosLevel)
+            val jsonValue = msg.getPayloadAsJson()
+            if (jsonValue != null) {
+                obj.put("value", jsonValue)
+            } else {
+                obj.put("value", msg.getPayloadAsBase64())
+            }
+            return obj
+        }
+
+        @Suppress("unused")
+        fun getLastValue(topic: String, archiveGroup: String = "Default"): JsonObject? {
+            return try {
+                val store = getArchiveGroups()[archiveGroup]?.lastValStore
+                if (store == null) {
+                    logger.warning("No LastValueStore for archive group '$archiveGroup'")
+                    return null
+                }
+                val msg = store[topic] ?: return null
+                brokerMessageToJson(msg)
+            } catch (e: Exception) {
+                logger.warning("archive.getLastValue error: ${e.message}")
+                null
+            }
+        }
+
+        @Suppress("unused")
+        fun getLastValues(topicFilter: String, limit: Int = 100, archiveGroup: String = "Default"): JsonArray {
+            val results = JsonArray()
+            try {
+                val store = getArchiveGroups()[archiveGroup]?.lastValStore
+                if (store == null) {
+                    logger.warning("No LastValueStore for archive group '$archiveGroup'")
+                    return results
+                }
+                var count = 0
+                store.findMatchingMessages(topicFilter) { msg ->
+                    if (count < limit) {
+                        results.add(brokerMessageToJson(msg))
+                        count++
+                        true // continue
+                    } else {
+                        false // stop
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warning("archive.getLastValues error: ${e.message}")
+            }
+            return results
+        }
+
+        @Suppress("unused")
+        fun getHistory(
+            topicFilter: String,
+            startTime: String? = null,
+            endTime: String? = null,
+            limit: Int = 100,
+            archiveGroup: String = "Default"
+        ): JsonArray {
+            return try {
+                val store = getArchiveGroups()[archiveGroup]?.archiveStore as? IMessageArchiveExtended
+                if (store == null) {
+                    logger.warning("No extended archive store for archive group '$archiveGroup'")
+                    return JsonArray()
+                }
+                store.getHistory(
+                    topic = topicFilter,
+                    startTime = startTime?.let { Instant.parse(it) },
+                    endTime = endTime?.let { Instant.parse(it) },
+                    limit = limit
+                )
+            } catch (e: Exception) {
+                logger.warning("archive.getHistory error: ${e.message}")
+                JsonArray()
+            }
+        }
+
+        @Suppress("unused")
+        fun getAggregatedHistory(
+            topics: List<String>,
+            interval: String,
+            startTime: String,
+            endTime: String,
+            functions: List<String>? = null,
+            fields: List<String>? = null,
+            archiveGroup: String = "Default"
+        ): JsonObject {
+            return try {
+                val store = getArchiveGroups()[archiveGroup]?.archiveStore as? IMessageArchiveExtended
+                if (store == null) {
+                    logger.warning("No extended archive store for archive group '$archiveGroup'")
+                    return JsonObject().put("columns", JsonArray()).put("rows", JsonArray())
+                }
+                val intervalMinutes = parseInterval(interval)
+                store.getAggregatedHistory(
+                    topics = topics,
+                    startTime = Instant.parse(startTime),
+                    endTime = Instant.parse(endTime),
+                    intervalMinutes = intervalMinutes,
+                    functions = functions ?: listOf("AVG"),
+                    fields = fields ?: emptyList()
+                )
+            } catch (e: Exception) {
+                logger.warning("archive.getAggregatedHistory error: ${e.message}")
+                JsonObject().put("columns", JsonArray()).put("rows", JsonArray())
+            }
+        }
+
+        private fun parseInterval(interval: String): Int {
+            val match = Regex("^(\\d+)([mhd])$").matchEntire(interval)
+                ?: throw IllegalArgumentException("Invalid interval format: '$interval' (expected e.g. 1m, 5m, 1h, 1d)")
+            val value = match.groupValues[1].toInt()
+            return when (match.groupValues[2]) {
+                "m" -> value
+                "h" -> value * 60
+                "d" -> value * 1440
+                else -> throw IllegalArgumentException("Invalid interval unit: '${match.groupValues[2]}'")
             }
         }
     }

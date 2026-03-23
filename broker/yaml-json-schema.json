@@ -21,6 +21,11 @@
       "default": 0,
       "description": "WS port for SSL connection"
     },
+    "NATS": {
+      "type": "integer",
+      "default": 0,
+      "description": "NATS protocol port (0=disabled)"
+    },
     "NodeName": {
       "type": "string",
       "description": "Custom node name for cluster identification (defaults to hostname if not set)"
@@ -100,6 +105,12 @@
           "type": "string",
           "description": "Password for the keystore file",
           "default": "password"
+        },
+        "KeyStoreType": {
+          "type": "string",
+          "enum": ["JKS", "PKCS12", "PFX", "P12"],
+          "description": "Keystore format. JKS (Java KeyStore, default) or PKCS12/PFX/P12 (universal format).",
+          "default": "JKS"
         }
       }
     },
@@ -275,26 +286,45 @@
         }
       }
     },
-    "Grafana": {
+    "Prometheus": {
       "type": "object",
-      "description": "Grafana JSON Data Source API server configuration. Provides a compatible endpoint for the Grafana JSON Data Source plugin (simpod-json-datasource) to query time-series data.",
+      "description": "Prometheus-compatible metrics server. Exposes broker metrics and topic values in Prometheus text format (/metrics) and implements a subset of the Prometheus HTTP API (/api/v1/query_range, etc.) for Grafana integration.",
       "properties": {
         "Enabled": {
           "type": "boolean",
-          "description": "Enable Grafana API server",
+          "description": "Enable Prometheus metrics server",
           "default": false
         },
         "Port": {
           "type": "integer",
-          "description": "Port for Grafana API HTTP endpoint",
+          "description": "Port for Prometheus HTTP endpoint",
           "default": 3001,
           "minimum": 1,
           "maximum": 65535
         },
-        "DefaultArchiveGroup": {
-          "type": "string",
-          "description": "Default archive group to use when not specified in query payload",
-          "default": "Default"
+        "RawQueryLimit": {
+          "type": "integer",
+          "description": "Maximum number of raw records returned for sub-minute step queries (step < 60s). Does not apply to aggregated queries (step >= 60s), which use getAggregatedHistory with no row limit.",
+          "default": 10000,
+          "minimum": 1
+        }
+      }
+    },
+    "I3x": {
+      "type": "object",
+      "description": "CESMII I3X (Industrial Information Interoperability eXchange) REST API server. Exposes MQTT topics, current values, historical data and publish capabilities through the standardized I3X manufacturing API.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable I3X API server",
+          "default": false
+        },
+        "Port": {
+          "type": "integer",
+          "description": "Port for I3X API HTTP endpoint",
+          "default": 3002,
+          "minimum": 1,
+          "maximum": 65535
         }
       }
     },
@@ -318,6 +348,22 @@
             "type": "string"
           },
           "default": ["_online.._value", "_online.._stime", "_online.._status"]
+        }
+      }
+    },
+    "Dashboard": {
+      "type": "object",
+      "description": "Web dashboard configuration (served from the GraphQL HTTP port)",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable serving the web dashboard",
+          "default": true
+        },
+        "Path": {
+          "type": "string",
+          "description": "Filesystem path to dashboard files (for development). Leave empty to serve from classpath.",
+          "default": ""
         }
       }
     },
@@ -351,56 +397,101 @@
     },
     "GenAI": {
       "type": "object",
-      "description": "Generative AI integration configuration for JavaScript coding assistance",
+      "description": "Generative AI configuration for assistant (script editor, topic analysis) and agent API keys",
       "properties": {
         "Enabled": {
           "type": "boolean",
-          "description": "Enable GenAI integration for AI-supported JavaScript coding",
+          "description": "Enable GenAI integration for AI-supported features",
           "default": false
+        },
+        "Assistant": {
+          "type": "object",
+          "description": "Configuration for the internal AI assistant (script editor, topic analysis). Uses LangChain4j.",
+          "properties": {
+            "Provider": {
+              "type": "string",
+              "description": "AI provider for the assistant",
+              "enum": ["gemini", "claude", "openai", "ollama"],
+              "default": "gemini"
+            },
+            "Model": {
+              "type": "string",
+              "description": "Model name (e.g., 'gemini-2.5-flash', 'claude-sonnet-4-20250514', 'gpt-4o', 'llama3')"
+            },
+            "Temperature": {
+              "type": "number",
+              "description": "Sampling temperature (0.0 to 2.0, higher = more creative)",
+              "default": 0.7,
+              "minimum": 0.0,
+              "maximum": 2.0
+            },
+            "DocsPath": {
+              "type": "string",
+              "description": "Path to documentation directory containing markdown files for context",
+              "default": "docs"
+            }
+          }
         },
         "Provider": {
           "type": "string",
-          "description": "AI provider to use",
-          "enum": ["gemini", "claude", "openai", "azure-openai"],
+          "description": "(Deprecated: use Assistant.Provider) AI provider to use",
+          "enum": ["gemini", "claude", "openai", "ollama"],
           "default": "gemini"
-        },
-        "ApiKey": {
-          "type": "string",
-          "description": "API key for the selected provider (supports environment variable substitution like ${GENAI_API_KEY})"
-        },
-        "Endpoint": {
-          "type": "string",
-          "description": "Azure OpenAI endpoint URL (required for azure-openai provider, e.g., https://your-resource.openai.azure.com/)"
-        },
-        "Deployment": {
-          "type": "string",
-          "description": "Azure OpenAI deployment name (required for azure-openai provider)"
         },
         "Model": {
           "type": "string",
-          "description": "Optional model name to use (provider-specific, e.g., 'gemini-pro', 'claude-3-opus', 'gpt-4', 'gpt-4o')"
+          "description": "(Deprecated: use Assistant.Model) Model name to use"
         },
         "MaxTokens": {
           "type": "integer",
-          "description": "Maximum number of tokens in the response",
+          "description": "(Deprecated) Maximum number of tokens in the response",
           "default": 2048,
           "minimum": 1,
           "maximum": 100000
         },
         "Temperature": {
           "type": "number",
-          "description": "Sampling temperature for response generation (0.0 to 2.0, higher = more creative)",
+          "description": "(Deprecated: use Assistant.Temperature) Sampling temperature",
           "default": 0.7,
           "minimum": 0.0,
           "maximum": 2.0
         },
         "DocsPath": {
           "type": "string",
-          "description": "Path to documentation directory containing markdown files for context",
+          "description": "(Deprecated: use Assistant.DocsPath) Path to documentation directory",
           "default": "docs"
+        },
+        "Providers": {
+          "type": "object",
+          "description": "Per-provider API keys (shared by Assistant and Agents)",
+          "properties": {
+            "Gemini": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "Gemini API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "Claude": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "Anthropic API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "OpenAI": {
+              "type": "object",
+              "properties": {
+                "ApiKey": { "type": "string", "description": "OpenAI API key (supports ${ENV_VAR} syntax)" }
+              }
+            },
+            "Ollama": {
+              "type": "object",
+              "properties": {
+                "BaseUrl": { "type": "string", "description": "Ollama base URL (e.g., http://localhost:11434)", "default": "http://localhost:11434" }
+              }
+            }
+          }
         }
-      },
-      "required": ["ApiKey"]
+      }
     },
     "ArchiveGroups": {
       "type": "array",

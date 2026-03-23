@@ -154,6 +154,10 @@ type Query {
         archiveGroup: String = "Default"
     ): [Topic!]!
 
+    # Get the full broker configuration as loaded from config.yaml
+    # Exposes enabled features, ports, storage backends, and extension settings
+    brokerConfig: BrokerConfig!
+
     # Get broker node information and metrics for monitoring cluster health
     # Returns current metrics, session counts, and node status information
     broker(
@@ -246,6 +250,12 @@ type TopicValue {
     format: DataFormat!
     timestamp: Long!
     qos: Int!
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type Topic {
@@ -261,6 +271,12 @@ type RetainedMessage {
     format: DataFormat!
     timestamp: Long!
     qos: Int!
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type ArchivedMessage {
@@ -270,6 +286,12 @@ type ArchivedMessage {
     timestamp: Long!
     qos: Int!
     clientId: String
+    # MQTT v5 Message Properties
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 # User Management Types
@@ -409,6 +431,7 @@ type MonitoringParameters {
     bufferSize: Int!
     samplingInterval: Float!
     discardOldest: Boolean!
+    monitoredItemsBatchSize: Int!
 }
 
 enum SecurityPolicy {
@@ -418,6 +441,16 @@ enum SecurityPolicy {
     Basic128Rsa15
     Aes256_Sha256_RsaPss
     Aes128_Sha256_RsaOaep
+}
+
+type OpcUaWriteConfig {
+    enabled: Boolean!
+    requestResponseEnabled: Boolean!
+    topicPrefix: String!
+    requestTopicPrefix: String!
+    responseTopicPrefix: String!
+    qos: Int!
+    writeTimeout: Long!
 }
 
 type OpcUaConnectionConfig {
@@ -435,6 +468,8 @@ type OpcUaConnectionConfig {
     addresses: [OpcUaAddress!]!
     # Certificate configuration for TLS/SSL connections and client authentication
     certificateConfig: CertificateConfig!
+    # Write configuration for MQTT-to-OPC UA writes
+    writeConfig: OpcUaWriteConfig!
 }
 
 type OpcUaDevice {
@@ -472,6 +507,10 @@ type OpcUaServer {
     port: Int!
     # OPC UA server endpoint path
     path: String!
+    # Override hostname used in endpoint URLs (null = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (null = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace index
     namespaceIndex: Int!
     # OPC UA namespace URI
@@ -671,6 +710,7 @@ enum MqttClientMode {
 
 # MQTT Client address mapping configuration
 # Defines how topics are mapped between local and remote brokers
+# MQTT Client address mapping configuration
 type MqttClientAddress {
     # Connection mode: SUBSCRIBE (remote→local) or PUBLISH (local→remote)
     mode: String!
@@ -683,6 +723,30 @@ type MqttClientAddress {
     removePath: Boolean!
     # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
     qos: Int
+    # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
+    # No Local: Don't receive messages you published (prevents loops)
+    noLocal: Boolean
+    # Retain Handling: 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
+    retainHandling: Int
+    # Retain As Published: Preserve original retain flag when forwarding
+    retainAsPublished: Boolean
+    # MQTT v5 Message Properties (only for PUBLISH mode)
+    # Message expiry interval in seconds (0 = no expiry)
+    messageExpiryInterval: Long
+    # MIME type of the message payload
+    contentType: String
+    # Topic pattern for request-response pattern
+    responseTopicPattern: String
+    # Indicates payload is UTF-8 encoded text
+    payloadFormatIndicator: Boolean
+    # Custom key-value metadata pairs
+    userProperties: [UserProperty!]
+}
+
+# User property key-value pair for MQTT v5 messages
+type UserProperty {
+    key: String!
+    value: String!
 }
 
 # MQTT Client connection configuration
@@ -715,6 +779,16 @@ type MqttClientConnectionConfig {
     deleteOldestMessages: Boolean!
     # Whether to verify SSL certificates (disable for self-signed certificates)
     sslVerifyCertificate: Boolean!
+    # MQTT protocol version: 4 for v3.1.1, 5 for v5.0 (default: 4)
+    protocolVersion: Int
+    # Session expiry interval in seconds (MQTT v5 only, 0-4294967295, default: 0)
+    sessionExpiryInterval: Long
+    # Maximum number of QoS 1 and QoS 2 publications that the client is willing to process concurrently (MQTT v5 only, 1-65535, default: 65535)
+    receiveMaximum: Int
+    # Maximum packet size the client is willing to accept (MQTT v5 only, 1-268435455 bytes)
+    maximumPacketSize: Long
+    # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
+    topicAliasMaximum: Int
 }
 
 # MQTT Client configuration
@@ -781,10 +855,6 @@ type KafkaClientConfig {
 
     # Additional arbitrary Kafka consumer properties
     extraConsumerConfig: JSON
-    # Poll interval in milliseconds
-    pollIntervalMs: Long!
-    # Max records per poll
-    maxPollRecords: Int!
     # Reconnect delay to Kafka in milliseconds
     reconnectDelayMs: Long!
     # Optional prefix applied to all published MQTT topics.
@@ -794,6 +864,10 @@ type KafkaClientConfig {
     # - Must not contain MQTT wildcards '+' or '#'
     # - Legacy keyTopicPrefix input still accepted for backward compatibility
     destinationTopicPrefix: String
+    # Regex pattern applied to the Kafka record key to transform it into an MQTT topic name
+    topicKeyRegex: String
+    # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
+    topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
 }
 
@@ -832,6 +906,110 @@ extend type Query {
         # Filter by cluster node ID (optional)
         node: String
     ): [KafkaClient!]!
+}
+
+#############################################
+# NATS Client Configuration                #
+#############################################
+
+"""
+NATS Client Bridge enables bidirectional messaging between MonsterMQ and a NATS server.
+
+Outbound (MQTT → NATS): Subscribes to local MQTT topics and publishes payloads to NATS subjects.
+Inbound  (NATS → MQTT): Subscribes to NATS subjects and republishes messages as local MQTT messages.
+
+Features:
+- Core NATS pub/sub and JetStream persistent streams
+- Anonymous, username/password, token, and TLS authentication
+- Automatic topic/subject separator translation (/ ↔ ., # ↔ >, + ↔ *)
+- Per-address wildcard conversion toggle (autoConvert)
+- Configurable reconnect behaviour
+"""
+
+enum NatsClientMode {
+    # Bring messages IN from NATS to the local MQTT broker (NATS → MQTT)
+    SUBSCRIBE
+    # Push messages OUT from the local MQTT broker to NATS (MQTT → NATS)
+    PUBLISH
+}
+
+enum NatsAuthType {
+    ANONYMOUS
+    USERNAME_PASSWORD
+    TOKEN
+    TLS
+}
+
+type NatsClientAddress {
+    # Direction: SUBSCRIBE (NATS→MQTT) or PUBLISH (MQTT→NATS)
+    mode: NatsClientMode!
+    # NATS subject pattern (supports * and > wildcards)
+    natsSubject: String!
+    # Local MQTT topic pattern (supports + and # wildcards)
+    mqttTopic: String!
+    # QoS level to use when publishing to the local MQTT broker (inbound only)
+    qos: Int!
+    # When true, automatically translate / ↔ . and # ↔ > and + ↔ * between MQTT and NATS
+    autoConvert: Boolean!
+    # When true, strip the topic prefix before the wildcard and prepend the target prefix
+    removePath: Boolean!
+}
+
+type NatsClientConfig {
+    # NATS server URLs, e.g. ["nats://localhost:4222"]
+    servers: [String!]!
+    # Authentication type
+    authType: NatsAuthType!
+    # Username (USERNAME_PASSWORD auth)
+    username: String
+    # Path to CA certificate file (TLS auth)
+    tlsCaCertPath: String
+    # Verify TLS server certificate
+    tlsVerify: Boolean!
+    # Connection timeout in milliseconds
+    connectTimeoutMs: Long!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelayMs: Long!
+    # Maximum reconnection attempts (-1 = unlimited)
+    maxReconnectAttempts: Int!
+    # Enable JetStream for persistent messaging
+    useJetStream: Boolean!
+    # JetStream stream name (required when useJetStream = true)
+    streamName: String
+    # Durable consumer name for JetStream (enables at-least-once delivery)
+    consumerDurableName: String
+    # List of address mappings (subscribe / publish)
+    addresses: [NatsClientAddress!]!
+}
+
+type NatsClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    errors: Float!
+    timestamp: String!
+}
+
+type NatsClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: NatsClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [NatsClientMetrics!]!
+}
+
+# Extend Queries for NATS clients
+extend type Query {
+    # Get NATS client bridge configurations across the entire cluster
+    natsClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [NatsClient!]!
 }
 
 #############################################
@@ -1570,4 +1748,77 @@ type AggregatedResult {
     topicCount: Int!
     # Number of data rows returned
     rowCount: Int!
+}
+
+#############################################
+# Telegram Client Configuration             #
+#############################################
+
+"""
+Telegram Bot Client Bridge Configuration
+
+Bidirectional bridge between the local MQTT broker and a Telegram Bot.
+
+Topic structure (driven by device namespace):
+- {namespace}/chats        — retained JSON array of registered chat IDs
+- {namespace}/in/{chatId}  — incoming messages from Telegram
+- {namespace}/out/{chatId} — publish here to send a message to a Telegram chat
+
+Bot commands:
+- /start — registers the chat, adds chatId to the retained chats topic
+- /stop  — unregisters the chat, removes chatId
+
+Features:
+- No external SDK — uses Telegram Bot API directly via HTTP
+- Long polling for receiving messages
+- Allowed-users whitelist (empty = all users allowed)
+- Supports Text, HTML, Markdown, and MarkdownV2 parse modes
+"""
+
+type TelegramClientConfig {
+    # Bot token (masked — only last 4 characters shown)
+    botToken: String!
+    # Long polling timeout in seconds
+    pollingTimeoutSeconds: Int!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelayMs: Long!
+    # HTTP proxy host (optional)
+    proxyHost: String
+    # HTTP proxy port (optional)
+    proxyPort: Int
+    # Default parse mode for outgoing messages: Text, HTML, Markdown, MarkdownV2
+    parseMode: String!
+    # Allowed Telegram usernames (empty list = all users allowed)
+    allowedUsers: [String!]!
+}
+
+type TelegramClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    errors: Float!
+    registeredChats: Int!
+    timestamp: String!
+}
+
+type TelegramClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: TelegramClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [TelegramClientMetrics!]!
+}
+
+# Extend Queries for Telegram clients
+extend type Query {
+    # Get Telegram client bridge configurations across the entire cluster
+    telegramClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [TelegramClient!]!
 }

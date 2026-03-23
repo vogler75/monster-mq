@@ -98,6 +98,52 @@ type BrokerMetrics {
  }
 
 
+# Full broker configuration as loaded from config.yaml
+type BrokerConfig {
+    nodeId: String!
+    version: String!
+    clustered: Boolean!
+    # MQTT listener ports (0 = disabled)
+    tcpPort: Int!
+    wsPort: Int!
+    tcpsPort: Int!
+    wssPort: Int!
+    natsPort: Int!
+    # Storage backends
+    sessionStoreType: String!
+    retainedStoreType: String!
+    configStoreType: String!
+    # User management
+    userManagementEnabled: Boolean!
+    anonymousEnabled: Boolean!
+    # Extensions
+    mcpEnabled: Boolean!
+    mcpPort: Int!
+    prometheusEnabled: Boolean!
+    prometheusPort: Int!
+    i3xEnabled: Boolean!
+    i3xPort: Int!
+    # GraphQL / HTTP API
+    graphqlEnabled: Boolean!
+    graphqlPort: Int!
+    # Metrics
+    metricsEnabled: Boolean!
+    # GenAI
+    genAiEnabled: Boolean!
+    genAiProvider: String!
+    genAiModel: String!
+    # Database connections (passwords omitted)
+    postgresUrl: String!
+    postgresUser: String!
+    crateDbUrl: String!
+    crateDbUser: String!
+    mongoDbUrl: String!
+    mongoDbDatabase: String!
+    sqlitePath: String!
+    # Kafka
+    kafkaServers: String!
+}
+
 # Represents a broker node in the MonsterMQ cluster
 # Each broker node runs independently and can handle MQTT clients, message processing, and data storage
 type Broker {
@@ -107,6 +153,9 @@ type Broker {
     version: String!
     # Whether user management is enabled for this broker
     userManagementEnabled: Boolean!
+    # Whether the Anonymous user is enabled (allows unauthenticated access)
+    # Only meaningful when userManagementEnabled is true
+    anonymousEnabled: Boolean!
     # Whether this broker node is the cluster leader
     # In single-node setups, always returns true
     # In clustered setups, returns true only for the designated leader node
@@ -168,6 +217,14 @@ type Session {
     queuedMessageCount: Long!
     # Additional session information as JSON
     information: String
+    # MQTT protocol version (4 = v3.1.1, 5 = v5.0)
+    protocolVersion: Int
+    # MQTT v5: Receive Maximum (max number of QoS 1/2 messages in flight)
+    receiveMaximum: Int
+    # MQTT v5: Maximum Packet Size in bytes
+    maximumPacketSize: Long
+    # MQTT v5: Topic Alias Maximum (max number of topic aliases)
+    topicAliasMaximum: Int
 }
 
 # Metrics for a single session
@@ -214,4 +271,10 @@ type MqttSubscription {
     topicFilter: String!
     # The Quality of Service level
     qos: Int!
+    # MQTT v5: No Local option (don't receive own messages)
+    noLocal: Boolean
+    # MQTT v5: Retain Handling (0=always, 1=if new, 2=never)
+    retainHandling: Int
+    # MQTT v5: Retain As Published option (preserve retain flag)
+    retainAsPublished: Boolean
 }

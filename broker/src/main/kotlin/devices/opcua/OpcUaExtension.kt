@@ -61,6 +61,17 @@ class OpcUaExtension : AbstractVerticle() {
             // Initialize shared data
             deviceRegistry = vertx.sharedData().getLocalMap("opcua.device.registry")
 
+            // Register connectors list consumer early so MetricsHandler can always discover active devices
+            vertx.eventBus()
+                .consumer<JsonObject>(EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)) { msg ->
+                    try {
+                        val list = activeDevices.keys.toList()
+                        msg.reply(JsonObject().put("devices", list))
+                    } catch (e: Exception) {
+                        msg.fail(500, e.message)
+                    }
+                }
+
             // Initialize device store
             initializeDeviceStore()
                 .compose { loadAndDeployDevices() }
@@ -179,19 +190,7 @@ class OpcUaExtension : AbstractVerticle() {
                                 // Complete when all devices have been processed (regardless of success/failure)
                                 if (completedCount == devices.size) {
                                     logger.info("OPC UA device deployment completed: $successCount/$completedCount devices deployed successfully")
-                                    // Provide list of active connector device names (OPC UA clients) - node-specific address
-                                    vertx.eventBus()
-                                        .consumer<JsonObject>(EventBusAddresses.OpcUaBridge.connectorsList(currentNodeId)) { msg ->
-                                            try {
-                                                val list = activeDevices.keys.toList()
-                                                msg.reply(JsonObject().put("devices", list))
-                                            } catch (e: Exception) {
-                                                msg.fail(500, e.message)
-                                            }
-                                        }
-
                                     promise.complete()
-
                                 }
                             }
                     }

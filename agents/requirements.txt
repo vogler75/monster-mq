@@ -1,0 +1,20 @@
+# MonsterMQ External Agent - Python Dependencies
+
+# MQTT client
+paho-mqtt>=2.1.0
+
+# LangChain core + agent framework
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# LLM providers (install the ones you need)
+langchain-google-genai>=2.0.0    # Gemini (default)
+# langchain-anthropic>=0.3.0     # Claude
+# langchain-openai>=0.3.0        # OpenAI
+# langchain-ollama>=0.3.0        # Ollama (local)
+
+# System monitoring (for the example agent)
+psutil>=6.0.0
+
+# Configuration
+pyyaml>=6.0

@@ -352,35 +352,53 @@ messageHandler.unregisterArchiveGroup(archiveGroupName)
 
 ## Bulk Import Configuration
 
-For initial setup or migration, use the `-archiveConfig` parameter:
+For initial setup or migration, use the `-archiveConfigs` or `-archiveConfigsMerge` parameters with a JSON file:
+
+- **`-archiveConfigs <file>`** — Full sync: imports all groups from the file and deletes any existing groups not present in the file.
+- **`-archiveConfigsMerge <file>`** — Merge: imports/updates groups from the file, keeps existing groups that are not in the file.
+
+These two arguments cannot be used together.
 
 ```bash
-# Import archive groups from YAML into database
-./run.sh -archiveConfig archive-setup.yaml
+# Full sync: import archive groups, delete any not in the file
+./run.sh -archiveConfigs archive-setup.json
+
+# Merge: import/update archive groups, keep existing ones
+./run.sh -archiveConfigsMerge archive-setup.json
 ```
 
-**archive-setup.yaml example:**
-```yaml
-ArchiveGroups:
-  - Name: "ProductionSensors"
-    Enabled: true
-    TopicFilter: ["sensors/#", "devices/#"]
-    RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-    LastValRetention: "7d"
-    ArchiveRetention: "30d"
-    PurgeInterval: "1h"
-
-  - Name: "DebugData"
-    Enabled: false
-    TopicFilter: ["debug/+", "test/#"]
-    LastValType: MEMORY
-    ArchiveType: POSTGRES
-    LastValRetention: "1h"
-    ArchiveRetention: "24h"
-    PurgeInterval: "30m"
+**archive-setup.json example:**
+```json
+[
+  {
+    "Name": "ProductionSensors",
+    "Enabled": true,
+    "TopicFilter": ["sensors/#", "devices/#"],
+    "RetainedOnly": false,
+    "LastValType": "POSTGRES",
+    "ArchiveType": "POSTGRES",
+    "LastValRetention": "7d",
+    "ArchiveRetention": "30d",
+    "PurgeInterval": "1h"
+  },
+  {
+    "Name": "DebugData",
+    "Enabled": false,
+    "TopicFilter": ["debug/+", "test/#"],
+    "LastValType": "MEMORY",
+    "ArchiveType": "POSTGRES",
+    "LastValRetention": "1h",
+    "ArchiveRetention": "24h",
+    "PurgeInterval": "30m"
+  }
+]
 ```
+
+## Export Configuration
+
+Click the download icon button in the Archive Groups table header in the dashboard to export all archive groups as a JSON file.
+
+The exported JSON uses the same format as the import files and can be used directly with `-archiveConfigs` or `-archiveConfigsMerge`.
 
 ## Clustering Considerations
 

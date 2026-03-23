@@ -70,6 +70,9 @@ class SessionStorePostgres(
                     topic TEXT[],
                     qos INT,
                     wildcard BOOLEAN,
+                    no_local BOOLEAN DEFAULT false,
+                    retain_handling INT DEFAULT 0,
+                    retain_as_published BOOLEAN DEFAULT false,
                     PRIMARY KEY (client_id, topic)
                 );
                 """.trimIndent(), """
@@ -80,7 +83,9 @@ class SessionStorePostgres(
                     payload BYTEA,
                     qos INT,
                     retained BOOLEAN,
-                    client_id VARCHAR(65535), 
+                    client_id VARCHAR(65535),
+                    creation_time BIGINT,
+                    message_expiry_interval BIGINT,
                     PRIMARY KEY (message_uuid)
                 );             
                 """.trimIndent(), """
@@ -105,6 +110,16 @@ class SessionStorePostgres(
                 connection.createStatement().use { statement ->
                     createTableSQL.forEach(statement::executeUpdate)
                     createIndexesSQL.forEach(statement::executeUpdate)
+                    
+                    // Migration: Add retain_as_published column if it doesn't exist
+                    try {
+                        statement.executeUpdate("""
+                        ALTER TABLE $subscriptionsTableName ADD COLUMN IF NOT EXISTS retain_as_published BOOLEAN DEFAULT false
+                        """.trimIndent())
+                        logger.fine("Subscription migration: Added retain_as_published column")
+                    } catch (e: Exception) {
+                        logger.fine("Subscription migration: Column may already exist: ${e.message}")
+                    }
                 }
                 connection.commit()
                 logger.fine("Tables are ready [${Utils.getCurrentFunctionName()}]")
@@ -121,18 +136,21 @@ class SessionStorePostgres(
         db.start(vertx, startPromise)
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int)->Unit) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean)->Unit) {
         try {
             db.connection?.let { connection ->
                 var rows = 0
-                val sql = "SELECT client_id, array_to_string(topic, '/'), qos FROM $subscriptionsTableName "
+                val sql = "SELECT client_id, array_to_string(topic, '/'), qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName "
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
                         val clientId = resultSet.getString(1)
                         val topic = resultSet.getString(2)
                         val qos = MqttQoS.valueOf(resultSet.getInt(3))
-                        callback(topic, clientId, qos.value())
+                        val noLocal = resultSet.getBoolean(4)
+                        val retainHandling = resultSet.getInt(5)
+                        val retainAsPublished = resultSet.getBoolean(6)
+                        callback(topic, clientId, qos.value(), noLocal, retainHandling, retainAsPublished)
                         rows++
                     }
                 }
@@ -348,8 +366,8 @@ class SessionStorePostgres(
     }
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard) VALUES (?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos, no_local = EXCLUDED.no_local, retain_handling = EXCLUDED.retain_handling, retain_as_published = EXCLUDED.retain_as_published"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
@@ -359,6 +377,9 @@ class SessionStorePostgres(
                         preparedStatement.setArray(2, connection.createArrayOf("text", levels))
                         preparedStatement.setInt(3, subscription.qos.value())
                         preparedStatement.setBoolean(4, Utils.isWildCardTopic(subscription.topicName))
+                        preparedStatement.setBoolean(5, subscription.noLocal)
+                        preparedStatement.setInt(6, subscription.retainHandling)
+                        preparedStatement.setBoolean(7, subscription.retainAsPublished)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -432,7 +453,7 @@ class SessionStorePostgres(
 
     override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         val sql1 = "INSERT INTO $queuedMessagesTableName "+
-                   "(message_uuid, message_id, topic, payload, qos, retained, client_id) VALUES (?, ?, ?, ?, ?, ?, ?) "+
+                   "(message_uuid, message_id, topic, payload, qos, retained, client_id, creation_time, message_expiry_interval) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
                    "ON CONFLICT (message_uuid) DO NOTHING"
         val sql2 = "INSERT INTO $queuedMessagesClientsTableName "+
                    "(client_id, message_uuid) VALUES (?, ?) "+
@@ -450,6 +471,12 @@ class SessionStorePostgres(
                            preparedStatement1.setInt(5, message.first.qosLevel)
                            preparedStatement1.setBoolean(6, message.first.isRetain)
                            preparedStatement1.setString(7, message.first.clientId)
+                           preparedStatement1.setLong(8, message.first.time.toEpochMilli())
+                           if (message.first.messageExpiryInterval != null) {
+                               preparedStatement1.setLong(9, message.first.messageExpiryInterval!!)
+                           } else {
+                               preparedStatement1.setNull(9, java.sql.Types.BIGINT)
+                           }
                            preparedStatement1.addBatch()
 
                            // Add client to message relation
@@ -471,7 +498,7 @@ class SessionStorePostgres(
     }
 
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) {
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id "+
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval "+
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) "+
                   "WHERE c.client_id = ? AND c.status = 0 "+
                   "ORDER BY m.message_uuid" // Time Based UUIDs
@@ -480,6 +507,7 @@ class SessionStorePostgres(
                 connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
+                    val currentTimeMillis = System.currentTimeMillis()
                     while (resultSet.next()) {
                         val messageUuid = resultSet.getString(1)
                         val messageId = resultSet.getInt(2)
@@ -488,6 +516,19 @@ class SessionStorePostgres(
                         val qos = resultSet.getInt(5)
                         val retained = resultSet.getBoolean(6)
                         val clientIdPublisher = resultSet.getString(7)
+                        val creationTime = resultSet.getLong(8)
+                        val messageExpiryIntervalRaw = resultSet.getLong(9)
+                        val messageExpiryInterval = if (resultSet.wasNull()) null else messageExpiryIntervalRaw
+                        
+                        // Check if message has expired
+                        if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                            val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                            if (ageSeconds >= messageExpiryInterval) {
+                                // Skip expired message
+                                continue
+                            }
+                        }
+                        
                         val continueProcessing = callback(
                             BrokerMessage(
                                 messageUuid = messageUuid,
@@ -498,7 +539,9 @@ class SessionStorePostgres(
                                 isRetain = retained,
                                 isDup = false,
                                 isQueued = true,
-                                clientId = clientIdPublisher
+                                clientId = clientIdPublisher,
+                                time = java.time.Instant.ofEpochMilli(creationTime),
+                                messageExpiryInterval = messageExpiryInterval
                             )
                         )
                         if (!continueProcessing) break
@@ -535,7 +578,7 @@ class SessionStorePostgres(
     }
 
     override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
-        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id " +
+        val sql = "SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval " +
                   "FROM $queuedMessagesTableName AS m JOIN $queuedMessagesClientsTableName AS c USING (message_uuid) " +
                   "WHERE c.client_id = ? AND c.status = 0 " +
                   "ORDER BY m.message_uuid LIMIT ?"
@@ -545,18 +588,41 @@ class SessionStorePostgres(
                     preparedStatement.setString(1, clientId)
                     preparedStatement.setInt(2, limit)
                     val resultSet = preparedStatement.executeQuery()
+                    val currentTimeMillis = System.currentTimeMillis()
                     val messages = mutableListOf<BrokerMessage>()
                     while (resultSet.next()) {
+                        val messageUuid = resultSet.getString(1)
+                        val messageId = resultSet.getInt(2)
+                        val topic = resultSet.getString(3)
+                        val payload = resultSet.getBytes(4)
+                        val qos = resultSet.getInt(5)
+                        val retained = resultSet.getBoolean(6)
+                        val clientIdPublisher = resultSet.getString(7)
+                        val creationTime = resultSet.getLong(8)
+                        val messageExpiryIntervalRaw = resultSet.getLong(9)
+                        val messageExpiryInterval = if (resultSet.wasNull()) null else messageExpiryIntervalRaw
+                        
+                        // Check if message has expired
+                        if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                            val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                            if (ageSeconds >= messageExpiryInterval) {
+                                // Skip expired message
+                                continue
+                            }
+                        }
+                        
                         messages.add(BrokerMessage(
-                            messageUuid = resultSet.getString(1),
-                            messageId = resultSet.getInt(2),
-                            topicName = resultSet.getString(3),
-                            payload = resultSet.getBytes(4),
-                            qosLevel = resultSet.getInt(5),
-                            isRetain = resultSet.getBoolean(6),
+                            messageUuid = messageUuid,
+                            messageId = messageId,
+                            topicName = topic,
+                            payload = payload,
+                            qosLevel = qos,
+                            isRetain = retained,
                             isDup = false,
                             isQueued = true,
-                            clientId = resultSet.getString(7)
+                            clientId = clientIdPublisher,
+                            time = java.time.Instant.ofEpochMilli(creationTime),
+                            messageExpiryInterval = messageExpiryInterval
                         ))
                     }
                     messages
@@ -644,6 +710,37 @@ class SessionStorePostgres(
             } ?: 0
         } catch (e: SQLException) {
             logger.warning("Error purging delivered messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            0
+        }
+    }
+
+    override fun purgeExpiredMessages(): Int {
+        val currentTimeMillis = System.currentTimeMillis()
+        
+        // Delete expired message client mappings
+        val sql = """
+            DELETE FROM $queuedMessagesClientsTableName
+            WHERE message_uuid IN (
+                SELECT message_uuid FROM $queuedMessagesTableName
+                WHERE message_expiry_interval IS NOT NULL
+                AND creation_time IS NOT NULL
+                AND (($currentTimeMillis - creation_time) / 1000) >= message_expiry_interval
+            )
+        """
+        
+        return try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    val count = preparedStatement.executeUpdate()
+                    connection.commit()
+                    if (count > 0) {
+                        logger.fine { "Purged $count expired messages" }
+                    }
+                    count
+                }
+            } ?: 0
+        } catch (e: SQLException) {
+            logger.warning("Error purging expired messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
             0
         }
     }

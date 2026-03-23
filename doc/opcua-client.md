@@ -128,6 +128,107 @@ Each OPC UA value becomes an MQTT message emitted on the namespace derived topic
 - `timestamp` is taken from the OPC UA `sourceTime` when available, otherwise `Instant.now()`.
 - `status` contains the raw OPC UA `StatusCode` value.
 
+## Writing to OPC UA (MQTT → OPC UA)
+
+The connector supports writing values to OPC UA server nodes and reading values on demand. Both features are disabled by default and controlled independently via `writeConfig`.
+
+### Configuration
+
+Add a `writeConfig` block to the device's `config`:
+
+```graphql
+config: {
+  endpointUrl: "opc.tcp://192.168.1.100:4840"
+  # ... other settings ...
+  writeConfig: {
+    enabled: true                    # Fire & forget writes
+    requestResponseEnabled: true     # Request/response (read + write)
+    topicPrefix: "write"             # Fire & forget topic prefix
+    requestTopicPrefix: "request"    # Request topic prefix
+    responseTopicPrefix: "response"  # Response topic prefix
+    qos: 1                           # Internal MQTT subscription QoS
+    writeTimeout: 5000               # OPC UA write/read timeout (ms)
+  }
+}
+```
+
+| Field | Default | Description |
+| ----- | ------- | ----------- |
+| `enabled` | `false` | Enable fire & forget writes via `{namespace}/{topicPrefix}/{nodeId}`. |
+| `requestResponseEnabled` | `false` | Enable request/response via `{namespace}/{requestTopicPrefix}/{nodeId}` with responses on `{namespace}/{responseTopicPrefix}/{nodeId}`. |
+| `topicPrefix` | `write` | Topic prefix for fire & forget writes. |
+| `requestTopicPrefix` | `request` | Topic prefix for request/response publish. |
+| `responseTopicPrefix` | `response` | Topic prefix for responses. |
+| `qos` | `1` | QoS for the connector's internal MQTT subscription to write/request topics. |
+| `writeTimeout` | `5000` | Timeout in ms for OPC UA write and read service calls. |
+
+### Fire & Forget Write
+
+Publish to `{namespace}/{topicPrefix}/{nodeId}` — no response is sent.
+
+```
+Topic:   opcua/factory/plc01/write/ns=2;i=1001
+Payload: {"value": 42.5}
+```
+
+With an explicit data type hint:
+
+```
+Payload: {"value": 42, "dataType": "Int16"}
+```
+
+### Request/Response Write
+
+Publish to `{namespace}/{requestTopicPrefix}/{nodeId}` with a `value` field. A response with the write status is published on `{namespace}/{responseTopicPrefix}/{nodeId}`.
+
+```
+Publish:  opcua/factory/plc01/request/ns=2;i=1001
+Payload:  {"value": 42.5}
+
+Response: opcua/factory/plc01/response/ns=2;i=1001
+Payload:  {"nodeId": "ns=2;i=1001", "status": "Good", "statusCode": 0, "timestamp": "2025-01-15T10:30:00Z"}
+```
+
+### Request/Response Read
+
+Publish to `{namespace}/{requestTopicPrefix}/{nodeId}` with an empty payload (or `{}`). The current value is read from the OPC UA server and returned.
+
+```
+Publish:  opcua/factory/plc01/request/ns=2;i=1001
+Payload:  {}
+
+Response: opcua/factory/plc01/response/ns=2;i=1001
+Payload:  {"nodeId": "ns=2;i=1001", "value": 42.5, "status": "Good", "statusCode": 0, "timestamp": "2025-01-15T10:30:00Z"}
+```
+
+### Batch Requests
+
+Publish a JSON array to the base topic (without a nodeId). Each entry specifies a `nodeId` and optionally a `value`. Entries without `value` are reads, entries with `value` are writes.
+
+```
+Publish:  opcua/factory/plc01/request
+Payload:  [
+            {"nodeId": "ns=2;i=1001"},
+            {"nodeId": "ns=2;i=1002", "value": 42.5},
+            {"nodeId": "ns=2;i=1003", "value": true, "dataType": "Boolean"}
+          ]
+
+Response: opcua/factory/plc01/response
+Payload:  [
+            {"nodeId": "ns=2;i=1001", "value": 23.1, "status": "Good", "statusCode": 0, "timestamp": "..."},
+            {"nodeId": "ns=2;i=1002", "status": "Good", "statusCode": 0, "timestamp": "..."},
+            {"nodeId": "ns=2;i=1003", "status": "Good", "statusCode": 0, "timestamp": "..."}
+          ]
+```
+
+Fire & forget batch writes (no reads) can use `{namespace}/{topicPrefix}` instead.
+
+### Data Type Hints
+
+When no `dataType` is provided, the type is inferred from the JSON value (numbers → Int32 or Double, booleans → Boolean, strings → String). For precise control, set `dataType` to one of:
+
+`Boolean`, `Byte`, `SByte`, `UByte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Float`, `Double`, `String`
+
 ## Operational Notes
 
 - Connectors automatically resubscribe after reconnecting and respect `monitoringParameters` when creating Milo monitored items.

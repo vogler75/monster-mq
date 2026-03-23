@@ -1,0 +1,9 @@
+Release v1.7.7
+Built from commit: 068823f
+Date: 2026-03-07 18:37:47
+
+Changes since v1.7.6:
+---
+068823f feat(prometheus): split query_range into raw (step<60s) and aggregated (step>=60s) paths
+63b4ec4 fix(prometheus): always use getAggregatedHistory for query_range, defaulting to AVG
+cd789fd fix(prometheus): downgrade query log messages to FINE and remove getHistory row limit

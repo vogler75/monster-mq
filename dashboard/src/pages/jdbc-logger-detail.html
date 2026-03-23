@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - JDBC Logger Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .logger-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .json-schema-section { grid-row: span 2; }
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
+        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
+        .section-card.full-width { grid-column: 1 / -1; }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; }
+        .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-content { padding: 1.5rem; }
+        .info-list { display: flex; flex-direction: column; gap: 1rem; }
+        .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
+        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .info-value { color: var(--text-primary); font-weight: 600; }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border: 1px solid; }
+        .status-enabled { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); border-color: rgba(16, 185, 129, 0.3); }
+        .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border-color: rgba(239, 68, 68, 0.3); }
+        input[type="text"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem; transition: all 0.2s ease; box-sizing: border-box; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1); }
+        input::placeholder, textarea::placeholder { color: var(--text-muted); }
+        input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="checkbox"] { width: auto; accent-color: var(--monster-purple); transform: scale(1.2); }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
+        small.form-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
+        textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+        #logger-json-schema { min-height: 400px; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: var(--gradient-primary); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3); }
+        .btn-secondary { background: var(--dark-surface-2); color: var(--text-primary); border: 1px solid var(--dark-border); min-width: 160px; white-space: nowrap; }
+        .btn-secondary:hover { background: var(--dark-border); transform: translateY(-1px); }
+        .btn-danger { background: var(--monster-red); color: white; }
+        .btn-danger:hover { opacity: 0.9; transform: translateY(-1px); }
+        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .section-actions { display: flex; align-items: center; gap: 0.5rem; }
+        .btn-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--dark-surface-2); border: 1px solid var(--dark-border); color: var(--text-muted); cursor: pointer; transition: all 0.2s ease; }
+        .btn-icon:hover { background: var(--monster-purple); color: white; transform: translateY(-1px); }
+        .refresh-btn svg { transition: transform 0.3s ease; }
+        .refresh-btn:hover svg { transform: rotate(180deg); }
+        .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .loading-indicator { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; text-align: center; }
+        .loading-spinner { width: 32px; height: 32px; border: 3px solid var(--dark-border); border-top: 3px solid var(--monster-purple); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; box-sizing: border-box; }
+        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; transition: color 0.2s ease; }
+        .modal-close:hover { color: var(--text-primary); }
+        .modal-body { padding: 2rem; }
+        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 1024px) {
+            .logger-info-grid, .info-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+            .json-schema-section { grid-row: auto; }
+        }
+
+        /* Help Button Styles */
+        .label-with-help { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .help-btn { background: none; border: none; color: var(--monster-purple); cursor: pointer; padding: 0.25rem; display: flex; align-items: center; transition: all 0.2s ease; }
+        .help-btn:hover { color: var(--monster-teal); transform: scale(1.1); }
+        .help-modal .modal-content { max-width: 900px; }
+        .help-modal .modal-body { padding: 1.5rem 2rem; }
+        .help-section { margin-bottom: 2rem; }
+        .help-section h4 { color: var(--text-primary); margin-bottom: 0.75rem; font-size: 1rem; }
+        .help-section p { color: var(--text-muted); margin-bottom: 1rem; line-height: 1.6; }
+        .help-code { background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-primary); overflow-x: auto; margin: 0.75rem 0; }
+        .help-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+        .help-table th, .help-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--dark-border); }
+        .help-table th { color: var(--text-primary); font-weight: 600; background: var(--dark-bg); }
+        .help-table td { color: var(--text-muted); }
+        .help-example { background: rgba(124, 58, 237, 0.1); border-left: 3px solid var(--monster-purple); padding: 1rem; margin: 0.75rem 0; }
+        .help-example-title { color: var(--monster-purple); font-weight: 600; margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+        <div class="page-header">
+            <div class="page-header-content">
+                <div>
+                    <h1 class="page-title" id="logger-title">JDBC Logger</h1>
+                    <p class="page-subtitle" id="logger-subtitle">Logger configuration and settings</p>
+                </div>
+                <div class="page-header-actions">
+                    <button class="btn btn-secondary" onclick="goBack()">Back to Loggers</button>
+                    <button class="btn btn-primary" onclick="saveLogger()" id="save-logger-btn">Save Logger</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <span>Loading logger details...</span>
+        </div>
+
+        <div id="logger-content" style="display: none;">
+            <div class="logger-info-grid">
+                <!-- Basic Information Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                                </svg>
+                            </div>
+                            <h2>Basic Information</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-name">Logger Name *</label>
+                                <input type="text" id="logger-name" required placeholder="e.g., jdbc-logger-1">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-namespace">Namespace *</label>
+                                <input type="text" id="logger-namespace" required placeholder="e.g., sensors/data">
+                                <small class="form-hint">The MQTT topic namespace prefix for this logger</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-node">Cluster Node *</label>
+                                <select id="logger-node" required>
+                                    <option value="">Select Node...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="logger-enabled" checked>
+                                    <label for="logger-enabled">Enabled</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 3C7.58 3 4 4.79 4 7s3.58 4 8 4 8-1.79 8-4-3.58-4-8-4zM4 9v3c0 2.21 3.58 4 8 4s8-1.79 8-4V9c0 2.21-3.58 4-8 4s-8-1.79-8-4zm0 5v3c0 2.21 3.58 4 8 4s8-1.79 8-4v-3c0 2.21-3.58 4-8 4s-8-1.79-8-4z"/>
+                                </svg>
+                            </div>
+                            <h2>Database Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-db-type">Database Type *</label>
+                                <select id="logger-db-type" required>
+                                    <option value="">Select Database Type...</option>
+                                    <option value="QUESTDB">QuestDB</option>
+                                    <option value="POSTGRESQL">PostgreSQL</option>
+                                    <option value="TIMESCALEDB">TimescaleDB</option>
+                                    <option value="MYSQL">MySQL</option>
+                                    <option value="SNOWFLAKE">Snowflake</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-jdbc-url">JDBC URL *</label>
+                                <input type="text" id="logger-jdbc-url" required placeholder="jdbc:postgresql://localhost:8812/qdb">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-username">Username *</label>
+                                <input type="text" id="logger-username" required placeholder="admin">
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="logger-update-password">
+                                    <label for="logger-update-password">Update Password</label>
+                                </div>
+                                <div id="password-field-group" style="display: none; margin-top: 0.5rem;">
+                                    <input type="password" id="logger-password" placeholder="Enter new password">
+                                </div>
+                            </div>
+
+                            <!-- Snowflake-specific configuration (shown only when Snowflake is selected) -->
+                            <div id="snowflake-config-section" style="display: none;">
+                                <div class="form-group">
+                                    <label for="logger-sf-account">Account *</label>
+                                    <input type="text" id="logger-sf-account" placeholder="MYORG-MYACCOUNT or xy12345">
+                                    <small class="form-hint">Snowflake account identifier</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-private-key-file">Private Key File *</label>
+                                    <input type="text" id="logger-sf-private-key-file" placeholder="/path/to/rsa_key.p8">
+                                    <small class="form-hint">Path to RSA private key file in PKCS#8 format (.p8)</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-warehouse">Warehouse *</label>
+                                    <input type="text" id="logger-sf-warehouse" placeholder="COMPUTE_WH">
+                                    <small class="form-hint">Snowflake warehouse for query execution</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-database">Database *</label>
+                                    <input type="text" id="logger-sf-database" placeholder="SCADA">
+                                    <small class="form-hint">Snowflake database name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-schema">Schema *</label>
+                                    <input type="text" id="logger-sf-schema" placeholder="PUBLIC">
+                                    <small class="form-hint">Snowflake schema name</small>
+                                </div>
+                                <div class="form-group">
+                                    <label for="logger-sf-role">Role</label>
+                                    <input type="text" id="logger-sf-role" placeholder="ACCOUNTADMIN">
+                                    <small class="form-hint">Snowflake role (optional, default: ACCOUNTADMIN)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+                                </svg>
+                            </div>
+                            <h2>MQTT Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label for="logger-topic-filters">Topic Filters *</label>
+                            <textarea id="logger-topic-filters" placeholder="Enter topic filters, one per line (e.g., sensors/+/temperature)"></textarea>
+                            <small class="form-hint">MQTT topic filters to subscribe to. Enter one filter per line.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="logger-payload-format">Payload Format *</label>
+                            <select id="logger-payload-format" required>
+                                <option value="JSON">JSON</option>
+                                <option value="RAW">Raw</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JSON Schema Section -->
+                <div class="section-card json-schema-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                                </svg>
+                            </div>
+                            <h2>JSON Schema</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <div class="label-with-help">
+                                <label for="logger-json-schema">JSON Schema *</label>
+                                <button type="button" class="help-btn" onclick="showSchemaHelp()" title="Show JSON Schema Help">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <textarea id="logger-json-schema" required placeholder='{"type":"object","properties":{"ts":{"type":"string","format":"timestamp"},"value":{"type":"number"}},"mapping":{"ts":"$.timestamp","value":"$.value"}}'></textarea>
+                            <small class="form-hint">Define schema (properties) for database columns and optional JSONPath mapping. Use "format": "timestamp" (ISO 8601/epoch ms) or "format": "timestampms" (epoch ms only) for timestamp fields. Use "arrayPath" to expand arrays into multiple rows (e.g., "arrayPath": "$.sensors[*]").</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Table Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M10 3H3v8h7V3zM21 3h-7v8h7V3zM21 13h-7v8h7v-8zM10 13H3v8h7v-8z"/>
+                                </svg>
+                            </div>
+                            <h2>Table Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-table-name">Fixed Table Name</label>
+                                <input type="text" id="logger-table-name" placeholder="e.g., sensor_data">
+                                <small class="form-hint">Use a fixed table name OR a JSONPath expression (not both)</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-table-jsonpath">Table Name JSONPath</label>
+                                <input type="text" id="logger-table-jsonpath" placeholder="e.g., $.device_type">
+                                <small class="form-hint">Extract table name from message using JSONPath</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-topic-name-column">Topic Name Column</label>
+                                <input type="text" id="logger-topic-name-column" placeholder="e.g., mqtt_topic">
+                                <small class="form-hint">Column name for storing MQTT topic (optional - leave empty to exclude topic)</small>
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group">
+                                    <input type="checkbox" id="logger-auto-create-table" checked>
+                                    <label for="logger-auto-create-table">Auto-create Table</label>
+                                </div>
+                                <small class="form-hint">Automatically create table if it doesn't exist (only works with fixed table name)</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Queue Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                                </svg>
+                            </div>
+                            <h2>Queue Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-queue-type">Queue Type</label>
+                                <select id="logger-queue-type">
+                                    <option value="MEMORY">Memory</option>
+                                    <option value="DISK">Disk</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-queue-size">Queue Size</label>
+                                <input type="number" id="logger-queue-size" value="10000" min="100" max="1000000">
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-disk-path">Disk Path</label>
+                                <input type="text" id="logger-disk-path" value="./buffer" placeholder="./buffer">
+                                <small class="form-hint">Used when Queue Type is DISK</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Write Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                                </svg>
+                            </div>
+                            <h2>Bulk Write Configuration</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="info-list">
+                            <div class="form-group">
+                                <label for="logger-bulk-size">Bulk Size</label>
+                                <input type="number" id="logger-bulk-size" value="1000" min="1" max="10000">
+                                <small class="form-hint">Number of messages to batch before writing</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-bulk-timeout">Bulk Timeout (ms)</label>
+                                <input type="number" id="logger-bulk-timeout" value="5000" min="100" max="60000">
+                                <small class="form-hint">Maximum time to wait before writing batch</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-reconnect-delay">Reconnect Delay (ms)</label>
+                                <input type="number" id="logger-reconnect-delay" value="5000" min="1000" max="60000">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timestamps Section (only visible when editing) -->
+            <div id="timestamps-section" class="section-card full-width" style="display: none;">
+                <div class="section-header">
+                    <div class="section-title">
+                        <div class="section-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                            </svg>
+                        </div>
+                        <h2>Timestamps</h2>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Created At</div>
+                            <div class="info-value" id="logger-created-at">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Updated At</div>
+                            <div class="info-value" id="logger-updated-at">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Section (only visible when editing) -->
+            <div id="metrics-section" class="section-card full-width" style="display: none; margin-top: 1.5rem;">
+                <div class="section-header">
+                    <div class="section-title">
+                        <div class="section-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                            </svg>
+                        </div>
+                        <h2>Current Metrics</h2>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn-icon refresh-btn" onclick="refreshMetrics()" title="Refresh Metrics">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                                <path d="M3 21v-5h5"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Messages In (msg/s)</div>
+                            <div class="info-value" id="metric-messages-in">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Messages Validated (msg/s)</div>
+                            <div class="info-value" id="metric-messages-validated">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Messages Written (msg/s)</div>
+                            <div class="info-value" id="metric-messages-written">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Messages Skipped (msg/s)</div>
+                            <div class="info-value" id="metric-messages-skipped">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Validation Errors (errors/s)</div>
+                            <div class="info-value" id="metric-validation-errors">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Write Errors (errors/s)</div>
+                            <div class="info-value" id="metric-write-errors">0</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Queue Size / Capacity</div>
+                            <div class="info-value"><span id="metric-queue-size">0</span> / <span id="metric-queue-capacity">0</span></div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Queue Status</div>
+                            <div class="info-value" id="metric-queue-full">Normal</div>
+                        </div>
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <div class="info-label">Metrics Timestamp</div>
+                            <div class="info-value" id="metric-timestamp">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error-message" class="error-message" style="display: none;">
+            <div class="error-content">
+                <span class="error-icon">⚠️</span>
+                <span class="error-text"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON Schema Help Modal -->
+<div id="schema-help-modal" class="modal help-modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>JSON Schema Configuration Guide</h3>
+            <button class="modal-close" onclick="hideSchemaHelp()">×</button>
+        </div>
+        <div class="modal-body">
+            <div class="help-section">
+                <h4>Overview</h4>
+                <p>The JSON Schema defines how incoming MQTT messages are validated and mapped to database columns. It supports JSON Schema validation, JSONPath field mapping, array expansion, and automatic timestamp handling.</p>
+            </div>
+
+            <div class="help-section">
+                <h4>Schema Structure</h4>
+                <p>The schema consists of four main parts:</p>
+                <table class="help-table">
+                    <thead>
+                        <tr>
+                            <th>Property</th>
+                            <th>Required</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>properties</code></td>
+                            <td>Yes</td>
+                            <td>Defines database columns with their data types</td>
+                        </tr>
+                        <tr>
+                            <td><code>required</code></td>
+                            <td>No</td>
+                            <td>Array of field names that must be present</td>
+                        </tr>
+                        <tr>
+                            <td><code>mapping</code></td>
+                            <td>No</td>
+                            <td>JSONPath expressions to extract values from incoming JSON</td>
+                        </tr>
+                        <tr>
+                            <td><code>arrayPath</code></td>
+                            <td>No</td>
+                            <td>JSONPath to extract array for expanding into multiple rows</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-section">
+                <h4>Data Types and Formats</h4>
+                <p>Supported JSON Schema types:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li><code>string</code> - Text values (VARCHAR)</li>
+                    <li><code>number</code> - Numeric values (INTEGER, FLOAT, DOUBLE)</li>
+                    <li><code>boolean</code> - True/false values</li>
+                    <li><code>string</code> with <code>"format": "timestamp"</code> - Timestamp fields that parse ISO 8601 strings or epoch ms (auto-fills current time if missing)</li>
+                    <li><code>number</code> with <code>"format": "timestampms"</code> - Timestamp fields that interpret the value as milliseconds since epoch (auto-fills current time if missing)</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>JSONPath Mapping</h4>
+                <p>Use the <code>mapping</code> object to extract values from nested JSON structures using JSONPath expressions:</p>
+                <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "mapping": {
+    "ts": "$.timestamp",           // Extract from root.timestamp
+    "sensor_id": "$.device.id",    // Extract from nested object
+    "value": "$.readings.temperature"
+  }
+}</div>
+                <p><strong>Common JSONPath expressions:</strong></p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li><code>$.field</code> - Root level field</li>
+                    <li><code>$.parent.child</code> - Nested field</li>
+                    <li><code>$.array[0]</code> - First array element</li>
+                    <li><code>$.sensors[*]</code> - All array elements</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>Array Expansion</h4>
+                <p>Use <code>arrayPath</code> to expand array items into multiple database rows. Root-level fields are merged with each array item:</p>
+                <div class="help-example">
+                    <div class="help-example-title">Example: Expanding Sensor Array</div>
+                    <strong>Incoming JSON:</strong>
+                    <div class="help-code">{
+  "device_id": "sensor-123",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "sensors": [
+    {"id": "temp-1", "value": 23.5},
+    {"id": "temp-2", "value": 24.1},
+    {"id": "humidity-1", "value": 65.0}
+  ]
+}</div>
+                    <strong>Schema:</strong>
+                    <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "device_id": {"type": "string"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_id": "$.id",
+    "value": "$.value"
+  }
+}</div>
+                    <strong>Result: 3 database rows created</strong>
+                    <div class="help-code">Row 1: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-1', value: 23.5}
+Row 2: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-2', value: 24.1}
+Row 3: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'humidity-1', value: 65.0}</div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Timestamp Handling</h4>
+                <p>Two timestamp formats are available:</p>
+                <p><strong><code>"format": "timestamp"</code></strong> - Flexible timestamp parsing:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Automatically parses ISO 8601 format: <code>"2024-01-15T10:30:00Z"</code></li>
+                    <li>Accepts epoch milliseconds as string or number: <code>1705318200000</code></li>
+                    <li>If field is missing, uses current timestamp automatically</li>
+                </ul>
+                <p><strong><code>"format": "timestampms"</code></strong> - Milliseconds since epoch only:</p>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Interprets long/number values as milliseconds since epoch: <code>1705318200000</code></li>
+                    <li>Use this when you have numeric timestamps to avoid parsing overhead</li>
+                    <li>If field is missing, uses current timestamp automatically</li>
+                </ul>
+            </div>
+
+            <div class="help-section">
+                <h4>Complete Example</h4>
+                <div class="help-example">
+                    <div class="help-example-title">Full Configuration for IoT Sensor Data</div>
+                    <strong>Schema:</strong>
+                    <div class="help-code">{
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "timestamp"
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "sensor_type": {
+      "type": "string"
+    },
+    "value": {
+      "type": "number"
+    },
+    "unit": {
+      "type": "string"
+    }
+  },
+  "required": ["value"],
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_type": "$.type",
+    "value": "$.reading",
+    "unit": "$.unit"
+  }
+}</div>
+                    <strong>Database Table (must be created manually):</strong>
+                    <div class="help-code">CREATE TABLE sensor_data (
+    ts TIMESTAMP,
+    device_id VARCHAR,
+    sensor_type VARCHAR,
+    value DOUBLE,
+    unit VARCHAR
+);</div>
+                </div>
+            </div>
+
+            <div class="help-section">
+                <h4>Important Notes</h4>
+                <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                    <li>Database tables must be created manually before starting the logger</li>
+                    <li>Column names in schema must match database column names exactly</li>
+                    <li>If no <code>mapping</code> is provided, field names are used directly</li>
+                    <li>Array expansion creates one row per array item</li>
+                    <li>Fields not in schema are ignored</li>
+                </ul>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" onclick="hideSchemaHelp()">Got it!</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="delete-logger-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" onclick="hideDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete this JDBC logger "<span id="delete-logger-name"></span>"?</p>
+            <p>This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDeleteLogger()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/jdbc-logger-detail.js"></script>
+    </ix-application>
+</body>
+</html>

@@ -13,8 +13,8 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.data.MqttSubscriptionCodec
 import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
-import at.rocworks.extensions.GrafanaServer
-import at.rocworks.extensions.ApiService
+import at.rocworks.extensions.PrometheusServer
+import at.rocworks.extensions.I3xServer
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
@@ -33,6 +33,7 @@ import io.vertx.config.ConfigRetrieverOptions
 import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
 // VertxInternal removed in Vert.x 5 - using alternative approaches
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
@@ -56,7 +57,6 @@ import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
-    // Print working directory and user.dir property
     Monster(args)
 }
 
@@ -67,8 +67,10 @@ class Monster(args: Array<String>) {
 
     private val configFile: String
     private var configJson: JsonObject = JsonObject()
-    private val archiveConfigFile: String?
-    private val dashboardPath: String?
+    private val archiveConfigsFile: String?
+    private val archiveConfigsMergeFile: String?
+    private val deviceConfigsFile: String?
+    private val deviceConfigsMergeFile: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -78,6 +80,7 @@ class Monster(args: Array<String>) {
     private var vertx: Vertx? = null
     private var sessionHandler: SessionHandler? = null
     private var messageBus: IMessageBus? = null
+    private var retainedStore: IMessageStore? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -165,6 +168,14 @@ class Monster(args: Array<String>) {
 
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
+        }
+
+        fun getArchiveHandler(): ArchiveHandler? {
+            return getInstance().archiveHandler
+        }
+
+        fun getRetainedStore(): IMessageStore? {
+            return getInstance().retainedStore
         }
 
         fun getVertx(): Vertx? {
@@ -286,20 +297,48 @@ class Monster(args: Array<String>) {
             System.getenv("GATEWAY_CONFIG") ?: "config.yaml"
         }
 
-        // Archive config file (optional)
-        val archiveConfigIndex = Utils.getArgIndex(args, listOf("-archiveConfig", "--archiveConfig"))
-        archiveConfigFile = if (archiveConfigIndex != -1 && archiveConfigIndex + 1 < args.size) {
-            args[archiveConfigIndex + 1]
+        // Archive configs file (optional) - full sync: import from file, delete orphans
+        val archiveConfigsIndex = Utils.getArgIndex(args, listOf("-archiveConfigs", "--archiveConfigs"))
+        archiveConfigsFile = if (archiveConfigsIndex != -1 && archiveConfigsIndex + 1 < args.size) {
+            args[archiveConfigsIndex + 1]
         } else {
             null
         }
 
-        // Dashboard path for development (optional)
-        val dashboardPathIndex = Utils.getArgIndex(args, listOf("-dashboardPath", "--dashboardPath"))
-        dashboardPath = if (dashboardPathIndex != -1 && dashboardPathIndex + 1 < args.size) {
-            args[dashboardPathIndex + 1]
+        // Archive configs merge file (optional) - merge: import/update from file, keep existing
+        val archiveConfigsMergeIndex = Utils.getArgIndex(args, listOf("-archiveConfigsMerge", "--archiveConfigsMerge"))
+        archiveConfigsMergeFile = if (archiveConfigsMergeIndex != -1 && archiveConfigsMergeIndex + 1 < args.size) {
+            args[archiveConfigsMergeIndex + 1]
         } else {
             null
+        }
+
+        // Validate that both import modes aren't specified simultaneously
+        if (archiveConfigsFile != null && archiveConfigsMergeFile != null) {
+            println("ERROR: -archiveConfigs and -archiveConfigsMerge cannot be used together")
+            exitProcess(1)
+        }
+
+        // Device configs file (optional) - full sync: import from file, delete orphans
+        val deviceConfigsIndex = Utils.getArgIndex(args, listOf("-deviceConfigs", "--deviceConfigs"))
+        deviceConfigsFile = if (deviceConfigsIndex != -1 && deviceConfigsIndex + 1 < args.size) {
+            args[deviceConfigsIndex + 1]
+        } else {
+            null
+        }
+
+        // Device configs merge file (optional) - merge: import/update from file, keep existing
+        val deviceConfigsMergeIndex = Utils.getArgIndex(args, listOf("-deviceConfigsMerge", "--deviceConfigsMerge"))
+        deviceConfigsMergeFile = if (deviceConfigsMergeIndex != -1 && deviceConfigsMergeIndex + 1 < args.size) {
+            args[deviceConfigsMergeIndex + 1]
+        } else {
+            null
+        }
+
+        // Validate that both device import modes aren't specified simultaneously
+        if (deviceConfigsFile != null && deviceConfigsMergeFile != null) {
+            println("ERROR: -deviceConfigs and -deviceConfigsMerge cannot be used together")
+            exitProcess(1)
         }
 
         Utils.getArgIndex(args, listOf("-log", "--log")).let {
@@ -324,18 +363,91 @@ class Monster(args: Array<String>) {
         logger.fine("Cluster: ${isClustered()}")
 
         val builder = Vertx.builder()
+        val vertxOptions = VertxOptions()
+            .setMaxWorkerExecuteTime(5 * 60 * 1_000_000_000L) // 5 min — LLM calls with tool loops can be long
         // Apply worker pool size if specified via command line
         getWorkerPoolSize()?.let { poolSize ->
-            val vertxOptions = VertxOptions()
-                .setWorkerPoolSize(poolSize)
-            builder.with(vertxOptions)
+            vertxOptions.setWorkerPoolSize(poolSize)
             logger.fine("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
         }
+        builder.with(vertxOptions)
 
         if (isClustered())
             clusterSetup(builder)
         else
             localSetup(builder)
+    }
+
+    private fun loadDeviceConfigs(vertx: Vertx, store: at.rocworks.stores.IDeviceConfigStore, file: String, fullSync: Boolean) {
+        val mode = if (fullSync) "full sync" else "merge"
+        logger.fine("Loading device configurations from: $file (mode: $mode)")
+
+        vertx.fileSystem().readFile(file).onComplete { readResult ->
+            if (readResult.failed()) {
+                logger.severe("Failed to read device config file $file: ${readResult.cause()?.message}")
+                return@onComplete
+            }
+
+            try {
+                val jsonArray = JsonArray(readResult.result().toString())
+                if (jsonArray.isEmpty) {
+                    logger.warning("No device configurations found in $file")
+                    return@onComplete
+                }
+
+                // Convert JsonArray to List<Map> and force enabled=false for safety
+                val configs = jsonArray.filterIsInstance<JsonObject>().map { obj ->
+                    val map = obj.map.toMutableMap()
+                    map["enabled"] = false
+                    map
+                }
+
+                val importedNames = configs.mapNotNull { it["name"] as? String }.toSet()
+
+                store.importConfigs(configs).onComplete { importResult ->
+                    if (importResult.succeeded()) {
+                        val result = importResult.result()
+                        logger.fine("Imported ${result.imported} device configs from $file (failed: ${result.failed})")
+                        if (result.errors.isNotEmpty()) {
+                            result.errors.forEach { logger.warning("Device import error: $it") }
+                        }
+
+                        if (fullSync) {
+                            deleteOrphanDeviceConfigs(store, importedNames)
+                        }
+                    } else {
+                        logger.severe("Failed to import device configs from $file: ${importResult.cause()?.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Failed to parse JSON from $file: ${e.message}")
+            }
+        }
+    }
+
+    private fun deleteOrphanDeviceConfigs(store: at.rocworks.stores.IDeviceConfigStore, importedNames: Set<String>) {
+        store.getAllDevices().onComplete { getAllResult ->
+            if (getAllResult.succeeded()) {
+                val orphanNames = getAllResult.result()
+                    .map { it.name }
+                    .filter { it !in importedNames }
+
+                if (orphanNames.isEmpty()) return@onComplete
+
+                orphanNames.forEach { name ->
+                    store.deleteDevice(name).onComplete { deleteResult ->
+                        if (deleteResult.succeeded() && deleteResult.result()) {
+                            logger.fine("Deleted orphan device config [$name] (full sync)")
+                        } else {
+                            logger.warning("Failed to delete orphan device config [$name]")
+                        }
+                    }
+                }
+                logger.fine("Full sync cleanup: deleting ${orphanNames.size} orphan device configs: $orphanNames")
+            } else {
+                logger.warning("Failed to get all devices for orphan cleanup: ${getAllResult.cause()?.message}")
+            }
+        }
     }
 
     private fun printHelp() {
@@ -349,9 +461,27 @@ OPTIONS:
   -config <file>        Configuration file path (default: config.yaml)
                         Environment: GATEWAY_CONFIG
 
-  -archiveConfig <file> Load ArchiveGroups from separate YAML file
-                        If ConfigStoreType is set: imports to database
-                        Otherwise: merges with main config in memory
+  -archiveConfigs <file> Load ArchiveGroups from a JSON file (full sync)
+                        Imports all groups from file, deletes groups not in file
+                        If ConfigStoreType is NONE: loads into memory
+
+  -archiveConfigsMerge <file>
+                        Load ArchiveGroups from a JSON file (merge)
+                        Imports/updates groups from file, keeps existing groups
+                        If ConfigStoreType is NONE: loads into memory
+                        Cannot be used together with -archiveConfigs
+
+  -deviceConfigs <file> Load device configurations from a JSON file (full sync)
+                        Imports all devices from file, deletes devices not in file
+                        Requires ConfigStoreType to be set (not NONE)
+                        Imported devices are disabled by default
+
+  -deviceConfigsMerge <file>
+                        Load device configurations from a JSON file (merge)
+                        Imports/updates devices from file, keeps existing devices
+                        Requires ConfigStoreType to be set (not NONE)
+                        Imported devices are disabled by default
+                        Cannot be used together with -deviceConfigs
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
 
@@ -362,10 +492,6 @@ OPTIONS:
   -workerPoolSize <num> Vert.x worker thread pool size
                         Default: 2×CPU count (e.g., 16 on 8-core machine)
                         Increase for high-concurrency scenarios
-
-  -dashboardPath <path> Serve dashboard files from filesystem path (development only)
-                        Example: broker/src/main/resources/dashboard
-                        Default: serve from classpath resources
 
 EXAMPLES:
   # Start with default configuration
@@ -639,6 +765,8 @@ MORE INFO:
         val useTcp = configJson.getInteger("TCP", 1883)
         val useWs = configJson.getInteger("WS", 0)
 
+        val useNats = configJson.getInteger("NATS", 0)
+
         val useTcpSsl = configJson.getInteger("TCPS", 0)
         val useWsSsl = configJson.getInteger("WSS", 0)
 
@@ -646,6 +774,7 @@ MORE INFO:
         val sslConfig = configJson.getJsonObject("SSL", JsonObject())
         val keyStorePath = sslConfig.getString("KeyStorePath", "server-keystore.jks")
         val keyStorePassword = sslConfig.getString("KeyStorePassword", "password")
+        val keyStoreType = sslConfig.getString("KeyStoreType", "JKS")
 
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
@@ -655,7 +784,7 @@ MORE INFO:
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
 
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
-        logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] QME [$queuedMessagesEnabled]")
+        logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] NATS [$useNats] QME [$queuedMessagesEnabled]")
         logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
@@ -672,9 +801,10 @@ MORE INFO:
 
             // Retained messages
             val (retainedStore, retainedReady) = getMessageStore(vertx, "RetainedMessages", retainedStoreType)
+            this.retainedStore = retainedStore
 
             // Archive groups
-            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigFile, isClustered)
+            val archiveHandler = ArchiveHandler(vertx, configJson, archiveConfigsFile, archiveConfigsMergeFile, isClustered)
             val archiveGroupsFuture = archiveHandler.initialize()
 
             // Wait for all stores to be ready
@@ -719,6 +849,16 @@ MORE INFO:
                         store?.initialize()?.onComplete { result ->
                             if (result.failed()) {
                                 logger.warning("Failed to initialize device config store: ${result.cause()?.message}")
+                            } else {
+                                // Start Topic Schema Policy Cache after store is ready
+                                at.rocworks.schema.TopicSchemaPolicyCache(vertx, store).start()
+
+                                // Load device configs from file if specified
+                                val deviceConfigFile = deviceConfigsFile ?: deviceConfigsMergeFile
+                                if (deviceConfigFile != null) {
+                                    val fullSync = deviceConfigsFile != null
+                                    loadDeviceConfigs(vertx, store, deviceConfigFile, fullSync)
+                                }
                             }
                         }
                         store
@@ -727,6 +867,9 @@ MORE INFO:
                         null
                     }
                 } else {
+                    if (deviceConfigsFile != null || deviceConfigsMergeFile != null) {
+                        logger.warning("-deviceConfigs/-deviceConfigsMerge requires ConfigStoreType to be set (not NONE)")
+                    }
                     null
                 }
 
@@ -751,15 +894,19 @@ MORE INFO:
                     null
                 }
 
-                // Grafana JSON Data Source API Server
-                val grafanaConfig = configJson.getJsonObject("Grafana", JsonObject())
-                val grafanaEnabled = grafanaConfig.getBoolean("Enabled", false)
-                val grafanaPort = grafanaConfig.getInteger("Port", 3001)
-                val grafanaDefaultArchiveGroup = grafanaConfig.getString("DefaultArchiveGroup", "Default")
-                val grafanaServer = if (grafanaEnabled) {
-                    GrafanaServer("0.0.0.0", grafanaPort, archiveHandler, userManager, grafanaDefaultArchiveGroup)
+                // Prometheus-compatible metrics server (instantiated after metricsStore below)
+                val prometheusConfig = configJson.getJsonObject("Prometheus", JsonObject())
+                val prometheusEnabled = prometheusConfig.getBoolean("Enabled", false)
+                val prometheusPort = prometheusConfig.getInteger("Port", 3001)
+
+                // CESMII I3X API Server
+                val i3xConfig = configJson.getJsonObject("I3x", JsonObject())
+                val i3xEnabled = i3xConfig.getBoolean("Enabled", false)
+                val i3xPort = i3xConfig.getInteger("Port", 3002)
+                val i3xServer = if (i3xEnabled) {
+                    I3xServer("0.0.0.0", i3xPort, archiveHandler, sessionHandler, userManager)
                 } else {
-                    logger.fine("Grafana API server is disabled in configuration")
+                    logger.fine("I3X API server is disabled in configuration")
                     null
                 }
 
@@ -793,14 +940,29 @@ MORE INFO:
                     null to null
                 }
 
+                // Prometheus Server (needs metricsStore for historical broker metrics)
+                val prometheusRawQueryLimit = prometheusConfig.getInteger("RawQueryLimit", 10000)
+                val prometheusServer = if (prometheusEnabled) {
+                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore, prometheusRawQueryLimit)
+                } else {
+                    logger.fine("Prometheus server is disabled in configuration")
+                    null
+                }
+
                 // GenAI Provider
-                val genAiConfig = configJson.getJsonObject("GenAI", JsonObject())
                 val genAiProvider = try {
-                    at.rocworks.genai.GenAiProviderFactory.create(vertx, genAiConfig).get()
+                    at.rocworks.genai.GenAiProviderFactory.create(vertx, configJson).get()
                 } catch (e: Exception) {
                     logger.warning("Failed to initialize GenAI provider: ${e.message}")
                     null
                 }
+
+                // Dashboard config
+                val dashboardConfig = configJson.getJsonObject("Dashboard", JsonObject())
+                val dashboardEnabled = dashboardConfig.getBoolean("Enabled", true)
+                val dashboardPath: String? = if (dashboardEnabled) {
+                    dashboardConfig.getString("Path", "")
+                } else null
 
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
@@ -820,38 +982,26 @@ MORE INFO:
                         sessionHandler,
                         metricsStore,
                         this.archiveHandler,
-                        dashboardPath,
                         deviceConfigStore,
-                        genAiProvider
+                        genAiProvider,
+                        dashboardPath
                     )
                 } else {
                     logger.fine("GraphQL server is disabled in configuration")
                     null
                 }
 
-                // API Service (JSON-RPC 2.0 over MQTT)
-                val apiEnabled = graphQLConfig.getBoolean("MqttApi", true)
-                val apiService = if (apiEnabled && graphQLServer != null) {
-                    val graphQLPort = graphQLConfig.getInteger("Port", 4000)
-                    val graphQLPath = graphQLConfig.getString("Path", "/graphql")
-                    ApiService(sessionHandler, "graphql", graphQLPort, graphQLPath)
-                } else {
-                    if (!apiEnabled) {
-                        logger.fine("API Service is disabled in configuration")
-                    } else if (graphQLServer == null) {
-                        logger.fine("GraphQL server is disabled, API Service will not start")
-                    }
-                    null
-                }
 
                 // MQTT Servers
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword) else null,
+                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
+                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
+                    if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
-                    grafanaServer
+                    prometheusServer,
+                    i3xServer
                 )
 
                 // Deploy all verticles
@@ -926,6 +1076,18 @@ MORE INFO:
                         val kafkaClientExtension = KafkaClientExtension()
                         val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                         vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
+                    }
+                    .compose {
+                        // NATS Client Bridge Extension
+                        val natsClientExtension = at.rocworks.devices.natsclient.NatsClientExtension()
+                        val natsDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
+                    }
+                    .compose {
+                        // Telegram Client Bridge Extension
+                        val telegramClientExtension = at.rocworks.devices.telegramclient.TelegramClientExtension()
+                        val telegramDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(telegramClientExtension, telegramDeploymentOptions)
                     }
                     .compose {
                         // WinCC OA Client Extension (GraphQL-based)
@@ -1004,13 +1166,15 @@ MORE INFO:
                     }
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
                     .compose {
-                        // Deploy API Service after other components are ready
-                        if (apiService != null) {
-                            logger.fine("Deploying API Service...")
-                            vertx.deployVerticle(apiService)
-                        } else {
-                            Future.succeededFuture<String>()
-                        }
+                        // Agent Extension (must start AFTER MCP server and other servers are ready)
+                        val agentExtension = at.rocworks.agents.AgentExtension()
+                        val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                        vertx.deployVerticle(agentExtension, agentDeploymentOptions)
+                            .recover { error ->
+                                // Non-fatal: agents are optional
+                                logger.warning("AgentExtension not started: ${error.message}")
+                                Future.succeededFuture<String>()
+                            }
                     }
                     .compose {
                         // Start GraphQL server after all other components are ready

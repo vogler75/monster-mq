@@ -63,20 +63,59 @@ class MessageStoreSQLite(
                 qos INTEGER,
                 retained BOOLEAN,
                 client_id TEXT, 
-                message_uuid TEXT
+                message_uuid TEXT,
+                creation_time INTEGER,
+                message_expiry_interval INTEGER
             )
             """.trimIndent())
             .add("""
             CREATE INDEX IF NOT EXISTS ${tableName}_topic ON $tableName (${(FIXED_TOPIC_COLUMN_NAMES + "topic_r").joinToString(", ")})
             """.trimIndent())
 
-        sqlClient.initDatabase(createTableSQL).onComplete { result ->
-            if (result.succeeded()) {
-                logger.info("SQLite Message store [$name] is ready [start]")
-                startPromise.complete()
+        sqlClient.initDatabase(createTableSQL).onComplete { createResult ->
+            if (createResult.succeeded()) {
+                // Migration: Check for Phase 5 columns before attempting to add them
+                val checkColumnSql = "PRAGMA table_info($tableName)"
+                sqlClient.executeQuery(checkColumnSql, JsonArray()).onComplete { queryResult ->
+                    if (queryResult.succeeded()) {
+                        val rows = queryResult.result()
+                        val hasCreationTime = rows.any { row ->
+                            (row as JsonObject).getString("name") == "creation_time"
+                        }
+                        val hasExpiryInterval = rows.any { row ->
+                            (row as JsonObject).getString("name") == "message_expiry_interval"
+                        }
+                        
+                        val migrationsNeeded = mutableListOf<String>()
+                        if (!hasCreationTime) migrationsNeeded.add("ALTER TABLE $tableName ADD COLUMN creation_time INTEGER")
+                        if (!hasExpiryInterval) migrationsNeeded.add("ALTER TABLE $tableName ADD COLUMN message_expiry_interval INTEGER")
+                        
+                        if (migrationsNeeded.isNotEmpty()) {
+                            logger.info("Phase 5 migration: Adding ${migrationsNeeded.size} missing column(s) to $tableName")
+                            val migrationSQL = JsonArray(migrationsNeeded)
+                            sqlClient.initDatabase(migrationSQL).onComplete { migrationResult ->
+                                if (migrationResult.succeeded()) {
+                                    logger.info("Phase 5 migration: Successfully added expiry columns to $tableName")
+                                } else {
+                                    logger.warning("Phase 5 migration warning for $tableName: ${migrationResult.cause()?.message}")
+                                }
+                                logger.info("SQLite Message store [$name] is ready [start]")
+                                startPromise.complete()
+                            }
+                        } else {
+                            logger.fine("Phase 5 columns already exist in $tableName, skipping migration")
+                            logger.info("SQLite Message store [$name] is ready [start]")
+                            startPromise.complete()
+                        }
+                    } else {
+                        logger.warning("Could not check for Phase 5 columns in $tableName: ${queryResult.cause()?.message}")
+                        logger.info("SQLite Message store [$name] is ready [start]")
+                        startPromise.complete()
+                    }
+                }
             } else {
-                logger.severe("Failed to initialize SQLite message store: ${result.cause()?.message}")
-                startPromise.fail(result.cause())
+                logger.severe("Failed to initialize SQLite message store: ${createResult.cause()?.message}")
+                startPromise.fail(createResult.cause())
             }
         }
     }
@@ -168,8 +207,8 @@ class MessageStoreSQLite(
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
         val placeholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
         val sql = """INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l,
-                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid) 
-                   VALUES (?, $placeholders, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval) 
+                   VALUES (?, $placeholders, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                    ON CONFLICT (topic) DO UPDATE 
                    SET time = excluded.time, 
                    payload_blob = excluded.payload_blob, 
@@ -177,7 +216,9 @@ class MessageStoreSQLite(
                    qos = excluded.qos, 
                    retained = excluded.retained, 
                    client_id = excluded.client_id, 
-                   message_uuid = excluded.message_uuid 
+                   message_uuid = excluded.message_uuid,
+                   creation_time = excluded.creation_time,
+                   message_expiry_interval = excluded.message_expiry_interval 
                    """
 
         val batchParams = JsonArray()
@@ -205,6 +246,8 @@ class MessageStoreSQLite(
             params.add(message.isRetain)
             params.add(message.clientId)
             params.add(message.messageUuid)
+            params.add(message.time.toEpochMilli())
+            params.add(message.messageExpiryInterval)
             
             batchParams.add(params)
         }
@@ -263,7 +306,7 @@ class MessageStoreSQLite(
                         " AND json_array_length(topic_r) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                     }
                 })
-        val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid " +
+        val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval " +
                   "FROM $tableName WHERE $where"
 
         val params = JsonArray()
@@ -274,6 +317,7 @@ class MessageStoreSQLite(
         sqlClient.executeQuery(sql, params).onComplete { result ->
             if (result.succeeded()) {
                 val results = result.result()
+                val currentTimeMillis = System.currentTimeMillis()
                 results.forEach { row ->
                     val rowObj = row as JsonObject
                     val topic = rowObj.getString("topic")
@@ -281,6 +325,17 @@ class MessageStoreSQLite(
                     val qos = rowObj.getInteger("qos", 0)
                     val clientId = rowObj.getString("client_id", "")
                     val messageUuid = rowObj.getString("message_uuid", "")
+                    val creationTime = rowObj.getLong("creation_time", currentTimeMillis)
+                    val messageExpiryInterval = if (rowObj.getValue("message_expiry_interval") == null) null else rowObj.getLong("message_expiry_interval")
+                    
+                    // Phase 5: Check if message has expired
+                    if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                        val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                        if (ageSeconds >= messageExpiryInterval) {
+                            return@forEach // Skip expired message
+                        }
+                    }
+                    
                     val message = BrokerMessage(
                         messageUuid = messageUuid,
                         messageId = 0,
@@ -290,7 +345,9 @@ class MessageStoreSQLite(
                         isRetain = true,
                         isDup = false,
                         isQueued = false,
-                        clientId = clientId
+                        clientId = clientId,
+                        time = java.time.Instant.ofEpochMilli(creationTime),
+                        messageExpiryInterval = messageExpiryInterval
                     )
                     callback(message)
                 }

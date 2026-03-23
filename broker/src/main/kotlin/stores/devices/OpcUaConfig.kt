@@ -179,6 +179,54 @@ data class OpcUaAddress(
 }
 
 /**
+ * OPC UA write configuration for MQTT-to-OPC UA writes
+ */
+data class OpcUaWriteConfig(
+    val enabled: Boolean = false,                          // Enable fire&forget writes
+    val requestResponseEnabled: Boolean = false,           // Enable request/response (read + write)
+    val topicPrefix: String = "write",                     // Fire&forget: {namespace}/{topicPrefix}/...
+    val requestTopicPrefix: String = "request",            // Request/response publish topic
+    val responseTopicPrefix: String = "response",          // Request/response response topic
+    val qos: Int = 1,                                      // QoS for write topic subscriptions
+    val writeTimeout: Long = 5000                          // Write operation timeout in ms
+) {
+    companion object {
+        fun fromJsonObject(json: JsonObject): OpcUaWriteConfig {
+            return OpcUaWriteConfig(
+                enabled = json.getBoolean("enabled", false),
+                requestResponseEnabled = json.getBoolean("requestResponseEnabled", false),
+                topicPrefix = json.getString("topicPrefix", "write"),
+                requestTopicPrefix = json.getString("requestTopicPrefix", "request"),
+                responseTopicPrefix = json.getString("responseTopicPrefix", "response"),
+                qos = json.getInteger("qos", 1),
+                writeTimeout = json.getLong("writeTimeout", 5000)
+            )
+        }
+    }
+
+    fun toJsonObject(): JsonObject {
+        return JsonObject()
+            .put("enabled", enabled)
+            .put("requestResponseEnabled", requestResponseEnabled)
+            .put("topicPrefix", topicPrefix)
+            .put("requestTopicPrefix", requestTopicPrefix)
+            .put("responseTopicPrefix", responseTopicPrefix)
+            .put("qos", qos)
+            .put("writeTimeout", writeTimeout)
+    }
+
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+        if (topicPrefix.isBlank()) errors.add("writeConfig.topicPrefix cannot be blank")
+        if (requestTopicPrefix.isBlank()) errors.add("writeConfig.requestTopicPrefix cannot be blank")
+        if (responseTopicPrefix.isBlank()) errors.add("writeConfig.responseTopicPrefix cannot be blank")
+        if (qos !in 0..2) errors.add("writeConfig.qos must be 0, 1, or 2")
+        if (writeTimeout < 100) errors.add("writeConfig.writeTimeout should be at least 100ms")
+        return errors
+    }
+}
+
+/**
  * OPC UA connection configuration parameters
  */
 data class OpcUaConnectionConfig(
@@ -194,7 +242,8 @@ data class OpcUaConnectionConfig(
     val requestTimeout: Long = 5000,
     val monitoringParameters: MonitoringParameters = MonitoringParameters(),
     val addresses: List<OpcUaAddress> = emptyList(),
-    val certificateConfig: CertificateConfig = CertificateConfig()
+    val certificateConfig: CertificateConfig = CertificateConfig(),
+    val writeConfig: OpcUaWriteConfig = OpcUaWriteConfig()
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): OpcUaConnectionConfig {
@@ -224,6 +273,15 @@ data class OpcUaConnectionConfig(
                 } catch (e: Exception) {
                     println("Error parsing certificateConfig: ${e.message}")
                     CertificateConfig()
+                }
+
+                val writeConfig = try {
+                    json.getJsonObject("writeConfig")?.let {
+                        OpcUaWriteConfig.fromJsonObject(it)
+                    } ?: OpcUaWriteConfig()
+                } catch (e: Exception) {
+                    println("Error parsing writeConfig: ${e.message}")
+                    OpcUaWriteConfig()
                 }
 
                 val config = OpcUaConnectionConfig(
@@ -269,7 +327,8 @@ data class OpcUaConnectionConfig(
                     },
                     monitoringParameters = monitoringParams,
                     addresses = addresses,
-                    certificateConfig = certificateConfig
+                    certificateConfig = certificateConfig,
+                    writeConfig = writeConfig
                 )
 
                 // DeviceConfig is only for OPC UA Client devices
@@ -297,6 +356,7 @@ data class OpcUaConnectionConfig(
             .put("requestTimeout", requestTimeout)
             .put("monitoringParameters", monitoringParameters.toJsonObject())
             .put("certificateConfig", certificateConfig.toJsonObject())
+            .put("writeConfig", writeConfig.toJsonObject())
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {
@@ -340,6 +400,9 @@ data class OpcUaConnectionConfig(
                 errors.add("Address $index: $error")
             }
         }
+
+        // Validate write config
+        errors.addAll(writeConfig.validate())
 
         return errors
     }
@@ -401,14 +464,16 @@ data class CertificateConfig(
 data class MonitoringParameters(
     val bufferSize: Int = 100,
     val samplingInterval: Double = 0.0,
-    val discardOldest: Boolean = false
+    val discardOldest: Boolean = false,
+    val monitoredItemsBatchSize: Int = 1000
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): MonitoringParameters {
             return MonitoringParameters(
                 bufferSize = json.getInteger("bufferSize", 100),
                 samplingInterval = json.getDouble("samplingInterval", 0.0),
-                discardOldest = json.getBoolean("discardOldest", false)
+                discardOldest = json.getBoolean("discardOldest", false),
+                monitoredItemsBatchSize = json.getInteger("monitoredItemsBatchSize", 1000)
             )
         }
     }
@@ -418,5 +483,6 @@ data class MonitoringParameters(
             .put("bufferSize", bufferSize)
             .put("samplingInterval", samplingInterval)
             .put("discardOldest", discardOldest)
+            .put("monitoredItemsBatchSize", monitoredItemsBatchSize)
     }
 }

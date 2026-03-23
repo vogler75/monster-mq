@@ -112,10 +112,10 @@ class KafkaClientConfigQueries(
                 "groupId" to config.groupId,
                 "payloadFormat" to config.payloadFormat,
                 "extraConsumerConfig" to config.extraConsumerConfig,
-                "pollIntervalMs" to config.pollIntervalMs,
-                "maxPollRecords" to config.maxPollRecords,
                 "reconnectDelayMs" to config.reconnectDelayMs,
-                "destinationTopicPrefix" to config.destinationTopicPrefix
+                "destinationTopicPrefix" to config.destinationTopicPrefix,
+                "topicKeyRegex" to config.topicKeyRegex,
+                "topicKeyReplacement" to config.topicKeyReplacement
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

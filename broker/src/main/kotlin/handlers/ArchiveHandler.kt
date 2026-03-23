@@ -11,9 +11,6 @@ import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.MessageArchiveKafka
 import at.rocworks.stores.PayloadFormat
-import io.vertx.config.ConfigRetriever
-import io.vertx.config.ConfigRetrieverOptions
-import io.vertx.config.ConfigStoreOptions
 import io.vertx.core.*
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonArray
@@ -26,7 +23,8 @@ import java.util.logging.Logger
 class ArchiveHandler(
     private val vertx: Vertx,
     private val configJson: JsonObject,
-    private val archiveConfigFile: String?,
+    private val archiveConfigsFile: String?,
+    private val archiveConfigsMergeFile: String?,
     private val isClustered: Boolean = false
 ) {
     private val logger: Logger = Utils.getLogger(this::class.java)
@@ -56,9 +54,11 @@ class ArchiveHandler(
         // Setup message bus event handlers
         setupEventHandlers()
 
-        // Load archive config if specified
-        if (archiveConfigFile != null) {
-            loadArchiveConfig().onComplete { loadResult ->
+        // Load archive configs if specified
+        val configFile = archiveConfigsFile ?: archiveConfigsMergeFile
+        if (configFile != null) {
+            val fullSync = archiveConfigsFile != null
+            loadArchiveConfigs(configFile, fullSync).onComplete { loadResult ->
                 if (loadResult.succeeded()) {
                     deployArchiveGroups().onComplete(promise)
                 } else {
@@ -108,63 +108,59 @@ class ArchiveHandler(
         logger.fine("ArchiveHandler event handlers registered")
     }
 
-    private fun loadArchiveConfig(): Future<Void> {
+    private fun loadArchiveConfigs(file: String, fullSync: Boolean): Future<Void> {
         val promise = Promise.promise<Void>()
 
         try {
-            logger.fine("Loading archive configuration from: $archiveConfigFile")
+            val mode = if (fullSync) "full sync" else "merge"
+            logger.fine("Loading archive configuration from: $file (mode: $mode)")
 
-            val archiveConfigRetriever = ConfigRetriever.create(
-                vertx,
-                ConfigRetrieverOptions().addStore(
-                    ConfigStoreOptions()
-                        .setType("file")
-                        .setFormat("yaml")
-                        .setConfig(JsonObject().put("path", archiveConfigFile))
-                )
-            )
-
-            archiveConfigRetriever.config.onComplete { result ->
+            vertx.fileSystem().readFile(file).onComplete { result ->
                 if (result.succeeded()) {
-                    val archiveConfig = result.result()
-                    val archiveGroups = archiveConfig.getJsonArray("ArchiveGroups")
+                    try {
+                        val archiveGroups = JsonArray(result.result().toString())
 
-                    if (archiveGroups != null && !archiveGroups.isEmpty) {
-                        val configStoreType = Monster.getConfigStoreType(configJson)
+                        if (!archiveGroups.isEmpty) {
+                            val configStoreType = Monster.getConfigStoreType(configJson)
 
-                        if (configStoreType != "NONE") {
-                            // Import into database
-                            importArchiveConfigToDatabase(archiveGroups, configStoreType).onComplete { importResult ->
-                                if (importResult.succeeded()) {
-                                    promise.complete()
-                                } else {
-                                    promise.fail(importResult.cause())
+                            if (configStoreType != "NONE") {
+                                // Import into database
+                                importArchiveConfigToDatabase(archiveGroups, configStoreType, fullSync).onComplete { importResult ->
+                                    if (importResult.succeeded()) {
+                                        promise.complete()
+                                    } else {
+                                        promise.fail(importResult.cause())
+                                    }
                                 }
+                            } else {
+                                // Load into memory (ArchiveGroups key for in-memory mode)
+                                configJson.put("ArchiveGroups", archiveGroups)
+                                logger.fine("Loaded ${archiveGroups.size()} archive groups from $file into memory")
+                                promise.complete()
                             }
                         } else {
-                            // Merge or replace ArchiveGroups in main config (existing behavior)
-                            configJson.put("ArchiveGroups", archiveGroups)
-                            logger.fine("Loaded ${archiveGroups.size()} archive groups from $archiveConfigFile into memory")
+                            logger.warning("No archive groups found in $file")
                             promise.complete()
                         }
-                    } else {
-                        logger.warning("No ArchiveGroups found in $archiveConfigFile")
-                        promise.complete()
+                    } catch (e: Exception) {
+                        logger.severe("Failed to parse JSON from $file: ${e.message}")
+                        promise.fail(e)
                     }
                 } else {
-                    logger.severe("Failed to load archive config from $archiveConfigFile: ${result.cause()?.message}")
+                    logger.severe("Failed to read archive config file $file: ${result.cause()?.message}")
                     promise.fail(result.cause())
                 }
             }
         } catch (e: Exception) {
-            logger.severe("Error loading archive config from $archiveConfigFile: ${e.message}")
+            logger.severe("Error loading archive config from $file: ${e.message}")
             promise.fail(e)
         }
 
         return promise.future()
     }
 
-    private fun importArchiveConfigToDatabase(archiveGroups: JsonArray, configStoreType: String): Future<Void> {
+
+    private fun importArchiveConfigToDatabase(archiveGroups: JsonArray, configStoreType: String, fullSync: Boolean = false): Future<Void> {
         val promise = Promise.promise<Void>()
         val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
@@ -187,10 +183,12 @@ class ArchiveHandler(
 
                 // Import each archive group
                 val configsList = archiveGroups.filterIsInstance<JsonObject>()
+                val importedNames = mutableSetOf<String>()
                 val importFutures = configsList.map { config ->
                     try {
                         val archiveGroup = ArchiveGroup.fromConfig(config, databaseConfig, isClustered)
                         val enabled = config.getBoolean("Enabled", true)
+                        importedNames.add(archiveGroup.name)
 
                         configStore.saveArchiveGroup(archiveGroup, enabled).map { success ->
                             if (success) {
@@ -212,22 +210,71 @@ class ArchiveHandler(
                         if (it.succeeded()) it.result() as Int else null
                     }.sum()
 
-                    logger.fine("Successfully imported $importedCount archive groups from $archiveConfigFile to database")
+                    val file = archiveConfigsFile ?: archiveConfigsMergeFile ?: "unknown"
+                    logger.fine("Successfully imported $importedCount archive groups from $file to database")
 
-                    // Undeploy the temporary ConfigStore
-                    vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
-                        if (undeployResult.succeeded()) {
-                            logger.fine("Temporary ConfigStore undeployed after import")
+                    if (fullSync) {
+                        // Delete orphan groups not present in the file
+                        deleteOrphanArchiveGroups(configStore, importedNames).onComplete {
+                            // Undeploy the temporary ConfigStore
+                            vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
+                                if (!undeployResult.succeeded()) {
+                                    logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
+                                }
+                                promise.complete()
+                            }
+                        }
+                    } else {
+                        // Undeploy the temporary ConfigStore
+                        vertx.undeploy(deployResult.result()).onComplete { undeployResult ->
+                            if (!undeployResult.succeeded()) {
+                                logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
+                            }
                             promise.complete()
-                        } else {
-                            logger.warning("Failed to undeploy temporary ConfigStore: ${undeployResult.cause()?.message}")
-                            promise.complete() // Still complete successfully even if undeploy fails
                         }
                     }
                 }
             } else {
                 logger.severe("Failed to deploy ConfigStore for import: ${deployResult.cause()?.message}")
                 promise.fail(deployResult.cause())
+            }
+        }
+
+        return promise.future()
+    }
+
+    private fun deleteOrphanArchiveGroups(configStore: IArchiveConfigStore, importedNames: Set<String>): Future<Void> {
+        val promise = Promise.promise<Void>()
+
+        configStore.getAllArchiveGroups().onComplete { getAllResult ->
+            if (getAllResult.succeeded()) {
+                val existingGroups = getAllResult.result()
+                val orphanNames = existingGroups
+                    .map { it.archiveGroup.name }
+                    .filter { it !in importedNames }
+
+                if (orphanNames.isEmpty()) {
+                    promise.complete()
+                    return@onComplete
+                }
+
+                val deleteFutures = orphanNames.map { name ->
+                    configStore.deleteArchiveGroup(name).map { success ->
+                        if (success) {
+                            logger.fine("Deleted orphan ArchiveGroup [$name] (full sync)")
+                        } else {
+                            logger.warning("Failed to delete orphan ArchiveGroup [$name]")
+                        }
+                    }
+                }
+
+                Future.all<Any>(deleteFutures).onComplete {
+                    logger.fine("Full sync cleanup: deleted ${orphanNames.size} orphan archive groups: $orphanNames")
+                    promise.complete()
+                }
+            } else {
+                logger.warning("Failed to get all archive groups for orphan cleanup: ${getAllResult.cause()?.message}")
+                promise.complete() // Don't fail the import because of cleanup failure
             }
         }
 
@@ -245,6 +292,13 @@ class ArchiveHandler(
     }
 
     private fun loadArchiveGroupsFromDatabase(configStoreType: String, promise: Promise<List<ArchiveGroup>>) {
+        // If ConfigStoreType is NONE, skip archive group initialization
+        if (configStoreType.uppercase() == "NONE") {
+            logger.info("ConfigStoreType is NONE, skipping archive group initialization")
+            promise.complete(emptyList())
+            return
+        }
+
         val configStore = ArchiveConfigStoreFactory.createConfigStore(configJson, configStoreType)
 
         if (configStore == null) {

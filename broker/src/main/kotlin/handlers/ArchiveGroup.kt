@@ -669,18 +669,17 @@ class ArchiveGroup(
             val purgeIntervalMs = Utils.parseDuration(purgeIntervalStr)
 
             // Detect if LastValRetention is size-based (ends with "k") or time-based
-            val maxMemoryEntries = if (lastValRetentionStr.endsWith("k")) {
+            val maxMemoryEntries = if (lastValRetentionStr != null && lastValRetentionStr.endsWith("k")) {
                 lastValRetentionMs  // Already parsed as count (e.g., "50k" → 50000)
+            } else if (lastValRetentionStr != null && lastValType == MessageStoreType.MEMORY) {
+                // Non-null, non-size-based retention with MEMORY store is invalid
+                throw IllegalArgumentException(
+                    "Archive group '$name' uses MEMORY LastValType but LastValRetention '$lastValRetentionStr' is time-based. " +
+                    "Memory store requires size-based retention (e.g., '50k' for 50,000 entries). " +
+                    "Use 'LastValRetention: \"50k\"' format instead, or switch to a persistent store (POSTGRES, CRATEDB, MONGODB, SQLITE)."
+                )
             } else {
-                // Time-based retention detected (e.g., "7d", "1h") but memory store doesn't support it
-                if (lastValType == MessageStoreType.MEMORY) {
-                    throw IllegalArgumentException(
-                        "Archive group '$name' uses MEMORY LastValType but LastValRetention '$lastValRetentionStr' is time-based. " +
-                        "Memory store requires size-based retention (e.g., '50k' for 50,000 entries). " +
-                        "Use 'LastValRetention: \"50k\"' format instead, or switch to a persistent store (POSTGRES, CRATEDB, MONGODB, SQLITE)."
-                    )
-                }
-                null  // Other store types (HAZELCAST, POSTGRES, etc.) use time-based retention
+                null  // No retention configured, or time-based for non-memory stores
             }
 
             val payloadFormat = PayloadFormat.parse(config.getString("PayloadFormat", "DEFAULT"))

@@ -1,0 +1,36 @@
+# MCP Server types and operations
+
+type McpServer {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    url: String!
+    transport: String!
+    createdAt: String!
+    updatedAt: String!
+}
+
+input McpServerInput {
+    name: String!
+    namespace: String!
+    nodeId: String
+    url: String!
+    transport: String
+    enabled: Boolean
+}
+
+type McpServerMutations {
+    create(input: McpServerInput!): McpServer!
+    update(name: String!, input: McpServerInput!): McpServer!
+    delete(name: String!): Boolean!
+}
+
+extend type Query {
+    mcpServers: [McpServer!]!
+    mcpServer(name: String!): McpServer
+}
+
+extend type Mutation {
+    mcpServer: McpServerMutations
+}

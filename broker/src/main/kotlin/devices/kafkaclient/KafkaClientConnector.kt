@@ -114,7 +114,7 @@ class KafkaClientConnector : AbstractVerticle() {
                             PayloadFormat.TEXT -> (value as? String)?.toByteArray(Charsets.UTF_8) ?: run { messagesDropped.incrementAndGet(); return@handler }
                             else -> ByteArray(0)
                         }
-                        val topic = applyDestinationPrefix(key)
+                        val topic = applyDestinationPrefix(applyTopicKeyRegex(key))
                         publishPlain(topic, payloadBytes)
                     }
                     PayloadFormat.DEFAULT, PayloadFormat.JSON -> {
@@ -124,9 +124,40 @@ class KafkaClientConnector : AbstractVerticle() {
                             when (value) {
                                 is ByteArray -> {
                                     // Decode using BrokerMessageCodec
-                                    val buffer = io.vertx.core.buffer.Buffer.buffer(value)
-                                    val decoded = at.rocworks.data.BrokerMessageCodec().decodeFromWire(0, buffer)
-                                    publishDecoded(decoded)
+                                    try {
+                                        val buffer = io.vertx.core.buffer.Buffer.buffer(value)
+                                        val decoded = at.rocworks.data.BrokerMessageCodec().decodeFromWire(0, buffer)
+                                        publishDecoded(decoded)
+                                    } catch (e: Exception) {
+                                        logger.log(Level.WARNING, "Failed to decode binary data from topic '${device.namespace}' as BrokerMessageCodec format: ${e.message} — check the payloadFormat setting (current: ${cfg.payloadFormat}). Trying JSON fallback...")
+                                        try {
+                                            val json = io.vertx.core.json.JsonObject(String(value, Charsets.UTF_8))
+                                            val topic = json.getString("topicName") ?: json.getString("topic") ?: run { messagesDropped.incrementAndGet(); return@handler }
+                                            val payloadBase64 = json.getString("payloadBase64")
+                                            val payloadText = json.getString("payload")
+                                            val payloadBytes = when {
+                                                payloadBase64 != null -> java.util.Base64.getDecoder().decode(payloadBase64)
+                                                payloadText != null -> payloadText.toByteArray(Charsets.UTF_8)
+                                                else -> ByteArray(0)
+                                            }
+                                            val decoded = at.rocworks.data.BrokerMessage(
+                                                messageUuid = json.getString("messageUuid") ?: Utils.getUuid(),
+                                                messageId = json.getInteger("messageId", 0),
+                                                topicName = topic,
+                                                payload = payloadBytes,
+                                                qosLevel = json.getInteger("qosLevel", 0),
+                                                isRetain = json.getBoolean("isRetain", false),
+                                                isDup = json.getBoolean("isDup", false),
+                                                isQueued = json.getBoolean("isQueued", false),
+                                                clientId = json.getString("clientId") ?: "kafkaclient-${device.name}",
+                                                time = try { java.time.Instant.parse(json.getString("time")) } catch (_: Exception) { java.time.Instant.now() }
+                                            )
+                                            publishDecoded(decoded)
+                                        } catch (e2: Exception) {
+                                            logger.log(Level.WARNING, "JSON fallback also failed for topic '${device.namespace}': ${e2.message} — skipping message.")
+                                            messagesDropped.incrementAndGet(); errors.incrementAndGet()
+                                        }
+                                    }
                                 }
                                 is String -> {
                                     // Treat as JSON serialized BrokerMessage
@@ -210,6 +241,12 @@ class KafkaClientConnector : AbstractVerticle() {
             errors.incrementAndGet()
             logger.log(Level.WARNING, "Failed to publish message: ${e.message}", e)
         }
+    }
+
+    private fun applyTopicKeyRegex(key: String): String {
+        val pattern = cfg.topicKeyRegex ?: return key
+        val replacement = cfg.topicKeyReplacement ?: return key
+        return Regex(pattern).replace(key, replacement)
     }
 
     private fun applyDestinationPrefix(topic: String): String {

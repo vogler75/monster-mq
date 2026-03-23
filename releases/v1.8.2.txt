@@ -1,0 +1,41 @@
+Release v1.8.2
+Built from commit: ae0615e
+Date: 2026-03-21 21:50:28
+
+Changes since v1.8.1:
+---
+ae0615e Add topic browser with drag-and-drop, resizable columns, and UI refinements to Archive Explorer
+4f5bda0 Add Archive Explorer page and scripts
+657782e Add enableThinking config and bump default memory window to 40
+c858281 Fix log viewer overlapping main content and add sidebar toggle
+ee3884f Publish agent response to output topics
+c0a99ef Set default agent namespace to 'agents'
+d931c63 Adopt HiveMQ A2A over MQTT topic hierarchy
+479033b Add agent health status lifecycle: ready, running, stopped
+4a708c3 Fix manual agent task delivery and add cronPrompt support
+34cb18a Add AI agents documentation
+95c0100 Add subAgents config for orchestrator scoping and handle plain-text tasks
+42eceb0 Add Telegram Bot device integration and default agent response topic
+09455c6 Add topic value display and resizable data panel to side panel browser
+0738807 Add persistent agent notes and tools UI
+cb41c79 Add defaultArchiveGroup and skip native tool logs
+807d120 Add history data context and LLM request logging for AI agents
+32dbc59 Fix topic browser drag-drop on agent detail context textareas
+9efeff7 Batch OPC UA monitored item creation and add paginated address list
+4747755 Add topic browser UI and drag-drop context handlers
+eeeefce Add cron expression scheduling with cron-utils and schedule builder UI
+8fca8ab Unify AI providers: replace native Gemini SDK with LangChain4j for assistant
+c6ca3f6 Enable Gemini thinking for tool call compatibility with Gemini 3.x
+0127ac8 Publish agent card/health as retained and add A2A-compatible fields
+ab1ca3f Add context data injection for agents (lastval + retained topics)
+764248d Add MCP server support, agent logging, and fixes
+06650ef Add AI Agent runtime with LangChain4j integration (OpenClaw Phase 1)
+fc803dd Add -deviceConfigs and -deviceConfigsMerge for loading device configurations from JSON file (#66)
+4c62012 Replace -archiveConfig with -archiveConfigs/-archiveConfigsMerge and add dashboard export (#65)
+1787516 Document database node proxy API for flow engine (#45)
+6b3014f Fix MongoDB timeout defaults causing Vert.x thread blocking (#117)
+22757e3 Filter archive/last-value type options by broker configuration (#115)
+b3b7b51 Add archive query functions to flow engine JavaScript runtime (#116)
+8d1c509 Fix imported flow instances failing to start without broker restart (#36)
+463b0f2 Revert "Closing issue with comment"
+921c774 Closing issue with comment

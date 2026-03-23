@@ -117,6 +117,8 @@ class UserManager(
      * Check if user management is enabled
      */
     fun isUserManagementEnabled(): Boolean = isEnabled
+
+    fun isAnonymousEnabled(): Boolean = getUser("Anonymous")?.enabled == true
     
     /**
      * Authenticate user with username and password

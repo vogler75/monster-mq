@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Linux5",
+    "host": "linux5",
+    "port": 4000,
+    "tls": false,
+    "default": false
+  },
+  {
+    "name": "Public",
+    "host": "test.monstermq.com",
+    "port": 443,
+    "tls": true,
+    "default": false
+  }      
+]

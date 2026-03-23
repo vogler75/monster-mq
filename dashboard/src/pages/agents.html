@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - AI Agents</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+        .btn-play { color: var(--monster-green); }
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+        }
+        .btn-pause { color: var(--monster-orange); }
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+        }
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow-x: auto;
+            box-shadow: var(--card-shadow);
+        }
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+            cursor: pointer;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+        }
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .form-control, input[type="text"], input[type="password"], input[type="number"], select, textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .form-control:focus, input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+        textarea {
+            resize: vertical;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+        }
+        .form-row {
+            display: flex;
+            gap: 1rem;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .trigger-type-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .trigger-mqtt {
+            background: rgba(59, 130, 246, 0.15);
+            color: #3B82F6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .trigger-cron {
+            background: rgba(249, 115, 22, 0.15);
+            color: var(--monster-orange);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        .trigger-manual {
+            background: rgba(124, 58, 237, 0.15);
+            color: var(--monster-purple);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+        }
+        .topics-cell {
+            font-size: 0.85rem;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">AI Agent Management</h1>
+                <p class="page-subtitle">Configure and manage AI agents for intelligent automation</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Agents</span>
+                        <div class="metric-icon">🤖</div>
+                    </div>
+                    <div class="metric-value" id="total-agents">0</div>
+                    <div class="metric-label">Configured Agents</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Agents</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-agents">0</div>
+                    <div class="metric-label">Active Agents</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">MQTT Triggered</span>
+                        <div class="metric-icon">📡</div>
+                    </div>
+                    <div class="metric-value" id="mqtt-agents">0</div>
+                    <div class="metric-label">MQTT Trigger</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">CRON Triggered</span>
+                        <div class="metric-icon">⏰</div>
+                    </div>
+                    <div class="metric-value" id="cron-agents">0</div>
+                    <div class="metric-label">Scheduled</div>
+                </div>
+            </div>
+
+            <div id="agents-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Agent Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <label style="display:inline-flex;align-items:center;gap:0.4rem;font-size:0.85rem;color:var(--text-muted);cursor:pointer;user-select:none;">
+                            <input type="checkbox" id="show-descriptions" onchange="agentManager.toggleDescriptions(this.checked)" style="accent-color:var(--monster-purple);">
+                            Descriptions
+                        </label>
+                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshAgents()" title="Refresh agents"></ix-icon-button>
+                        <a href="/pages/agent-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Agent</a>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Provider / Model</th>
+                            <th>Trigger Type</th>
+                            <th>Input Topics</th>
+                            <th>Output Topics</th>
+                            <th>Node</th>
+                            <th>Enabled</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agents-table-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading agents...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Agent Modal -->
+    <div id="agent-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Create Agent</h3>
+                <button class="modal-close" onclick="agentManager.hideModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="agent-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-name">Name *</label>
+                            <input type="text" id="agent-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-namespace">Namespace *</label>
+                            <input type="text" id="agent-namespace" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-nodeId">Node ID *</label>
+                            <input type="text" id="agent-nodeId" value="*" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-enabled">Enabled</label>
+                            <div class="checkbox-group" style="margin-top: 0.5rem;">
+                                <input type="checkbox" id="agent-enabled">
+                                <label for="agent-enabled" style="margin-bottom: 0; font-weight: normal;">Agent is enabled</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="agent-description">Description</label>
+                        <textarea id="agent-description" rows="2"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-provider">Provider</label>
+                            <select id="agent-provider">
+                                <option value="gemini">Gemini</option>
+                                <option value="claude">Claude</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="ollama">Ollama</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-model">Model</label>
+                            <input type="text" id="agent-model">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="agent-systemPrompt">System Prompt</label>
+                        <textarea id="agent-systemPrompt" rows="6"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-triggerType">Trigger Type</label>
+                            <select id="agent-triggerType" onchange="agentManager.onTriggerTypeChange()">
+                                <option value="MQTT">MQTT</option>
+                                <option value="CRON">CRON</option>
+                                <option value="MANUAL">MANUAL</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cron-interval-group" style="display: none;">
+                            <label for="agent-cronIntervalMs">CRON Interval (ms)</label>
+                            <input type="number" id="agent-cronIntervalMs" min="1000" step="1000">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-inputTopics">Input Topics (comma-separated)</label>
+                            <input type="text" id="agent-inputTopics">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-outputTopics">Output Topics (comma-separated)</label>
+                            <input type="text" id="agent-outputTopics">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-temperature">Temperature</label>
+                            <input type="number" id="agent-temperature" value="0.7" min="0" max="2" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-maxTokens">Max Tokens</label>
+                            <input type="number" id="agent-maxTokens" min="1">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="agent-maxToolIterations">Max Tool Iterations</label>
+                            <input type="number" id="agent-maxToolIterations" value="10" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-memoryWindowSize">Memory Window Size</label>
+                            <input type="number" id="agent-memoryWindowSize" value="20" min="0">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="agentManager.hideModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="agentManager.saveAgent()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the agent "<span id="delete-agent-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteAgent()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/agents.js"></script>
+    </ix-application>
+</body>
+</html>

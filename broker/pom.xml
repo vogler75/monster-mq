@@ -151,10 +151,10 @@
             <version>1.7.36</version>
         </dependency>
 
-        <!-- SLF4J Simple Logger dependency -->
+        <!-- SLF4J to JUL bridge — routes SLF4J logs (e.g. MongoDB driver) through java.util.logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
+            <artifactId>slf4j-jdk14</artifactId>
             <version>1.7.36</version>
         </dependency>
 
@@ -178,6 +178,13 @@
             <groupId>io.vertx</groupId>
             <artifactId>vertx-hazelcast</artifactId>
             <version>${vertx.version}</version>
+        </dependency>
+
+        <!-- NATS.io Java client for NATS/JetStream bridge -->
+        <dependency>
+            <groupId>io.nats</groupId>
+            <artifactId>jnats</artifactId>
+            <version>2.20.4</version>
         </dependency>
 
         <!-- Eclipse Paho MQTT Client for connecting to remote MQTT brokers -->
@@ -288,11 +295,43 @@
             <version>22.0</version>
         </dependency>
 
-        <!-- Google Generative AI (Gemini) -->
+        <!-- LangChain4j - AI Agent Framework -->
         <dependency>
-            <groupId>com.google.genai</groupId>
-            <artifactId>google-genai</artifactId>
-            <version>1.24.0</version>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-google-ai-gemini</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-anthropic</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-ollama</artifactId>
+            <version>1.12.2</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-mcp</artifactId>
+            <version>1.12.2-beta22</version>
+        </dependency>
+
+        <!-- Cron expression parsing -->
+        <dependency>
+            <groupId>com.cronutils</groupId>
+            <artifactId>cron-utils</artifactId>
+            <version>9.2.1</version>
         </dependency>
 
         <!-- BCrypt for password hashing -->

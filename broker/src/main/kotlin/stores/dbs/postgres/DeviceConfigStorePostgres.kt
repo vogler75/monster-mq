@@ -41,8 +41,6 @@ class DeviceConfigStorePostgres(
                 type VARCHAR(255) DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
-
-                CONSTRAINT deviceconfigs_namespace_format CHECK (namespace ~ '^[a-zA-Z0-9_/-]+$'),
                 CONSTRAINT deviceconfigs_name_format CHECK (name ~ '^[a-zA-Z0-9_-]+$')
             )
         """

@@ -3,8 +3,6 @@ package at.rocworks.stores.mongodb
 import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.stores.*
-import com.mongodb.ConnectionString
-import com.mongodb.MongoClientSettings
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
@@ -41,16 +39,20 @@ class ArchiveConfigStoreMongoDB(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            val settings = MongoClientSettings.builder()
-                .applyConnectionString(ConnectionString(connectionString))
-                .build()
-
-            mongoClient = MongoClients.create(settings)
+            mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
             database = mongoClient.getDatabase(databaseName)
             collection = database.getCollection(collectionName)
 
-            // Create index on name field for faster lookups
-            collection.createIndex(Document("name", 1))
+            // Create index in background to avoid blocking the event loop
+            vertx.executeBlocking(Callable {
+                try {
+                    collection.createIndex(Document("name", 1))
+                    logger.info("MongoDB ConfigStore indexes created successfully")
+                } catch (e: Exception) {
+                    logger.warning("Failed to create indexes: ${e.message}")
+                }
+                null
+            })
 
             logger.info("MongoDB ConfigStore connected successfully to $databaseName.$collectionName")
             startPromise.complete()
@@ -260,16 +262,10 @@ class ArchiveConfigStoreMongoDB(
             .append("payload_format", archiveGroup.payloadFormat.name)
             .append("updated_at", Instant.now())
 
-        // Add optional duration fields
-        archiveGroup.getLastValRetentionMs()?.let { ms ->
-            document.append("last_val_retention", Utils.formatDuration(ms))
-        }
-        archiveGroup.getArchiveRetentionMs()?.let { ms ->
-            document.append("archive_retention", Utils.formatDuration(ms))
-        }
-        archiveGroup.getPurgeIntervalMs()?.let { ms ->
-            document.append("purge_interval", Utils.formatDuration(ms))
-        }
+        // Add optional duration fields (preserve original string to avoid lossy roundtrip via formatDuration)
+        archiveGroup.getLastValRetention()?.let { document.append("last_val_retention", it) }
+        archiveGroup.getArchiveRetention()?.let { document.append("archive_retention", it) }
+        archiveGroup.getPurgeInterval()?.let { document.append("purge_interval", it) }
 
         return document
     }

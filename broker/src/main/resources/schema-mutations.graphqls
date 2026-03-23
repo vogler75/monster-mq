@@ -318,6 +318,7 @@ input MonitoringParametersInput {
     bufferSize: Int = 100
     samplingInterval: Float = 0.0
     discardOldest: Boolean = false
+    monitoredItemsBatchSize: Int = 1000
 }
 
 # Input type for certificate configuration settings
@@ -346,6 +347,23 @@ input CertificateConfigInput {
     autoAcceptServerCertificates: Boolean = false
 }
 
+input OpcUaWriteConfigInput {
+    # Enable fire-and-forget writes (default: false)
+    enabled: Boolean = false
+    # Enable request/response for reads and writes (default: false)
+    requestResponseEnabled: Boolean = false
+    # Topic prefix for fire-and-forget writes: {namespace}/{topicPrefix}/{nodeId}
+    topicPrefix: String = "write"
+    # Topic prefix for request/response writes: {namespace}/{requestTopicPrefix}/{nodeId}
+    requestTopicPrefix: String = "request"
+    # Topic prefix for write responses: {namespace}/{responseTopicPrefix}/{nodeId}
+    responseTopicPrefix: String = "response"
+    # QoS for write topic subscriptions (default: 1)
+    qos: Int = 1
+    # Write operation timeout in milliseconds (default: 5000)
+    writeTimeout: Long = 5000
+}
+
 input OpcUaConnectionConfigInput {
     endpointUrl: String!
     updateEndpointUrl: Boolean = true
@@ -360,6 +378,8 @@ input OpcUaConnectionConfigInput {
     monitoringParameters: MonitoringParametersInput
     # Certificate configuration for TLS/SSL and client authentication
     certificateConfig: CertificateConfigInput
+    # Write configuration for MQTT-to-OPC UA writes
+    writeConfig: OpcUaWriteConfigInput
 }
 
 input OpcUaAddressInput {
@@ -510,6 +530,8 @@ type OpcUaServerInfo {
     enabled: Boolean!
     port: Int!
     path: String!
+    hostname: String
+    bindAddress: String
     namespaceIndex: Int!
     namespaceUri: String!
     addresses: [OpcUaServerAddress!]!
@@ -558,6 +580,10 @@ input OpcUaServerInput {
     port: Int = 4840
     # OPC UA server endpoint path
     path: String = "server"
+    # Override hostname used in endpoint URLs (empty = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (empty = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace index (must be >= 1)
     namespaceIndex: Int = 1
     # OPC UA namespace URI
@@ -620,6 +646,10 @@ input OpcUaServerConfigInput {
     port: Int = 4840
     # OPC UA server endpoint path
     path: String = "monstermq"
+    # Override hostname used in endpoint URLs (empty = auto-detect system hostname)
+    hostname: String
+    # Network address to bind to (empty = 0.0.0.0 for all interfaces)
+    bindAddress: String
     # OPC UA namespace URI
     namespaceUri: String
     # Minimum update interval in milliseconds
@@ -738,6 +768,16 @@ input MqttClientConnectionConfigInput {
     deleteOldestMessages: Boolean = true
     # Whether to verify SSL certificates (default: true, disable for self-signed certificates)
     sslVerifyCertificate: Boolean = true
+    # MQTT protocol version: 4 for v3.1.1, 5 for v5.0 (default: 4)
+    protocolVersion: Int = 4
+    # Session expiry interval in seconds (MQTT v5 only, 0-4294967295, default: 0)
+    sessionExpiryInterval: Long
+    # Maximum number of QoS 1 and QoS 2 publications that the client is willing to process concurrently (MQTT v5 only, 1-65535, default: 65535)
+    receiveMaximum: Int
+    # Maximum packet size the client is willing to accept (MQTT v5 only, 1-268435455 bytes)
+    maximumPacketSize: Long
+    # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
+    topicAliasMaximum: Int
 }
 
 # Input for MQTT client address mapping
@@ -752,6 +792,30 @@ input MqttClientAddressInput {
     removePath: Boolean = true
     # QoS level for MQTT messages (0, 1, or 2)
     qos: Int = 0
+    # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
+    # No Local: Don't receive messages you published (prevents loops)
+    noLocal: Boolean = false
+    # Retain Handling: 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
+    retainHandling: Int = 0
+    # Retain As Published: Preserve original retain flag when forwarding
+    retainAsPublished: Boolean = false
+    # MQTT v5 Message Properties (only for PUBLISH mode)
+    # Message expiry interval in seconds (0 = no expiry)
+    messageExpiryInterval: Long
+    # MIME type of the message payload
+    contentType: String
+    # Topic pattern for request-response pattern
+    responseTopicPattern: String
+    # Indicates payload is UTF-8 encoded text
+    payloadFormatIndicator: Boolean = false
+    # Custom key-value metadata pairs
+    userProperties: [UserPropertyInput!]
+}
+
+# Input for user property key-value pair
+input UserPropertyInput {
+    key: String!
+    value: String!
 }
 
 # Kafka Client Mutations - Grouped operations for Kafka client management
@@ -813,11 +877,13 @@ input KafkaClientConfigInput {
     groupId: String = "monstermq-subscriber"
     payloadFormat: KafkaPayloadFormat = DEFAULT
     extraConsumerConfig: JSON
-    pollIntervalMs: Long = 500
-    maxPollRecords: Int = 100
     reconnectDelayMs: Long = 5000
     # Optional prefix applied to all published MQTT topics (see KafkaClientConfig.destinationTopicPrefix)
     destinationTopicPrefix: String
+    # Regex pattern applied to the Kafka record key to transform it into an MQTT topic name
+    topicKeyRegex: String
+    # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
+    topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
 }
 
@@ -1434,4 +1500,153 @@ input JDBCLoggerInput {
     enabled: Boolean = true
     # Connection and validation configuration
     config: JDBCLoggerConfigInput!
+}
+
+#############################################
+# NATS Client Mutations                    #
+#############################################
+
+type NatsClientMutations {
+    # Create a new NATS client bridge
+    create(input: NatsClientInput!): NatsClientResult!
+    # Update an existing NATS client bridge configuration
+    update(name: String!, input: NatsClientInput!): NatsClientResult!
+    # Delete a NATS client bridge permanently
+    delete(name: String!): Boolean!
+    # Start (enable) a NATS client bridge
+    start(name: String!): NatsClientResult!
+    # Stop (disable) a NATS client bridge
+    stop(name: String!): NatsClientResult!
+    # Toggle the enabled state of a NATS client bridge
+    toggle(name: String!, enabled: Boolean!): NatsClientResult!
+    # Reassign a NATS client bridge to a different cluster node
+    reassign(name: String!, nodeId: String!): NatsClientResult!
+    # Add an address entry (SUBSCRIBE or PUBLISH mapping)
+    addAddress(deviceName: String!, input: NatsClientAddressInput!): NatsClientResult!
+    # Update an existing address entry by natsSubject
+    updateAddress(deviceName: String!, natsSubject: String!, input: NatsClientAddressInput!): NatsClientResult!
+    # Delete an address entry by natsSubject
+    deleteAddress(deviceName: String!, natsSubject: String!): NatsClientResult!
+}
+
+extend type Mutation {
+    # Access NATS client bridge management operations
+    natsClient: NatsClientMutations!
+}
+
+type NatsClientResult {
+    success: Boolean!
+    client: NatsClient
+    errors: [String!]!
+}
+
+input NatsClientAddressInput {
+    # SUBSCRIBE = NATS→MQTT, PUBLISH = MQTT→NATS
+    mode: NatsClientMode!
+    # NATS subject (wildcards: * single-token, > multi-token)
+    natsSubject: String!
+    # Local MQTT topic
+    mqttTopic: String!
+    # QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Auto-translate / ↔ . and # ↔ > and + ↔ * (default true)
+    autoConvert: Boolean = true
+    # Strip topic prefix before wildcard and prepend target prefix (default true)
+    removePath: Boolean = true
+}
+
+input NatsClientConfigInput {
+    # NATS server URL list (e.g. ["nats://localhost:4222"])
+    servers: [String!] = ["nats://localhost:4222"]
+    # Authentication type
+    authType: NatsAuthType = ANONYMOUS
+    # Username (required for USERNAME_PASSWORD)
+    username: String
+    # Password (required for USERNAME_PASSWORD)
+    password: String
+    # Token (required for TOKEN)
+    token: String
+    # Path to CA certificate file (TLS)
+    tlsCaCertPath: String
+    # Verify server TLS certificate
+    tlsVerify: Boolean = true
+    # Connection timeout in ms
+    connectTimeoutMs: Long = 5000
+    # Reconnect delay in ms
+    reconnectDelayMs: Long = 5000
+    # Max reconnect attempts (-1 = unlimited)
+    maxReconnectAttempts: Int = -1
+    # Enable JetStream
+    useJetStream: Boolean = false
+    # JetStream stream name (required when useJetStream = true)
+    streamName: String
+    # Durable consumer name for JetStream
+    consumerDurableName: String
+    # Address mappings (can be supplied at create time)
+    addresses: [NatsClientAddressInput!] = []
+}
+
+input NatsClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: NatsClientConfigInput!
+}
+
+#############################################
+# Telegram Client Mutations                 #
+#############################################
+
+type TelegramClientMutations {
+    # Create a new Telegram bot client
+    create(input: TelegramClientInput!): TelegramClientResult!
+    # Update an existing Telegram bot client configuration
+    update(name: String!, input: TelegramClientInput!): TelegramClientResult!
+    # Delete a Telegram bot client permanently
+    delete(name: String!): Boolean!
+    # Start (enable) a Telegram bot client
+    start(name: String!): TelegramClientResult!
+    # Stop (disable) a Telegram bot client
+    stop(name: String!): TelegramClientResult!
+    # Toggle the enabled state of a Telegram bot client
+    toggle(name: String!, enabled: Boolean!): TelegramClientResult!
+    # Reassign a Telegram bot client to a different cluster node
+    reassign(name: String!, nodeId: String!): TelegramClientResult!
+}
+
+extend type Mutation {
+    # Access Telegram bot client management operations
+    telegramClient: TelegramClientMutations!
+}
+
+type TelegramClientResult {
+    success: Boolean!
+    client: TelegramClient
+    errors: [String!]!
+}
+
+input TelegramClientConfigInput {
+    # Bot token from BotFather
+    botToken: String!
+    # Long polling timeout in seconds
+    pollingTimeoutSeconds: Int = 30
+    # Reconnect delay in ms
+    reconnectDelayMs: Long = 5000
+    # HTTP proxy host
+    proxyHost: String
+    # HTTP proxy port
+    proxyPort: Int
+    # Default parse mode for outgoing messages: Text, HTML, Markdown, MarkdownV2
+    parseMode: String = "Text"
+    # Allowed Telegram usernames (empty = all users allowed)
+    allowedUsers: [String!] = []
+}
+
+input TelegramClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: TelegramClientConfigInput!
 }

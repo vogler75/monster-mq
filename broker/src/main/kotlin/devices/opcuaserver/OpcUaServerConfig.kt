@@ -15,6 +15,8 @@ data class OpcUaServerConfig(
     val enabled: Boolean = true,
     val port: Int = 4840,                       // OPC UA server port
     val path: String = "server",                // OPC UA server endpoint path
+    val hostname: String? = null,               // Override hostname for endpoint URLs (null = auto-detect)
+    val bindAddress: String? = null,            // Network address to bind to (null = 0.0.0.0)
     val namespaceIndex: Int = 1,                // OPC UA namespace index (must be >= 1)
     val namespaceUri: String = "urn:MonsterMQ:OpcUaServer", // OPC UA namespace URI
     val addresses: List<OpcUaServerAddress>,    // MQTT to OPC UA topic mappings
@@ -36,6 +38,8 @@ data class OpcUaServerConfig(
                 enabled = json.getBoolean("enabled", true),
                 port = json.getInteger("port", 4840),
                 path = json.getString("path", "server"),
+                hostname = json.getString("hostname"),
+                bindAddress = json.getString("bindAddress"),
                 namespaceIndex = json.getInteger("namespaceIndex", 1),
                 namespaceUri = json.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
                 addresses = addressesArray
@@ -61,6 +65,10 @@ data class OpcUaServerConfig(
             .put("enabled", enabled)
             .put("port", port)
             .put("path", path)
+            .apply {
+                hostname?.let { put("hostname", it) }
+                bindAddress?.let { put("bindAddress", it) }
+            }
             .put("namespaceIndex", namespaceIndex)
             .put("namespaceUri", namespaceUri)
             .put("addresses", JsonArray(addresses.map { it.toJsonObject() }))

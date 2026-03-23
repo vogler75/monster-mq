@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - AI Agent Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); margin-bottom: 2rem; box-shadow: var(--card-shadow); }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-content { padding: 1.5rem; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
+        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .info-value { color: var(--text-primary); font-weight: 600; }
+        .status-badge { display: inline-flex; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .status-enabled { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border: 1px solid rgba(239, 68, 68, 0.3); }
+        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; border: none; cursor: pointer; }
+        .btn-primary { background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color: white; }
+        .btn-secondary { background: var(--dark-surface-2); border: 1px solid var(--dark-border); color: var(--text-primary); }
+        .btn.btn-secondary { white-space: nowrap; }
+        .btn-danger { background: var(--monster-red); color: white; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; }
+        .form-control, input[type="text"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); box-sizing: border-box; }
+        .form-control:focus, input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); }
+        textarea { resize: vertical; font-family: inherit; }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+        .checkbox-group input[type="checkbox"] { accent-color: var(--monster-purple); }
+        .full-width { grid-column: 1 / -1; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; }
+        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+
+        /* Topic Browser Side Panel */
+        .topic-browser-side-panel { position: fixed; top: 48px; right: -400px; width: 380px; min-width: 300px; max-width: 600px; height: calc(100vh - 48px); background: var(--dark-surface); border-left: 1px solid var(--dark-border); z-index: 1000; transition: right 0.3s ease; display: flex; flex-direction: column; box-shadow: -4px 0 8px rgba(0, 0, 0, 0.2); resize: horizontal; overflow: hidden; }
+        .topic-browser-side-panel.open { right: 0; }
+        .topic-panel-resize-handle { position: absolute; left: -5px; top: 0; width: 10px; height: 100%; cursor: col-resize; background: transparent; z-index: 1001; }
+        .topic-panel-resize-handle:hover { background: rgba(124, 58, 237, 0.3); }
+        .topic-panel-resize-handle:active { background: rgba(124, 58, 237, 0.5); }
+        body.topic-panel-open .main-content { transition: margin-right 0.3s ease; }
+        .topic-browser-floating-toggle { position: fixed; right: 20px; top: 50%; transform: translateY(-50%) rotate(-90deg); background: var(--monster-purple); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px 8px 0 0; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; z-index: 999; box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.2); transform-origin: center; }
+        .topic-browser-floating-toggle:hover { background: var(--monster-dark); right: 15px; }
+        .topic-browser-floating-toggle.active { background: var(--monster-dark); opacity: 0; visibility: hidden; pointer-events: none; }
+        .topic-browser-floating-toggle .toggle-icon { transition: transform 0.3s ease; }
+        .topic-browser-floating-toggle.active .toggle-icon { transform: rotate(180deg); }
+        .topic-panel-header { padding: 1rem; background: var(--dark-surface-2); border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; min-height: 60px; }
+        .topic-panel-title { font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0; }
+        .topic-panel-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.5rem; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .topic-panel-close:hover { background: var(--dark-border); color: var(--text-primary); }
+        .topic-panel-archive-select { margin: 0.5rem 1rem; display: flex; gap: 0.5rem; align-items: center; font-size: 0.875rem; }
+        .topic-panel-archive-select label { color: var(--text-primary); font-weight: 500; min-width: 80px; }
+        .topic-panel-archive-select select { flex: 1; padding: 0.5rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem; }
+        .topic-panel-tree { flex: 1; overflow-y: auto; padding: 0.5rem; }
+        .topic-panel-tree .tree-node { margin: 0; padding: 0; list-style: none; }
+        .topic-panel-tree .tree-item { display: flex; align-items: center; padding: 0.4rem 0.5rem; cursor: pointer; border-radius: 4px; transition: background-color 0.2s; user-select: none; font-size: 0.875rem; }
+        .topic-panel-tree .tree-item:hover { background: rgba(124, 58, 237, 0.1); }
+        .topic-panel-tree .tree-item.has-data { color: var(--monster-green); font-weight: 500; }
+        .topic-panel-tree .tree-item.draggable { cursor: grab; }
+        .topic-panel-tree .tree-item.draggable:active { cursor: grabbing; }
+        .topic-panel-tree .tree-toggle { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; margin-right: 0.4rem; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: 2px; transition: all 0.2s; font-size: 0.75rem; }
+        .topic-panel-tree .tree-toggle:hover { background: var(--dark-border); color: var(--text-primary); }
+        .topic-panel-tree .tree-toggle.expanded { transform: rotate(90deg); }
+        .topic-panel-tree .tree-toggle:empty { visibility: hidden; }
+        .topic-panel-tree .tree-children { margin-left: 1rem; border-left: 1px solid var(--dark-border); padding-left: 0.4rem; }
+        .topic-panel-tree .tree-children.collapsed { display: none; }
+        .topic-panel-tree .tree-icon { margin-right: 0.4rem; color: var(--text-muted); font-size: 0.75rem; }
+        .topic-panel-tree .tree-icon.folder { color: var(--monster-purple); }
+        .topic-panel-tree .tree-icon.topic { color: var(--monster-green); }
+        .topic-panel-data { height: 200px; min-height: 60px; max-height: 80vh; padding: 0.5rem; background: var(--dark-bg); border-top: 1px solid var(--dark-border); overflow-y: auto; }
+        .topic-panel-data-resize { height: 6px; cursor: row-resize; background: transparent; border-top: 1px solid var(--dark-border); flex-shrink: 0; }
+        .topic-panel-data-resize:hover, .topic-panel-data-resize:active { background: rgba(124, 58, 237, 0.3); }
+        .topic-panel-data.empty { display: none; }
+        .topic-panel-data-content { font-family: 'Fira Code', 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 1.4; color: var(--text-primary); white-space: pre-wrap; word-wrap: break-word; }
+        .drop-zone { border: 2px dashed transparent; transition: border-color 0.2s; }
+        .drop-zone.drag-over { border-color: var(--monster-green); background: rgba(34, 197, 94, 0.1); }
+        @media (max-width: 1024px) { .topic-browser-side-panel { width: 320px; min-width: 280px; } .topic-browser-floating-toggle { right: 15px; padding: 0.6rem 1.2rem; font-size: 0.8rem; } }
+        @media (max-width: 768px) { .topic-browser-side-panel { width: 100vw; right: -100vw; min-width: 100vw; max-width: 100vw; } .topic-browser-floating-toggle { right: 10px; padding: 0.5rem 1rem; } body.topic-panel-open .main-content { margin-right: 0; } }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-body { padding: 2rem; }
+        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
+        @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } .full-width { grid-column: 1; } }
+
+        /* History Query Cards */
+        .history-query-card { background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+        .history-query-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+        .history-query-header span { color: var(--text-primary); font-weight: 500; font-size: 0.9rem; }
+        .history-query-remove { background: none; border: none; color: var(--monster-red); cursor: pointer; font-size: 1.1rem; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .history-query-remove:hover { background: rgba(239, 68, 68, 0.15); }
+        .history-query-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .history-query-grid .full { grid-column: 1 / -1; }
+        .history-query-grid label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; display: block; }
+        .history-query-grid input, .history-query-grid select, .history-query-grid textarea { width: 100%; padding: 0.5rem; background: var(--dark-surface); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); box-sizing: border-box; font-size: 0.85rem; }
+        .history-query-grid textarea { resize: vertical; font-family: monospace; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="page-title">AI Agent</h1>
+                        <p class="page-subtitle" id="page-subtitle"></p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary btn-small" onclick="goBack()">← Back</button>
+                        <button class="btn btn-danger btn-small" id="delete-btn" onclick="showDeleteModal()">Delete</button>
+                        <button class="btn btn-primary btn-small" id="save-agent-btn" onclick="saveAgent()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                            </svg>
+                            Save Agent
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Configuration Section -->
+            <div class="section-card" id="agent-content" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Agent Configuration</h2></div>
+                    <span class="status-badge status-enabled" id="agent-status">ENABLED</span>
+                </div>
+                <div class="section-content">
+                    <form id="agent-form">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="agent-name">Name *</label>
+                                <input type="text" id="agent-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="agent-namespace">Namespace *</label>
+                                <input type="text" id="agent-namespace" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="agent-org">Org</label>
+                                <input type="text" id="agent-org" value="default" placeholder="default">
+                            </div>
+                            <div class="form-group">
+                                <label for="agent-site">Site</label>
+                                <input type="text" id="agent-site" value="default" placeholder="default">
+                            </div>
+                            <div class="form-group">
+                                <label for="agent-version">Version</label>
+                                <input type="text" id="agent-version" value="1.0.0" placeholder="1.0.0">
+                            </div>
+                            <div class="form-group">
+                                <label for="agent-node">Cluster Node</label>
+                                <select id="agent-node">
+                                    <option value="*">* (Any Node)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: column; justify-content: flex-end;">
+                                <div class="checkbox-group" style="height: 2.5rem; display: flex; align-items: center;">
+                                    <input type="checkbox" id="agent-enabled">
+                                    <label for="agent-enabled">Enabled</label>
+                                </div>
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="agent-description">Description</label>
+                                <textarea id="agent-description" rows="2" placeholder="Describe what this agent does"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- AI Provider Section -->
+            <div class="section-card" id="provider-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>AI Provider</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="agent-provider">Provider</label>
+                            <select id="agent-provider" onchange="updateModelPlaceholder()">
+                                <option value="gemini">Gemini</option>
+                                <option value="claude">Claude</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="ollama">Ollama</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-model">Model</label>
+                            <input type="text" id="agent-model" placeholder="gemini-2.0-flash">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-api-key">API Key</label>
+                            <input type="password" id="agent-api-key" placeholder="Leave blank to use global config">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-temperature">Temperature</label>
+                            <input type="number" id="agent-temperature" step="0.1" min="0" max="2" value="0.7">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-max-tokens">Max Tokens</label>
+                            <input type="number" id="agent-max-tokens" placeholder="Provider default">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-max-tool-iterations">Max Tool Iterations</label>
+                            <input type="number" id="agent-max-tool-iterations" value="10" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-memory-window-size">Memory Window Size</label>
+                            <input type="number" id="agent-memory-window-size" value="40" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="agent-task-timeout-ms">Task Timeout (ms)</label>
+                            <input type="number" id="agent-task-timeout-ms" value="60000" min="1000" step="1000" placeholder="60000">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="agent-enable-thinking" style="accent-color: var(--monster-purple);">
+                            <label for="agent-enable-thinking" style="margin: 0; cursor: pointer;">Enable Thinking</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MCP Servers Section -->
+            <div class="section-card" id="mcp-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Tools &amp; MCP Servers</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="agent-default-archive-group">Default Archive Group</label>
+                        <input type="text" id="agent-default-archive-group" value="Default" placeholder="Default">
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            Archive group used by built-in tools when no group is specified.
+                        </small>
+                    </div>
+
+                    <details style="margin-bottom: 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px;">
+                        <summary style="padding: 0.75rem 1rem; cursor: pointer; color: var(--text-primary); font-weight: 600; font-size: 0.9rem; user-select: none;">
+                            Built-in Tools Reference
+                        </summary>
+                        <div style="padding: 0 1rem 1rem; font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">MQTT</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>publishMessage(topic, payload)</code><br>
+                                Publish a message to any MQTT topic.
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">Data Queries</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>getTopicValues(topics, archiveGroup?)</code><br>
+                                Get last known values for comma-separated topics.<br><br>
+                                <code>findTopics(pattern, archiveGroup?)</code><br>
+                                Search topics by MQTT wildcard pattern (<code>+</code> single level, <code>#</code> multi-level).<br><br>
+                                <code>queryHistory(topic, startTime?, endTime?, limit?, archiveGroup?)</code><br>
+                                Query archived messages for a topic within a time range (ISO-8601 timestamps).
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.5rem; color: var(--text-primary); font-weight: 600;">Agent Notes (Persistent Memory)</p>
+                            <div style="margin-left: 0.5rem;">
+                                <code>saveNote(key, content)</code><br>
+                                Save a note to persistent memory. Keys can be hierarchical (e.g. <code>decisions/heater</code>).<br><br>
+                                <code>recallNote(key)</code><br>
+                                Retrieve a note by its exact key.<br><br>
+                                <code>searchNotes(pattern)</code><br>
+                                Find notes by pattern (e.g. <code>#</code> for all, <code>decisions/#</code>).<br><br>
+                                <code>deleteNote(key)</code><br>
+                                Delete a note by key.
+                            </div>
+
+                            <p style="margin: 0.75rem 0 0.25rem; font-size: 0.8rem;">
+                                Notes are stored as retained MQTT messages under <code>agents/{name}/memory/{key}</code> and persist across restarts.
+                                Tools with <code>archiveGroup?</code> use the configured default archive group when omitted.
+                            </p>
+                        </div>
+                    </details>
+
+                    <label style="display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--monster-purple); cursor: pointer; margin-bottom: 1rem;">
+                        <input type="checkbox" id="agent-use-monstermq-mcp" style="accent-color: var(--monster-purple);">
+                        <div>
+                            <div style="color: var(--text-primary); font-weight: 600;">MonsterMQ MCP Server</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Built-in tools: topic discovery, archive queries, value retrieval, SQL queries</div>
+                        </div>
+                    </label>
+                    <small style="color: var(--text-muted); margin-bottom: 0.75rem; display: block;">
+                        External MCP servers:
+                    </small>
+                    <div id="mcp-server-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="color: var(--text-muted);">Loading MCP servers...</div>
+                    </div>
+
+                    <hr style="border: none; border-top: 1px solid var(--dark-border); margin: 1.5rem 0;">
+                    <small style="color: var(--text-muted); margin-bottom: 0.75rem; display: block;">
+                        Sub-Agents (restrict which agents this orchestrator can invoke; leave empty to allow all):
+                    </small>
+                    <div id="sub-agent-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="color: var(--text-muted);">Loading agents...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trigger Configuration Section -->
+            <div class="section-card" id="trigger-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Trigger Configuration</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="agent-trigger-type">Trigger Type</label>
+                            <select id="agent-trigger-type" onchange="toggleTriggerFields()">
+                                <option value="MQTT">MQTT</option>
+                                <option value="CRON">CRON</option>
+                                <option value="MANUAL">MANUAL</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cron-schedule-group" style="display:none;">
+                            <label for="agent-schedule-mode">Schedule Mode</label>
+                            <select id="agent-schedule-mode" onchange="toggleScheduleMode()">
+                                <option value="interval">Simple Interval</option>
+                                <option value="daily">Daily at Time</option>
+                                <option value="custom">Custom Cron</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="schedule-interval-group" style="display:none;">
+                            <label for="agent-interval-value">Interval</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="number" id="agent-interval-value" min="1" placeholder="e.g., 60" style="flex: 1;">
+                                <select id="agent-interval-unit" style="width: auto; min-width: 110px;">
+                                    <option value="seconds">Seconds</option>
+                                    <option value="minutes" selected>Minutes</option>
+                                    <option value="hours">Hours</option>
+                                </select>
+                            </div>
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                How often the agent should execute
+                            </small>
+                        </div>
+                        <div class="form-group" id="schedule-daily-group" style="display:none;">
+                            <label for="agent-daily-time">Time (HH:MM:SS)</label>
+                            <input type="time" id="agent-daily-time" step="1" value="22:00:00">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Agent will execute once daily at this time
+                            </small>
+                        </div>
+                        <div class="form-group" id="schedule-custom-group" style="display:none;">
+                            <label for="agent-cron-expression">Cron Expression (Quartz)</label>
+                            <input type="text" id="agent-cron-expression" placeholder="0 0 22 * * ? *">
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                Quartz format: seconds minutes hours day-of-month month day-of-week [year]<br>
+                                Examples: <code>0 0 22 * * ? *</code> (daily 22:00), <code>0 */15 * * * ? *</code> (every 15 min), <code>0 0 */4 * * ? *</code> (every 4 hours)
+                            </small>
+                        </div>
+                        <div class="form-group full-width" id="cron-prompt-group" style="display:none;">
+                            <label for="agent-cron-prompt">Cron Prompt</label>
+                            <textarea id="agent-cron-prompt" rows="3" placeholder="Optional prompt sent to the LLM on each scheduled execution. If empty, a default timestamp message is used."></textarea>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="agent-input-topics">Input Topics</label>
+                            <textarea id="agent-input-topics" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., sensor/+/temperature&#10;     device/+/status"></textarea>
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                MQTT topics that trigger this agent (one per line). Supports wildcards: + (single level), # (multi-level)
+                            </small>
+                        </div>
+                        <div class="form-group full-width">
+                            <label for="agent-output-topics">Output Topics</label>
+                            <textarea id="agent-output-topics" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., agent/output/alerts&#10;     agent/output/commands"></textarea>
+                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                MQTT topics where the agent publishes results (one per line)
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Context Data Section -->
+            <div class="section-card" id="context-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Context Data</h2></div>
+                </div>
+                <div class="section-content">
+                    <small style="color: var(--text-muted); margin-bottom: 1rem; display: block;">
+                        Define topics whose current values are fetched and included in the agent's context on every invocation.
+                    </small>
+                    <div class="form-group">
+                        <label for="agent-context-lastval-topics">Lastval Message Topics</label>
+                        <textarea id="agent-context-lastval-topics" rows="4" data-drop-zone-enabled="true" placeholder='{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}' style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            JSON mapping archive group names to topic filters, e.g. <code>{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}</code>. Last values from each group's store are included as context.
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label for="agent-context-retained">Retained Message Topics</label>
+                        <textarea id="agent-context-retained" rows="3" data-drop-zone-enabled="true" placeholder="One topic per line&#10;e.g., config/limits&#10;     status/+/health"></textarea>
+                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                            Topic filters for retained messages (one per line). Current retained values are included as context.
+                        </small>
+                    </div>
+
+                    <!-- History Data Queries -->
+                    <div class="form-group full-width" style="margin-top: 1rem;">
+                        <label>History Data Queries</label>
+                        <small style="color: var(--text-muted); margin-bottom: 0.5rem; display: block;">
+                            Configure historical data to include in the agent's context. Drag topics from the topic browser to the topics field.
+                        </small>
+                        <div id="history-queries-list"></div>
+                        <button type="button" class="btn-secondary" id="add-history-query-btn" style="margin-top: 0.5rem; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+                            + Add History Query
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Prompt Section -->
+            <div class="section-card" id="prompt-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>System Prompt</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <textarea id="agent-system-prompt" rows="10" placeholder="Enter the system prompt for this AI agent..." style="min-height: 200px; font-family: 'Courier New', monospace; font-size: 0.9rem;"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timestamps Section -->
+            <div class="section-card" id="timestamps-section" style="display:none;">
+                <div class="section-header">
+                    <div class="section-title"><h2>Timestamps</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="info-grid">
+                        <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="agent-created-at">-</div></div>
+                        <div class="info-item"><div class="info-label">Updated At</div><div class="info-value" id="agent-updated-at">-</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon"></span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="delete-agent-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideDeleteModal()">x</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the AI agent "<span id="delete-agent-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteAgent()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Topic Browser Toggle -->
+    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle" onclick="TopicBrowserSidePanel.toggle()">
+        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+        </svg>
+        Topics
+    </button>
+
+    <!-- Topic Browser Side Panel -->
+    <div class="topic-browser-side-panel" id="topic-browser-panel">
+        <div class="topic-panel-resize-handle" id="topic-panel-resize-handle"></div>
+        <div class="topic-panel-header">
+            <h3 class="topic-panel-title">Topic Browser</h3>
+            <button class="topic-panel-close" onclick="TopicBrowserSidePanel.close()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="topic-panel-archive-select">
+            <label for="topic-panel-archive-group">Archive:</label>
+            <select id="topic-panel-archive-group">
+                <option value="">Loading...</option>
+            </select>
+        </div>
+        <div class="topic-panel-tree">
+            <ul id="topic-panel-tree-root" class="tree-node">
+                <!-- Tree will be populated here -->
+            </ul>
+        </div>
+        <div class="topic-panel-data-resize" id="topic-panel-data-resize"></div>
+        <div class="topic-panel-data empty" id="topic-panel-data">
+            <div class="topic-panel-data-content" id="topic-panel-data-content"></div>
+        </div>
+    </div>
+
+    <script src="/js/agent-detail.js"></script>
+    <script src="/js/topic-browser-side-panel.js"></script>
+    </ix-application>
+</body>
+</html>

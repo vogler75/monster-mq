@@ -320,7 +320,7 @@ class MqttClientExtension : AbstractVerticle() {
             logger.info("Handling device config change: $operation for device $deviceName")
 
             when (operation) {
-                "add", "update", "addAddress", "deleteAddress" -> {
+                "add", "update", "addAddress", "updateAddress", "deleteAddress" -> {
                     val deviceJson = changeData.getJsonObject("device")
                     val device = DeviceConfig.fromJsonObject(deviceJson)
 

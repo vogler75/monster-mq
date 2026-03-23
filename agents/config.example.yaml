@@ -1,0 +1,52 @@
+# MonsterMQ External Agent Configuration
+
+# MQTT connection to MonsterMQ broker
+mqtt:
+  host: localhost
+  port: 1883
+  username: ""
+  password: ""
+
+# Agent identity
+agent:
+  name: system-monitor
+  org: default
+  site: default
+  description: "Monitors local system resources (CPU, memory, disk) and answers questions about system health."
+  version: "1.0.0"
+
+# AI provider configuration
+ai:
+  # Provider: gemini, claude, openai, ollama
+  provider: gemini
+  # Model name (leave empty for provider default)
+  model: ""
+  # API key (can also use environment variables: GEMINI_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY)
+  api_key: ""
+  temperature: 0.7
+  max_tool_iterations: 10
+
+# Agent behavior
+trigger:
+  # MQTT topics that trigger the agent (message payload becomes the user prompt)
+  input_topics:
+    - "agents/system-monitor/request"
+  # Where responses are published
+  output_topics:
+    - "agents/system-monitor/response"
+
+# System prompt for the LLM
+system_prompt: |
+  You are a system monitor agent running on a local computer.
+  You can check CPU usage, memory usage, disk space, running processes, and network information.
+  When asked about the system, use your tools to gather real data and provide accurate reports.
+  Be concise and format numbers clearly (e.g., percentages, GB).
+
+# Skills advertised in the A2A agent card
+skills:
+  - name: check-system-health
+    description: "Get an overview of CPU, memory, and disk usage"
+  - name: list-processes
+    description: "List running processes sorted by resource usage"
+  - name: check-disk-space
+    description: "Report available disk space on all mounted volumes"

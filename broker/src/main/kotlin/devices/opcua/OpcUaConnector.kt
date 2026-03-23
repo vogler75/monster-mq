@@ -37,8 +37,13 @@ import org.eclipse.milo.opcua.stack.core.types.structured.*
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.OpcUaAddress
 import at.rocworks.stores.devices.OpcUaConnectionConfig
+import at.rocworks.stores.devices.OpcUaWriteConfig
+import at.rocworks.data.BulkClientMessage
+import io.vertx.core.eventbus.MessageConsumer
+import io.vertx.core.json.JsonArray
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.logging.Logger
 import kotlin.concurrent.thread
 
@@ -82,6 +87,9 @@ class OpcUaConnector : AbstractVerticle() {
 
     // Static address subscriptions
     private val addressSubscriptions = ConcurrentHashMap<String, AddressSubscription>() // address -> subscription
+
+    // Write support
+    private var writeConsumer: MessageConsumer<Any>? = null
     private val opcUaMonitoredItems = ConcurrentHashMap<String, UaMonitoredItem>() // address -> item
 
     data class AddressSubscription(
@@ -145,6 +153,7 @@ class OpcUaConnector : AbstractVerticle() {
                 .onComplete { result ->
                     if (result.succeeded()) {
                         logger.info("Initial OPC UA connection successful for device ${deviceConfig.name}")
+                        setupWriteSubscriptions()
                     } else {
                         logger.warning("Initial OPC UA connection failed for device ${deviceConfig.name}: ${result.cause()?.message}. Will retry automatically.")
                     }
@@ -159,6 +168,9 @@ class OpcUaConnector : AbstractVerticle() {
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping OpcUaConnector for device: ${deviceConfig.name}")
         isStopped = true
+
+        // Teardown write subscriptions
+        teardownWriteSubscriptions()
 
         // Cancel any pending reconnection timer
         reconnectTimerId?.let { timerId ->
@@ -219,21 +231,113 @@ class OpcUaConnector : AbstractVerticle() {
 
         logger.info("Setting up ${addresses.size} static address subscriptions for device ${deviceConfig.name}")
 
-        // Process each configured address
-        val setupFutures = addresses.map { address ->
-            setupAddressSubscription(address)
+        // Phase 1: Resolve all addresses to (address, nodeId, browsePath) tuples
+        val resolveFutures = addresses.map { address ->
+            parseAddressToNodeIds(address).map { nodeIdPairs ->
+                nodeIdPairs.map { (nodeId, browsePath) -> Triple(address, nodeId, browsePath) }
+            }
         }
 
-        Future.all<Void>(setupFutures)
+        Future.all<Any>(resolveFutures.map { it.map { r -> r as Any } })
+            .compose { compositeResult ->
+                val allItems = mutableListOf<Triple<OpcUaAddress, NodeId, String>>()
+                for (i in 0 until compositeResult.size()) {
+                    @Suppress("UNCHECKED_CAST")
+                    val items = compositeResult.resultAt<Any>(i) as? List<Triple<OpcUaAddress, NodeId, String>>
+                    if (items != null) allItems.addAll(items)
+                }
+
+                if (allItems.isEmpty()) {
+                    logger.warning("No nodes resolved for any configured address on device ${deviceConfig.name}")
+                    return@compose Future.succeededFuture<Void>()
+                }
+
+                // Phase 2: Batch create monitored items
+                val batchSize = opcUaConfig.monitoringParameters.monitoredItemsBatchSize
+                val batches = allItems.chunked(batchSize)
+                logger.info("Creating ${allItems.size} monitored items in ${batches.size} batch(es) for device ${deviceConfig.name}")
+
+                val batchFutures = batches.map { batch -> createMonitoredItemsBatch(batch) }
+                Future.all<Void>(batchFutures).map { null as Void? }
+            }
             .onComplete { result ->
                 if (result.succeeded()) {
-                    logger.info("Successfully set up ${addresses.size} address subscriptions for device ${deviceConfig.name}")
+                    logger.info("Successfully set up address subscriptions for device ${deviceConfig.name}")
                     promise.complete()
                 } else {
                     logger.severe("Failed to set up address subscriptions: ${result.cause()?.message}")
                     promise.fail(result.cause())
                 }
             }
+
+        return promise.future()
+    }
+
+    /**
+     * Create monitored items in a single batch request to reduce round-trips to the OPC UA server.
+     */
+    private fun createMonitoredItemsBatch(items: List<Triple<OpcUaAddress, NodeId, String>>): Future<Void> {
+        val promise = Promise.promise<Void>()
+
+        if (subscription == null) {
+            promise.fail(Exception("OPC UA subscription not available"))
+            return promise.future()
+        }
+
+        try {
+            val requests = items.map { (_, nodeId, _) ->
+                val clientHandle = subscription!!.nextClientHandle()
+                MonitoredItemCreateRequest(
+                    ReadValueId(nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE),
+                    MonitoringMode.Reporting,
+                    MonitoringParameters(
+                        clientHandle,
+                        opcUaConfig.monitoringParameters.samplingInterval,
+                        null,
+                        Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize),
+                        opcUaConfig.monitoringParameters.discardOldest
+                    )
+                )
+            }
+
+            subscription!!.createMonitoredItems(
+                TimestampsToReturn.Both,
+                requests
+            ) { item, idx ->
+                val (address, nodeId, browsePath) = items[idx]
+                item.setValueConsumer { dataValue ->
+                    handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
+                }
+            }.whenComplete { createdItems, throwable ->
+                if (throwable != null) {
+                    logger.severe("Failed to create monitored items batch: ${throwable.message}")
+                    promise.fail(throwable)
+                    return@whenComplete
+                }
+
+                var successCount = 0
+                createdItems.forEachIndexed { idx, item ->
+                    val (address, nodeId, _) = items[idx]
+                    if (item.statusCode.isGood) {
+                        addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
+                        opcUaMonitoredItems[address.address] = item
+                        successCount++
+                        logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
+                    } else {
+                        logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
+                    }
+                }
+
+                if (successCount > 0) {
+                    logger.info("Batch created $successCount/${items.size} monitored items successfully")
+                    promise.complete()
+                } else {
+                    promise.fail(Exception("All ${items.size} monitored items in batch failed"))
+                }
+            }
+        } catch (e: Exception) {
+            promise.fail(e)
+        }
 
         return promise.future()
     }
@@ -564,49 +668,13 @@ class OpcUaConnector : AbstractVerticle() {
                                 scheduleReconnection()
                             } else {
                                 logger.info("Reconnection successful for device ${deviceConfig.name}")
+                                setupWriteSubscriptions()
                             }
                         }
                 }
             }
             logger.info("Scheduled reconnection for device ${deviceConfig.name} in ${opcUaConfig.reconnectDelay}ms")
         }
-    }
-
-    private fun setupAddressSubscription(address: OpcUaAddress): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        try {
-            // Parse the address to get NodeIds (can be multiple for wildcards)
-            parseAddressToNodeIds(address)
-                .compose { nodeIdPairs ->
-                    if (nodeIdPairs.isEmpty()) {
-                        promise.fail(Exception("No nodes found for address: ${address.address}"))
-                        return@compose Future.succeededFuture<Void>()
-                    }
-
-                    // Create monitored items for all resolved nodes
-                    val createFutures = nodeIdPairs.map { (nodeId, browsePath) ->
-                        createMonitoredItemForAddress(address, nodeId, browsePath)
-                    }
-
-                    Future.all<Void>(createFutures)
-                        .map { Void.TYPE.cast(null) }
-                }
-                .onComplete { result ->
-                    if (result.succeeded()) {
-                        logger.info("Successfully set up subscription for address: ${address.address} -> ${address.topic}")
-                        promise.complete()
-                    } else {
-                        logger.warning("Failed to set up subscription for address ${address.address}: ${result.cause()?.message}")
-                        promise.fail(result.cause())
-                    }
-                }
-
-        } catch (e: Exception) {
-            promise.fail(e)
-        }
-
-        return promise.future()
     }
 
     private fun parseAddressToNodeIds(address: OpcUaAddress): Future<List<Pair<NodeId, String>>> {
@@ -796,63 +864,6 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
-    private fun createMonitoredItemForAddress(address: OpcUaAddress, nodeId: NodeId, browsePath: String = nodeId.toParseableString()): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        if (subscription == null) {
-            promise.fail(Exception("OPC UA subscription not available"))
-            return promise.future()
-        }
-
-        try {
-            val clientHandle = subscription!!.nextClientHandle()
-
-            val request = MonitoredItemCreateRequest(
-                ReadValueId(nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE),
-                MonitoringMode.Reporting,
-                MonitoringParameters(
-                    clientHandle,
-                    opcUaConfig.monitoringParameters.samplingInterval,
-                    null, // No data change filter for now
-                    Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize),
-                    opcUaConfig.monitoringParameters.discardOldest
-                )
-            )
-
-            subscription!!.createMonitoredItems(
-                TimestampsToReturn.Both,
-                listOf(request)
-            ) { item, _ ->
-                // Set value consumer
-                item.setValueConsumer { dataValue ->
-                    handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
-                }
-            }.whenComplete { items, throwable ->
-                if (throwable == null && items.isNotEmpty()) {
-                    val item = items[0]
-                    if (item.statusCode.isGood) {
-                        // Track the subscription
-                        addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
-                        opcUaMonitoredItems[address.address] = item
-
-                        logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
-                        promise.complete()
-                    } else {
-                        logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
-                        promise.fail(Exception("Monitored item creation failed: ${item.statusCode}"))
-                    }
-                } else {
-                    logger.severe("Failed to create monitored item for address ${address.address}: ${throwable?.message}")
-                    promise.fail(throwable ?: Exception("Unknown error creating monitored item"))
-                }
-            }
-
-        } catch (e: Exception) {
-            promise.fail(e)
-        }
-
-        return promise.future()
-    }
 
     private fun createCertificateValidator(): ClientCertificateValidator {
         val certificateConfig = opcUaConfig.certificateConfig
@@ -1028,5 +1039,394 @@ class OpcUaConnector : AbstractVerticle() {
         } catch (e: Exception) {
             logger.severe("Error handling OPC UA value change for address ${address.address}: ${e.message}")
         }
+    }
+
+    // ======================== Write Support (MQTT -> OPC UA) ========================
+
+    private fun setupWriteSubscriptions() {
+        val writeConfig = opcUaConfig.writeConfig
+        if (!writeConfig.enabled && !writeConfig.requestResponseEnabled) return
+
+        val sessionHandler = Monster.getSessionHandler() ?: run {
+            logger.warning("SessionHandler not available for write subscriptions on device ${deviceConfig.name}")
+            return
+        }
+
+        val writeClientId = "opcua-write-${deviceConfig.name}"
+        val namespace = deviceConfig.namespace
+
+        // Register EventBus consumer for incoming MQTT messages
+        if (writeConsumer == null) {
+            writeConsumer = vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(writeClientId)) { busMessage ->
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> handleWriteMessage(body)
+                    is BulkClientMessage -> body.messages.forEach { handleWriteMessage(it) }
+                    else -> logger.warning("Unknown message type in write handler: ${body::class.java}")
+                }
+            }
+        }
+
+        // Subscribe to fire&forget write topics
+        if (writeConfig.enabled) {
+            val fireForgetTopic = "$namespace/${writeConfig.topicPrefix}/#"
+            sessionHandler.subscribeInternalClient(writeClientId, fireForgetTopic, writeConfig.qos)
+            logger.info("Subscribed to fire&forget write topic: $fireForgetTopic for device ${deviceConfig.name}")
+        }
+
+        // Subscribe to request/response topics (read + write)
+        if (writeConfig.requestResponseEnabled) {
+            val requestTopic = "$namespace/${writeConfig.requestTopicPrefix}/#"
+            sessionHandler.subscribeInternalClient(writeClientId, requestTopic, writeConfig.qos)
+            logger.info("Subscribed to request/response topic: $requestTopic for device ${deviceConfig.name}")
+        }
+    }
+
+    private fun teardownWriteSubscriptions() {
+        writeConsumer?.unregister()
+        writeConsumer = null
+    }
+
+    private fun handleWriteMessage(message: BrokerMessage) {
+        // Loop prevention
+        if (message.senderId == deviceConfig.name) return
+
+        if (!isConnected || client == null) {
+            logger.fine { "Not connected to OPC UA server, skipping request for ${message.topicName}" }
+            return
+        }
+
+        val writeConfig = opcUaConfig.writeConfig
+        val namespace = deviceConfig.namespace
+        val topic = message.topicName
+
+        // Determine if this is fire&forget or request/response
+        val fireForgetPrefix = "$namespace/${writeConfig.topicPrefix}"
+        val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
+
+        val isRequestResponse: Boolean
+        val nodeIdPart: String
+
+        when {
+            topic.startsWith("$requestPrefix/") -> {
+                isRequestResponse = true
+                nodeIdPart = topic.removePrefix("$requestPrefix/")
+            }
+            topic == requestPrefix -> {
+                // Batch on request/response base topic
+                isRequestResponse = true
+                nodeIdPart = ""
+            }
+            topic.startsWith("$fireForgetPrefix/") -> {
+                isRequestResponse = false
+                nodeIdPart = topic.removePrefix("$fireForgetPrefix/")
+            }
+            topic == fireForgetPrefix -> {
+                // Batch write on fire&forget base topic
+                isRequestResponse = false
+                nodeIdPart = ""
+            }
+            else -> {
+                logger.warning("Unexpected write/request topic: $topic")
+                return
+            }
+        }
+
+        try {
+            val payloadStr = String(message.payload).trim()
+
+            // Detect batch vs single: if payload starts with '[' it's a batch
+            if (payloadStr.startsWith("[")) {
+                val entries = JsonArray(payloadStr)
+                executeBatch(entries, isRequestResponse, topic)
+            } else if (nodeIdPart.isNotEmpty()) {
+                val payload = if (payloadStr.startsWith("{")) JsonObject(payloadStr) else JsonObject()
+                // No "value" field → read, has "value" field → write
+                if (payload.containsKey("value")) {
+                    executeSingleWrite(nodeIdPart, payload, isRequestResponse, topic)
+                } else if (isRequestResponse) {
+                    executeSingleRead(nodeIdPart, topic)
+                } else {
+                    logger.warning("Read requires request/response topic, not fire&forget: $topic")
+                }
+            } else {
+                logger.warning("Single read/write requires nodeId in topic path: $topic")
+            }
+        } catch (e: Exception) {
+            logger.severe("Error parsing payload for topic $topic: ${e.message}")
+            if (isRequestResponse) {
+                publishErrorResponse(topic, null, e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun executeSingleRead(nodeIdStr: String, originalTopic: String) {
+        thread {
+            try {
+                val nodeId = NodeId.parse(nodeIdStr)
+                val readValueId = ReadValueId(
+                    nodeId,
+                    Unsigned.uint(13), // AttributeId.Value
+                    null,
+                    QualifiedName.NULL_VALUE
+                )
+
+                val readResponse = client!!.read(
+                    0.0,
+                    TimestampsToReturn.Both,
+                    listOf(readValueId)
+                ).get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
+
+                val dataValue = readResponse.results[0]
+                val statusCode = dataValue.statusCode ?: StatusCode.GOOD
+                val value = dataValue.value?.value
+                val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
+
+                val response = JsonObject()
+                    .put("nodeId", nodeIdStr)
+                    .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
+                    .put("statusCode", statusCode.value)
+                    .put("timestamp", timestamp.toString())
+
+                // Convert OPC UA value to JSON (reuse read-path conversion logic)
+                when (value) {
+                    null -> response.putNull("value")
+                    is Boolean -> response.put("value", value)
+                    is Byte -> response.put("value", value.toInt())
+                    is Short -> response.put("value", value.toInt())
+                    is Int -> response.put("value", value)
+                    is Long -> response.put("value", value)
+                    is Float -> response.put("value", value.toDouble())
+                    is Double -> response.put("value", value)
+                    is String -> response.put("value", value)
+                    is UByte -> response.put("value", value.toInt())
+                    is UShort -> response.put("value", value.toInt())
+                    is UInteger -> response.put("value", value.toLong())
+                    is ULong -> response.put("value", value.toLong())
+                    else -> response.put("value", value.toString())
+                }
+
+                logger.fine { "OPC UA read $nodeIdStr: value=$value status=$statusCode" }
+                publishResponse(originalTopic, response.encode().toByteArray())
+            } catch (e: Exception) {
+                logger.severe("OPC UA read failed for $nodeIdStr: ${e.message}")
+                publishErrorResponse(originalTopic, nodeIdStr, e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun executeSingleWrite(nodeIdStr: String, payload: JsonObject, isRequestResponse: Boolean, originalTopic: String) {
+        thread {
+            try {
+                val nodeId = NodeId.parse(nodeIdStr)
+                val value = payload.getValue("value")
+                val dataTypeHint = payload.getString("dataType")
+                val variant = convertJsonToVariant(value, dataTypeHint)
+
+                val writeValue = WriteValue(
+                    nodeId,
+                    Unsigned.uint(13), // AttributeId.Value
+                    null,
+                    DataValue(variant, null, null, null)
+                )
+
+                val writeResponse = client!!.write(listOf(writeValue))
+                    .get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
+
+                val statusCode = writeResponse.results[0]
+                messagesOutCounter.incrementAndGet()
+                logger.fine { "OPC UA write to $nodeIdStr: status=${statusCode}" }
+
+                if (isRequestResponse) {
+                    val response = JsonObject()
+                        .put("nodeId", nodeIdStr)
+                        .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
+                        .put("statusCode", statusCode.value)
+                        .put("timestamp", Instant.now().toString())
+                    publishResponse(originalTopic, response.encode().toByteArray())
+                }
+            } catch (e: Exception) {
+                logger.severe("OPC UA write failed for $nodeIdStr: ${e.message}")
+                if (isRequestResponse) {
+                    publishErrorResponse(originalTopic, nodeIdStr, e.message ?: "Unknown error")
+                }
+            }
+        }
+    }
+
+    private fun executeBatch(entries: JsonArray, isRequestResponse: Boolean, originalTopic: String) {
+        thread {
+            try {
+                // Separate reads and writes, preserving original indices
+                data class ReadEntry(val index: Int, val nodeIdStr: String, val nodeId: NodeId)
+                data class WriteEntry(val index: Int, val nodeIdStr: String, val writeValue: WriteValue)
+
+                val reads = mutableListOf<ReadEntry>()
+                val writes = mutableListOf<WriteEntry>()
+
+                for (i in 0 until entries.size()) {
+                    val entry = entries.getJsonObject(i)
+                    val nodeIdStr = entry.getString("nodeId")
+                    val nodeId = NodeId.parse(nodeIdStr)
+
+                    if (entry.containsKey("value")) {
+                        val variant = convertJsonToVariant(entry.getValue("value"), entry.getString("dataType"))
+                        writes.add(WriteEntry(i, nodeIdStr, WriteValue(
+                            nodeId,
+                            Unsigned.uint(13), // AttributeId.Value
+                            null,
+                            DataValue(variant, null, null, null)
+                        )))
+                    } else {
+                        reads.add(ReadEntry(i, nodeIdStr, nodeId))
+                    }
+                }
+
+                // Results array matching input order
+                val results = arrayOfNulls<JsonObject>(entries.size())
+                val timeout = opcUaConfig.writeConfig.writeTimeout
+
+                // Execute writes
+                if (writes.isNotEmpty()) {
+                    val writeResponse = client!!.write(writes.map { it.writeValue })
+                        .get(timeout, TimeUnit.MILLISECONDS)
+                    messagesOutCounter.addAndGet(writes.size.toLong())
+
+                    writes.forEachIndexed { idx, entry ->
+                        val sc = writeResponse.results[idx]
+                        results[entry.index] = JsonObject()
+                            .put("nodeId", entry.nodeIdStr)
+                            .put("status", if (sc.isGood) "Good" else sc.toString())
+                            .put("statusCode", sc.value)
+                            .put("timestamp", Instant.now().toString())
+                    }
+                }
+
+                // Execute reads
+                if (reads.isNotEmpty()) {
+                    val readValueIds = reads.map { entry ->
+                        ReadValueId(entry.nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE)
+                    }
+                    val readResponse = client!!.read(0.0, TimestampsToReturn.Both, readValueIds)
+                        .get(timeout, TimeUnit.MILLISECONDS)
+
+                    reads.forEachIndexed { idx, entry ->
+                        val dv = readResponse.results[idx]
+                        val sc = dv.statusCode ?: StatusCode.GOOD
+                        val value = dv.value?.value
+                        val ts = dv.sourceTime?.javaInstant ?: Instant.now()
+                        val r = JsonObject()
+                            .put("nodeId", entry.nodeIdStr)
+                            .put("status", if (sc.isGood) "Good" else sc.toString())
+                            .put("statusCode", sc.value)
+                            .put("timestamp", ts.toString())
+                        when (value) {
+                            null -> r.putNull("value")
+                            is Boolean -> r.put("value", value)
+                            is Byte -> r.put("value", value.toInt())
+                            is Short -> r.put("value", value.toInt())
+                            is Int -> r.put("value", value)
+                            is Long -> r.put("value", value)
+                            is Float -> r.put("value", value.toDouble())
+                            is Double -> r.put("value", value)
+                            is String -> r.put("value", value)
+                            is UByte -> r.put("value", value.toInt())
+                            is UShort -> r.put("value", value.toInt())
+                            is UInteger -> r.put("value", value.toLong())
+                            is ULong -> r.put("value", value.toLong())
+                            else -> r.put("value", value.toString())
+                        }
+                        results[entry.index] = r
+                    }
+                }
+
+                logger.fine { "OPC UA batch: ${writes.size} writes, ${reads.size} reads" }
+
+                if (isRequestResponse) {
+                    val responseArray = JsonArray()
+                    results.forEach { responseArray.add(it) }
+                    publishResponse(originalTopic, responseArray.encode().toByteArray())
+                }
+            } catch (e: Exception) {
+                logger.severe("OPC UA batch request failed: ${e.message}")
+                if (isRequestResponse) {
+                    publishErrorResponse(originalTopic, null, e.message ?: "Unknown error")
+                }
+            }
+        }
+    }
+
+    private fun convertJsonToVariant(value: Any?, dataTypeHint: String?): Variant {
+        if (value == null) return Variant.NULL_VALUE
+
+        // If explicit data type hint provided, use it
+        if (dataTypeHint != null) {
+            return when (dataTypeHint.lowercase()) {
+                "boolean" -> Variant(value as? Boolean ?: value.toString().toBoolean())
+                "byte", "sbyte" -> Variant((value as Number).toByte())
+                "ubyte" -> Variant(Unsigned.ubyte((value as Number).toShort()))
+                "int16" -> Variant((value as Number).toShort())
+                "uint16" -> Variant(Unsigned.ushort((value as Number).toInt()))
+                "int32" -> Variant((value as Number).toInt())
+                "uint32" -> Variant(Unsigned.uint((value as Number).toLong()))
+                "int64" -> Variant((value as Number).toLong())
+                "uint64" -> Variant(Unsigned.ulong((value as Number).toLong()))
+                "float" -> Variant((value as Number).toFloat())
+                "double" -> Variant((value as Number).toDouble())
+                "string" -> Variant(value.toString())
+                else -> Variant(value.toString())
+            }
+        }
+
+        // Infer type from JSON value
+        return when (value) {
+            is Boolean -> Variant(value)
+            is Int -> Variant(value)
+            is Long -> if (value in Int.MIN_VALUE..Int.MAX_VALUE) Variant(value.toInt()) else Variant(value)
+            is Double -> Variant(value)
+            is Float -> Variant(value.toDouble())
+            is String -> Variant(value)
+            is Number -> Variant(value.toDouble())
+            else -> Variant(value.toString())
+        }
+    }
+
+    private fun publishResponse(originalTopic: String, payload: ByteArray) {
+        val writeConfig = opcUaConfig.writeConfig
+        val namespace = deviceConfig.namespace
+        val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
+        val responsePrefix = "$namespace/${writeConfig.responseTopicPrefix}"
+
+        val responseTopic = originalTopic.replaceFirst(requestPrefix, responsePrefix)
+
+        try {
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null) {
+                val responseMessage = BrokerMessage(
+                    messageId = 0,
+                    topicName = responseTopic,
+                    payload = payload,
+                    qosLevel = 0,
+                    isRetain = false,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = "opcua-connector-${deviceConfig.name}",
+                    senderId = deviceConfig.name
+                )
+                sessionHandler.publishMessage(responseMessage)
+                logger.fine { "Published response to $responseTopic" }
+            }
+        } catch (e: Exception) {
+            logger.severe("Error publishing response to $responseTopic: ${e.message}")
+        }
+    }
+
+    private fun publishErrorResponse(originalTopic: String, nodeIdStr: String?, errorMessage: String) {
+        val response = JsonObject()
+            .put("status", "Bad")
+            .put("error", errorMessage)
+            .put("timestamp", Instant.now().toString())
+        if (nodeIdStr != null) response.put("nodeId", nodeIdStr)
+
+        publishResponse(originalTopic, response.encode().toByteArray())
     }
 }

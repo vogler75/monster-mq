@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - NATS Client Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); margin-bottom:2rem; box-shadow:var(--card-shadow); }
+        .section-header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:12px 12px 0 0; }
+        .section-title h2 { margin:0; color:var(--text-primary); font-size:1.25rem; font-weight:600; }
+        .section-content { padding:1.5rem; }
+        .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+        .status-badge { display:inline-flex; padding:0.4rem 0.8rem; border-radius:20px; font-size:0.7rem; font-weight:600; text-transform:uppercase; }
+        .status-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .status-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
+        .page-header-content { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
+        .page-header-actions { display:flex; gap:0.75rem; align-items:center; }
+        .btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.75rem 1.5rem; border-radius:8px; font-weight:600; transition:all 0.2s ease; border:none; cursor:pointer; }
+        .btn-primary { background:linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color:white; }
+        .btn-secondary { background:var(--dark-surface-2); border:1px solid var(--dark-border); color:var(--text-primary); }
+        .btn.btn-secondary { white-space:nowrap; }
+        .btn-success { background:var(--monster-green); color:white; }
+        .btn-warning { background:var(--monster-orange); color:white; }
+        .btn-danger { background:var(--monster-red); color:white; }
+        .btn-danger:hover { filter:brightness(1.1); }
+        .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:2rem; }
+        .modal-content { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); max-width:600px; width:100%; max-height:90vh; overflow-y:auto; }
+        .modal-header { padding:1.5rem 2rem; border-bottom:1px solid var(--dark-border); display:flex; justify-content:space-between; align-items:center; }
+        .modal-header h3 { margin:0; color:var(--text-primary); }
+        .modal-close { background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer; }
+        .modal-body { padding:2rem; }
+        .modal-footer { padding:1.5rem 2rem; border-top:1px solid var(--dark-border); display:flex; justify-content:flex-end; gap:1rem; }
+        .form-group { margin-bottom:1.5rem; }
+        .form-group label { display:block; margin-bottom:0.5rem; color:var(--text-primary); font-weight:600; }
+        .form-control, input[type=text], input[type=password], input[type=number], select, textarea { width:100%; padding:0.75rem 1rem; background:var(--dark-bg); border:1px solid var(--dark-border); border-radius:8px; color:var(--text-primary); box-sizing:border-box; font-family:inherit; font-size:0.9rem; }
+        .form-control:focus, input:focus, select:focus, textarea:focus { outline:none; border-color:var(--monster-purple); }
+        .checkbox-group { display:flex; align-items:center; gap:0.5rem; }
+        .checkbox-group input[type=checkbox] { accent-color:var(--monster-purple); }
+        .json-hint { color:var(--text-muted); font-size:0.7rem; margin-top:0.4rem; display:block; }
+        .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+        .info-item { display:flex; flex-direction:column; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border); }
+        .info-label { font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.5rem; }
+        .info-value { color:var(--text-primary); font-weight:600; }
+        .auth-fields { display:none; }
+        /* Address table */
+        .addresses-table { width:100%; border-collapse:collapse; }
+        .addresses-table th, .addresses-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--dark-border); text-align:left; }
+        .addresses-table th { font-weight:600; color:var(--text-primary); background:var(--dark-surface-2); }
+        .addresses-table tbody tr:hover { background:rgba(71,85,105,0.1); }
+        .mode-badge { display:inline-flex; padding:0.25rem 0.6rem; border-radius:12px; font-size:0.7rem; font-weight:700; text-transform:uppercase; }
+        .mode-subscribe { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .mode-publish { background:rgba(124,58,237,0.15); color:var(--monster-purple); border:1px solid rgba(124,58,237,0.3); }
+        .action-buttons { display:flex; gap:0.5rem; }
+.btn-icon.btn-delete { color:var(--monster-red); }
+        .btn-icon.btn-delete:hover { background:rgba(239,68,68,0.1); }
+        @media (max-width:1000px) { .form-grid, .info-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+        <div class="page-header">
+            <div class="page-header-content">
+                <div>
+                    <h1 class="page-title" id="page-title">NATS Client</h1>
+                    <p class="page-subtitle" id="page-subtitle"></p>
+                </div>
+                <div class="page-header-actions">
+                    <button class="btn btn-secondary btn-small" onclick="goBack()">← Back</button>
+                    <button class="btn btn-danger btn-small" id="delete-btn" onclick="showDeleteModal()">Delete</button>
+                    <button class="btn btn-primary btn-small" id="save-client-btn" onclick="saveClient()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+                        Save Client
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Configuration -->
+        <div class="section-card" id="client-content" style="display:none;">
+            <div class="section-header">
+                <div class="section-title"><h2>Connection Configuration</h2></div>
+                    <span class="status-badge status-enabled" id="client-status">ENABLED</span>
+            </div>
+            <div class="section-content">
+                <form id="client-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="client-name">Client Name *</label>
+                            <input type="text" id="client-name" required disabled>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-namespace">Namespace *</label>
+                            <input type="text" id="client-namespace" required>
+                        </div>
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label for="client-servers">NATS Servers *</label>
+                            <input type="text" id="client-servers" required placeholder="nats://host1:4222, nats://host2:4222">
+                            <span class="json-hint">Comma-separated list of NATS server URLs.</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-node">Cluster Node *</label>
+                            <select id="client-node" required><option value="">Select Node...</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="client-auth-type">Authentication</label>
+                            <select id="client-auth-type" onchange="natsDetailManager.onAuthTypeChange(this.value)">
+                                <option value="ANONYMOUS">Anonymous</option>
+                                <option value="USERNAME_PASSWORD">Username / Password</option>
+                                <option value="TOKEN">Token</option>
+                                <option value="TLS">TLS</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Auth fields (shown conditionally) -->
+                    <div id="detail-auth-fields-userpass" class="auth-fields">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="client-username">Username</label>
+                                <input type="text" id="client-username">
+                            </div>
+                            <div class="form-group">
+                                <label for="client-password">Password</label>
+                                <input type="password" id="client-password" placeholder="(unchanged)">
+                                <span class="json-hint">Leave blank to keep existing password.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="detail-auth-fields-token" class="auth-fields">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="client-token">Token</label>
+                                <input type="password" id="client-token" placeholder="(unchanged)">
+                                <span class="json-hint">Leave blank to keep existing token.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="detail-auth-fields-tls" class="auth-fields">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="client-tls-ca">CA Certificate Path</label>
+                                <input type="text" id="client-tls-ca" placeholder="/etc/ssl/certs/ca.jks">
+                            </div>
+                            <div class="form-group">
+                                <div class="checkbox-group" style="margin-top:2rem;">
+                                    <input type="checkbox" id="client-tls-verify" checked>
+                                    <label for="client-tls-verify">Verify TLS Certificate</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- JetStream -->
+                    <div class="form-grid" style="margin-top:0.5rem;">
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="client-jetstream" onchange="natsDetailManager.onJetStreamChange(this.checked)">
+                                <label for="client-jetstream">Use JetStream</label>
+                            </div>
+                        </div>
+                        <div class="form-group" id="js-stream-group" style="display:none;">
+                            <label for="client-stream-name">Stream Name *</label>
+                            <input type="text" id="client-stream-name" placeholder="events">
+                        </div>
+                        <div class="form-group" id="js-durable-group" style="display:none;">
+                            <label for="client-durable-name">Durable Consumer Name</label>
+                            <input type="text" id="client-durable-name" placeholder="monstermq-consumer">
+                        </div>
+                    </div>
+                    <!-- Timeouts -->
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="client-connect-timeout">Connect Timeout (ms)</label>
+                            <input type="number" id="client-connect-timeout" min="100" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="client-reconnect-delay">Reconnect Delay (ms)</label>
+                            <input type="number" id="client-reconnect-delay" min="100" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label for="client-max-reconnects">Max Reconnect Attempts</label>
+                            <input type="number" id="client-max-reconnects" value="-1">
+                            <span class="json-hint">-1 = unlimited</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="client-enabled">
+                            <label for="client-enabled">Enabled</label>
+                        </div>
+                    </div>
+                </form>
+
+                <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--dark-border);" id="timestamps-row">
+                    <h3 style="color:var(--text-primary);margin-bottom:1rem;">Timestamps</h3>
+                    <div class="info-grid">
+                        <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="client-created-at">-</div></div>
+                        <div class="info-item"><div class="info-label">Updated At</div><div class="info-value" id="client-updated-at">-</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <div class="section-card" id="metrics-section">
+            <div class="section-header"><div class="section-title"><h2>Current Metrics</h2></div></div>
+            <div class="section-content">
+                <div class="info-grid">
+                    <div class="info-item"><div class="info-label">Messages In / s (NATS→MQTT)</div><div class="info-value" id="metric-messages-in">0</div></div>
+                    <div class="info-item"><div class="info-label">Messages Out / s (MQTT→NATS)</div><div class="info-value" id="metric-messages-out">0</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Address Mappings -->
+        <div class="section-card" id="addresses-section" style="display:none;">
+            <div class="section-header">
+                <div class="section-title"><h2>Address Mappings</h2></div>
+                <button class="btn btn-primary" style="padding:0.5rem 1rem;font-size:0.85rem;" onclick="showAddAddressModal()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    Add Mapping
+                </button>
+            </div>
+            <div class="section-content" style="padding:0;">
+                <table class="addresses-table">
+                    <thead>
+                        <tr>
+                            <th>Mode</th>
+                            <th>NATS Subject</th>
+                            <th>MQTT Topic</th>
+                            <th>QoS</th>
+                            <th>Auto-Convert</th>
+                            <th>Remove Path</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="addresses-table-body">
+                        <tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="loading-indicator" class="loading-indicator" style="display:none;">
+            <div class="loading-spinner"></div><span>Loading NATS client…</span>
+        </div>
+        <div id="error-message" class="error-message" style="display:none;">
+            <div class="error-content"><span class="error-icon">⚠️</span><span class="error-text"></span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Address Modal -->
+<div id="add-address-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="address-modal-title">Add Address Mapping</h3>
+            <button class="modal-close" onclick="hideAddAddressModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <form id="add-address-form">
+                <div class="form-group">
+                    <label for="addr-mode">Mode *</label>
+                    <select id="addr-mode" required>
+                        <option value="SUBSCRIBE">SUBSCRIBE — NATS → MQTT (inbound)</option>
+                        <option value="PUBLISH">PUBLISH — MQTT → NATS (outbound)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="addr-nats-subject">NATS Subject *</label>
+                    <input type="text" id="addr-nats-subject" required placeholder="e.g. sensors.> or commands.*">
+                    <span class="json-hint">NATS wildcards: * (single token), > (multi-token)</span>
+                </div>
+                <div class="form-group">
+                    <label for="addr-mqtt-topic">MQTT Topic *</label>
+                    <input type="text" id="addr-mqtt-topic" required placeholder="e.g. sensors/# or commands/+">
+                    <span class="json-hint">MQTT wildcards: + (single level), # (multi-level)</span>
+                </div>
+                <div class="form-group">
+                    <label for="addr-qos">QoS Level</label>
+                    <select id="addr-qos">
+                        <option value="0">0 — At most once</option>
+                        <option value="1">1 — At least once</option>
+                        <option value="2">2 — Exactly once</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="addr-auto-convert" checked>
+                        <label for="addr-auto-convert">Auto-convert separators (/ ↔ ., # ↔ >, + ↔ *)</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="addr-remove-path" checked>
+                        <label for="addr-remove-path">Remove path (strip prefix before wildcard, prepend target prefix)</label>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveAddressMapping()">Save Mapping</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Client Modal -->
+<div id="delete-client-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Confirm Delete</h3>
+            <button class="modal-close" onclick="hideDeleteModal()">×</button>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete the NATS client "<span id="delete-client-name"></span>"?</p>
+            <p>This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
+            <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/nats-client-detail.js"></script>
+    </ix-application>
+</body>
+</html>

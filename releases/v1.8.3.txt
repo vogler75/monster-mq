@@ -1,0 +1,13 @@
+Release v1.8.3
+Built from commit: a29045a
+Date: 2026-03-22 13:58:24
+
+Changes since v1.8.2:
+---
+a29045a Collect-then-resume pattern for async sub-agent orchestration
+a88afb9 Correlate tasks with input & rebuild AI service
+3cd59bd Improve agent memory, retries, and UI zoom
+24454a2 Use QoS 0 for internal inbox subscriptions
+d56cc11 Add Python external agents and A2A improvements
+bf14088 Add AI Agents feature to homepage and update README GenAI config
+31a11fb Update README.md

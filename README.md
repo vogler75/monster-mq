@@ -1,592 +1,308 @@
 # MonsterMQ
 
-A high-performance, enterprise-grade MQTT broker with advanced data processing capabilities, built on Vert.x and designed for industrial IoT and real-time messaging scenarios.
+MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time messaging, built on Vert.x. It combines MQTT messaging with storage, protocol bridges, workflows, a web dashboard, and management APIs.
 
-## 🚀 Key Features
+## Highlights
 
-### Core MQTT Broker
-- **Full MQTT 3.1.1 Support** - Complete protocol implementation with QoS 0, 1, 2
-- **High Performance** - Built on Vert.x for maximum throughput and low latency  
-- **SSL/TLS Security** - End-to-end encryption with certificate management
-- **WebSocket Support** - MQTT over WebSocket for web applications
-- **Clustering** - Multi-node deployment with Hazelcast clustering and automatic failover
-- **Retained Messages** - Persistent message storage for new subscribers
-- **MQTT Logging** - Publish all system logs to MQTT topics in real-time ([details](doc/mqtt-logging.md))
+- MQTT 3.1.1 with broad MQTT 5 support ([details](doc/mqtt5.md))
+- Native NATS protocol support and MQTT <-> NATS bridging ([details](doc/nats.md))
+- WebSocket, TLS, retained messages, clustering, and MQTT-based system logging ([details](doc/mqtt-logging.md))
+- Storage backends for PostgreSQL, CrateDB, MongoDB, SQLite, and more via JDBC ([database docs](doc/databases.md))
+- Archive groups, last-value storage, retention policies, and schema-based JDBC logging ([archiving](doc/archiving.md), [Snowflake](doc/snowflake.md))
+- Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, and others
+- Flow engine for visual, JavaScript-based message processing ([details](doc/workflows.md))
+- AI agents with multi-provider LLM support (Gemini, Claude, OpenAI, Ollama), MQTT/cron triggers, and agent-to-agent orchestration
+- GraphQL API, MCP server, web dashboard, and CESMII I3X API support
 
-### Data Integration & Storage
+## Quick Start
 
-#### Multi-Database Support 📊
-Advanced database integration for real-time data archiving and analytics:
+### Docker
 
-- **PostgreSQL, QuestDB, TimescaleDB** - Time-series and relational databases
-- **SQLite** - Lightweight embedded deployments
-- **CrateDB** - Distributed analytics and large-scale IoT data
-- **MongoDB** - Document-based storage with flexible schema
-- **MySQL** - Widely-used relational database
-- **Snowflake** - Cloud data warehouse with private key authentication
-- **Custom JDBC** - Support for any JDBC-compatible database
-
-#### Archive Groups 🗄️
-Flexible message storage with configurable retention and archiving:
-
-- **Last Value Store** - Keep latest values for instant access
-- **Message Archive** - Long-term storage with compression
-- **Retention Policies** - Automatic cleanup and data lifecycle management
-- **Performance Monitoring** - Real-time throughput and storage metrics
-- **Smart Data Processing** - JSON Schema validation and transformation
-- **Connection Pooling** - Enterprise-grade database connection management
-
-**Note:** Two archive groups are automatically created:
-- **Default** - In-memory store for process images (disabled by default, must be enabled in configuration)
-- **Syslogs** - Archive for broker system logs (disabled by default, requires `ArchiveType` to be defined before enabling)
-
-#### JDBC Logger 📝
-Schema-based MQTT message logging to databases with JSON validation:
-
-- **Schema Validation** - Validate MQTT messages against JSON Schema before writing
-- **Bulk Writes** - Configurable batch size and timeout for optimal performance
-- **Dynamic Tables** - Extract table name from message payload using JSONPath
-- **Queue Buffering** - Memory or disk-based message queuing with overflow protection
-- **Auto Table Creation** - Automatically create tables based on JSON schema
-- **Field Mapping** - Map JSON fields to database columns with JSONPath expressions
-- **Supported Databases**:
-  - **QuestDB** - High-performance time-series database
-  - **PostgreSQL** - Enterprise-grade relational database
-  - **TimescaleDB** - PostgreSQL extension for time-series data
-  - **MySQL** - Popular open-source database
-  - **Snowflake** - Cloud data warehouse ([configuration guide](broker/SNOWFLAKE.md))
-
-**Snowflake Configuration Example:**
-```yaml
-JDBC URL: jdbc:snowflake://account.snowflakecomputing.com
-Account: MYORG-MYACCOUNT
-Username: mqtt_logger_user
-Private Key File: /etc/snowflake/keys/rsa_key.p8
-Warehouse: COMPUTE_WH
-Database: IOT_DATA
-Schema: SENSORS
-```
-
-For detailed Snowflake setup, see [SNOWFLAKE.md](broker/SNOWFLAKE.md).
-
-### Device Integration 🔌
-
-#### OPC UA Integration
-- **Client & Server** - Connect to PLCs and industrial systems
-- **Security** - Certificate management and authentication
-- **Real-time Data** - Subscribe to OPC UA variables with automatic mapping to MQTT
-
-#### MQTT Client Bridge
-- **Remote Broker Connection** - Bridge multiple MQTT brokers
-- **Topic Mapping** - Flexible topic transformation and routing
-- **Failover Support** - Automatic reconnection and buffering
-
-#### PLC4X Integration
-- **Multi-Protocol Support** - Connect to Siemens, Allen-Bradley, Modbus, and more
-- **Direct PLC Access** - Read/write PLC variables without gateways
-- **Industrial Standards** - Support for major industrial protocols
-
-#### WinCC OA & Unified Integration
-- **High-Performance SCADA** - Bulk message transfer from Siemens systems
-- **GraphQL/WebSocket** - Real-time tag values and alarm notifications
-- **Massive Scale** - Subscribe to millions of datapoints efficiently
-
-#### Neo4j Graph Database
-- **Topic Hierarchy Analysis** - MQTT topics as graph relationships
-- **Path-based Queries** - Discover device connections and hierarchies
-- **Graph Analytics** - Powerful relationship analysis for IoT data
-
-### Workflow Engine 🔄
-Visual flow-based data processing inspired by Node-RED:
-
-#### Flow Classes (Templates)
-- **Reusable Templates** - Define processing logic once, deploy everywhere
-- **Node Types** - Function, filter, transform, and custom JavaScript nodes
-- **Visual Design** - Drag-and-drop workflow creation with zoom/pan editor
-
-#### Flow Instances (Deployments)  
-- **Input Mapping** - Connect MQTT topics to workflow inputs
-- **Output Mapping** - Publish results to configured topics
-- **JavaScript Processing** - GraalVM-powered JavaScript execution
-- **Real-time Execution** - Event-driven processing with low latency
-
-#### Workflow Features
-- **Cluster Deployment** - Distribute workflows across nodes
-- **State Management** - Persistent variables and context
-- **Error Handling** - Robust error capture and reporting
-- **Performance Monitoring** - Execution metrics and debugging
-
-### Web Dashboard 🖥️
-Modern, responsive web interface for complete system management:
-
-- **Real-time Monitoring** - Live metrics and system status
-- **Configuration Management** - Visual configuration of all components
-- **User Management** - Role-based access control with ACL
-- **Topic Browser** - Interactive MQTT topic exploration with drag-and-drop
-- **Workflow Editor** - Visual workflow design, debugging, and deployment
-- **Device Management** - Configure and monitor all connected devices
-
-## 🏃 Quick Start
-
-### Docker (Recommended)
+Run the published image:
 
 ```bash
-# Pull from Docker Hub
-docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
-
-# Or with PostgreSQL and full docker-compose
-docker-compose up -d
+docker run \
+  -p 1883:1883 \
+  -p 4222:4222 \
+  -p 4000:4000 \
+  -p 3000:3000 \
+  -p 3002:3002 \
+  -v ./config.yaml:/app/config.yaml \
+  rocworks/monstermq:latest
 ```
 
-### Build from Source
+### Build From Source
 
 ```bash
 cd broker
-mvn compile
 
-# Run with SQLite (development)
-./run.sh
+# Build everything (dashboard + broker) and run
+./run.sh -build
 
-# Run with PostgreSQL (production)  
-./run.sh -config config-postgres.yaml
+# Or run with a custom config
+./run.sh -build -config configs/config-postgres.yaml
 
-# Run with clustering
-./run.sh -cluster -config config-hazelcast.yaml
+# Or run in cluster mode
+./run.sh -build -cluster -config configs/config-hazelcast.yaml
 ```
 
-### Configuration Examples
+The `./run.sh -build` flag builds the dashboard (`npm install && npm run build` in `dashboard/`), copies the output to `broker/src/main/resources/dashboard/`, then runs `mvn package` to compile the broker with the dashboard embedded.
+
+For dashboard development, use `npm run dev` in the `dashboard/` directory to start a Vite dev server with hot reload on port 5173.
+
+### Configuration
 
 ```yaml
-# Production configuration (config.yaml)
 TCP: 1883
 TCPS: 8883
-WS: 9000
-WSS: 9001
+WSS: 8083
+NATS: 4222
 
 DefaultStoreType: POSTGRES
+#DefaultStoreType: MONGODB
+#DefaultStoreType: SQLITE
+
+BulkProcessing:
+  Enabled: false
+  TimeoutMS: 50
+  BulkSize: 1000
+  WorkerThreads: 4
+
+BulkMessaging:
+  Enabled: true
+  TimeoutMS: 100
+  BulkSize: 1000
+
+# MQTT TCP Server configuration (socket-level settings)
+MqttTcpServer:
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  MaxMessageSizeKb: 512          # Maximum MQTT message size (default: 512KB)
+
+QueuedMessagesEnabled: true
+AllowRootWildcardSubscription: true
+
+# Rate limiting for MQTT clients (0 = unlimited)
+#MaxPublishRate: 10000    # Max messages per second a client can publish
+#MaxSubscribeRate: 10000  # Max messages per second a client can receive
+
+# Queue size configuration for high-load scenarios
+# Increase these values if experiencing NetworkTimeout errors during heavy subscription load
+Queues:
+  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
+
+# User Management configuration
+UserManagement:
+  Enabled: true  # Set to true to enable user authentication and ACL
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60  # seconds
+  DisconnectOnUnauthorized: true
+
+Metrics:
+  Enabled: true
+  RetentionHours: 1   # Default 1 hour
+  CollectionInterval: 10  # Collection interval in seconds (default: 1)
+
+Logging:
+  Mqtt:
+    Enabled: true          # Enable MQTT log publishing to $SYS/syslogs/<node>/<level> topics
+  Memory:
+    Enabled: true         # Enable in-memory log storage (circular buffer)
+    Entries: 1000          # Maximum number of log entries to store in memory
+
+# SQLite configuration
+SQLite:
+  Path: "sqlite"
+  EnableWAL: true  # Set to true for better performance, false for easier multi-client access
 
 # PostgreSQL configuration
 Postgres:
   Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
-  # Schema: mqtt_broker    # Optional: custom PostgreSQL schema (defaults to 'public')
 
-# Enable MQTT logging
-Logging:
-  MqttEnabled: true    # Publish logs to MQTT topics
-  MqttLevel: INFO      # Minimum log level: INFO, WARNING, or SEVERE
+# MongoDB configuration
+MongoDB:
+  Url: mongodb://system:manager@localhost:27017
+  Database: monster
 
-# Service endpoints
+# CrateDB configuration
+CrateDB:
+  Url: jdbc:postgresql://localhost:5433/monster
+  User: crate
+  Pass: ""
+
 GraphQL:
   Enabled: true
   Port: 4000
+  Path: /graphql
+
+Dashboard:
+  Enabled: true
+
+# MCP Server configuration
+MCP:
+  Enabled: true
+  Port: 3000
+
+Prometheus:
+  Enabled: true
+  Port: 3001
+  RawQueryLimit: 10000
+
+I3x:
+  Enabled: true
+  Port: 3002
+  DefaultArchiveGroup: SCADA
+
+# GenAI Configuration
+GenAI:
+  Enabled: true
+  Providers:
+    Gemini:
+      ApiKey: "${GENAI_GEMINI_API_KEY}"
+    Claude:
+      ApiKey: "${GENAI_CLAUDE_API_KEY}"
+    OpenAI:
+      ApiKey: "${GENAI_OPENAI_API_KEY}"
+    Ollama:
+      BaseUrl: http://localhost:11434
+  Assistant:
+    Provider: "gemini"
+    Model: "gemini-2.5-flash-lite"
 ```
 
-#### PostgreSQL Multi-Schema Setup
+For more examples, see `broker/configs/`.
 
-For multi-tenant or multi-environment deployments, use different PostgreSQL schemas:
+## Core Capabilities
 
-```yaml
-# Environment-specific configuration
-Postgres:
-  Url: jdbc:postgresql://db.example.com:5432/monstermq
-  User: system
-  Pass: manager
-  Schema: prod_mqtt_broker    # Production environment
-```
+### Messaging and Protocols
 
-See [Database Configuration](doc/databases.md#postgresql-schema-support-optional) for detailed documentation on schema support.
+- MQTT over TCP, TLS, and WebSocket
+- Native NATS server for standard NATS clients
+- MQTT client bridge for remote brokers
+- MQTT logging for publishing broker logs to topics
 
-## 🗄️ Database Support
+### Storage and Archiving
+
+- Session, retained, archive, and last-value storage
+- Archive groups with retention and performance metrics
+- JDBC logger with JSON schema validation, field mapping, and bulk writes
+- Optional PostgreSQL schema support for multi-tenant setups
+
+### Device and System Integration
+
+- OPC UA client and server ([docs](doc/opcua.md), [server](doc/opcua-server.md))
+- PLC4X for direct PLC access
+- WinCC OA and WinCC Unified connectors ([WinCC OA](doc/winccoa.md), [WinCC Unified](doc/winccua.md))
+- Neo4j integration for topic hierarchy analysis ([details](doc/neo4j.md))
+- Kafka integration for event streaming ([details](doc/kafka.md))
+
+### Processing and APIs
+
+- Flow engine with reusable flow classes and deployed instances
+- JavaScript execution with GraalVM
+- GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
+- MCP server for AI-oriented access ([details](doc/mcp.md))
+
+### AI Agents
+
+MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents are configured and managed through the dashboard or GraphQL API and run as Vert.x verticles inside the broker.
+
+- **Multi-provider support**: Gemini, Claude, OpenAI, and Ollama (local models)
+- **MQTT-triggered agents**: Subscribe to topics and react to incoming messages with LLM-driven logic
+- **Cron and manual triggers**: Schedule agents on cron expressions or invoke them on demand
+- **Broker tools**: Agents can publish/subscribe, query archives, read retained messages, and access last values
+- **MCP integration**: Connect agents to external MCP servers for additional tool capabilities
+- **Agent-to-agent communication (A2A)**: Agents can delegate tasks to other agents via MQTT-based orchestration
+- **Conversation memory**: Configurable sliding-window chat memory with optional persistent state
+- **Context injection**: Automatically provide agents with last-value data, retained messages, or historical queries as context
+
+### Operations and UI
+
+- Web dashboard for monitoring, configuration, users, topics, devices, and workflows
+- Hazelcast-based clustering and failover ([details](doc/clustering.md))
+- TLS, certificates, ACLs, and user management ([security](doc/security.md), [users](doc/users.md), [ACL](doc/acl.md))
+
+## Database Support
 
 | Database | Session Store | Retained Store | Message Archive | Clustering |
 |----------|:-------------:|:--------------:|:---------------:|:----------:|
-| **PostgreSQL** | ✅ | ✅ | ✅ | ✅ |
-| **CrateDB** | ✅ | ✅ | ✅ | ✅ |
-| **MongoDB** | ✅ | ✅ | ✅ | ✅ |
-| **SQLite** | ✅ | ✅ | ✅ | ❌ |
-| **Memory** | ❌ | ✅ | ❌ | ✅ |
-| **Hazelcast** | ❌ | ✅ | ❌ | ✅ |
+| PostgreSQL | Yes | Yes | Yes | Yes |
+| CrateDB | Yes | Yes | Yes | Yes |
+| MongoDB | Yes | Yes | Yes | Yes |
+| SQLite | Yes | Yes | Yes | No |
+| Memory | No | Yes | No | Yes |
+| Hazelcast | No | Yes | No | Yes |
 
-**Note:** SQLite cannot be used in cluster mode - use PostgreSQL, CrateDB, or MongoDB for clustering.
+SQLite is not suitable for cluster mode; use PostgreSQL, CrateDB, or MongoDB instead.
 
-## 🔧 Architecture
+## Default Endpoints
 
-MonsterMQ follows a modular, event-driven architecture built on Eclipse Vert.x, providing high-performance message routing with enterprise-grade reliability and clustering capabilities.
+| Service | Port |
+|---------|:----:|
+| MQTT TCP | 1883 |
+| MQTT TLS | 8883 |
+| WebSocket | 9000 |
+| WebSocket TLS | 9001 |
+| NATS | 4222 |
+| OPC UA Server | 4840 |
+| GraphQL API and Dashboard | 4000 |
+| MCP Server | 3000 |
+| I3X API | 3002 |
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                Client Layer                                     │
-│                                                                                 │
-│  MQTT Clients    OPC UA Devices    WinCC Systems    PLC4X    AI/Analytics       │
-│  IoT Devices     Industrial PLCs   SCADA Systems    Modbus   MCP Clients        │
-└────────────────────────────────┬────────────────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼────────────────────────────────────────────────┐
-│                             Protocol Layer                                      │
-│                                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐.   │
-│  │ MQTT 3.1.1/5│  │  OPC UA     │  │  GraphQL    │  │  Device Integration  │    │
-│  │ TCP / TLS   │  │  Server     │  │  WebSocket  │  │  WinCC / PLC4X       │    │
-│  │ WebSocket   │  │  Client     │  │  Queries    │  │  Neo4j / Kafka       │    │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └──────────────────────┘    │
-└────────────────────────────────┬────────────────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼────────────────────────────────────────────────┐
-│                        Core Processing Layer                                    │
-│                          (Vert.x Event Bus)                                     │
-│                                                                                 │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐.  │
-│  │   Message Router     │  │  Workflow Engine     │  │  Archive Manager     │.  │
-│  │  • Topic Matching    │  │  • Flow Classes      │  │  • Archive Groups    │   │
-│  │  • Pub/Sub Logic     │  │  • Flow Instances    │  │  • Default (memory)  │.  │
-│  │  • QoS 0/1/2         │  │  • JavaScript Engine │  │  • Syslogs           │   │
-│  │  • Subscriptions     │  │  • Real-time Exec    │  │  • Last Value Store  │   │
-│  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘   │
-│                                                                                 │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐   │
-│  │  Auth & ACL          │  │  Session Manager     │  │  Retained Store      │.  │
-│  │  • User Management   │  │  • Client State      │  │  • Last Messages     │   │
-│  │  • Topic Permissions │  │  • Subscriptions     │  │  • QoS Persistence   │.  │
-│  │  • Password Hashing  │  │  • Will Messages     │  │  • Multi-Backend     │   │
-│  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘.  │
-└────────────────────────────────┬────────────────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼────────────────────────────────────────────────┐
-│                           Storage Layer                                         │
-│                                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │ PostgreSQL  │  │  CrateDB    │  │  MongoDB    │  │   SQLite    │             │
-│  │ QuestDB     │  │ TimescaleDB │  │   Kafka     │  │   MySQL     │             │
-│  │ Snowflake   │  │   Custom    │  │             │  │             │             │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘             │
-│                                                                                 │
-│  Sessions • Retained • Archives • Last Values • Logs • JDBC Logger (Schema)     │
-└────────────────────────────────┬────────────────────────────────────────────────┘
-                                 │
-┌────────────────────────────────▼────────────────────────────────────────────────┐
-│                       Clustering Layer (Optional)                               │
-│                                                                                 │
-│  ┌──────────────────────────────────────────────────────────────────────────┐   │
-│  │                         Hazelcast Grid                                   │   │
-│  │  • Distributed Maps  • Event Sourcing  • Node Discovery  • State Sync    │   │
-│  └──────────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────┘
+## Example Usage
 
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         Management & Monitoring                                 │
-│                                                                                 │
-│  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐   │
-│  │   GraphQL API        │  │   Web Dashboard      │  │   MCP Server         │   │
-│  │  • Queries           │  │  • Configuration     │  │  • AI Integration    │   │
-│  │  • Mutations         │  │  • Topic Browser     │  │  • GraphQL API       │   │
-│  │  • Subscriptions     │  │  • Flow Editor       │  │  • SQL Queries       │   │
-│  │  • Port 4000         │  │  • User Management   │  │                      │   │ 
-│  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Component Layers
-
-#### 1. **Protocol & Transport Layer**
-- **MQTT 3.1.1** - Full protocol compliance with QoS 0, 1, 2
-- **Multiple Transports** - TCP, TLS, WebSocket, WebSocket Secure
-- **Authentication** - Username/password, certificates, token-based
-- **Access Control** - Topic-based ACL with pattern matching
-
-#### 2. **Message Processing Core**
-- **Topic Router** - High-performance topic matching and subscription management
-- **QoS Manager** - Message persistence, acknowledgments, and retry logic
-- **Session Manager** - Client state, subscriptions, and will messages
-- **Retained Store** - Last message storage with configurable persistence
-
-#### 3. **Workflow Engine**
-- **Visual Editor** - Drag-and-drop flow creation with zoom/pan interface
-- **Flow Classes** - Reusable templates with configurable parameters
-- **Flow Instances** - Deployed workflows with input/output topic mapping
-- **JavaScript Runtime** - GraalVM-powered execution with state management
-
-#### 4. **Archive & Storage**
-- **Archive Groups** - Configurable message persistence with retention policies
-- **JDBC Logger** - Schema-based message logging with validation (PostgreSQL, QuestDB, TimescaleDB, MySQL, Snowflake)
-- **Multi-Database** - Support for PostgreSQL, QuestDB, TimescaleDB, MongoDB, CrateDB, SQLite, MySQL, Snowflake
-- **JSON Schema** - Message validation and transformation
-- **Connection Pooling** - Enterprise-grade database connection management
-
-#### 5. **Integration & APIs**
-- **GraphQL API** - Real-time queries, mutations, and subscriptions
-- **Web Dashboard** - Modern React-based management interface  
-- **OPC UA Server** - Industrial protocol bridge with certificate management
-- **Device Clients** - WinCC OA, PLC4X, Neo4j, Kafka integration
-
-#### 6. **Clustering & High Availability**
-- **Hazelcast Grid** - Distributed state management and coordination
-- **Node Discovery** - Automatic cluster formation and health monitoring
-- **Load Balancing** - Client connection distribution across nodes
-- **Failover** - Automatic client migration and message routing
-
-## 📚 Documentation
-
-For detailed documentation, see the [`doc/`](doc/) directory:
-
-- **[Installation & Setup](doc/installation.md)** - Complete setup guide with examples
-- **[Configuration Reference](doc/configuration.md)** - All configuration options and schema
-- **[Database Setup](doc/databases.md)** - Database-specific configuration and optimization
-- **[Clustering](doc/clustering.md)** - Hazelcast clustering and high availability
-- **[Message Archiving](doc/archiving.md)** - Archive groups, retention policies, and storage
-- **[User Management & ACL](doc/users.md)** - Authentication and authorization system
-- **[Access Control Lists (ACL)](doc/acl.md)** - Comprehensive ACL documentation and examples
-- **[OPC UA Integration](doc/opcua.md)** - Industrial protocol support and certificates
-- **[WinCC OA Integration](doc/winccoa.md)** - Siemens WinCC OA SCADA system integration
-- **[WinCC Unified Integration](doc/winccua.md)** - Siemens WinCC Unified GraphQL/WebSocket integration
-- **[Neo4j Integration](doc/neo4j.md)** - Graph database for MQTT topic hierarchies
-- **[GraphQL API](doc/graphql.md)** - Real-time data access and management
-- **[MQTT JSON-RPC 2.0 API](doc/mqtt-api.md)** - Execute GraphQL queries/mutations over MQTT
-- **[MCP Server](doc/mcp.md)** - AI model integration with GraphQL API and SQL queries
-- **[Workflows (Flow Engine)](doc/workflows.md)** - Visual flow-based programming and data processing
-- **[Kafka Integration](doc/kafka.md)** - Stream processing and event sourcing
-- **[MQTT Logging](doc/mqtt-logging.md)** - Real-time system logging via MQTT topics
-- **[Security](doc/security.md)** - TLS, certificates, and best practices
-- **[Development](doc/development.md)** - Building, testing, and contributing
-
-## 🐳 Docker Hub
-
-Available at: **[rocworks/monstermq:latest](https://hub.docker.com/r/rocworks/monstermq)**
+### MQTT
 
 ```bash
-# Latest stable release
-docker pull rocworks/monstermq:latest
-
-# Run with custom configuration
-docker run -p 1883:1883 -p 4840:4840 -p 3000:3000 -p 4000:4000 -v ./config.yaml:/app/config.yaml rocworks/monstermq:latest
-
-# Docker Compose with PostgreSQL
-
-# Or create your own docker-compose.yml:
-version: '3.8'
-services:
-  monstermq:
-    image: rocworks/monstermq:latest
-    restart: unless-stopped
-    ports:
-      - "1883:1883"    # MQTT TCP
-      - "8883:8883"    # MQTT TLS
-      - "9000:9000"    # WebSocket
-      - "9001:9001"    # WebSocket TLS
-      - "4840:4840"    # OPC UA Server
-      - "4000:4000"    # GraphQL API
-    volumes:
-      - ./log:/app/log
-      - ./config.yaml:/app/config.yaml
-      - ./security:/app/security
-    depends_on:
-      - postgres
-    environment:
-      - JAVA_OPTS=-Xmx512m
-
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: monster
-      POSTGRES_USER: system
-      POSTGRES_PASSWORD: manager
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-volumes:
-  postgres_data:
-
-# Example config.yaml for PostgreSQL setup:
-TCP: 1883
-TCPS: 8883
-WS: 9000
-WSS: 9001
-
-DefaultStoreType: POSTGRES
-
-Postgres:
-  Url: jdbc:postgresql://postgres:5432/monster
-  User: system
-  Pass: manager
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-```
-
-> docker-compose up -d
-
-
-## 🌐 Endpoints
-
-| Service | Default Port | Description |
-|---------|:------------:|-------------|
-| MQTT TCP | 1883 | Standard MQTT protocol |
-| MQTT TLS | 8883 | MQTT over TLS/SSL |
-| WebSocket | 9000 | MQTT over WebSocket |
-| WebSocket TLS | 9001 | MQTT over secure WebSocket |
-| **OPC UA Server** | **4840** | **Industrial protocol with MQTT bridge** |
-| GraphQL API | 4000 | Management and real-time data |
-
-## 🧪 Example Usage
-
-### MQTT Operations
-```bash
-# Publish message
 mosquitto_pub -h localhost -p 1883 -t "sensors/temp1" -m "23.5"
-
-# Subscribe to topics
 mosquitto_sub -h localhost -p 1883 -t "sensors/#"
 ```
 
-### GraphQL Queries
+### NATS
+
 ```bash
-# Query current values
+nats sub "sensors.>" --server nats://localhost:4222
+nats pub "sensors.temp1" "23.5" --server nats://localhost:4222
+```
+
+### GraphQL
+
+```bash
 curl -X POST http://localhost:4000/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "query { currentValue(topic: \"sensors/temp1\") { payload timestamp } }"}'
-
-# Publish via GraphQL
-curl -X POST http://localhost:4000/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "mutation { publish(input: {topic: \"sensors/temp1\", payload: \"25.0\", qos: 0}) { success } }"}'
 ```
 
-## 🏭 WinCC OA Integration
+## Documentation
 
-**High-Performance SCADA Data Transfer**
+See `doc/` for full documentation:
 
-MonsterMQ includes a native WinCC OA client that efficiently transfers data from Siemens WinCC OA SCADA systems to MQTT.
+- `doc/installation.md` - installation and setup
+- `doc/configuration.md` - configuration reference
+- `doc/databases.md` - database backends and tuning
+- `doc/archiving.md` - archive groups and retention
+- `doc/graphql.md` - GraphQL API
+- `doc/workflows.md` - flow engine
+- `doc/nats.md` - native NATS and bridging
+- `doc/opcua.md` - OPC UA integration
+- `doc/winccoa.md` - WinCC OA integration
+- `doc/winccua.md` - WinCC Unified integration
+- `doc/neo4j.md` - Neo4j integration
+- `doc/mcp.md` - MCP server
+- `doc/kafka.md` - Kafka integration
+- `doc/security.md` - TLS and security
+- `doc/development.md` - build, test, and development notes
 
-### 🤨 Why not use WinCC OA's built-in MQTT capabilities?
+## Requirements
 
-Because the MQTT protocol doesn't support bulk messages, it's not efficient for transferring a large number of topic value changes. MonsterMQ's WinCC OA client leverages WinCC OA's powerful **continuous SQL queries** (`dpQueryConnectSingle`), making it possible to subscribe to **5 million tags with just a single SQL query**.
+- Java 21+
+- Maven 3.6+ for builds
+- PostgreSQL, MongoDB, CrateDB, SQLite, or another supported backend
 
-### Key Benefits
+## License
 
-- **Massive Scale** - Subscribe to millions of datapoints with minimal configuration
-- **Efficient Bulk Transfer** - Process high-volume tag changes without MQTT per-message overhead
-- **Real-time Streaming** - GraphQL subscription-based updates via WebSocket
-- **Flexible Topic Mapping** - Transform WinCC OA datapoint names to MQTT topic hierarchies
-- **Multiple Formats** - Publish as JSON (ISO/epoch) or raw values
-
-See the [WinCC OA Integration documentation](doc/winccoa.md) for detailed configuration and setup instructions.
-
-## 🏭 WinCC Unified Integration
-
-**Modern SCADA Integration via GraphQL**
-
-MonsterMQ includes a WinCC Unified client that connects to Siemens WinCC Unified systems using their GraphQL API over WebSocket for real-time tag values and alarm notifications.
-
-### Key Benefits
-
-- **GraphQL Subscriptions** - Real-time tag value updates via WebSocket
-- **Active Alarms** - Subscribe to alarm notifications with full alarm details
-- **Flexible Filtering** - Name filters with wildcards for tag subscriptions
-- **Topic Transformation** - Convert tag names to MQTT topic hierarchies
-- **Multiple Formats** - JSON with ISO timestamps, milliseconds, or raw values
-
-See the [WinCC Unified Integration documentation](doc/winccua.md) for detailed configuration and setup instructions.
-
-## 🕸️ Neo4j Graph Database Integration
-
-**MQTT Topic Hierarchy as Graph Database**
-
-MonsterMQ includes a native Neo4j client that automatically converts MQTT topic hierarchies into graph database structures, enabling powerful path-based queries and relationship analysis.
-
-### Why Graph Database?
-
-MQTT topics naturally form hierarchical structures. Neo4j excels at:
-- **Path Queries** - Find all sensors under a building or floor
-- **Relationship Analysis** - Discover connections between devices
-- **Hierarchical Visualization** - Graph-based UI for topic exploration
-- **Message Rate Limiting** - Prevent database overload with configurable suppression
-
-See the [Neo4j Integration documentation](doc/neo4j.md) for detailed configuration, query examples, and best practices.
-
-## 🔀 Workflows (Flow Engine)
-
-**Visual Flow-Based Programming for MQTT Data Processing**
-
-MonsterMQ includes a powerful workflow engine that enables visual data processing and transformation pipelines using a node-based programming model.
-
-### Key Features
-
-- **Visual Flow Editor** - Drag-and-drop interface for creating data processing flows
-- **JavaScript Runtime** - Execute custom logic using GraalVM JavaScript engine
-- **Flow Classes** - Reusable flow templates/blueprints
-- **Flow Instances** - Deployable instances with custom configuration
-- **Real-time Processing** - Process MQTT messages as they arrive
-- **Instance Variables** - Configure flows with instance-specific values
-
-### Quick Example
-
-Create a temperature alert flow:
-
-```javascript
-// Node script: check_threshold
-let temperature = inputs.temp.value;
-let threshold = inputs.threshold.value;
-
-if (temperature > threshold) {
-    outputs.send("alert", {
-        temperature: temperature,
-        threshold: threshold,
-        message: "Temperature exceeded!"
-    });
-}
-```
-
-Connect MQTT topics and deploy:
-- **Input**: Subscribe to `sensors/warehouse/temperature`
-- **Output**: Publish alerts to `alerts/warehouse/temperature`
-- **Variables**: `location: "Warehouse A"`, `alertEmail: "ops@example.com"`
-
-### Script API
-
-Workflows provide the following globals in node scripts:
-
-```javascript
-// Input values from connected nodes or MQTT topics
-inputs.temperature.value
-inputs.threshold.value
-
-// Message shorthand for triggering input
-msg.value
-msg.topic
-msg.timestamp
-
-// Send data to output ports
-outputs.send("out", result);
-
-// Persistent node-level state
-state.count = (state.count || 0) + 1;
-
-// Read-only instance configuration
-let apiKey = flow.apiKey;
-let serverUrl = flow.serverUrl;
-
-// Logging
-console.log("Processing:", msg.value);
-```
-
-See the [Workflows documentation](doc/workflows.md) for complete guide, examples, and API reference.
-
-## 📋 Requirements
-
-- **Java 21+**
-- **Maven 3.6+** (for building)
-- **Database** (PostgreSQL, MongoDB, CrateDB, or SQLite)
-- **Kafka** (optional, for streaming)
-
-## 📄 License
-
-This project is licensed under the GNU General Public License v3.0.
-
----
-
-**MonsterMQ** - Factory MQTT Broker for industrial IoT and real-time messaging applications.
+GNU General Public License v3.0.

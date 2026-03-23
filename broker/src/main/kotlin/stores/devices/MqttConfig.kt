@@ -4,6 +4,14 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 
 /**
+ * User property key-value pair for MQTT v5 messages
+ */
+data class UserProperty(
+    val key: String,
+    val value: String
+)
+
+/**
  * MQTT Client address configuration for subscriptions and publications
  */
 data class MqttClientAddress(
@@ -11,30 +19,77 @@ data class MqttClientAddress(
     val remoteTopic: String,       // Remote MQTT topic (with wildcards)
     val localTopic: String,        // Local MQTT topic destination/source
     val removePath: Boolean = true, // Remove base path before wildcard
-    val qos: Int = 0               // QoS level (0, 1, or 2)
+    val qos: Int = 0,              // QoS level (0, 1, or 2)
+    // MQTT v5 Subscription Options (only for SUBSCRIBE mode)
+    val noLocal: Boolean = false,  // Don't receive messages you published
+    val retainHandling: Int = 0,   // 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
+    val retainAsPublished: Boolean = false,  // Preserve original retain flag when forwarding
+    // MQTT v5 Message Properties (only for PUBLISH mode)
+    val messageExpiryInterval: Long? = null,  // Message expiry in seconds (null = no expiry)
+    val contentType: String? = null,  // MIME type of the payload
+    val responseTopicPattern: String? = null,  // Topic for request-response pattern
+    val payloadFormatIndicator: Boolean = false,  // Payload is UTF-8 text
+    val userProperties: List<UserProperty> = emptyList()  // Custom key-value pairs
 ) {
     companion object {
         const val MODE_SUBSCRIBE = "SUBSCRIBE"
         const val MODE_PUBLISH = "PUBLISH"
 
         fun fromJsonObject(json: JsonObject): MqttClientAddress {
+            val userProperties = try {
+                json.getJsonArray("userProperties")?.map { propObj ->
+                    val prop = propObj as JsonObject
+                    UserProperty(prop.getString("key"), prop.getString("value"))
+                } ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            
             return MqttClientAddress(
                 mode = json.getString("mode"),
                 remoteTopic = json.getString("remoteTopic"),
                 localTopic = json.getString("localTopic"),
                 removePath = json.getBoolean("removePath", true),
-                qos = json.getInteger("qos", 0)
+                qos = json.getInteger("qos", 0),
+                noLocal = json.getBoolean("noLocal", false),
+                retainHandling = json.getInteger("retainHandling", 0),
+                retainAsPublished = json.getBoolean("retainAsPublished", false),
+                messageExpiryInterval = json.getLong("messageExpiryInterval"),
+                contentType = json.getString("contentType"),
+                responseTopicPattern = json.getString("responseTopicPattern"),
+                payloadFormatIndicator = json.getBoolean("payloadFormatIndicator", false),
+                userProperties = userProperties
             )
         }
     }
 
     fun toJsonObject(): JsonObject {
-        return JsonObject()
+        val result = JsonObject()
             .put("mode", mode)
             .put("remoteTopic", remoteTopic)
             .put("localTopic", localTopic)
             .put("removePath", removePath)
             .put("qos", qos)
+            .put("noLocal", noLocal)
+            .put("retainHandling", retainHandling)
+            .put("retainAsPublished", retainAsPublished)
+            .put("payloadFormatIndicator", payloadFormatIndicator)
+        
+        // Add optional message properties
+        messageExpiryInterval?.let { result.put("messageExpiryInterval", it) }
+        contentType?.let { result.put("contentType", it) }
+        responseTopicPattern?.let { result.put("responseTopicPattern", it) }
+        
+        // Add user properties if present
+        if (userProperties.isNotEmpty()) {
+            val userPropsArray = JsonArray()
+            userProperties.forEach { prop ->
+                userPropsArray.add(JsonObject().put("key", prop.key).put("value", prop.value))
+            }
+            result.put("userProperties", userPropsArray)
+        }
+        
+        return result
     }
 
     fun validate(): List<String> {
@@ -95,7 +150,13 @@ data class MqttClientConnectionConfig(
     // Loop prevention (prevents bridge from republishing its own messages)
     val loopPrevention: Boolean = true,
     // SSL/TLS configuration
-    val sslVerifyCertificate: Boolean = true  // Verify SSL certificates (disable for self-signed certificates)
+    val sslVerifyCertificate: Boolean = true,  // Verify SSL certificates (disable for self-signed certificates)
+    // MQTT v5 properties
+    val protocolVersion: Int = 4,  // 4 for MQTT v3.1.1, 5 for MQTT v5.0
+    val sessionExpiryInterval: Long? = null,  // Session expiry interval in seconds (MQTT v5 only, 0-4294967295)
+    val receiveMaximum: Int? = null,  // Maximum number of QoS 1 and QoS 2 publications to process concurrently (MQTT v5 only, 1-65535)
+    val maximumPacketSize: Long? = null,  // Maximum packet size in bytes (MQTT v5 only, 1-268435455)
+    val topicAliasMaximum: Int? = null  // Maximum number of topic aliases (MQTT v5 only, 0-65535)
 ) {
     companion object {
         const val PROTOCOL_TCP = "tcp"
@@ -133,7 +194,13 @@ data class MqttClientConnectionConfig(
                     sslVerifyCertificate = when (val value = json.getValue("sslVerifyCertificate")) {
                         is Boolean -> value
                         else -> true
-                    }
+                    },
+                    // MQTT v5 properties
+                    protocolVersion = json.getInteger("protocolVersion", 4),
+                    sessionExpiryInterval = json.getLong("sessionExpiryInterval"),
+                    receiveMaximum = json.getInteger("receiveMaximum"),
+                    maximumPacketSize = json.getLong("maximumPacketSize"),
+                    topicAliasMaximum = json.getInteger("topicAliasMaximum")
                 )
             } catch (e: Exception) {
                 println("Overall error in fromJsonObject: ${e.message}")
@@ -158,6 +225,13 @@ data class MqttClientConnectionConfig(
             .put("deleteOldestMessages", deleteOldestMessages)
             .put("loopPrevention", loopPrevention)
             .put("sslVerifyCertificate", sslVerifyCertificate)
+            .put("protocolVersion", protocolVersion)
+
+        // Add MQTT v5 properties only if they are set
+        sessionExpiryInterval?.let { result.put("sessionExpiryInterval", it) }
+        receiveMaximum?.let { result.put("receiveMaximum", it) }
+        maximumPacketSize?.let { result.put("maximumPacketSize", it) }
+        topicAliasMaximum?.let { result.put("topicAliasMaximum", it) }
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {

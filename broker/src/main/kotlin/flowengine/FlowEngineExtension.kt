@@ -250,25 +250,20 @@ class FlowEngineExtension : AbstractVerticle() {
                 return promise.future()
             }
 
-            // Get the flow class
-            val flowClassConfig = flowClasses[flowClassId]
-            if (flowClassConfig == null) {
-                promise.fail(Exception("Flow class $flowClassId not found for instance ${instanceConfig.name}"))
-                return promise.future()
-            }
-
-            // Deploy as verticle
-            val executor = FlowInstanceExecutor(instanceConfig, flowClassConfig)
-            vertx.deployVerticle(executor).onComplete { deployResult ->
-                if (deployResult.succeeded()) {
-                    val deploymentId = deployResult.result()
-                    flowVerticles[instanceConfig.name] = deploymentId
-                    logger.info("Deployed flow instance verticle ${instanceConfig.name} (class: $flowClassId, deploymentId: $deploymentId)")
-                    promise.complete(instanceConfig.name)
-                } else {
-                    logger.severe("Failed to deploy flow verticle ${instanceConfig.name}: ${deployResult.cause()?.message}")
-                    deployResult.cause()?.printStackTrace()
-                    promise.fail(deployResult.cause())
+            // Get the flow class - try cache first, fallback to DB for imported classes
+            val cachedClass = flowClasses[flowClassId]
+            if (cachedClass != null) {
+                deployFlowVerticle(instanceConfig, cachedClass, flowClassId, promise)
+            } else {
+                // Try loading from DB (handles imported classes not yet in cache)
+                deviceStore.getDevice(flowClassId).onComplete { classResult ->
+                    val loadedClass = classResult.result()
+                    if (classResult.succeeded() && loadedClass != null && loadedClass.type == DeviceConfig.DEVICE_TYPE_FLOW_CLASS) {
+                        flowClasses[flowClassId] = loadedClass
+                        deployFlowVerticle(instanceConfig, loadedClass, flowClassId, promise)
+                    } else {
+                        promise.fail(Exception("Flow class $flowClassId not found for instance ${instanceConfig.name}"))
+                    }
                 }
             }
 
@@ -279,6 +274,22 @@ class FlowEngineExtension : AbstractVerticle() {
         }
 
         return promise.future()
+    }
+
+    private fun deployFlowVerticle(instanceConfig: DeviceConfig, flowClassConfig: DeviceConfig, flowClassId: String, promise: Promise<String>) {
+        val executor = FlowInstanceExecutor(instanceConfig, flowClassConfig)
+        vertx.deployVerticle(executor).onComplete { deployResult ->
+            if (deployResult.succeeded()) {
+                val deploymentId = deployResult.result()
+                flowVerticles[instanceConfig.name] = deploymentId
+                logger.info("Deployed flow instance verticle ${instanceConfig.name} (class: $flowClassId, deploymentId: $deploymentId)")
+                promise.complete(instanceConfig.name)
+            } else {
+                logger.severe("Failed to deploy flow verticle ${instanceConfig.name}: ${deployResult.cause()?.message}")
+                deployResult.cause()?.printStackTrace()
+                promise.fail(deployResult.cause())
+            }
+        }
     }
 
     private fun undeployFlow(instanceName: String): Future<Void> {

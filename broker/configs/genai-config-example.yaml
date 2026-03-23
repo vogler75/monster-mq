@@ -1,5 +1,5 @@
 # GenAI Configuration Example for MonsterMQ
-# Add this section to your config.yaml to enable AI-supported JavaScript coding
+# Add this section to your config.yaml to enable AI-supported features
 
 # Enable GraphQL server (required for GenAI to work)
 GraphQL:
@@ -13,35 +13,23 @@ GenAI:
   # Enable GenAI integration
   Enabled: true
 
-  # AI provider: "gemini", "azure-openai", "claude" (future), or "openai" (future)
-  Provider: "gemini"
+  # Per-provider API keys (shared by Assistant and Agents)
+  Providers:
+    Gemini:
+      ApiKey: "${GEMINI_API_KEY}"
+    Claude:
+      ApiKey: "${ANTHROPIC_API_KEY}"
+    OpenAI:
+      ApiKey: "${OPENAI_API_KEY}"
+    Ollama:
+      BaseUrl: "http://localhost:11434"
 
-  # API key for the selected provider
-  # You can use environment variable substitution: ${VARIABLE_NAME}
-  # Set your API key in environment: export GENAI_API_KEY="your-key-here"
-  ApiKey: "${GENAI_API_KEY}"
-
-  # === GEMINI CONFIGURATION ===
-  # Optional: Specific model to use
-  # Gemini models: gemini-2.5-flash (default), gemini-1.5-pro, etc.
-  Model: "gemini-2.5-flash"
-
-  # === AZURE OPENAI CONFIGURATION ===
-  # Required for azure-openai provider:
-  # Endpoint: "${AZURE_OPENAI_ENDPOINT}"  # e.g., https://your-resource.openai.azure.com/
-  # Deployment: "gpt-4o"                  # Your deployment name in Azure
-  # Model: "gpt-4o"                        # Optional: for display purposes
-
-  # Optional: Maximum tokens in response (default: 2048)
-  MaxTokens: 2048
-
-  # Optional: Temperature for response generation (0.0-2.0, default: 0.7)
-  # Higher = more creative, Lower = more focused/deterministic
-  Temperature: 0.7
-
-  # Optional: Path to documentation directory in resources (default: "docs")
-  # Documentation files should be in src/main/resources/docs/
-  DocsPath: "docs"
+  # Internal AI assistant (script editor, topic analysis)
+  Assistant:
+    Provider: "gemini"              # gemini | claude | openai | ollama
+    Model: "gemini-2.5-flash"
+    Temperature: 0.7
+    DocsPath: "docs"
 
 # Example GraphQL Query
 # Once configured, you can query the GenAI endpoint:

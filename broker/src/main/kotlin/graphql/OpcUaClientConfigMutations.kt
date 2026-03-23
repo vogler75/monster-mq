@@ -8,6 +8,7 @@ import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.devices.MonitoringParameters
 import at.rocworks.stores.devices.OpcUaAddress
 import at.rocworks.stores.devices.OpcUaConnectionConfig
+import at.rocworks.stores.devices.OpcUaWriteConfig
 import at.rocworks.stores.devices.CertificateConfig
 import at.rocworks.devices.opcua.OpcUaExtension
 import graphql.schema.DataFetcher
@@ -180,7 +181,9 @@ class OpcUaClientConfigMutations(
                         // Preserve existing keystore password if not provided in update
                         certificateConfig = requestConfig.certificateConfig.copy(
                             keystorePassword = requestConfig.certificateConfig.keystorePassword
-                        )
+                        ),
+                        // Preserve existing writeConfig if not provided in update
+                        writeConfig = if (requestConfig.writeConfig == OpcUaWriteConfig()) existingConfig.writeConfig else requestConfig.writeConfig
                     )
                     val updatedDevice = request.toDeviceConfig().copy(
                         createdAt = existingDevice.createdAt,
@@ -457,7 +460,8 @@ class OpcUaClientConfigMutations(
             MonitoringParameters(
                 bufferSize = (paramsMap["bufferSize"] as? Number)?.toInt() ?: 100,
                 samplingInterval = (paramsMap["samplingInterval"] as? Number)?.toDouble() ?: 0.0,
-                discardOldest = paramsMap["discardOldest"] as? Boolean ?: false
+                discardOldest = paramsMap["discardOldest"] as? Boolean ?: false,
+                monitoredItemsBatchSize = (paramsMap["monitoredItemsBatchSize"] as? Number)?.toInt() ?: 1000
             )
         } ?: MonitoringParameters()
 
@@ -480,6 +484,21 @@ class OpcUaClientConfigMutations(
             )
         } ?: CertificateConfig()
 
+        // Parse write configuration
+        val writeConfig = (configMap["writeConfig"] as? Map<*, *>)?.let { writeMap ->
+            @Suppress("UNCHECKED_CAST")
+            val wm = writeMap as Map<String, Any>
+            OpcUaWriteConfig(
+                enabled = wm["enabled"] as? Boolean ?: false,
+                requestResponseEnabled = wm["requestResponseEnabled"] as? Boolean ?: false,
+                topicPrefix = wm["topicPrefix"] as? String ?: "write",
+                requestTopicPrefix = wm["requestTopicPrefix"] as? String ?: "request",
+                responseTopicPrefix = wm["responseTopicPrefix"] as? String ?: "response",
+                qos = (wm["qos"] as? Number)?.toInt() ?: 1,
+                writeTimeout = (wm["writeTimeout"] as? Number)?.toLong() ?: 5000L
+            )
+        } ?: OpcUaWriteConfig()
+
         val config = OpcUaConnectionConfig(
             endpointUrl = configMap["endpointUrl"] as String,
             updateEndpointUrl = configMap["updateEndpointUrl"] as? Boolean ?: true,
@@ -493,7 +512,8 @@ class OpcUaClientConfigMutations(
             requestTimeout = (configMap["requestTimeout"] as? Number)?.toLong() ?: 5000L,
             monitoringParameters = monitoringParams,
             addresses = emptyList(), // Addresses are managed separately now
-            certificateConfig = certificateConfig
+            certificateConfig = certificateConfig,
+            writeConfig = writeConfig
         )
 
         return DeviceConfigRequest(
@@ -773,7 +793,8 @@ class OpcUaClientConfigMutations(
                 "monitoringParameters" to mapOf(
                     "bufferSize" to config.monitoringParameters.bufferSize,
                     "samplingInterval" to config.monitoringParameters.samplingInterval,
-                    "discardOldest" to config.monitoringParameters.discardOldest
+                    "discardOldest" to config.monitoringParameters.discardOldest,
+                    "monitoredItemsBatchSize" to config.monitoringParameters.monitoredItemsBatchSize
                 ),
                 "addresses" to config.addresses.map { address ->
                     mapOf(
@@ -793,6 +814,15 @@ class OpcUaClientConfigMutations(
                     "countryCode" to config.certificateConfig.countryCode,
                     "createSelfSigned" to config.certificateConfig.createSelfSigned,
                     "keystorePassword" to config.certificateConfig.keystorePassword
+                ),
+                "writeConfig" to mapOf(
+                    "enabled" to config.writeConfig.enabled,
+                    "requestResponseEnabled" to config.writeConfig.requestResponseEnabled,
+                    "topicPrefix" to config.writeConfig.topicPrefix,
+                    "requestTopicPrefix" to config.writeConfig.requestTopicPrefix,
+                    "responseTopicPrefix" to config.writeConfig.responseTopicPrefix,
+                    "qos" to config.writeConfig.qos,
+                    "writeTimeout" to config.writeConfig.writeTimeout
                 )
             ),
             "enabled" to device.enabled,

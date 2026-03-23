@@ -98,6 +98,22 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // NATS Client Bridge (bidirectional MQTT <-> NATS)
+    object NatsBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.nats"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
+    // Telegram Client Bridge (bidirectional MQTT <-> Telegram)
+    object TelegramBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.telegram"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // WinCC OA Client (WinCC OA -> MQTT via GraphQL)
     object WinCCOaBridge {
         private const val BRIDGE_NS = "$BASE.bridge.winccoa"
@@ -161,6 +177,12 @@ object EventBusAddresses {
         const val GROUPS_LIST = "$ARCHIVE_NS.groups.list"
         fun groupMetrics(groupName: String) = "$ARCHIVE_NS.metrics.$groupName"
         fun groupBufferSize(groupName: String) = "$ARCHIVE_NS.buffer.$groupName"
+    }
+
+    // Schema Policy (Topic Schema Governance)
+    object SchemaPolicy {
+        private const val NS = "$BASE.schema"
+        const val RELOAD = "$NS.reload"
     }
 
     // System Operations

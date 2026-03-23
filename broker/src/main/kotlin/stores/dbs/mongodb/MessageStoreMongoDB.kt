@@ -116,6 +116,9 @@ class MessageStoreMongoDB(
                         builder.connectTimeout(5, TimeUnit.SECONDS)
                         builder.readTimeout(10, TimeUnit.SECONDS)
                     }
+                    .applyToClusterSettings { builder ->
+                        builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
+                    }
                     .writeConcern(WriteConcern.W1.withJournal(false)) // Faster writes
                     .build()
 
@@ -309,7 +312,9 @@ class MessageStoreMongoDB(
                     "qos" to message.qosLevel,
                     "retained" to message.isRetain,
                     "client_id" to message.clientId,
-                    "message_uuid" to message.messageUuid
+                    "message_uuid" to message.messageUuid,
+                    "creation_time" to message.time.toEpochMilli(),
+                    "message_expiry_interval" to message.messageExpiryInterval
                 )
                 // Add fixed topic level fields
                 updateFieldsMap.putAll(getTopicLevelFields(message.topicName))
@@ -357,6 +362,7 @@ class MessageStoreMongoDB(
 
             val filter = createWildcardFilter(topicName)
             val startTime = System.currentTimeMillis()
+            val currentTimeMillis = System.currentTimeMillis()
             var count = 0
 
             activeCollection.find(filter).iterator().use { cursor ->
@@ -369,6 +375,17 @@ class MessageStoreMongoDB(
                     is ByteArray -> p
                     else -> ByteArray(0)
                 }
+                
+                val creationTime = document.getLong("creation_time") ?: currentTimeMillis
+                val messageExpiryInterval = document.getLong("message_expiry_interval")
+                
+                // Phase 5: Check if message has expired
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) {
+                        continue // Skip expired message
+                    }
+                }
 
                 val message = BrokerMessage(
                     messageUuid = document.getString("message_uuid") ?: "",
@@ -379,7 +396,9 @@ class MessageStoreMongoDB(
                     isRetain = true,
                     isDup = false,
                     isQueued = false,
-                    clientId = document.getString("client_id") ?: ""
+                    clientId = document.getString("client_id") ?: "",
+                    time = java.time.Instant.ofEpochMilli(creationTime),
+                    messageExpiryInterval = messageExpiryInterval
                 )
 
                 if (!callback(message)) {

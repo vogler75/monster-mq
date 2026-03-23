@@ -22,6 +22,7 @@
             </div>
             <div class="nav-links">
                 <a href="#features">Features</a>
+                <a href="#ai-agents">AI Agents</a>
                 <a href="#databases">Databases</a>
                 <a href="#clustering">Clustering</a>
                 <a href="https://github.com/vogler75/monster-mq" target="_blank">GitHub</a>
@@ -34,7 +35,7 @@
             <h1 class="hero-title">MQTT Broker for<br><span class="highlight">Factory Automation</span></h1>
             <p class="hero-subtitle">
                 High-performance, database-backed MQTT broker built on Vert.X and Hazelcast.<br>
-                Store messages persistently, scale horizontally, and integrate with AI models.
+                Store messages persistently, scale horizontally, and deploy AI agents that reason over your data.
             </p>
             <div class="hero-buttons">
                 <a href="https://github.com/vogler75/monster-mq#-quick-start" class="btn btn-primary">Get Started</a>
@@ -43,12 +44,18 @@
             </div>
             <div class="hero-features">
                 <div class="feature-badge">✓ MQTT 3.1.1</div>
+                <div class="feature-badge">✓ MQTT 5.0</div>
                 <div class="feature-badge">✓ Multi-Database</div>
                 <div class="feature-badge">✓ OPC UA</div>
+                <div class="feature-badge">✓ NATS</div>
                 <div class="feature-badge">✓ Workflows</div>
                 <div class="feature-badge">✓ Dashboard</div>
                 <div class="feature-badge">✓ Clustering</div>
+                <div class="feature-badge">✓ I3X API</div>
+                <div class="feature-badge badge-new">★ AI Agents</div>
                 <div class="feature-badge">✓ MCP Ready</div>
+                <div class="feature-badge">✓ Prometheus</div>
+                <div class="feature-badge">✓ JSON Schema</div>
             </div>
         </div>
     </header>
@@ -67,10 +74,11 @@
                     <h3>Horizontal Scaling</h3>
                     <p>Built-in Hazelcast clustering enables seamless horizontal scaling. Deploy from production line to enterprise with automatic failover and load balancing.</p>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card feature-card-highlight">
+                    <div class="feature-new-badge">NEW</div>
                     <div class="feature-icon">🤖</div>
-                    <h3>MCP Server</h3>
-                    <p>Built-in Model Context Protocol (MCP) server enables AI models and LLMs to query real-time and historical MQTT data through GraphQL API and custom SQL queries.</p>
+                    <h3>AI Agents</h3>
+                    <p>Built-in AI agent framework powered by LangChain4j. Deploy LLM-driven agents that react to MQTT messages, run on schedules, and orchestrate multi-agent workflows — all managed from the dashboard.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🏭</div>
@@ -88,14 +96,49 @@
                     <p>Modern SCADA integration via GraphQL/WebSocket for Siemens WinCC Unified. Real-time tag value subscriptions with flexible name filters and wildcards. Stream active alarms and alerts with complete alarm details including state, priority, and timestamps. Optional OPC UA quality information for tag values including quality codes and status flags.</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Native NATS Protocol</h3>
+                    <p>Accept standard NATS clients directly on a configurable port. Automatic topic translation between MQTT separators (<code>/</code>, <code>+</code>, <code>#</code>) and NATS (<code>.</code>, <code>*</code>, <code>&gt;</code>). Supports Core NATS and JetStream with authentication options including anonymous, username/password, token, and TLS.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3>NATS Client Bridge</h3>
+                    <p>Bidirectional bridging between MQTT and external NATS servers. Forward MQTT topics to NATS subjects and subscribe NATS subjects back into MQTT. Supports Core NATS at-most-once and JetStream at-least-once delivery with durable consumers.</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">🔗</div>
                     <h3>MQTT to MQTT Bridge</h3>
-                    <p>Built-in MQTT bridge functionality enables bidirectional message flow between brokers. Forward messages to remote brokers with topic filters and transformations, or consume messages from external MQTT brokers. Perfect for building hierarchical broker architectures and connecting distributed systems without external tools.</p>
+                    <p>Built-in MQTT bridge functionality enables bidirectional message flow between brokers. Forward messages to remote brokers with topic filters and transformations, or consume messages from external MQTT brokers. Perfect for building hierarchical broker architectures and connecting distributed systems.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📨</div>
+                    <h3>Kafka Integration</h3>
+                    <p>Stream MQTT messages to Apache Kafka topics for event sourcing, stream processing, and long-term data retention. Bidirectional bridging enables consuming Kafka topics back into MQTT for seamless integration with data pipelines.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔧</div>
+                    <h3>PLC4X Integration</h3>
+                    <p>Connect directly to industrial PLCs using Apache PLC4X. Multi-protocol support for Siemens S7, Allen-Bradley, Modbus, and more. Read and write PLC variables without gateways, bridging operational technology directly to MQTT.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🕸️</div>
+                    <h3>Neo4j Graph Database</h3>
+                    <p>Automatically convert MQTT topic hierarchies into graph structures. Enable path-based queries, relationship analysis, and hierarchical visualization of device connections with configurable message rate limiting.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>SparkplugB Decoder</h3>
+                    <p>Decode SparkplugB protocol messages and expand compressed payloads into individual MQTT topics. Enables standard MQTT clients and archives to work with SparkplugB devices without specialized libraries.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🔀</div>
                     <h3>Workflows (Flow Engine)</h3>
                     <p>Visual flow-based programming with JavaScript runtime. Create data processing pipelines with drag-and-drop nodes. Transform, filter, and aggregate MQTT messages in real-time with reusable flow templates and instance-specific configuration.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔌</div>
+                    <h3>I3X API (CESMII)</h3>
+                    <p>CESMII-compatible I3X REST API exposes MQTT topics as industrial object instances with parent-child hierarchies. Access real-time values, historical data, and Server-Sent Event subscriptions. JSON payloads are automatically decomposed into child property objects.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">📊</div>
@@ -113,14 +156,80 @@
                     <p>TLS/SSL support, user authentication with BCrypt, fine-grained ACL rules, and database-level security.</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>JSON Schema Governance</h3>
+                    <p>Validate MQTT message payloads against reusable JSON Schema definitions. Bind schemas to topic filters via namespaces with configurable enforcement modes: reject invalid payloads, emit warnings, or log violations for audit trails.</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">🔍</div>
                     <h3>Topic Browser</h3>
                     <p>Interactive topic tree navigation with search capabilities and message inspection. Browse MQTT topic hierarchies with expandable nodes and view message data in real-time.</p>
                 </div>
                 <div class="feature-card">
+                    <div class="feature-icon">📈</div>
+                    <h3>Prometheus Integration</h3>
+                    <p>Built-in Prometheus-compatible endpoint exposes broker metrics, device I/O statistics, and real-time topic values as gauge metrics. Includes a Prometheus HTTP API subset so Grafana can query historical archive data directly from MonsterMQ without a separate Prometheus instance.</p>
+                </div>
+                <div class="feature-card">
                     <div class="feature-icon">🖥️</div>
                     <h3>Web Dashboard</h3>
                     <p>Complete web-based management interface for archive groups, users, and system configuration. Real-time updates without broker restarts.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="ai-agents" class="ai-agents">
+        <div class="container">
+            <div class="ai-agents-banner">
+                <span class="new-label">NEW</span>
+                <h2 class="section-title">AI Agents</h2>
+            </div>
+            <p class="section-subtitle">
+                Deploy intelligent agents directly inside the broker. Agents subscribe to MQTT topics,<br>
+                reason with LLMs, call broker tools, and publish results — no external orchestration needed.
+            </p>
+
+            <div class="ai-agents-grid">
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">🧠</div>
+                    <h3>Multi-Provider LLMs</h3>
+                    <p>Choose from Gemini, Claude, OpenAI, or run local models via Ollama. Each agent can use a different provider and model. Switch providers without changing agent logic.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">📡</div>
+                    <h3>MQTT-Triggered</h3>
+                    <p>Agents subscribe to input topics and react to incoming messages. When a sensor value arrives or an alarm fires, the agent reasons about it and publishes a response — all in real-time.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">⏱️</div>
+                    <h3>Cron &amp; Manual Triggers</h3>
+                    <p>Schedule agents with cron expressions or fixed intervals for periodic analysis. Invoke agents manually on demand via the dashboard or GraphQL API.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">🔧</div>
+                    <h3>Broker Tools</h3>
+                    <p>Agents can publish messages, query archive history, read retained values, and access last-value caches. Full read/write access to broker data through LangChain4j tool annotations.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">🔗</div>
+                    <h3>MCP Integration</h3>
+                    <p>Connect agents to external MCP servers for additional tool capabilities. Use MonsterMQ's own MCP server or plug in third-party services to extend what agents can do.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">🤝</div>
+                    <h3>Agent-to-Agent (A2A)</h3>
+                    <p>Orchestrate multi-agent workflows over MQTT. Agents can delegate tasks to specialized sub-agents and collect results. Build hierarchies of cooperating agents for complex automation.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">💾</div>
+                    <h3>Memory &amp; Context</h3>
+                    <p>Sliding-window conversation memory with optional persistent state. Inject last-value data, retained messages, or historical queries as context so agents always have the information they need.</p>
+                </div>
+                <div class="ai-agent-card">
+                    <div class="ai-agent-icon">🖥️</div>
+                    <h3>Dashboard Management</h3>
+                    <p>Create, configure, enable, and monitor agents from the web dashboard or GraphQL API. View execution logs and tool calls in real-time. No restarts required.</p>
                 </div>
             </div>
         </div>
@@ -305,7 +414,7 @@
                     <ul>
                         <li>Built with Kotlin & Vert.X</li>
                         <li>Hazelcast Clustering</li>
-                        <li>MQTT 3.1.1 Protocol</li>
+                        <li>MQTT 3.1.1 &amp; 5.0 Protocol</li>
                         <li>JVM 21+</li>
                     </ul>
                 </div>
