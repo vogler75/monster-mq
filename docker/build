@@ -90,50 +90,71 @@ else
     docker build -t rocworks/monstermq:$version$ARCH_SUFFIX -t rocworks/monstermq:latest$ARCH_SUFFIX .
 fi
 
-if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ Docker image built successfully${NC}"
-    if [ "$TESTING" = true ]; then
-        echo -e "${GREEN}  - rocworks/monstermq:testing${ARCH_SUFFIX}${NC}"
-    else
-        echo -e "${GREEN}  - rocworks/monstermq:${version}${ARCH_SUFFIX}${NC}"
-        echo -e "${GREEN}  - rocworks/monstermq:latest${ARCH_SUFFIX}${NC}"
-    fi
-
-    # Handle publishing based on mode
-    SHOULD_PUSH=false
-
-    if [ "$PUBLISH_MODE" = "yes" ]; then
-        SHOULD_PUSH=true
-    elif [ "$PUBLISH_MODE" = "ask" ]; then
-        echo ""
-        read -p "Do you want to push the Docker image to Docker Hub? (y/n) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            SHOULD_PUSH=true
-        fi
-    fi
-
-    if [ "$SHOULD_PUSH" = true ]; then
-        echo -e "${YELLOW}Pushing Docker image to Docker Hub...${NC}"
-        if [ "$TESTING" = true ]; then
-            docker push rocworks/monstermq:testing$ARCH_SUFFIX
-        else
-            docker push rocworks/monstermq:latest$ARCH_SUFFIX
-            docker push rocworks/monstermq:$version$ARCH_SUFFIX
-        fi
-        echo -e "${GREEN}✓ Docker image pushed successfully${NC}"
-    else
-        echo -e "${YELLOW}Docker image not pushed. To push later, run:${NC}"
-        if [ "$TESTING" = true ]; then
-            echo "  docker push rocworks/monstermq:testing$ARCH_SUFFIX"
-        else
-            echo "  docker push rocworks/monstermq:latest$ARCH_SUFFIX"
-            echo "  docker push rocworks/monstermq:$version$ARCH_SUFFIX"
-        fi
-    fi
-else
+if [ $? -ne 0 ]; then
     echo -e "${RED}✗ Docker build failed${NC}"
     exit 1
+fi
+
+echo -e "${GREEN}✓ Docker image built successfully${NC}"
+if [ "$TESTING" = true ]; then
+    echo -e "${GREEN}  - rocworks/monstermq:testing${ARCH_SUFFIX}${NC}"
+else
+    echo -e "${GREEN}  - rocworks/monstermq:${version}${ARCH_SUFFIX}${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:latest${ARCH_SUFFIX}${NC}"
+fi
+
+# Build compat image (GraalVM JDK 21, x86-64-v2 compatible)
+if [ "$TESTING" = false ]; then
+    echo -e "${YELLOW}Building compat Docker image (GraalVM JDK 21, x86-64-v2)...${NC}"
+    docker build \
+        --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
+        -t rocworks/monstermq:$version-compat$ARCH_SUFFIX \
+        -t rocworks/monstermq:latest-compat$ARCH_SUFFIX \
+        .
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Compat Docker build failed${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Compat Docker image built successfully${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:${version}-compat${ARCH_SUFFIX}${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:latest-compat${ARCH_SUFFIX}${NC}"
+fi
+
+# Handle publishing based on mode
+SHOULD_PUSH=false
+
+if [ "$PUBLISH_MODE" = "yes" ]; then
+    SHOULD_PUSH=true
+elif [ "$PUBLISH_MODE" = "ask" ]; then
+    echo ""
+    read -p "Do you want to push the Docker image(s) to Docker Hub? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        SHOULD_PUSH=true
+    fi
+fi
+
+if [ "$SHOULD_PUSH" = true ]; then
+    echo -e "${YELLOW}Pushing Docker image(s) to Docker Hub...${NC}"
+    if [ "$TESTING" = true ]; then
+        docker push rocworks/monstermq:testing$ARCH_SUFFIX
+    else
+        docker push rocworks/monstermq:latest$ARCH_SUFFIX
+        docker push rocworks/monstermq:$version$ARCH_SUFFIX
+        docker push rocworks/monstermq:latest-compat$ARCH_SUFFIX
+        docker push rocworks/monstermq:$version-compat$ARCH_SUFFIX
+    fi
+    echo -e "${GREEN}✓ Docker image(s) pushed successfully${NC}"
+else
+    echo -e "${YELLOW}Docker image(s) not pushed. To push later, run:${NC}"
+    if [ "$TESTING" = true ]; then
+        echo "  docker push rocworks/monstermq:testing$ARCH_SUFFIX"
+    else
+        echo "  docker push rocworks/monstermq:latest$ARCH_SUFFIX"
+        echo "  docker push rocworks/monstermq:$version$ARCH_SUFFIX"
+        echo "  docker push rocworks/monstermq:latest-compat$ARCH_SUFFIX"
+        echo "  docker push rocworks/monstermq:$version-compat$ARCH_SUFFIX"
+    fi
 fi
 
 # Clean up temporary files
