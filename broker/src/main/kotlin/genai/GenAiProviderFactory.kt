@@ -44,11 +44,14 @@ object GenAiProviderFactory {
             val model = assistantConfig?.getString("Model") ?: genAiConfig.getString("Model")
             val temperature = assistantConfig?.getDouble("Temperature") ?: genAiConfig.getDouble("Temperature", 0.7)
             val docsPath = assistantConfig?.getString("DocsPath") ?: genAiConfig.getString("DocsPath", "docs")
+            val endpoint = assistantConfig?.getString("Endpoint") ?: genAiConfig.getString("Endpoint")
+            val serviceVersion = assistantConfig?.getString("ServiceVersion") ?: genAiConfig.getString("ServiceVersion")
 
-            // For backward compat: flat ApiKey is used as a fallback by LangChain4jFactory.resolveApiKey
             val chatModelConfig = ChatModelConfig(
                 provider = provider,
                 model = model,
+                endpoint = endpoint,
+                serviceVersion = serviceVersion,
                 temperature = temperature
             )
 

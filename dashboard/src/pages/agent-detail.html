@@ -187,20 +187,37 @@
                 </div>
                 <div class="section-content">
                     <div class="form-grid">
-                        <div class="form-group">
-                            <label for="agent-provider">Provider</label>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label for="agent-provider-name">Provider</label>
+                            <select id="agent-provider-name" onchange="onProviderNameChange()">
+                                <option value="">— Manual configuration —</option>
+                            </select>
+                            <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Select a saved provider, or configure manually below. <a href="/pages/genai-providers.html" style="color: var(--monster-light);">Manage providers →</a></small>
+                        </div>
+                        <div class="form-group manual-provider-field">
+                            <label for="agent-provider">Provider Type</label>
                             <select id="agent-provider" onchange="updateModelPlaceholder()">
                                 <option value="gemini">Gemini</option>
                                 <option value="claude">Claude</option>
                                 <option value="openai">OpenAI</option>
                                 <option value="ollama">Ollama</option>
+                                <option value="azure-openai">Azure OpenAI</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label for="agent-model">Model</label>
+                            <label for="agent-model">Model / Deployment</label>
                             <input type="text" id="agent-model" placeholder="gemini-2.0-flash">
+                            <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">Leave blank to use the provider's default model.</small>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group manual-provider-field" id="agent-endpoint-group" style="display:none;">
+                            <label for="agent-endpoint">Azure Endpoint</label>
+                            <input type="text" id="agent-endpoint" placeholder="https://&lt;resource&gt;.openai.azure.com/">
+                        </div>
+                        <div class="form-group manual-provider-field" id="agent-service-version-group" style="display:none;">
+                            <label for="agent-service-version">Azure API Version</label>
+                            <input type="text" id="agent-service-version" placeholder="e.g. 2024-12-01-preview">
+                        </div>
+                        <div class="form-group manual-provider-field">
                             <label for="agent-api-key">API Key</label>
                             <input type="password" id="agent-api-key" placeholder="Leave blank to use global config">
                         </div>

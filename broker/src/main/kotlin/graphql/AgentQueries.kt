@@ -6,6 +6,7 @@ import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -14,7 +15,8 @@ import java.util.logging.Logger
  */
 class AgentQueries(
     private val vertx: Vertx,
-    private val deviceStore: IDeviceConfigStore
+    private val deviceStore: IDeviceConfigStore,
+    private val config: JsonObject = JsonObject()
 ) {
     private val logger: Logger = Utils.getLogger(AgentQueries::class.java)
 
@@ -77,6 +79,21 @@ class AgentQueries(
         }
     }
 
+    fun configuredProviders(): DataFetcher<List<String>> {
+        return DataFetcher {
+            val providers = config.getJsonObject("GenAI")?.getJsonObject("Providers")
+                ?: return@DataFetcher emptyList()
+            val keyToProvider = mapOf(
+                "AzureOpenAI" to "azure-openai",
+                "Gemini"      to "gemini",
+                "Claude"      to "claude",
+                "OpenAI"      to "openai",
+                "Ollama"      to "ollama"
+            )
+            providers.fieldNames().mapNotNull { keyToProvider[it] }
+        }
+    }
+
     companion object {
         fun agentToMap(device: DeviceConfig): Map<String, Any?> {
             val agentConfig = AgentConfig.fromJsonObject(device.config)
@@ -103,7 +120,10 @@ class AgentQueries(
                 "cronIntervalMs" to agentConfig.cronIntervalMs,
                 "cronPrompt" to agentConfig.cronPrompt,
                 "provider" to agentConfig.provider,
+                "providerName" to agentConfig.providerName,
                 "model" to agentConfig.model,
+                "endpoint" to agentConfig.endpoint,
+                "serviceVersion" to agentConfig.serviceVersion,
                 "systemPrompt" to agentConfig.systemPrompt,
                 "maxTokens" to agentConfig.maxTokens,
                 "temperature" to agentConfig.temperature,

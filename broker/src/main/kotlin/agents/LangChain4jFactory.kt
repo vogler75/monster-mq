@@ -1,6 +1,7 @@
 package at.rocworks.agents
 
 import at.rocworks.Utils
+import dev.langchain4j.model.azure.AzureOpenAiChatModel
 import dev.langchain4j.model.chat.ChatModel
 import dev.langchain4j.model.chat.listener.ChatModelListener
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel
@@ -17,6 +18,8 @@ data class ChatModelConfig(
     val provider: String,
     val model: String? = null,
     val apiKey: String? = null,
+    val endpoint: String? = null,
+    val serviceVersion: String? = null,
     val maxTokens: Int? = null,
     val temperature: Double = 0.7,
     val enableThinking: Boolean = false
@@ -63,7 +66,22 @@ object LangChain4jFactory {
                 .listeners(listeners)
                 .build()
 
-            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama")
+            "azure-openai" -> {
+                val endpoint = resolveEndpoint(config.endpoint, globalConfig)
+                val deploymentName = config.model ?: resolveDeploymentName(globalConfig)
+                val svcVersion = resolveServiceVersion(config.serviceVersion, globalConfig)
+                AzureOpenAiChatModel.builder()
+                    .endpoint(endpoint)
+                    .apiKey(apiKey)
+                    .deploymentName(deploymentName)
+                    .apply { svcVersion?.let { serviceVersion(it) } }
+                    .temperature(config.temperature)
+                    .apply { config.maxTokens?.let { maxTokens(it) } }
+                    .listeners(listeners)
+                    .build()
+            }
+
+            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai")
         }
     }
 
@@ -73,6 +91,8 @@ object LangChain4jFactory {
                 provider = config.provider,
                 model = config.model,
                 apiKey = config.apiKey,
+                endpoint = config.endpoint,
+                serviceVersion = config.serviceVersion,
                 maxTokens = config.maxTokens,
                 temperature = config.temperature,
                 enableThinking = config.enableThinking
@@ -82,10 +102,38 @@ object LangChain4jFactory {
         )
     }
 
+    /**
+     * Creates a chat model from a stored GenAiProviderConfig + per-agent overrides.
+     * The provider supplies type, apiKey, endpoint, serviceVersion, and default model.
+     * The agent can override model, temperature, maxTokens, and enableThinking.
+     */
+    fun createChatModel(
+        providerConfig: GenAiProviderConfig,
+        agentConfig: AgentConfig,
+        globalConfig: JsonObject,
+        listeners: List<ChatModelListener> = emptyList()
+    ): ChatModel {
+        return createChatModel(
+            ChatModelConfig(
+                provider = providerConfig.type,
+                model = agentConfig.model ?: providerConfig.model,
+                apiKey = if (!providerConfig.baseUrl.isNullOrBlank()) providerConfig.baseUrl else providerConfig.apiKey,
+                endpoint = providerConfig.endpoint,
+                serviceVersion = providerConfig.serviceVersion,
+                maxTokens = agentConfig.maxTokens ?: providerConfig.maxTokens,
+                temperature = agentConfig.temperature,
+                enableThinking = agentConfig.enableThinking
+            ),
+            globalConfig,
+            listeners
+        )
+    }
+
     private fun resolveApiKey(agentApiKey: String?, provider: String, globalConfig: JsonObject): String {
         // 1. Agent-specific API key
         if (!agentApiKey.isNullOrBlank()) {
-            return resolveEnvVar(agentApiKey)
+            val resolved = resolveEnvVar(agentApiKey)
+            if (resolved != null) return resolved
         }
 
         val genAiConfig = globalConfig.getJsonObject("GenAI", JsonObject())
@@ -97,6 +145,7 @@ object LangChain4jFactory {
             "claude" -> providers.getJsonObject("Claude", JsonObject())
             "openai" -> providers.getJsonObject("OpenAI", JsonObject())
             "ollama" -> providers.getJsonObject("Ollama", JsonObject())
+            "azure-openai" -> providers.getJsonObject("AzureOpenAI", JsonObject())
             else -> JsonObject()
         }
         val providerKey = if (provider.lowercase() == "ollama") {
@@ -105,7 +154,8 @@ object LangChain4jFactory {
             providerSection.getString("ApiKey")
         }
         if (!providerKey.isNullOrBlank()) {
-            return resolveEnvVar(providerKey)
+            val resolved = resolveEnvVar(providerKey)
+            if (resolved != null) return resolved
         }
 
         // 3. Environment variable by convention
@@ -114,6 +164,7 @@ object LangChain4jFactory {
             "claude" -> "ANTHROPIC_API_KEY"
             "openai" -> "OPENAI_API_KEY"
             "ollama" -> "OLLAMA_BASE_URL"
+            "azure-openai" -> "AZURE_OPENAI_API_KEY"
             else -> null
         }
         if (envVarName != null) {
@@ -126,15 +177,73 @@ object LangChain4jFactory {
             return "http://localhost:11434"
         }
 
+        val configKey = when (provider.lowercase()) {
+            "gemini" -> "Gemini"
+            "claude" -> "Claude"
+            "openai" -> "OpenAI"
+            "azure-openai" -> "AzureOpenAI"
+            else -> provider
+        }
         throw IllegalArgumentException("No API key found for provider '$provider'. " +
-            "Configure it in: agent config, GenAI.Providers.$provider, or env ${envVarName ?: "variable"}")
+            "Configure it in: agent config, GenAI.Providers.$configKey.ApiKey, or env ${envVarName ?: "variable"}")
     }
 
-    private fun resolveEnvVar(value: String): String {
+    // Returns the resolved string, or null if a ${VAR} placeholder could not be substituted
+    private fun resolveEnvVar(value: String): String? {
         val envVarPattern = Regex("""\$\{([^}]+)\}""")
-        return envVarPattern.replace(value) { matchResult ->
+        var hasUnresolved = false
+        val result = envVarPattern.replace(value) { matchResult ->
             val varName = matchResult.groupValues[1]
-            System.getenv(varName) ?: matchResult.value
+            val envValue = System.getenv(varName)
+            if (envValue.isNullOrBlank()) {
+                hasUnresolved = true
+                logger.warning("Environment variable '$varName' is not set")
+                ""
+            } else {
+                envValue
+            }
         }
+        return if (hasUnresolved) null else result
+    }
+
+    private fun resolveEndpoint(agentEndpoint: String?, globalConfig: JsonObject): String {
+        if (!agentEndpoint.isNullOrBlank()) {
+            val resolved = resolveEnvVar(agentEndpoint)
+            if (resolved != null) return resolved
+        }
+        val azureConfig = globalConfig.getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+            .getJsonObject("AzureOpenAI", JsonObject())
+        val endpoint = azureConfig.getString("Endpoint")
+        if (!endpoint.isNullOrBlank()) {
+            val resolved = resolveEnvVar(endpoint)
+            if (resolved != null) return resolved
+        }
+        val envEndpoint = System.getenv("AZURE_OPENAI_ENDPOINT")
+        if (!envEndpoint.isNullOrBlank()) return envEndpoint
+        throw IllegalArgumentException("No endpoint found for Azure OpenAI. Configure GenAI.Providers.AzureOpenAI.Endpoint or set AZURE_OPENAI_ENDPOINT")
+    }
+
+    private fun resolveDeploymentName(globalConfig: JsonObject): String {
+        val azureConfig = globalConfig.getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+            .getJsonObject("AzureOpenAI", JsonObject())
+        return azureConfig.getString("Deployment") ?: "gpt-4o"
+    }
+
+    private fun resolveServiceVersion(agentServiceVersion: String?, globalConfig: JsonObject): String? {
+        if (!agentServiceVersion.isNullOrBlank()) {
+            return resolveEnvVar(agentServiceVersion)
+        }
+        val azureConfig = globalConfig.getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+            .getJsonObject("AzureOpenAI", JsonObject())
+        val sv = azureConfig.getString("ServiceVersion")
+        if (!sv.isNullOrBlank()) {
+            val resolved = resolveEnvVar(sv)
+            if (resolved != null) return resolved
+        }
+        val envSv = System.getenv("AZURE_OPENAI_SERVICE_VERSION")
+        return if (!envSv.isNullOrBlank()) envSv else null
     }
 }

@@ -8,6 +8,7 @@ class AgentDetailManager {
         this.clusterNodes = [];
         this.availableMcpServers = [];
         this.availableAgents = [];
+        this.genAiProviders = [];
         this.init();
     }
 
@@ -20,7 +21,8 @@ class AgentDetailManager {
             await this.loadClusterNodes();
             await this.loadMcpServers();
             await this.loadAgents();
-            this.showNewAgentForm();
+            await this.loadGenAiProviders();
+            await this.showNewAgentForm();
             return;
         }
 
@@ -36,6 +38,7 @@ class AgentDetailManager {
             await this.loadClusterNodes();
             await this.loadMcpServers();
             await this.loadAgents();
+            await this.loadGenAiProviders();
             await this.loadAgentData();
         } catch (error) {
             this.showError('Failed to load agent data: ' + error.message);
@@ -46,7 +49,7 @@ class AgentDetailManager {
         }
     }
 
-    showNewAgentForm() {
+    async showNewAgentForm() {
         document.getElementById('page-title').textContent = 'Add AI Agent';
         document.getElementById('page-subtitle').textContent = 'Create a new AI agent';
 
@@ -60,7 +63,17 @@ class AgentDetailManager {
         document.getElementById('agent-node').value = '*';
         document.getElementById('agent-description').value = '';
         document.getElementById('agent-enabled').checked = true;
-        document.getElementById('agent-provider').value = 'gemini';
+
+        // Populate provider dropdown and pre-select best default
+        this.populateProviderDropdown();
+        const providerSelect = document.getElementById('agent-provider-name');
+        if (providerSelect && providerSelect.options.length > 1) {
+            // Pre-select first DB provider, or first config provider
+            const dbOpt = Array.from(providerSelect.options).find(o => o.value && !o.disabled && o.closest && !o.closest('optgroup[label="From config.yaml"]'));
+            const firstOpt = Array.from(providerSelect.options).find(o => o.value !== '');
+            if (firstOpt) providerSelect.value = firstOpt.value;
+        }
+        onProviderNameChange();
         document.getElementById('agent-model').value = '';
         document.getElementById('agent-api-key').value = '';
         document.getElementById('agent-temperature').value = '0.7';
@@ -101,10 +114,58 @@ class AgentDetailManager {
         document.getElementById('context-section').style.display = 'block';
         document.getElementById('prompt-section').style.display = 'block';
 
-        // Update model placeholder
+        // Update model placeholder and trigger fields
         updateModelPlaceholder();
-        // Toggle trigger fields
         toggleTriggerFields();
+    }
+
+    async loadGenAiProviders() {
+        try {
+            const result = await this.client.query(`
+                query { genAiProviders { name type source model } }
+            `);
+            this.genAiProviders = result.genAiProviders || [];
+        } catch (e) {
+            console.warn('Could not load GenAI providers:', e.message);
+            this.genAiProviders = [];
+        }
+    }
+
+    populateProviderDropdown() {
+        const select = document.getElementById('agent-provider-name');
+        if (!select) return;
+        select.innerHTML = '<option value="">— Manual configuration —</option>';
+
+        const dbProviders = this.genAiProviders.filter(p => p.source === 'database');
+        const configProviders = this.genAiProviders.filter(p => p.source === 'config');
+
+        if (dbProviders.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = 'Saved Providers';
+            dbProviders.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.name;
+                opt.dataset.source = 'database';
+                opt.dataset.type = p.type;
+                opt.textContent = p.name + ' (' + p.type + ')';
+                group.appendChild(opt);
+            });
+            select.appendChild(group);
+        }
+
+        if (configProviders.length > 0) {
+            const group = document.createElement('optgroup');
+            group.label = 'From config.yaml';
+            configProviders.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = 'config:' + p.name;
+                opt.dataset.source = 'config';
+                opt.dataset.type = p.type;
+                opt.textContent = p.name + ' (' + p.type + ')';
+                group.appendChild(opt);
+            });
+            select.appendChild(group);
+        }
     }
 
     async loadClusterNodes() {
@@ -370,6 +431,7 @@ class AgentDetailManager {
                         cronIntervalMs
                         cronPrompt
                         provider
+                        providerName
                         model
                         systemPrompt
                         temperature
@@ -430,10 +492,39 @@ class AgentDetailManager {
         document.getElementById('agent-enabled').checked = d.enabled;
 
         // Populate AI Provider
+        this.populateProviderDropdown();
+        const providerNameEl = document.getElementById('agent-provider-name');
+        if (providerNameEl) {
+            if (d.providerName) {
+                // Try to select the DB provider by name
+                providerNameEl.value = d.providerName;
+                if (providerNameEl.value !== d.providerName) {
+                    // Provider was deleted — fall back to manual
+                    providerNameEl.value = '';
+                }
+            } else if (d.provider) {
+                // Check if it matches a config.yaml provider by type
+                const configOpt = Array.from(providerNameEl.options).find(o =>
+                    o.dataset && o.dataset.source === 'config' && o.dataset.type === d.provider
+                );
+                if (configOpt) {
+                    providerNameEl.value = configOpt.value;
+                } else {
+                    providerNameEl.value = '';
+                }
+            } else {
+                providerNameEl.value = '';
+            }
+            onProviderNameChange();
+        }
         document.getElementById('agent-provider').value = d.provider || 'gemini';
         updateModelPlaceholder();
         document.getElementById('agent-model').value = d.model || '';
         document.getElementById('agent-api-key').value = '';
+        const endpointEl = document.getElementById('agent-endpoint');
+        if (endpointEl) endpointEl.value = d.endpoint || '';
+        const serviceVersionEl = document.getElementById('agent-service-version');
+        if (serviceVersionEl) serviceVersionEl.value = d.serviceVersion || '';
         document.getElementById('agent-temperature').value = d.temperature != null ? d.temperature : 0.7;
         document.getElementById('agent-max-tokens').value = d.maxTokens || '';
         document.getElementById('agent-max-tool-iterations').value = d.maxToolIterations != null ? d.maxToolIterations : 10;
@@ -589,6 +680,32 @@ class AgentDetailManager {
         if (apiKey) {
             data.apiKey = apiKey;
         }
+        const endpoint = document.getElementById('agent-endpoint')?.value?.trim();
+        if (endpoint) {
+            data.endpoint = endpoint;
+        }
+        const serviceVersion = document.getElementById('agent-service-version')?.value?.trim();
+        if (serviceVersion) {
+            data.serviceVersion = serviceVersion;
+        }
+
+        // Resolve providerName vs provider based on dropdown selection
+        const providerNameEl = document.getElementById('agent-provider-name');
+        const providerNameVal = providerNameEl?.value || '';
+        if (providerNameVal.startsWith('config:')) {
+            // Config.yaml provider: use its type as the provider field
+            const selectedOpt = providerNameEl.options[providerNameEl.selectedIndex];
+            data.provider = selectedOpt?.dataset?.type || 'gemini';
+            data.providerName = null;
+        } else if (providerNameVal !== '') {
+            // DB provider
+            data.providerName = providerNameVal;
+            const selectedOpt = providerNameEl.options[providerNameEl.selectedIndex];
+            data.provider = selectedOpt?.dataset?.type || 'gemini';
+        } else {
+            // Manual mode — provider already set from the type select
+            data.providerName = null;
+        }
 
         return data;
     }
@@ -601,6 +718,11 @@ class AgentDetailManager {
         }
 
         const data = this.collectFormData();
+
+        if (this.isNew && !/^[a-zA-Z0-9_-]+$/.test(data.name)) {
+            this.showError('Invalid name: only letters, digits, underscores, and hyphens are allowed (no spaces).');
+            return;
+        }
 
         if (this.isNew) {
             try {
@@ -802,8 +924,26 @@ function toggleScheduleMode() {
     document.getElementById('schedule-custom-group').style.display = mode === 'custom' ? 'block' : 'none';
 }
 
+function onProviderNameChange() {
+    const nameSelect = document.getElementById('agent-provider-name');
+    const isManual = !nameSelect || nameSelect.value === '';
+    document.querySelectorAll('.manual-provider-field').forEach(el => {
+        // endpoint-group and service-version-group are further controlled by updateModelPlaceholder
+        if (el.id !== 'agent-endpoint-group' && el.id !== 'agent-service-version-group') {
+            el.style.display = isManual ? '' : 'none';
+        }
+    });
+    updateModelPlaceholder();
+}
+
 function updateModelPlaceholder() {
-    const provider = document.getElementById('agent-provider').value;
+    const nameSelect = document.getElementById('agent-provider-name');
+    const selectedOpt = nameSelect?.options[nameSelect.selectedIndex];
+    const isManual = !selectedOpt || nameSelect.value === '';
+    const providerType = isManual
+        ? (document.getElementById('agent-provider')?.value || 'gemini')
+        : (selectedOpt?.dataset?.type || 'gemini');
+
     const modelInput = document.getElementById('agent-model');
     if (!modelInput) return;
 
@@ -811,9 +951,17 @@ function updateModelPlaceholder() {
         'gemini': 'gemini-2.0-flash',
         'claude': 'claude-sonnet-4-20250514',
         'openai': 'gpt-4o',
-        'ollama': 'llama3'
+        'ollama': 'llama3',
+        'azure-openai': 'deployment-name'
     };
-    modelInput.placeholder = placeholders[provider] || 'Model name';
+    modelInput.placeholder = placeholders[providerType] || 'Model name';
+
+    // Endpoint/version groups only shown in manual mode with azure-openai
+    const isAzure = isManual && providerType === 'azure-openai';
+    const endpointGroup = document.getElementById('agent-endpoint-group');
+    if (endpointGroup) endpointGroup.style.display = isAzure ? '' : 'none';
+    const serviceVersionGroup = document.getElementById('agent-service-version-group');
+    if (serviceVersionGroup) serviceVersionGroup.style.display = isAzure ? '' : 'none';
 }
 
 // Set up custom drop handlers for context data textareas (append instead of replace)

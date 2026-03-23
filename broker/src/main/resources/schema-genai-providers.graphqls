@@ -1,0 +1,50 @@
+# =======================
+# GenAI Provider Types
+# =======================
+
+type GenAiProvider {
+    name: String!
+    type: String!
+    model: String
+    apiKey: String
+    endpoint: String
+    serviceVersion: String
+    baseUrl: String
+    temperature: Float!
+    maxTokens: Int
+    enabled: Boolean!
+    source: String!
+    createdAt: String!
+    updatedAt: String!
+}
+
+input GenAiProviderInput {
+    type: String!
+    model: String
+    apiKey: String
+    endpoint: String
+    serviceVersion: String
+    baseUrl: String
+    temperature: Float
+    maxTokens: Int
+    enabled: Boolean
+}
+
+type GenAiProviderMutations {
+    create(name: String!, input: GenAiProviderInput!): GenAiProvider!
+    update(name: String!, input: GenAiProviderInput!): GenAiProvider!
+    delete(name: String!): Boolean!
+}
+
+# =======================
+# GenAI Provider Queries / Mutations
+# =======================
+
+extend type Query {
+    genAiProviders: [GenAiProvider!]!
+    genAiProvider(name: String!): GenAiProvider
+}
+
+extend type Mutation {
+    genAiProvider: GenAiProviderMutations
+}
