@@ -560,7 +560,12 @@ class DashboardManager {
         if (!tableBody) return;
 
         // Detect feature mismatches across cluster nodes
-        const allFeatureSets = brokers.map(b => (b.enabledFeatures || []).slice().sort().join(','));
+        // null/absent means "all enabled (default)" — distinct from [] (none enabled)
+        const allFeatureSets = brokers.map(b =>
+            Array.isArray(b.enabledFeatures)
+                ? b.enabledFeatures.slice().sort().join(',')
+                : '__default__'
+        );
         const hasMismatch = allFeatureSets.length > 1 && new Set(allFeatureSets).size > 1;
 
         // Collect union of enabled features to decide which columns to show
@@ -587,9 +592,11 @@ class DashboardManager {
         tableBody.innerHTML = brokers.map(broker => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             const isHealthy = metrics.nodeSessionCount >= 0;
-            const features = broker.enabledFeatures || [];
-            const featureTooltip = features.length > 0 ? features.join(', ') : 'all enabled (default)';
-            const featureLabel = features.length > 0 ? `${features.length} enabled` : 'all';
+            const features = broker.enabledFeatures;
+            const hasExplicit = Array.isArray(features);
+            const featureList = features || [];
+            const featureTooltip = !hasExplicit ? 'all enabled (default)' : featureList.length === 0 ? 'none enabled' : featureList.join(', ');
+            const featureLabel = !hasExplicit ? 'all' : featureList.length === 0 ? 'none' : `${featureList.length} enabled`;
             const featureWarning = hasMismatch
                 ? `<span title="Feature mismatch across cluster nodes! This node: ${featureTooltip}" style="color:#F59E0B;cursor:default;">&#9888; ${featureLabel}</span>`
                 : `<span title="${featureTooltip}" style="color:var(--text-secondary);cursor:default;">${featureLabel}</span>`;
