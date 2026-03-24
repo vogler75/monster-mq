@@ -80,7 +80,7 @@ class MetricsResolver(
                         }
                     }).onComplete { result ->
                         if (result.succeeded()) {
-                            future.complete(Broker(nodeId, Version.getVersion()))
+                            future.complete(Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted()))
                         } else {
                             future.completeExceptionally(result.cause())
                         }
@@ -142,9 +142,7 @@ class MetricsResolver(
                             }
                         }).onComplete { result ->
                             if (result.succeeded()) {
-                                brokerFuture.complete(Broker(nodeId, Version.getVersion()))
-                            } else {
-                                brokerFuture.complete(null)
+                                brokerFuture.complete(Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted()))
                             }
                         }
                     } else {

@@ -30,7 +30,6 @@ class OpcUaClientConfigMutations(
     fun addOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -39,6 +38,8 @@ class OpcUaClientConfigMutations(
 
                 // Parse input
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("OpcUa"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on node ${request.nodeId}"))) }
                 val validationErrors = request.validate()
 
                 if (validationErrors.isNotEmpty()) {
@@ -385,6 +386,8 @@ class OpcUaClientConfigMutations(
                     return@DataFetcher future
                 }
 
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("OpcUa"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on node $nodeId"))) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val updatedDevice = result.result()

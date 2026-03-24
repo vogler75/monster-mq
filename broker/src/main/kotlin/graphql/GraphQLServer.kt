@@ -1042,6 +1042,12 @@ class GraphQLServer(
             // Register field resolvers for types
             .type("Broker") { builder ->
                 builder
+                    .dataFetcher("enabledFeatures") { env ->
+                        val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                        java.util.concurrent.CompletableFuture.completedFuture(
+                            broker?.enabledFeatures ?: emptyList<String>()
+                        )
+                    }
                     .dataFetcher("userManagementEnabled") { env ->
                         java.util.concurrent.CompletableFuture.completedFuture(userManager.isUserManagementEnabled())
                     }

@@ -14,6 +14,12 @@ class SidebarManager {
     async init() {
         this.injectFavicons();
         if (window.brokerManager) await window.brokerManager.ready();
+        // Fetch enabled features; null = unknown (show all), [] = all disabled
+        this._enabledFeatures = null;
+        try {
+            const client = window.graphqlClient || null;
+            if (client) this._enabledFeatures = await client.getEnabledFeatures();
+        } catch (e) { /* feature hiding is best-effort */ }
         this.renderMenu();
         this.setupUI();
         this.initLogViewer();
@@ -94,18 +100,18 @@ class SidebarManager {
             {
                 section: 'Agents', sectionIcon: 'rocket',
                 items: [
-                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
-                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
-                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
-                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
+                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor', feature: 'Agents' },
+                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph', feature: 'Agents' },
+                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents', feature: 'Agents' },
+            { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers', feature: 'Agents' }
                 ]
             },
             {
                 section: 'Configuration', sectionIcon: 'cogwheel',
                 items: [
                     { href: '/pages/archive-groups.html', icon: 'health', text: 'Archives' },
-                    { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers' },
-                    { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows' },
+                    { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers', feature: 'JdbcLogger' },
+                    { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows', feature: 'FlowEngine' },
                     { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export' }
                 ]
             },
@@ -119,17 +125,17 @@ class SidebarManager {
             {
                 section: 'Bridging', sectionIcon: 'link',
                 items: [
-                    { href: '/pages/opcua-devices.html', icon: 'screen', text: 'OPC UA Clients' },
-                    { href: '/pages/opcua-servers.html', icon: 'project-server', text: 'OPC UA Servers' },
-                    { href: '/pages/mqtt-clients.html', icon: 'link', text: 'MQTT Clients' },
-                    { href: '/pages/kafka-clients.html', icon: 'link', text: 'Kafka Clients' },
-                    { href: '/pages/nats-clients.html', icon: 'link', text: 'NATS Clients' },
-                    { href: '/pages/telegram-clients.html', icon: 'send-top-right', text: 'Telegram Clients' },
-                    { href: '/pages/winccoa-clients.html', icon: 'rack-ipc', text: 'WinCC OA Clients' },
-                    { href: '/pages/winccua-clients.html', icon: 'rack-ipc', text: 'WinCC Unified Clients' },
-                    { href: '/pages/plc4x-clients.html', icon: 'solid-state-drive', text: 'PLC4X Clients' },
-                    { href: '/pages/neo4j-clients.html', icon: 'distribution', text: 'Neo4j Clients' },
-                    { href: '/pages/sparkplugb-decoders.html', icon: 'electrical-energy', text: 'SparkplugB Decoders' }
+                    { href: '/pages/opcua-devices.html', icon: 'screen', text: 'OPC UA Clients', feature: 'OpcUa' },
+                    { href: '/pages/opcua-servers.html', icon: 'project-server', text: 'OPC UA Servers', feature: 'OpcUaServer' },
+                    { href: '/pages/mqtt-clients.html', icon: 'link', text: 'MQTT Clients', feature: 'MqttClient' },
+                    { href: '/pages/kafka-clients.html', icon: 'link', text: 'Kafka Clients', feature: 'Kafka' },
+                    { href: '/pages/nats-clients.html', icon: 'link', text: 'NATS Clients', feature: 'Nats' },
+                    { href: '/pages/telegram-clients.html', icon: 'send-top-right', text: 'Telegram Clients', feature: 'Telegram' },
+                    { href: '/pages/winccoa-clients.html', icon: 'rack-ipc', text: 'WinCC OA Clients', feature: 'WinCCOa' },
+                    { href: '/pages/winccua-clients.html', icon: 'rack-ipc', text: 'WinCC Unified Clients', feature: 'WinCCUa' },
+                    { href: '/pages/plc4x-clients.html', icon: 'solid-state-drive', text: 'PLC4X Clients', feature: 'Plc4x' },
+                    { href: '/pages/neo4j-clients.html', icon: 'distribution', text: 'Neo4j Clients', feature: 'Neo4j' },
+                    { href: '/pages/sparkplugb-decoders.html', icon: 'electrical-energy', text: 'SparkplugB Decoders', feature: 'SparkplugB' }
                 ]
             },
             {
@@ -157,9 +163,14 @@ class SidebarManager {
             // Prevent auto-closing other categories
             category.addEventListener('closeOtherCategories', (e) => e.stopPropagation());
 
+            let itemCount = 0;
             section.items.forEach(item => {
                 if (item.isUserItem) return;
+                // Hide if feature is specified and not in the broker's enabled set
+                if (item.feature && Array.isArray(this._enabledFeatures) &&
+                    !this._enabledFeatures.includes(item.feature)) return;
 
+                itemCount++;
                 const menuItem = document.createElement('ix-menu-item');
                 menuItem.setAttribute('label', item.text);
                 menuItem.setAttribute('icon', item.icon);
@@ -172,7 +183,8 @@ class SidebarManager {
                 category.appendChild(menuItem);
             });
 
-            ixMenu.appendChild(category);
+            // Skip empty categories (all items were feature-gated out)
+            if (itemCount > 0) ixMenu.appendChild(category);
         });
 
         this._addBottomItems(ixMenu);

@@ -490,7 +490,6 @@ class DashboardManager {
                 mqttClientIn: acc.mqttClientIn + (metrics.mqttClientIn || 0),
                 mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
                 kafkaClientIn: acc.kafkaClientIn + (metrics.kafkaClientIn || 0),
-                // kafkaClientOut removed
                 opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
                 opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0),
                 winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0),
@@ -500,56 +499,110 @@ class DashboardManager {
             messagesIn: 0, messagesOut: 0, totalSessions: 0, queuedMessages: 0,
             messageBusIn: 0, messageBusOut: 0,
             mqttClientIn: 0, mqttClientOut: 0,
-            kafkaClientIn: 0, // kafkaClientOut removed
+            kafkaClientIn: 0,
             opcUaClientIn: 0, opcUaClientOut: 0,
             winCCOaClientIn: 0,
             winCCUaClientIn: 0
         });
 
+        // Collect all enabled features across all cluster nodes (union)
+        const allEnabledFeatures = new Set(brokers.flatMap(b => b.enabledFeatures || []));
+        // If any node returns an empty array, features were explicitly configured;
+        // if ALL nodes return empty arrays, treat as "all explicitly disabled"
+        const anyNodeHasExplicitConfig = brokers.some(b => Array.isArray(b.enabledFeatures));
+        const isEnabled = (feature) => {
+            if (!anyNodeHasExplicitConfig) return true; // no feature config — show all
+            return allEnabledFeatures.has(feature);
+        };
+
         const overviewContainer = document.getElementById('cluster-overview');
 
-        overviewContainer.innerHTML = `
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>
-            <div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>
-            <div class="metric-card">
+        const cards = [
+            `<div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>`,
+            `<div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>`,
+            `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">MQTT Messages</span><div class="metric-icon">📨</div></div>
                 <div class="metric-value"><span style="color: #22C55E;">${this.formatNumber(clusterTotals.messagesIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(clusterTotals.messagesOut)}</span></div>
                 <div class="metric-label">In / Out</div>
-            </div>
-            <div class="metric-card">
+            </div>`,
+            isEnabled('MqttClient') ? `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">MQTT Bridges</span><div class="metric-icon">🌉</div></div>
                 <div class="metric-value"><span style="color: #0EA5E9;">${this.formatNumber(clusterTotals.mqttClientIn)}</span> / <span style="color: #F59E0B;">${this.formatNumber(clusterTotals.mqttClientOut)}</span></div>
                 <div class="metric-label">In / Out</div>
-            </div>
-            <div class="metric-card">
+            </div>` : '',
+            isEnabled('Kafka') ? `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">Kafka Bridges</span><div class="metric-icon">📦</div></div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.kafkaClientIn)}</div>
                 <div class="metric-label">In</div>
-            </div>
-            <div class="metric-card">
+            </div>` : '',
+            (isEnabled('OpcUa') || isEnabled('OpcUaServer')) ? `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">OPC UA Clients</span><div class="metric-icon">⚙️</div></div>
                 <div class="metric-value"><span style="color: #14B8A6;">${this.formatNumber(clusterTotals.opcUaClientIn)}</span> / <span style="color: #9333EA;">${this.formatNumber(clusterTotals.opcUaClientOut)}</span></div>
                 <div class="metric-label">In / Out</div>
-            </div>
-            <div class="metric-card">
+            </div>` : '',
+            isEnabled('WinCCOa') ? `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">WinCC OA Clients</span><div class="metric-icon">🏭</div></div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.winCCOaClientIn || 0)}</div>
                 <div class="metric-label">In</div>
-            </div>
-            <div class="metric-card">
+            </div>` : '',
+            isEnabled('WinCCUa') ? `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">WinCC UA Clients</span><div class="metric-icon">🔧</div></div>
                 <div class="metric-value">${this.formatNumber(clusterTotals.winCCUaClientIn || 0)}</div>
                 <div class="metric-label">In</div>
-            </div>`;
+            </div>` : '',
+        ];
+
+        overviewContainer.innerHTML = cards.join('');
     }
 
     updateBrokerTable(brokers) {
         const tableBody = document.getElementById('broker-table-body');
+        if (!tableBody) return;
+
+        // Detect feature mismatches across cluster nodes
+        // null/absent means "all enabled (default)" — distinct from [] (none enabled)
+        const allFeatureSets = brokers.map(b =>
+            Array.isArray(b.enabledFeatures)
+                ? b.enabledFeatures.slice().sort().join(',')
+                : '__default__'
+        );
+        const hasMismatch = allFeatureSets.length > 1 && new Set(allFeatureSets).size > 1;
+
+        // Collect union of enabled features to decide which columns to show
+        const allEnabledFeatures = new Set(brokers.flatMap(b => b.enabledFeatures || []));
+        const anyExplicit = brokers.some(b => Array.isArray(b.enabledFeatures));
+        const colVisible = (feature) => !anyExplicit || allEnabledFeatures.has(feature);
+
+        // Update column header visibility
+        const table = tableBody.closest('table');
+        const colMap = {
+            'th-mqtt-io':   colVisible('MqttClient'),
+            'th-kafka-io':  colVisible('Kafka'),
+            'th-opcua-io':  colVisible('OpcUa') || colVisible('OpcUaServer'),
+            'th-winccoa-io': colVisible('WinCCOa'),
+            'th-winccua-io': colVisible('WinCCUa'),
+        };
+        if (table) {
+            Object.entries(colMap).forEach(([id, visible]) => {
+                const th = table.querySelector(`#${id}`);
+                if (th) th.style.display = visible ? '' : 'none';
+            });
+        }
+
         tableBody.innerHTML = brokers.map(broker => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
             const isHealthy = metrics.nodeSessionCount >= 0;
+            const features = broker.enabledFeatures;
+            const hasExplicit = Array.isArray(features);
+            const featureList = features || [];
+            const featureTooltip = !hasExplicit ? 'all enabled (default)' : featureList.length === 0 ? 'none enabled' : featureList.join(', ');
+            const featureLabel = !hasExplicit ? 'all' : featureList.length === 0 ? 'none' : `${featureList.length} enabled`;
+            const featureWarning = hasMismatch
+                ? `<span title="Feature mismatch across cluster nodes! This node: ${featureTooltip}" style="color:#F59E0B;cursor:default;">&#9888; ${featureLabel}</span>`
+                : `<span title="${featureTooltip}" style="color:var(--text-secondary);cursor:default;">${featureLabel}</span>`;
+            const td = (visible, content) => visible ? `<td>${content}</td>` : '';
             return `
-                <tr>
+                <tr${hasMismatch ? ' style="background:rgba(245,158,11,0.05);"' : ''}>
                     <td><strong>${broker.nodeId}</strong></td>
                     <td><code style="font-size: 0.875rem; background: var(--bg-secondary); padding: 2px 6px; border-radius: 4px;">${broker.version || 'unknown'}</code></td>
                     <td><span class="status-indicator ${isHealthy ? 'status-online' : 'status-offline'}"><span class="status-dot"></span>${isHealthy ? 'Online' : 'Offline'}</span></td>
@@ -558,11 +611,12 @@ class DashboardManager {
                     <td>${metrics.nodeSessionCount || 0}</td>
                     <td>${this.formatNumber(metrics.queuedMessagesCount || 0)}</td>
                     <td><span style="color: #14B8A6;">${this.formatNumber(metrics.messageBusIn || 0)}</span> / <span style="color: #F97316;">${this.formatNumber(metrics.messageBusOut || 0)}</span></td>
-                    <td><span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttClientIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttClientOut || 0)}</span></td>
-                    <td><span style="color: #EF4444;">${this.formatNumber(metrics.kafkaClientIn || 0)}</span></td>
-                    <td><span style="color: #14B8A6;">${this.formatNumber(metrics.opcUaClientIn || 0)}</span> / <span style="color: #9333EA;">${this.formatNumber(metrics.opcUaClientOut || 0)}</span></td>
-                    <td><span style="color: #EC4899;">${this.formatNumber(metrics.winCCOaClientIn || 0)}</span></td>
-                    <td><span style="color: #A78BFA;">${this.formatNumber(metrics.winCCUaClientIn || 0)}</span></td>
+                    ${td(colVisible('MqttClient'), `<span style="color: #0EA5E9;">${this.formatNumber(metrics.mqttClientIn || 0)}</span> / <span style="color: #F59E0B;">${this.formatNumber(metrics.mqttClientOut || 0)}</span>`)}
+                    ${td(colVisible('Kafka'), `<span style="color: #EF4444;">${this.formatNumber(metrics.kafkaClientIn || 0)}</span>`)}
+                    ${td(colVisible('OpcUa') || colVisible('OpcUaServer'), `<span style="color: #14B8A6;">${this.formatNumber(metrics.opcUaClientIn || 0)}</span> / <span style="color: #9333EA;">${this.formatNumber(metrics.opcUaClientOut || 0)}</span>`)}
+                    ${td(colVisible('WinCCOa'), `<span style="color: #EC4899;">${this.formatNumber(metrics.winCCOaClientIn || 0)}</span>`)}
+                    ${td(colVisible('WinCCUa'), `<span style="color: #A78BFA;">${this.formatNumber(metrics.winCCUaClientIn || 0)}</span>`)}
+                    <td>${featureWarning}</td>
                 </tr>`;
         }).join('');
     }

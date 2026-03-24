@@ -34,6 +34,8 @@ class TelegramClientConfigMutations(
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
 
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("Telegram"))
+                    return@DataFetcher future.apply { complete(errorResult("Telegram feature is not enabled on node ${request.nodeId}")) }
                 val errors = request.validate() + TelegramClientConfig.fromJson(request.config).validate()
                 if (errors.isNotEmpty()) { future.complete(errorResult(errors)); return@DataFetcher future }
 
@@ -186,6 +188,8 @@ class TelegramClientConfigMutations(
                 if (!clusterNodes.contains(nodeId)) {
                     future.complete(errorResult("Node '$nodeId' not found. Available: ${clusterNodes.joinToString()}")); return@DataFetcher future
                 }
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("Telegram"))
+                    return@DataFetcher future.apply { complete(errorResult("Telegram feature is not enabled on node $nodeId")) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val device = result.result()

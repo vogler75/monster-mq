@@ -33,6 +33,8 @@ class KafkaClientConfigMutations(
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Input is required"))) }
 
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("Kafka"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on node ${request.nodeId}"))) }
                 val validationErrors = request.validate() + validateKafkaConfig(request.config)
                 if (validationErrors.isNotEmpty()) {
                     future.complete(mapOf("success" to false, "errors" to validationErrors))
@@ -216,6 +218,8 @@ class KafkaClientConfigMutations(
                     future.complete(mapOf("success" to false, "errors" to listOf("Cluster node '$nodeId' not found. Available nodes: ${clusterNodes.joinToString(", ")}")))
                     return@DataFetcher future
                 }
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("Kafka"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on node $nodeId"))) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val updatedDevice = result.result()
