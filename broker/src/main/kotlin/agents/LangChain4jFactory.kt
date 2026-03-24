@@ -54,6 +54,7 @@ object LangChain4jFactory {
             "openai" -> OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .modelName(config.model ?: "gpt-4o")
+                .apply { config.endpoint?.let { baseUrl(it) } }
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxTokens(it) } }
                 .listeners(listeners)

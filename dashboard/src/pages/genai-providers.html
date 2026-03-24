@@ -167,12 +167,8 @@
                 <div class="table-header">
                     <div class="table-title"><h2>Configured Providers</h2></div>
                     <div class="table-actions">
-                        <button class="btn btn-primary" onclick="genAiProviderManager.addProvider()">
-                            + Add Provider
-                        </button>
-                        <button class="btn btn-secondary" onclick="genAiProviderManager.loadProviders()">
-                            Refresh
-                        </button>
+                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="genAiProviderManager.loadProviders()" title="Refresh providers"></ix-icon-button>
+                        <a href="/pages/genai-provider-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Provider</a>
                     </div>
                 </div>
                 <table>

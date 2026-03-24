@@ -480,7 +480,8 @@
             "OpenAI": {
               "type": "object",
               "properties": {
-                "ApiKey": { "type": "string", "description": "OpenAI API key (supports ${ENV_VAR} syntax)" }
+                "ApiKey": { "type": "string", "description": "OpenAI API key (supports ${ENV_VAR} syntax)" },
+                "Endpoint": { "type": "string", "description": "Custom OpenAI-compatible endpoint URL (e.g., http://localhost:8080/v1)" }
               }
             },
             "Ollama": {

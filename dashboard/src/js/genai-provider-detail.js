@@ -91,11 +91,22 @@ class GenAiProviderDetailManager {
     onTypeChange() {
         const type = document.getElementById('provider-type').value;
         const isAzure = type === 'azure-openai';
+        const isOpenAI = type === 'openai';
         const isOllama = type === 'ollama';
 
-        document.getElementById('provider-endpoint-group').style.display = isAzure ? '' : 'none';
+        document.getElementById('provider-endpoint-group').style.display = (isAzure || isOpenAI) ? '' : 'none';
         document.getElementById('provider-service-version-group').style.display = isAzure ? '' : 'none';
         document.getElementById('provider-base-url-group').style.display = isOllama ? '' : 'none';
+
+        const endpointLabel = document.getElementById('provider-endpoint-label');
+        const endpointInput = document.getElementById('provider-endpoint');
+        if (isAzure) {
+            endpointLabel.textContent = 'Azure Endpoint';
+            endpointInput.placeholder = 'https://<resource>.openai.azure.com/';
+        } else if (isOpenAI) {
+            endpointLabel.textContent = 'Custom Endpoint (optional)';
+            endpointInput.placeholder = 'https://api.openai.com/v1 (leave blank for default)';
+        }
 
         const modelInput = document.getElementById('provider-model');
         const placeholders = {
