@@ -17,6 +17,7 @@ fi
 TESTING=false
 PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
 DOCKER_ONLY=false   # skip Maven build if true
+CONTAINER_BUILD=false  # build Maven inside Docker container
 
 for arg in "$@"; do
     case $arg in
@@ -26,6 +27,9 @@ for arg in "$@"; do
         -d)
             DOCKER_ONLY=true
             ;;
+        -c|--container)
+            CONTAINER_BUILD=true
+            ;;
         -n)
             PUBLISH_MODE="no"
             ;;
@@ -34,11 +38,12 @@ for arg in "$@"; do
             ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: $0 [--testing|-t] [-d] [-n] [-y]"
-            echo "  --testing, -t  Build testing image"
-            echo "  -d             Docker only (skip Maven build)"
-            echo "  -n             Do not publish to Docker Hub"
-            echo "  -y             Publish to Docker Hub without asking"
+            echo "Usage: $0 [--testing|-t] [-d] [-c|--container] [-n] [-y]"
+            echo "  --testing, -t      Build testing image"
+            echo "  -d                 Docker only (skip Maven build)"
+            echo "  -c, --container    Build Maven inside Docker container (GraalVM 21)"
+            echo "  -n                 Do not publish to Docker Hub"
+            echo "  -y                 Publish to Docker Hub without asking"
             exit 1
             ;;
     esac
@@ -56,22 +61,77 @@ fi
 if [ "$DOCKER_ONLY" = false ]; then
     # Build dashboard and copy to broker resources
     echo -e "${YELLOW}Building dashboard...${NC}"
-    cd ../dashboard
-    npm ci
-    npm run build
-    rm -rf ../broker/src/main/resources/dashboard
-    cp -r dist ../broker/src/main/resources/dashboard
-    rm -f ../broker/src/main/resources/dashboard/config/brokers.json
-    cd ../docker
+    DASHBOARD_DIR=$(cd ../dashboard && pwd)
+    BROKER_RESOURCES_DIR=$(cd ../broker/src/main/resources && pwd)
 
-    echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
-    cd ../broker
-    mvn package
-    if [ $? -ne 0 ]; then
+    if [ "$CONTAINER_BUILD" = true ]; then
+        echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
+        docker run --rm \
+            -v "${DASHBOARD_DIR}:/app/dashboard" \
+            -w /app/dashboard \
+            node:22-slim \
+            /bin/bash -c "
+                set -e
+                npm ci
+                npm run build
+            "
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}✗ Dashboard build failed${NC}"
+            exit 1
+        fi
+    else
+        cd ../dashboard
+        npm ci
+        npm run build
+        cd ../docker
+    fi
+
+    rm -rf "${BROKER_RESOURCES_DIR}/dashboard"
+    cp -r "${DASHBOARD_DIR}/dist" "${BROKER_RESOURCES_DIR}/dashboard"
+    rm -f "${BROKER_RESOURCES_DIR}/dashboard/config/brokers.json"
+
+    if [ "$CONTAINER_BUILD" = true ]; then
+        echo -e "${YELLOW}Running mvn package in Docker container (GraalVM 21)...${NC}"
+        BROKER_DIR=$(cd ../broker && pwd)
+        MAVEN_REPO="${HOME}/.m2"
+        MAVEN_BUILDER_IMAGE="monstermq-maven-builder:graalvm21"
+
+        # Create .m2 directory if it doesn't exist (for caching dependencies)
+        mkdir -p "${MAVEN_REPO}"
+
+        # Build the Maven builder image if it doesn't exist
+        if ! docker image inspect "${MAVEN_BUILDER_IMAGE}" > /dev/null 2>&1; then
+            echo -e "${YELLOW}Building Maven builder image (first time only)...${NC}"
+            docker build -t "${MAVEN_BUILDER_IMAGE}" -f Dockerfile.maven-builder .
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}✗ Failed to build Maven builder image${NC}"
+                exit 1
+            fi
+            echo -e "${GREEN}✓ Maven builder image created${NC}"
+        fi
+
+        # Run Maven build in container
+        docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "${BROKER_DIR}:/app/broker" \
+            -v "${MAVEN_REPO}:/home/${USER}/.m2" \
+            -e MAVEN_OPTS="-Duser.home=/home/${USER}" \
+            -w /app/broker \
+            "${MAVEN_BUILDER_IMAGE}" \
+            mvn package -DskipTests
+        BUILD_RESULT=$?
+    else
+        echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
+        cd ../broker
+        mvn package
+        BUILD_RESULT=$?
+        cd ../docker
+    fi
+
+    if [ $BUILD_RESULT -ne 0 ]; then
         echo -e "${RED}✗ Maven build failed${NC}"
         exit 1
     fi
-    cd ../docker
 else
     echo -e "${YELLOW}Skipping Maven build (-d flag set)${NC}"
 fi
@@ -108,16 +168,16 @@ if [ "$TESTING" = false ]; then
     echo -e "${YELLOW}Building compat Docker image (GraalVM JDK 21, x86-64-v2)...${NC}"
     docker build \
         --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
-        -t rocworks/monstermq:$version-compat$ARCH_SUFFIX \
-        -t rocworks/monstermq:latest-compat$ARCH_SUFFIX \
+        -t rocworks/monstermq:$version-jdk21$ARCH_SUFFIX \
+        -t rocworks/monstermq:latest-jdk21$ARCH_SUFFIX \
         .
     if [ $? -ne 0 ]; then
         echo -e "${RED}✗ Compat Docker build failed${NC}"
         exit 1
     fi
     echo -e "${GREEN}✓ Compat Docker image built successfully${NC}"
-    echo -e "${GREEN}  - rocworks/monstermq:${version}-compat${ARCH_SUFFIX}${NC}"
-    echo -e "${GREEN}  - rocworks/monstermq:latest-compat${ARCH_SUFFIX}${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:${version}-jdk21${ARCH_SUFFIX}${NC}"
+    echo -e "${GREEN}  - rocworks/monstermq:latest-jdk21${ARCH_SUFFIX}${NC}"
 fi
 
 # Handle publishing based on mode
@@ -141,8 +201,8 @@ if [ "$SHOULD_PUSH" = true ]; then
     else
         docker push rocworks/monstermq:latest$ARCH_SUFFIX
         docker push rocworks/monstermq:$version$ARCH_SUFFIX
-        docker push rocworks/monstermq:latest-compat$ARCH_SUFFIX
-        docker push rocworks/monstermq:$version-compat$ARCH_SUFFIX
+        docker push rocworks/monstermq:latest-jdk21$ARCH_SUFFIX
+        docker push rocworks/monstermq:$version-jdk21$ARCH_SUFFIX
     fi
     echo -e "${GREEN}✓ Docker image(s) pushed successfully${NC}"
 else
@@ -152,8 +212,8 @@ else
     else
         echo "  docker push rocworks/monstermq:latest$ARCH_SUFFIX"
         echo "  docker push rocworks/monstermq:$version$ARCH_SUFFIX"
-        echo "  docker push rocworks/monstermq:latest-compat$ARCH_SUFFIX"
-        echo "  docker push rocworks/monstermq:$version-compat$ARCH_SUFFIX"
+        echo "  docker push rocworks/monstermq:latest-jdk21$ARCH_SUFFIX"
+        echo "  docker push rocworks/monstermq:$version-jdk21$ARCH_SUFFIX"
     fi
 fi
 
