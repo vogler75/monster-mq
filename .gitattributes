@@ -1,0 +1,9 @@
+docker/entrypoint.sh text eol=lf
+docker/build text eol=lf
+docker/run text eol=lf
+docker/run-sqlite text eol=lf
+docker/push text eol=lf
+release.sh text eol=lf
+broker/run.sh text eol=lf
+broker/start_cluster.sh text eol=lf
+broker/stop_cluster.sh text eol=lf

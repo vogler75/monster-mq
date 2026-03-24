@@ -511,6 +511,27 @@
         },
         "required": ["Name","TopicFilter","LastValType","ArchiveType"]
       }
+    },
+    "Features": {
+      "type": "object",
+      "description": "Enable or disable optional broker features. All features are enabled by default; set a feature to false to disable it.",
+      "properties": {
+        "OpcUa": { "type": "boolean", "default": true, "description": "OPC UA client device bridge" },
+        "OpcUaServer": { "type": "boolean", "default": true, "description": "OPC UA server" },
+        "MqttClient": { "type": "boolean", "default": true, "description": "MQTT client bridge" },
+        "Kafka": { "type": "boolean", "default": true, "description": "Kafka client bridge" },
+        "Nats": { "type": "boolean", "default": true, "description": "NATS client bridge" },
+        "Telegram": { "type": "boolean", "default": true, "description": "Telegram client bridge" },
+        "WinCCOa": { "type": "boolean", "default": true, "description": "WinCC OA client bridge" },
+        "WinCCUa": { "type": "boolean", "default": true, "description": "WinCC Unified client bridge" },
+        "Plc4x": { "type": "boolean", "default": true, "description": "PLC4X industrial protocol bridge" },
+        "Neo4j": { "type": "boolean", "default": true, "description": "Neo4j graph database bridge" },
+        "JdbcLogger": { "type": "boolean", "default": true, "description": "JDBC logger device" },
+        "SparkplugB": { "type": "boolean", "default": true, "description": "SparkplugB decoder" },
+        "FlowEngine": { "type": "boolean", "default": true, "description": "Flow engine for automation workflows" },
+        "Agents": { "type": "boolean", "default": true, "description": "AI agent extension" }
+      },
+      "additionalProperties": false
     }
   },
   "required": [

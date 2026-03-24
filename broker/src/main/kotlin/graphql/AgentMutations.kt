@@ -28,7 +28,6 @@ class AgentMutations(
     fun createAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
                 val name = input["name"] as? String ?: ""

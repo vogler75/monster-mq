@@ -1,5 +1,6 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
@@ -26,6 +27,8 @@ class FlowMutations(
     fun createClass(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled("FlowEngine"))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("FlowEngine feature is not enabled on this node"))) }
 
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
@@ -237,6 +240,8 @@ class FlowMutations(
                 val name = input["name"] as String
                 val namespace = input["namespace"] as String
                 val nodeId = input["nodeId"] as String
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("FlowEngine"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("FlowEngine feature is not enabled on node $nodeId"))) }
                 val flowClassId = input["flowClassId"] as String
                 val enabled = input["enabled"] as? Boolean ?: true
 
@@ -423,6 +428,8 @@ class FlowMutations(
                 val name = env.getArgument<String>("name")!!
                 val newNodeId = env.getArgument<String>("nodeId")!!
 
+                if (!Monster.getEnabledFeaturesForNode(newNodeId).contains("FlowEngine"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("FlowEngine feature is not enabled on node $newNodeId"))) }
                 deviceStore.reassignDevice(name, newNodeId).onComplete { result ->
                     if (result.succeeded() && result.result() != null) {
                         future.complete(flowInstanceToMap(result.result()!!))

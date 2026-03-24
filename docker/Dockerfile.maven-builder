@@ -1,0 +1,18 @@
+FROM ghcr.io/graalvm/jdk-community:21
+
+# Install required tools
+RUN microdnf install -y gzip tar curl && \
+    microdnf clean all
+
+# Download and install Maven
+ENV MAVEN_VERSION=3.9.14
+ENV MAVEN_HOME=/opt/apache-maven-${MAVEN_VERSION}
+ENV PATH="${MAVEN_HOME}/bin:${PATH}"
+
+RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz | tar xz -C /opt
+
+# Set working directory
+WORKDIR /app/broker
+
+# Verify installation
+RUN java -version && mvn --version

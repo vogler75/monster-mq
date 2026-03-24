@@ -29,7 +29,6 @@ class WinCCUaClientConfigMutations(
     fun createWinCCUaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -38,6 +37,8 @@ class WinCCUaClientConfigMutations(
 
                 // Parse input
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("WinCCUa"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCUa feature is not enabled on node ${request.nodeId}"))) }
                 val validationErrors = request.validate()
 
                 if (validationErrors.isNotEmpty()) {
@@ -391,6 +392,8 @@ class WinCCUaClientConfigMutations(
                     return@DataFetcher future
                 }
 
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("WinCCUa"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCUa feature is not enabled on node $nodeId"))) }
                 deviceStore.reassignDevice(name, nodeId).onComplete { result ->
                     if (result.succeeded()) {
                         val updatedDevice = result.result()

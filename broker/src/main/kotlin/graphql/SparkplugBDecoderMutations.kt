@@ -28,7 +28,6 @@ class SparkplugBDecoderMutations(
     fun createSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
-
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -37,6 +36,8 @@ class SparkplugBDecoderMutations(
 
                 // Parse input
                 val request = parseDeviceConfigRequest(input)
+                if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("SparkplugB"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on node ${request.nodeId}"))) }
                 val validationErrors = request.validate()
 
                 if (validationErrors.isNotEmpty()) {
@@ -372,6 +373,8 @@ class SparkplugBDecoderMutations(
                     return@DataFetcher future
                 }
 
+                if (!Monster.getEnabledFeaturesForNode(nodeId).contains("SparkplugB"))
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on node $nodeId"))) }
                 deviceStore.getDevice(name).onComplete { existingResult ->
                     if (existingResult.failed() || existingResult.result() == null) {
                         future.complete(

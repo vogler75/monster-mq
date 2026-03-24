@@ -406,6 +406,7 @@ class GraphQLDashboardClient {
                 brokers {
                     nodeId
                     version
+                    enabledFeatures
                     userManagementEnabled
                     metrics {
                         messagesIn
@@ -455,12 +456,30 @@ class GraphQLDashboardClient {
         }
     }
 
+    async getEnabledFeatures() {
+        const query = `
+            query GetBrokerFeatures {
+                broker {
+                    enabledFeatures
+                }
+            }
+        `;
+        try {
+            const result = await this.query(query);
+            return result.broker?.enabledFeatures ?? [];
+        } catch (error) {
+            console.warn('Failed to fetch enabled features:', error);
+            return [];
+        }
+    }
+
     async getBrokersWithHistory(lastMinutes = null, from = null, to = null) {
         const query = `
             query GetBrokersWithHistory($lastMinutes: Int, $from: String, $to: String) {
                 brokers {
                     nodeId
                     version
+                    enabledFeatures
                     metrics {
                         messagesIn
                         messagesOut
