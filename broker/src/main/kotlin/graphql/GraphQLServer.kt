@@ -44,6 +44,8 @@ import at.rocworks.graphql.AgentQueries
 import at.rocworks.graphql.AgentMutations
 import at.rocworks.graphql.McpServerQueries
 import at.rocworks.graphql.McpServerMutations
+import at.rocworks.graphql.GenAiProviderQueries
+import at.rocworks.graphql.GenAiProviderMutations
 import at.rocworks.graphql.TopicSchemaQueries
 import at.rocworks.graphql.TopicSchemaMutations
 import at.rocworks.schema.TopicSchemaPolicyCache
@@ -221,8 +223,11 @@ class GraphQLServer(
             // Suppress broken pipe errors from browsers closing connections early
             router.route("/*").failureHandler { ctx ->
                 val cause = ctx.failure()
-                if (cause is java.io.IOException && cause.message?.contains("Broken pipe") == true) {
-                    logger.fine("Client disconnected (broken pipe)")
+                val msg = cause?.message ?: ""
+                val isAbortedConnection = cause is java.io.IOException &&
+                    (msg.contains("Broken pipe") || msg.contains("connection was aborted") || msg.contains("Connection reset"))
+                if (isAbortedConnection) {
+                    logger.fine("Client disconnected early: $msg")
                 } else {
                     ctx.next()
                 }
@@ -264,7 +269,8 @@ class GraphQLServer(
             "schema-genai.graphqls",       // GenAI integration
             "schema-topic-schema.graphqls", // Topic Schema Governance
             "schema-agents.graphqls",      // AI Agents
-            "schema-mcp-servers.graphqls"   // MCP Servers
+            "schema-mcp-servers.graphqls",  // MCP Servers
+            "schema-genai-providers.graphqls" // GenAI Providers
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -398,12 +404,16 @@ class GraphQLServer(
         } else null
 
         // Initialize AI Agent resolvers
-        val agentQueries = deviceStore?.let { AgentQueries(vertx, it) }
+        val agentQueries = deviceStore?.let { AgentQueries(vertx, it, config) }
         val agentMutations = deviceStore?.let { AgentMutations(vertx, it) }
 
         // Initialize MCP Server resolvers
         val mcpServerQueries = deviceStore?.let { McpServerQueries(vertx, it) }
         val mcpServerMutations = deviceStore?.let { McpServerMutations(vertx, it) }
+
+        // Initialize GenAI Provider resolvers
+        val genAiProviderQueries = deviceStore?.let { GenAiProviderQueries(vertx, it, config) }
+        val genAiProviderMutations = deviceStore?.let { GenAiProviderMutations(vertx, it) }
 
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
@@ -541,6 +551,7 @@ class GraphQLServer(
                         agentQueries?.let { resolver ->
                             dataFetcher("agents", resolver.agents())
                             dataFetcher("agent", resolver.agent())
+                            dataFetcher("configuredProviders", resolver.configuredProviders())
                         }
                     }
                     // MCP Server queries
@@ -548,6 +559,13 @@ class GraphQLServer(
                         mcpServerQueries?.let { resolver ->
                             dataFetcher("mcpServers", resolver.mcpServers())
                             dataFetcher("mcpServer", resolver.mcpServer())
+                        }
+                    }
+                    // GenAI Provider queries
+                    .apply {
+                        genAiProviderQueries?.let { resolver ->
+                            dataFetcher("genAiProviders", resolver.genAiProviders())
+                            dataFetcher("genAiProvider", resolver.genAiProvider())
                         }
                     }
                     // GenAI queries
@@ -775,6 +793,16 @@ class GraphQLServer(
                     .apply {
                         mcpServerMutations?.let { _ ->
                             dataFetcher("mcpServer") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // GenAI Provider mutations - grouped under genAiProvider
+                    .apply {
+                        genAiProviderMutations?.let { _ ->
+                            dataFetcher("genAiProvider") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -1220,6 +1248,16 @@ class GraphQLServer(
                         dataFetcher("create", resolver.createMcpServer())
                         dataFetcher("update", resolver.updateMcpServer())
                         dataFetcher("delete", resolver.deleteMcpServer())
+                    }
+                }
+            }
+            // Register GenAI Provider Mutations type
+            .type("GenAiProviderMutations") { builder ->
+                builder.apply {
+                    genAiProviderMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createProvider())
+                        dataFetcher("update", resolver.updateProvider())
+                        dataFetcher("delete", resolver.deleteProvider())
                     }
                 }
             }

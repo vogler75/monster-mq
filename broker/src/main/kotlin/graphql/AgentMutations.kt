@@ -30,9 +30,11 @@ class AgentMutations(
             val future = CompletableFuture<Map<String, Any?>>()
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
-                val targetNodeId = input["nodeId"] as String
-                if (!Monster.getEnabledFeaturesForNode(targetNodeId).contains("Agents"))
-                    return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Agents feature is not enabled on node $targetNodeId"))) }
+                val name = input["name"] as? String ?: ""
+                if (!name.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
+                    future.completeExceptionally(RuntimeException("Invalid agent name '${name}': only letters, digits, underscores, and hyphens are allowed (no spaces)"))
+                    return@DataFetcher future
+                }
                 val deviceConfig = inputToDeviceConfig(input)
 
                 deviceStore.saveDevice(deviceConfig).onComplete { result ->
@@ -178,8 +180,11 @@ class AgentMutations(
             cronIntervalMs = (input["cronIntervalMs"] as? Number)?.toLong(),
             cronPrompt = input["cronPrompt"] as? String,
             provider = input["provider"] as? String ?: "gemini",
+            providerName = input["providerName"] as? String,
             model = input["model"] as? String,
             apiKey = input["apiKey"] as? String,
+            endpoint = input["endpoint"] as? String,
+            serviceVersion = input["serviceVersion"] as? String,
             systemPrompt = input["systemPrompt"] as? String ?: "",
             maxTokens = (input["maxTokens"] as? Number)?.toInt(),
             temperature = (input["temperature"] as? Number)?.toDouble() ?: 0.7,
@@ -225,8 +230,11 @@ class AgentMutations(
             cronIntervalMs = if (input.containsKey("cronIntervalMs")) (input["cronIntervalMs"] as? Number)?.toLong() else existingConfig.cronIntervalMs,
             cronPrompt = if (input.containsKey("cronPrompt")) input["cronPrompt"] as? String else existingConfig.cronPrompt,
             provider = input["provider"] as? String ?: existingConfig.provider,
+            providerName = if (input.containsKey("providerName")) input["providerName"] as? String else existingConfig.providerName,
             model = if (input.containsKey("model")) input["model"] as? String else existingConfig.model,
             apiKey = if (input.containsKey("apiKey")) input["apiKey"] as? String else existingConfig.apiKey,
+            endpoint = if (input.containsKey("endpoint")) input["endpoint"] as? String else existingConfig.endpoint,
+            serviceVersion = if (input.containsKey("serviceVersion")) input["serviceVersion"] as? String else existingConfig.serviceVersion,
             systemPrompt = input["systemPrompt"] as? String ?: existingConfig.systemPrompt,
             maxTokens = if (input.containsKey("maxTokens")) (input["maxTokens"] as? Number)?.toInt() else existingConfig.maxTokens,
             temperature = (input["temperature"] as? Number)?.toDouble() ?: existingConfig.temperature,

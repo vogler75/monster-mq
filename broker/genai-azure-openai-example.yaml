@@ -1,0 +1,78 @@
+# Azure OpenAI Configuration Example for MonsterMQ
+# Add this section to your config.yaml to enable Azure OpenAI for agents and the AI assistant
+
+# Enable GraphQL server (required for GenAI to work)
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+  CorsEnabled: true
+
+# GenAI Configuration with Azure OpenAI
+GenAI:
+  Enabled: true
+
+  # Configure the Azure OpenAI provider under Providers.AzureOpenAI
+  Providers:
+    AzureOpenAI:
+      ApiKey: "${AZURE_OPENAI_API_KEY}"
+      # Azure OpenAI endpoint URL from Azure Portal > Your Resource > Keys and Endpoint
+      # Format: https://<resource-name>.openai.azure.com/
+      Endpoint: "${AZURE_OPENAI_ENDPOINT}"
+      # Default deployment name (used when no model is specified on an agent)
+      Deployment: "gpt-4o"
+      # Azure OpenAI REST API version (optional, falls back to SDK default)
+      # See https://learn.microsoft.com/azure/ai-services/openai/api-version-lifecycle
+      ServiceVersion: "2024-12-01-preview"
+
+  # Use azure-openai as the internal AI assistant provider
+  Assistant:
+    Provider: "azure-openai"         # gemini | claude | openai | ollama | azure-openai
+    Model: "gpt-4o"                   # deployment name in Azure OpenAI
+    Temperature: 0.7
+    DocsPath: "docs"
+
+# ========================================
+# Azure OpenAI Setup Steps
+# ========================================
+#
+# 1. Create Azure OpenAI Resource:
+#    - Go to Azure Portal (https://portal.azure.com)
+#    - Create an "Azure OpenAI" resource
+#    - Copy the endpoint URL and API key from "Keys and Endpoint"
+#
+# 2. Deploy a Model:
+#    - Go to Azure OpenAI Studio (https://oai.azure.com)
+#    - Go to "Deployments" > "Create new deployment"
+#    - Choose a model (e.g., gpt-4o) and give it a deployment name
+#
+# 3. Set Environment Variables:
+#    Windows PowerShell:
+#      $env:AZURE_OPENAI_API_KEY="your-api-key-from-azure"
+#      $env:AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+#
+#    Linux/Mac:
+#      export AZURE_OPENAI_API_KEY="your-api-key-from-azure"
+#      export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+#
+# 4. To use Azure OpenAI for an agent, set provider="azure-openai" and
+#    model="<deployment-name>". Optionally set endpoint per-agent to override
+#    the global Providers.AzureOpenAI.Endpoint setting.
+#
+# ========================================
+# Recommended Models
+# ========================================
+#
+# - gpt-4o: Best balance of speed and quality
+# - gpt-4: Highest quality, slower
+# - gpt-4-turbo: Fast with good quality
+# - gpt-35-turbo: Fastest, lower cost, good for simple tasks
+#
+# ========================================
+# Pricing Note
+# ========================================
+#
+# Azure OpenAI charges per token (input + output).
+# Monitor usage in Azure Portal > Cost Management.
+# Set maxTokens on your agents to control costs.
+

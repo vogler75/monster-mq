@@ -100,10 +100,11 @@ class SidebarManager {
             {
                 section: 'Agents', sectionIcon: 'rocket',
                 items: [
-                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor', feature: 'Agents' },
-                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph', feature: 'Agents' },
-                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents', feature: 'Agents' },
-            { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers', feature: 'Agents' }
+                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
+                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
+                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
+                    { href: '/pages/genai-providers.html', icon: 'hierarchy', text: 'AI Providers' },
+                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
                 ]
             },
             {

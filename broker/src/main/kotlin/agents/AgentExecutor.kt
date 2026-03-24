@@ -91,14 +91,47 @@ class AgentExecutor(
     override fun start(startPromise: Promise<Void>) {
         try {
             agentConfig = AgentConfig.fromJsonObject(deviceConfig.config)
-            logger.fine("Starting agent ${deviceConfig.name} (provider: ${agentConfig.provider}, trigger: ${agentConfig.triggerType})")
+            logger.fine("Starting agent ${deviceConfig.name} (provider: ${agentConfig.providerName ?: agentConfig.provider}, trigger: ${agentConfig.triggerType})")
 
             globalConfig = vertx.orCreateContext.config()
 
             // Create LLM model with logging listener
             val llmListener = createLlmListener()
-            chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
 
+            if (!agentConfig.providerName.isNullOrBlank()) {
+                // Look up the named GenAI provider from the device store
+                val store = DeviceConfigStoreFactory.getSharedInstance()
+                if (store != null) {
+                    store.getDevice(agentConfig.providerName!!)
+                        .onComplete { result ->
+                            chatModel = if (result.succeeded() && result.result() != null) {
+                                val providerConfig = GenAiProviderConfig.fromJsonObject(result.result()!!.config)
+                                LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
+                            } else {
+                                logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
+                                LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                            }
+                            doStart(startPromise)
+                        }
+                } else {
+                    logger.warning("Device store not available, falling back to direct config for provider '${agentConfig.providerName}'")
+                    chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                    doStart(startPromise)
+                }
+            } else {
+                chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                doStart(startPromise)
+            }
+
+        } catch (e: Exception) {
+            logger.severe("Failed to start agent ${deviceConfig.name}: ${e.message}")
+            e.printStackTrace()
+            startPromise.fail(e)
+        }
+    }
+
+    private fun doStart(startPromise: Promise<Void>) {
+        try {
             // Create tools
             val archiveHandler = Monster.getArchiveHandler()
             val sessionHandler = Monster.getSessionHandler()

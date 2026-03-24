@@ -23,10 +23,15 @@ GenAI:
       ApiKey: "${OPENAI_API_KEY}"
     Ollama:
       BaseUrl: "http://localhost:11434"
+    AzureOpenAI:
+      ApiKey: "${AZURE_OPENAI_API_KEY}"
+      Endpoint: "${AZURE_OPENAI_ENDPOINT}"   # e.g. https://<resource>.openai.azure.com/
+      Deployment: "gpt-4o"                    # default deployment name used as model
+      ServiceVersion: "2024-12-01-preview"    # Azure OpenAI API version (optional)
 
   # Internal AI assistant (script editor, topic analysis)
   Assistant:
-    Provider: "gemini"              # gemini | claude | openai | ollama
+    Provider: "gemini"              # gemini | claude | openai | ollama | azure-openai
     Model: "gemini-2.5-flash"
     Temperature: 0.7
     DocsPath: "docs"

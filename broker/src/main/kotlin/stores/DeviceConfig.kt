@@ -36,6 +36,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_TOPIC_SCHEMA_POLICY = "TopicSchema-Policy"
         const val DEVICE_TYPE_TOPIC_NAMESPACE = "TopicNamespace"
         const val DEVICE_TYPE_AGENT = "Agent"
+        const val DEVICE_TYPE_GENAI_PROVIDER = "GenAiProvider"
         const val DEVICE_TYPE_MCP_SERVER = "MCP-Server"
 
         fun fromJsonObject(json: JsonObject): DeviceConfig {
