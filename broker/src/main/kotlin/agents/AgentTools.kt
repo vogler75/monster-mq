@@ -31,6 +31,7 @@ class AgentTools(
     private val toolLogger: ((String, String, String) -> Unit)? = null,
     private val vertx: Vertx? = null,
     private val taskTimeoutMs: Long = 60000,
+    private val getCurrentTaskId: (() -> String?)? = null,
     private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
     private val subAgents: List<String> = emptyList()
 ) {
@@ -338,9 +339,11 @@ class AgentTools(
                 .put("input", input)
                 .put("replyTo", replyTo)
                 .put("callerAgent", agentName)
+            val parentTaskId = getCurrentTaskId?.invoke()
+            if (parentTaskId != null) taskJson.put("parentTaskId", parentTaskId)
             if (skill != null) taskJson.put("skill", skill)
 
-            val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox", taskJson.encode())
+            val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox/$taskId", taskJson.encode())
             sessionHandler.publishMessage(msg)
 
             logger.fine("Agent $agentName sent task $taskId to agent $targetAgent")

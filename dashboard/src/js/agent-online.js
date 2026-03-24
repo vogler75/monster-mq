@@ -10,7 +10,7 @@ class AgentOnlineGraphManager {
         this.ws = null;
         this.subscriptionId = 0;
         this.reconnectTimer = null;
-        this.layoutType = 'force';
+        this.layoutType = 'circular';
 
         this.STATUS_COLORS = {
             running: '#10B981',
@@ -135,8 +135,9 @@ class AgentOnlineGraphManager {
 
     parseInboxTopic(topic) {
         const p = topic.split('/');
+        // Accept both inbox (7 segments) and inbox/{taskId} (8 segments)
         if (p.length < 7 || p[0] !== 'a2a' || p[4] !== 'agents' || p[6] !== 'inbox') return null;
-        return { org: p[2], site: p[3], agentId: p[5] };
+        return { org: p[2], site: p[3], agentId: p[5], taskId: p[7] || null };
     }
 
     parseJSON(payload) {
@@ -202,7 +203,7 @@ class AgentOnlineGraphManager {
     subscribeToUpdates() {
         this.subscriptionId++;
         const query = `subscription {
-            topicUpdates(topicFilters: ["a2a/v1/+/+/discovery/+", "a2a/v1/+/+/agents/+/health", "a2a/v1/+/+/agents/+/inbox"]) {
+            topicUpdates(topicFilters: ["a2a/v1/+/+/discovery/+", "a2a/v1/+/+/agents/+/health", "a2a/v1/+/+/agents/+/inbox", "a2a/v1/+/+/agents/+/inbox/+"]) {
                 topic payload format timestamp
             }
         }`;
@@ -237,7 +238,7 @@ class AgentOnlineGraphManager {
                     this.agents.set(parsed.agentId, { ...existing, health });
                 }
             }
-        } else if (topic.endsWith('/inbox')) {
+        } else if (topic.includes('/inbox')) {
             this.processInboxMessage(topic, update.payload, update.timestamp || Date.now());
         }
 

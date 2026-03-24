@@ -70,10 +70,14 @@ class AgentExecutor(
     private val mcpClients = mutableListOf<McpClient>()
 
     // Pending tasks: taskId -> PendingTask (for timeout monitoring and correlation)
-    data class PendingTask(val targetAgent: String, val input: String, val submittedAt: Long = System.currentTimeMillis())
-    data class CollectedResult(val targetAgent: String, val taskId: String, val input: String, val status: String, val result: String)
+    data class PendingTask(val targetAgent: String, val input: String, val parentTaskId: String? = null, val submittedAt: Long = System.currentTimeMillis())
+    data class CollectedResult(val targetAgent: String, val taskId: String, val parentTaskId: String?, val input: String, val status: String, val result: String)
     private val pendingTasks = ConcurrentHashMap<String, PendingTask>()
     private val collectedResults = java.util.concurrent.ConcurrentLinkedQueue<CollectedResult>()
+
+    // The task ID currently being processed by this agent (set on event loop, read from worker thread)
+    @Volatile
+    private var currentTaskId: String? = null
 
     // Metrics
     private val messagesProcessed = AtomicLong(0)
@@ -146,7 +150,8 @@ class AgentExecutor(
                 toolLogger = { name, args, result -> publishToolLog(name, args, result) },
                 vertx = vertx,
                 taskTimeoutMs = agentConfig.taskTimeoutMs,
-                registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input) },
+                getCurrentTaskId = { currentTaskId },
+                registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
                 subAgents = agentConfig.subAgents
             )
 
@@ -527,20 +532,28 @@ class AgentExecutor(
             logger.info("Agent $agentName inbox message [${msg.topicName}]: ${String(msg.payload, Charsets.UTF_8).take(500)}")
         }
 
-        // 1. Check incoming tasks (this agent being invoked by another agent) — each task is independent
+        // 1. Messages on inbox sub-topics (inbox/{taskId}) — data-driven routing
+        if (msg.topicName.startsWith("$inboxPrefix/")) {
+            val taskId = msg.topicName.substringAfterLast("/")
+            if (pendingTasks.containsKey(taskId)) {
+                // Reply to a sub-agent task we submitted
+                handleSubAgentReply(msg)
+            } else {
+                // New incoming task (from another agent or forwarded input)
+                chatMemory?.clear()
+                handleTaskMessage(msg)
+            }
+            return
+        }
+
+        // 2. Backward compat: base inbox topic (external agents may still use it)
         if (msg.topicName == inboxPrefix) {
             chatMemory?.clear()
             handleTaskMessage(msg)
             return
         }
 
-        // 2. Check sub-agent reply (inbox/{taskId} — response from a task we submitted)
-        if (msg.topicName.startsWith("$inboxPrefix/")) {
-            handleSubAgentReply(msg)
-            return
-        }
-
-        // 3. Normal MQTT input topic — pack into a task JSON and republish to the agent's inbox
+        // 3. Normal MQTT input topic — forward to inbox/{taskId}
         forwardInputToInbox(msg)
     }
 
@@ -565,7 +578,7 @@ class AgentExecutor(
             .put("input", inputValue)
             .put("sourceTopic", msg.topicName)
 
-        val inboxMsg = BrokerMessage(clientId, a2aInboxTopic(), taskJson.encode())
+        val inboxMsg = BrokerMessage(clientId, "${a2aInboxTopic()}/$taskId", taskJson.encode())
         logger.fine("Agent $agentName forwarding input topic [${msg.topicName}] to inbox as task $taskId")
         sessionHandler.publishMessage(inboxMsg)
     }
@@ -593,7 +606,7 @@ class AgentExecutor(
 
         // Remove from pending tasks and collect the result
         val pending = pendingTasks.remove(taskId) ?: return
-        collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.input, status, result))
+        collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, status, result))
 
         logger.info("Agent $agentName collected reply for task $taskId from ${pending.targetAgent} (status=$status, remaining=${pendingTasks.size})")
 
@@ -615,7 +628,8 @@ class AgentExecutor(
         if (results.isEmpty()) return
 
         val resultText = results.joinToString("\n\n") { r ->
-            "Agent '${r.targetAgent}' (taskId=${r.taskId}, status=${r.status}, request='${r.input.take(100)}'):\n${r.result}"
+            val parentInfo = if (r.parentTaskId != null) ", parentTaskId=${r.parentTaskId}" else ""
+            "Agent '${r.targetAgent}' (taskId=${r.taskId}$parentInfo, status=${r.status}, request='${r.input.take(100)}'):\n${r.result}"
         }
 
         val userMessage = "[Sub-agent results received]\n$resultText\n\n[All tasks complete. Summarize the results and respond to the user. Do NOT invoke more agents unless the user explicitly asks.]"
@@ -632,7 +646,7 @@ class AgentExecutor(
             timedOut.forEach { (taskId, pending) ->
                 pendingTasks.remove(taskId)
                 logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${timeoutMs / 1000}s")
-                collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.input, "timeout",
+                collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, "timeout",
                     "Agent '${pending.targetAgent}' did not respond within ${timeoutMs / 1000} seconds"))
             }
             // If timeouts cleared all pending tasks, resume with whatever we have
@@ -674,6 +688,7 @@ class AgentExecutor(
             }
 
             val taskId = taskJson.getString("taskId") ?: Utils.getUuid()
+            val parentTaskId = taskJson.getString("parentTaskId")
             // Use "input" field if present (MonsterMQ format), otherwise pass the full JSON to the LLM.
             // Input can be a string, JSON object, or JSON array — serialize structured types.
             val input = when (val raw = taskJson.getValue("input")) {
@@ -690,8 +705,11 @@ class AgentExecutor(
 
             logger.info("Agent ${deviceConfig.name} received task $taskId from $callerAgent (replyTo=$replyTo)")
 
+            // Track the current task ID so sub-agent calls can reference it as parentTaskId
+            currentTaskId = taskId
+
             // Publish working status
-            publishTaskStatus(taskId, "working")
+            publishTaskStatus(taskId, "working", parentTaskId)
 
             // Build the user message for the LLM
             val header = buildString {
@@ -704,25 +722,28 @@ class AgentExecutor(
 
             // Execute the agent with a callback to publish the result
             executeAgentWithCallback(taskMessage, "task:$taskId") { response, error ->
+                currentTaskId = null
                 val sessionHandler = Monster.getSessionHandler() ?: return@executeAgentWithCallback
                 if (error != null) {
                     // Publish error response
                     val errorJson = JsonObject()
                         .put("taskId", taskId)
                         .put("status", "failed")
+                        .put("agent", agentName)
                         .put("error", error)
                     val responseMsg = BrokerMessage(clientId, replyTo, errorJson.encode())
                     sessionHandler.publishMessage(responseMsg)
-                    publishTaskStatus(taskId, "failed")
+                    publishTaskStatus(taskId, "failed", parentTaskId)
                 } else {
                     // Publish success response
                     val resultJson = JsonObject()
                         .put("taskId", taskId)
                         .put("status", "completed")
+                        .put("agent", agentName)
                         .put("result", response)
                     val responseMsg = BrokerMessage(clientId, replyTo, resultJson.encode())
                     sessionHandler.publishMessage(responseMsg)
-                    publishTaskStatus(taskId, "completed")
+                    publishTaskStatus(taskId, "completed", parentTaskId)
                     // Also publish to configured output topics
                     if (response != null) publishResponse(response)
                 }
@@ -732,13 +753,14 @@ class AgentExecutor(
         }
     }
 
-    private fun publishTaskStatus(taskId: String, status: String) {
+    private fun publishTaskStatus(taskId: String, status: String, parentTaskId: String? = null) {
         val sessionHandler = Monster.getSessionHandler() ?: return
         val statusJson = JsonObject()
             .put("taskId", taskId)
             .put("status", status)
             .put("agent", deviceConfig.name)
             .put("timestamp", Instant.now().toString())
+        if (parentTaskId != null) statusJson.put("parentTaskId", parentTaskId)
         val msg = BrokerMessage(clientId, a2aStatusTopic(taskId), statusJson.encode())
         sessionHandler.publishMessage(msg)
     }
