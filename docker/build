@@ -18,6 +18,7 @@ TESTING=false
 PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
 DOCKER_ONLY=false   # skip Maven build if true
 CONTAINER_BUILD=false  # build Maven inside Docker container
+CLEAN=false  # clean output directories before build
 
 for arg in "$@"; do
     case $arg in
@@ -36,14 +37,18 @@ for arg in "$@"; do
         -y)
             PUBLISH_MODE="yes"
             ;;
+        --clean|-clean)
+            CLEAN=true
+            ;;
         *)
             echo "Unknown argument: $arg"
-            echo "Usage: $0 [--testing|-t] [-d] [-c|--container] [-n] [-y]"
+            echo "Usage: $0 [--testing|-t] [-d] [-c|--container] [-n] [-y] [--clean]"
             echo "  --testing, -t      Build testing image"
             echo "  -d                 Docker only (skip Maven build)"
             echo "  -c, --container    Build Maven inside Docker container (GraalVM 21)"
             echo "  -n                 Do not publish to Docker Hub"
             echo "  -y                 Publish to Docker Hub without asking"
+            echo "  --clean            Clean output directories before build"
             exit 1
             ;;
     esac
@@ -57,6 +62,16 @@ else
     echo -e "${YELLOW}Building Docker image for MonsterMQ v${version}...${NC}"
 fi
 
+# Clean output directories if requested
+if [ "$CLEAN" = true ]; then
+    echo -e "${YELLOW}Cleaning output directories...${NC}"
+    rm -rf ../broker/target
+    rm -rf ../dashboard/dist
+    rm -rf ../dashboard/node_modules
+    rm -rf target
+    echo -e "${GREEN}✓ Output directories cleaned${NC}"
+fi
+
 # Build the broker with Maven (unless -d flag is set)
 if [ "$DOCKER_ONLY" = false ]; then
     # Build dashboard and copy to broker resources
@@ -67,6 +82,7 @@ if [ "$DOCKER_ONLY" = false ]; then
     if [ "$CONTAINER_BUILD" = true ]; then
         echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
         docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "${DASHBOARD_DIR}:/app/dashboard" \
             -w /app/dashboard \
             node:22-slim \
