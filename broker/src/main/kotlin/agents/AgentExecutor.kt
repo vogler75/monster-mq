@@ -540,11 +540,34 @@ class AgentExecutor(
             return
         }
 
-        // 3. Normal MQTT message handling — new user request, clear history to avoid re-executing old actions
-        chatMemory?.clear()
-        val payloadStr = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
-        val userMessage = "[Topic: ${msg.topicName}] $payloadStr"
-        executeAgent(userMessage, msg.topicName)
+        // 3. Normal MQTT input topic — pack into a task JSON and republish to the agent's inbox
+        forwardInputToInbox(msg)
+    }
+
+    private fun forwardInputToInbox(msg: BrokerMessage) {
+        val sessionHandler = Monster.getSessionHandler() ?: return
+        val payloadStr = String(msg.payload, Charsets.UTF_8)
+        val taskId = Utils.getUuid()
+
+        // Try to parse as JSON; embed as JSON if valid, otherwise as text
+        val inputValue: Any = try {
+            JsonObject(payloadStr)
+        } catch (_: Exception) {
+            try {
+                JsonArray(payloadStr)
+            } catch (_: Exception) {
+                payloadStr
+            }
+        }
+
+        val taskJson = JsonObject()
+            .put("taskId", taskId)
+            .put("input", inputValue)
+            .put("sourceTopic", msg.topicName)
+
+        val inboxMsg = BrokerMessage(clientId, a2aInboxTopic(), taskJson.encode())
+        logger.fine("Agent $agentName forwarding input topic [${msg.topicName}] to inbox as task $taskId")
+        sessionHandler.publishMessage(inboxMsg)
     }
 
     private fun handleSubAgentReply(msg: BrokerMessage) {
@@ -651,11 +674,19 @@ class AgentExecutor(
             }
 
             val taskId = taskJson.getString("taskId") ?: Utils.getUuid()
-            // Use "input" field if present (MonsterMQ format), otherwise pass the full JSON to the LLM
-            val input = taskJson.getString("input") ?: payload
+            // Use "input" field if present (MonsterMQ format), otherwise pass the full JSON to the LLM.
+            // Input can be a string, JSON object, or JSON array — serialize structured types.
+            val input = when (val raw = taskJson.getValue("input")) {
+                is String -> raw
+                is JsonObject -> raw.encode()
+                is JsonArray -> raw.encode()
+                null -> payload
+                else -> raw.toString()
+            }
             val replyTo = taskJson.getString("replyTo") ?: a2aStatusTopic(taskId)
             val skill = taskJson.getString("skill")
             val callerAgent = taskJson.getString("callerAgent") ?: taskJson.getString("from") ?: "unknown"
+            val sourceTopic = taskJson.getString("sourceTopic")
 
             logger.info("Agent ${deviceConfig.name} received task $taskId from $callerAgent (replyTo=$replyTo)")
 
@@ -663,11 +694,13 @@ class AgentExecutor(
             publishTaskStatus(taskId, "working")
 
             // Build the user message for the LLM
-            val taskMessage = if (skill != null) {
-                "[Task from agent '$callerAgent', taskId=$taskId, skill=$skill]\n$input"
-            } else {
-                "[Task from agent '$callerAgent', taskId=$taskId]\n$input"
+            val header = buildString {
+                append("[Task from agent '$callerAgent', taskId=$taskId")
+                if (skill != null) append(", skill=$skill")
+                if (sourceTopic != null) append(", topic=$sourceTopic")
+                append("]")
             }
+            val taskMessage = "$header\n$input"
 
             // Execute the agent with a callback to publish the result
             executeAgentWithCallback(taskMessage, "task:$taskId") { response, error ->
