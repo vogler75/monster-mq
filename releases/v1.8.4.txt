@@ -1,0 +1,26 @@
+Release v1.8.4
+Built from commit: 5de5d03
+Date: 2026-03-25 05:25:39
+
+Changes since v1.8.3:
+---
+5de5d03 feat: multi-arch Docker images via buildx (amd64 + arm64)
+f29cbdf Fix Add Provider button styling to match Add Agent button
+bce2b5f feat: add parentTaskId tracking and consistent inbox/{taskId} routing
+f44649b Remove stray peer flags from package-lock
+2624e7b Forward MQTT inputs to agent inbox
+436703e feat: add custom endpoint support for OpenAI provider and update UI
+6bff9cf Merge pull request #127 from KevinJoosten/3-add-openai-as-provider
+b4f6816 Merge branch 'develop' into 3-add-openai-as-provider
+bf2e0df Merge pull request #125 from KevinJoosten/8-feat-config-based-feature-flags-for-extension-isolation
+a5b253e fix: container build permissions and add --clean option
+2af4979 feat: add container-based build option (-c flag)
+0d79ee6 Merge pull request #126 from KevinJoosten/9-feat-x86-64-v2-compatible-release-variant-compat-tag
+055777c Add GenAI Providers dashboard page
+ba3799e Add Azure OpenAI provider support and GenAI provider config CRUD
+9da3fc9 Merge branch 'main' into 3-add-openai-as-provider
+96e741c feat: add compat release tag for x86-64-v2 compatible hardware
+58fd720 fix: correct feature label and mismatch detection in nodes table
+96711e7 fix: hide feature-gated dashboard cards and table columns when disabled
+89ac388 feat: config-based feature flags for extension isolation
+6761b54 Add Azure OpenAI provider support
