@@ -83,13 +83,13 @@ class UserStoreSqlite(
         vertx.executeBlocking(Callable {
             try {
                 connection = DriverManager.getConnection("jdbc:sqlite:$path")
-                connection?.autoCommit = false
-                // Enable WAL mode for better concurrency and set busy timeout
+                // WAL mode and busy_timeout must be set before disabling autoCommit (cannot run inside a transaction)
                 connection?.createStatement()?.use { stmt ->
                     stmt.executeUpdate("PRAGMA journal_mode = WAL")
                     stmt.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
                     stmt.executeUpdate("PRAGMA busy_timeout = 60000")
                 }
+                connection?.autoCommit = false
                 createTablesSync()
                 logger.info("SQLite user management store initialized [${Utils.getCurrentFunctionName()}]")
                 true
