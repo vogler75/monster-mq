@@ -281,6 +281,11 @@ class WinCCOaConnector : AbstractVerticle() {
             .setSsl(ssl)
             .addSubProtocol("graphql-transport-ws")
 
+        // Add Authorization header to the HTTP upgrade request if we have a token
+        if (authToken != null) {
+            connectOptions.putHeader("Authorization", "Bearer $authToken")
+        }
+
         wsClient!!.connect(connectOptions)
             .onSuccess { ws: WebSocket ->
                 webSocket = ws
