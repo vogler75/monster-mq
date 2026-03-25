@@ -112,14 +112,28 @@ class AgentExecutor(
                                 val providerConfig = GenAiProviderConfig.fromJsonObject(result.result()!!.config)
                                 LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
                             } else {
-                                logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
-                                LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                // Try config.yaml providers before falling back to direct config
+                                val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
+                                if (configProvider != null) {
+                                    logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
+                                    LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                                } else {
+                                    logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
+                                    LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                }
                             }
                             doStart(startPromise)
                         }
                 } else {
-                    logger.warning("Device store not available, falling back to direct config for provider '${agentConfig.providerName}'")
-                    chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                    // No device store — try config.yaml providers
+                    val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
+                    if (configProvider != null) {
+                        logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
+                        chatModel = LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                    } else {
+                        logger.warning("Device store not available, falling back to direct config for provider '${agentConfig.providerName}'")
+                        chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                    }
                     doStart(startPromise)
                 }
             } else {
@@ -132,6 +146,33 @@ class AgentExecutor(
             e.printStackTrace()
             startPromise.fail(e)
         }
+    }
+
+    /**
+     * Resolves a GenAiProviderConfig from config.yaml's GenAI.Providers section by name.
+     */
+    private fun resolveConfigYamlProvider(name: String, globalConfig: JsonObject): GenAiProviderConfig? {
+        val providers = globalConfig.getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+        val section = providers.getJsonObject(name) ?: return null
+        val keyToType = mapOf(
+            "AzureOpenAI" to "azure-openai",
+            "Gemini"      to "gemini",
+            "Claude"      to "claude",
+            "OpenAI"      to "openai",
+            "Ollama"      to "ollama"
+        )
+        val type = keyToType[name] ?: name.lowercase()
+        return GenAiProviderConfig(
+            type = type,
+            model = section.getString("Model"),
+            apiKey = section.getString("ApiKey"),
+            endpoint = section.getString("Endpoint"),
+            serviceVersion = section.getString("ServiceVersion"),
+            baseUrl = section.getString("BaseUrl"),
+            temperature = section.getDouble("Temperature", 0.7),
+            maxTokens = section.getInteger("MaxTokens")
+        )
     }
 
     private fun doStart(startPromise: Promise<Void>) {

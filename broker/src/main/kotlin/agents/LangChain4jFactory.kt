@@ -30,12 +30,13 @@ object LangChain4jFactory {
 
     fun createChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
         val apiKey = resolveApiKey(config.apiKey, config.provider, globalConfig)
-        logger.fine("Creating LangChain4j ${config.provider} model: ${config.model ?: "default"}")
+        val model = config.model ?: resolveDefaultModel(config.provider, globalConfig)
+        logger.fine("Creating LangChain4j ${config.provider} model: ${model ?: "default"}")
 
         return when (config.provider.lowercase()) {
             "gemini" -> GoogleAiGeminiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(config.model ?: "gemini-2.0-flash")
+                .modelName(model ?: "gemini-2.0-flash")
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
                 .sendThinking(config.enableThinking)
@@ -45,7 +46,7 @@ object LangChain4jFactory {
 
             "claude" -> AnthropicChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(config.model ?: "claude-sonnet-4-20250514")
+                .modelName(model ?: "claude-sonnet-4-20250514")
                 .maxTokens(config.maxTokens ?: 4096)
                 .temperature(config.temperature)
                 .listeners(listeners)
@@ -53,7 +54,7 @@ object LangChain4jFactory {
 
             "openai" -> OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(config.model ?: "gpt-4o")
+                .modelName(model ?: "gpt-4o")
                 .apply { config.endpoint?.let { baseUrl(it) } }
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxTokens(it) } }
@@ -62,14 +63,14 @@ object LangChain4jFactory {
 
             "ollama" -> OllamaChatModel.builder()
                 .baseUrl(apiKey)
-                .modelName(config.model ?: "llama3")
+                .modelName(model ?: "llama3")
                 .temperature(config.temperature)
                 .listeners(listeners)
                 .build()
 
             "azure-openai" -> {
                 val endpoint = resolveEndpoint(config.endpoint, globalConfig)
-                val deploymentName = config.model ?: resolveDeploymentName(globalConfig)
+                val deploymentName = model ?: resolveDeploymentName(globalConfig)
                 val svcVersion = resolveServiceVersion(config.serviceVersion, globalConfig)
                 AzureOpenAiChatModel.builder()
                     .endpoint(endpoint)
@@ -205,6 +206,23 @@ object LangChain4jFactory {
             }
         }
         return if (hasUnresolved) null else result
+    }
+
+    /**
+     * Resolves the default model from GenAI.Providers.<Provider>.Model in config.yaml.
+     */
+    private fun resolveDefaultModel(provider: String, globalConfig: JsonObject): String? {
+        val providerSection = globalConfig.getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+        val section = when (provider.lowercase()) {
+            "gemini" -> providerSection.getJsonObject("Gemini", null)
+            "claude" -> providerSection.getJsonObject("Claude", null)
+            "openai" -> providerSection.getJsonObject("OpenAI", null)
+            "ollama" -> providerSection.getJsonObject("Ollama", null)
+            "azure-openai" -> providerSection.getJsonObject("AzureOpenAI", null)
+            else -> null
+        }
+        return section?.getString("Model")
     }
 
     private fun resolveEndpoint(agentEndpoint: String?, globalConfig: JsonObject): String {
