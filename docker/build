@@ -6,12 +6,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Detect architecture and set tag suffix
-ARCH=$(uname -m)
-ARCH_SUFFIX=""
-if [ "$ARCH" = "aarch64" ]; then
-    ARCH_SUFFIX="-arm64"
-fi
+# Multi-arch platforms for buildx
+PLATFORMS="linux/amd64,linux/arm64"
 
 # Parse command line arguments
 TESTING=false
@@ -159,78 +155,118 @@ mkdir -p target
 cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
 cp -r ../broker/target/dependencies target/
 
-# Build Docker image
-if [ "$TESTING" = true ]; then
-    docker build -t rocworks/monstermq:testing$ARCH_SUFFIX .
+# Ensure buildx builder exists
+BUILDER_NAME="monstermq-builder"
+if ! docker buildx inspect "$BUILDER_NAME" > /dev/null 2>&1; then
+    echo -e "${YELLOW}Creating buildx builder '${BUILDER_NAME}'...${NC}"
+    docker buildx create --name "$BUILDER_NAME" --use
 else
-    docker build -t rocworks/monstermq:$version$ARCH_SUFFIX -t rocworks/monstermq:latest$ARCH_SUFFIX .
+    docker buildx use "$BUILDER_NAME"
 fi
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}✗ Docker build failed${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✓ Docker image built successfully${NC}"
-if [ "$TESTING" = true ]; then
-    echo -e "${GREEN}  - rocworks/monstermq:testing${ARCH_SUFFIX}${NC}"
-else
-    echo -e "${GREEN}  - rocworks/monstermq:${version}${ARCH_SUFFIX}${NC}"
-    echo -e "${GREEN}  - rocworks/monstermq:latest${ARCH_SUFFIX}${NC}"
-fi
-
-# Build compat image (GraalVM JDK 21, x86-64-v2 compatible)
-if [ "$TESTING" = false ]; then
-    echo -e "${YELLOW}Building compat Docker image (GraalVM JDK 21, x86-64-v2)...${NC}"
-    docker build \
-        --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
-        -t rocworks/monstermq:$version-jdk21$ARCH_SUFFIX \
-        -t rocworks/monstermq:latest-jdk21$ARCH_SUFFIX \
-        .
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}✗ Compat Docker build failed${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ Compat Docker image built successfully${NC}"
-    echo -e "${GREEN}  - rocworks/monstermq:${version}-jdk21${ARCH_SUFFIX}${NC}"
-    echo -e "${GREEN}  - rocworks/monstermq:latest-jdk21${ARCH_SUFFIX}${NC}"
-fi
-
-# Handle publishing based on mode
+# Determine if we should push (needed before build because buildx combines build+push for multi-arch)
 SHOULD_PUSH=false
 
 if [ "$PUBLISH_MODE" = "yes" ]; then
     SHOULD_PUSH=true
 elif [ "$PUBLISH_MODE" = "ask" ]; then
     echo ""
-    read -p "Do you want to push the Docker image(s) to Docker Hub? (y/n) " -n 1 -r
+    read -p "Do you want to build multi-arch and push to Docker Hub? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         SHOULD_PUSH=true
     fi
 fi
 
+# Build Docker image(s)
 if [ "$SHOULD_PUSH" = true ]; then
-    echo -e "${YELLOW}Pushing Docker image(s) to Docker Hub...${NC}"
+    # Multi-arch build + push (buildx requires --push for multi-platform)
+    echo -e "${YELLOW}Building and pushing multi-arch images (${PLATFORMS})...${NC}"
     if [ "$TESTING" = true ]; then
-        docker push rocworks/monstermq:testing$ARCH_SUFFIX
+        docker buildx build --platform "$PLATFORMS" --push \
+            -t rocworks/monstermq:testing \
+            .
     else
-        docker push rocworks/monstermq:latest$ARCH_SUFFIX
-        docker push rocworks/monstermq:$version$ARCH_SUFFIX
-        docker push rocworks/monstermq:latest-jdk21$ARCH_SUFFIX
-        docker push rocworks/monstermq:$version-jdk21$ARCH_SUFFIX
+        docker buildx build --platform "$PLATFORMS" --push \
+            -t rocworks/monstermq:$version \
+            -t rocworks/monstermq:latest \
+            .
     fi
-    echo -e "${GREEN}✓ Docker image(s) pushed successfully${NC}"
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Docker build failed${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ Multi-arch images built and pushed${NC}"
+    if [ "$TESTING" = true ]; then
+        echo -e "${GREEN}  - rocworks/monstermq:testing${NC}"
+    else
+        echo -e "${GREEN}  - rocworks/monstermq:${version}${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:latest${NC}"
+    fi
+
+    # Build and push compat image (GraalVM JDK 21)
+    if [ "$TESTING" = false ]; then
+        echo -e "${YELLOW}Building and pushing multi-arch compat image (GraalVM JDK 21)...${NC}"
+        docker buildx build --platform "$PLATFORMS" --push \
+            --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
+            -t rocworks/monstermq:$version-jdk21 \
+            -t rocworks/monstermq:latest-jdk21 \
+            .
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}✗ Compat Docker build failed${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓ Multi-arch compat images built and pushed${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:${version}-jdk21${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:latest-jdk21${NC}"
+    fi
 else
-    echo -e "${YELLOW}Docker image(s) not pushed. To push later, run:${NC}"
+    # Local build only (native platform, loaded into local Docker)
+    echo -e "${YELLOW}Building Docker image (local, native platform only)...${NC}"
     if [ "$TESTING" = true ]; then
-        echo "  docker push rocworks/monstermq:testing$ARCH_SUFFIX"
+        docker buildx build --load \
+            -t rocworks/monstermq:testing \
+            .
     else
-        echo "  docker push rocworks/monstermq:latest$ARCH_SUFFIX"
-        echo "  docker push rocworks/monstermq:$version$ARCH_SUFFIX"
-        echo "  docker push rocworks/monstermq:latest-jdk21$ARCH_SUFFIX"
-        echo "  docker push rocworks/monstermq:$version-jdk21$ARCH_SUFFIX"
+        docker buildx build --load \
+            -t rocworks/monstermq:$version \
+            -t rocworks/monstermq:latest \
+            .
     fi
+
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Docker build failed${NC}"
+        exit 1
+    fi
+
+    echo -e "${GREEN}✓ Docker image built successfully (native platform)${NC}"
+    if [ "$TESTING" = true ]; then
+        echo -e "${GREEN}  - rocworks/monstermq:testing${NC}"
+    else
+        echo -e "${GREEN}  - rocworks/monstermq:${version}${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:latest${NC}"
+    fi
+
+    # Build compat image (GraalVM JDK 21)
+    if [ "$TESTING" = false ]; then
+        echo -e "${YELLOW}Building compat Docker image (GraalVM JDK 21)...${NC}"
+        docker buildx build --load \
+            --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
+            -t rocworks/monstermq:$version-jdk21 \
+            -t rocworks/monstermq:latest-jdk21 \
+            .
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}✗ Compat Docker build failed${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}✓ Compat Docker image built successfully${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:${version}-jdk21${NC}"
+        echo -e "${GREEN}  - rocworks/monstermq:latest-jdk21${NC}"
+    fi
+
+    echo -e "${YELLOW}Images built for native platform only. To build multi-arch and push, run with -y${NC}"
 fi
 
 # Clean up temporary files
