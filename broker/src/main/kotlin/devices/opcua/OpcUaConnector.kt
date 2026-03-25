@@ -417,7 +417,20 @@ class OpcUaConnector : AbstractVerticle() {
                 }
             } else {
                 // Simple client creation without endpoint updating
-                OpcUaClient.create(opcUaConfig.endpointUrl)
+                OpcUaClient.create(
+                    opcUaConfig.endpointUrl,
+                    { endpoints: List<EndpointDescription> ->
+                        endpoints.stream()
+                            .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
+                            .findFirst()
+                    }
+                ) { configBuilder: OpcUaClientConfigBuilder ->
+                    configBuilder
+                        .setIdentityProvider(identityProvider)
+                        .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
+                        .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
+                        .build()
+                }
             }
         } else {
             // Create client with certificates for secured connections
@@ -472,8 +485,10 @@ class OpcUaConnector : AbstractVerticle() {
 
                 // Set up identity provider
                 val identityProvider: IdentityProvider = if (opcUaConfig.username != null) {
+                    logger.info("Using username/password authentication for device ${deviceConfig.name} (user: ${opcUaConfig.username})")
                     UsernameProvider(opcUaConfig.username, opcUaConfig.password ?: "")
                 } else {
+                    logger.info("Using anonymous authentication for device ${deviceConfig.name}")
                     AnonymousProvider()
                 }
 
