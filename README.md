@@ -338,6 +338,10 @@ See `doc/` for full documentation:
 - Maven 3.6+ for builds
 - PostgreSQL, MongoDB, CrateDB, SQLite, or another supported backend
 
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request. All contributions require a signed Copyright Assignment Agreement.
+
 ## License
 
 GNU General Public License v3.0.
