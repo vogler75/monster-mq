@@ -1,0 +1,18 @@
+Release v1.8.5
+Built from commit: 4f2bc1e
+Date: 2026-03-27 12:20:44
+
+Changes since v1.8.4:
+---
+4f2bc1e Fix MongoDB reconnect connection storm with shared client pool (#118)
+6ddca15 Simplify lastval topics UI to one-topic-per-line format
+8917b9b Use forwarding client for MQTT input topics
+deadd42 Add contributing guide and copyright form
+2a46f48 Merge pull request #134 from KevinJoosten/fix/user-manager-store-type
+7f1e629 fix: set SQLite WAL pragma before disabling autoCommit in UserStoreSqlite
+bf3ff1f fix: UserManager reads StoreType from UserManagement config block
+d654a82 Merge branch 'main' into develop
+8d1beae Add Authorization header to WS upgrade
+0a9b8da Merge pull request #133 from KevinJoosten/fix/opcua-username-password-none-security
+1f2069e Fix OPC UA username/password authentication with SecurityPolicy None
+859c06b fix: resolve default model and config.yaml providers for agents
