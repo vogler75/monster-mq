@@ -14,8 +14,8 @@ object MongoClientSettingsFactory {
 
     fun createSettings(
         connectionString: String,
-        poolMaxSize: Int = 50,
-        poolMinSize: Int = 10,
+        poolMaxSize: Int = 30,
+        poolMinSize: Int = 3,
         poolMaxWaitTimeMs: Long = 2000,
         poolMaxLifeTimeMinutes: Long = 30,
         poolMaxIdleTimeMinutes: Long = 10,

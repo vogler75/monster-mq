@@ -7,7 +7,6 @@ import at.rocworks.data.User
 import at.rocworks.stores.StoreType
 import at.rocworks.stores.IUserStore
 import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters
@@ -99,7 +98,7 @@ class UserStoreMongoDB(
 
         vertx.executeBlocking(Callable {
             try {
-                mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(url))
+                mongoClient = MongoClientPool.getClient(url)
                 mongoDatabase = mongoClient!!.getDatabase(database)
                 usersCollection = mongoDatabase!!.getCollection(usersCollectionName)
                 usersAclCollection = mongoDatabase!!.getCollection(usersAclCollectionName)
@@ -135,7 +134,7 @@ class UserStoreMongoDB(
 
         vertx.executeBlocking(Callable {
             try {
-                mongoClient?.close()
+                mongoClient?.let { MongoClientPool.releaseClient(url) }
             } catch (e: Exception) {
                 logger.warning("Error closing MongoDB connection: ${e.message}")
             }
