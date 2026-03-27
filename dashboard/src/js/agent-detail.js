@@ -271,12 +271,30 @@ class AgentDetailManager {
     parseContextLastvalTopics() {
         const raw = document.getElementById('agent-context-lastval-topics').value.trim();
         if (!raw) return null;
-        try {
-            return JSON.parse(raw);
-        } catch (e) {
-            this.showError('Invalid JSON in Lastval Message Topics: ' + e.message);
-            return null;
+        const defaultGroup = document.getElementById('agent-default-archive-group').value.trim() || 'Agents';
+        const result = {};
+        raw.split('\n').forEach(line => {
+            line = line.trim();
+            if (!line) return;
+            const match = line.match(/^(.+?)\s+@(\S+)$/);
+            const topic = match ? match[1].trim() : line;
+            const group = match ? match[2] : defaultGroup;
+            if (!result[group]) result[group] = [];
+            if (!result[group].includes(topic)) result[group].push(topic);
+        });
+        return Object.keys(result).length > 0 ? result : null;
+    }
+
+    lastvalTopicsToLines(json, defaultGroup) {
+        if (!json || typeof json !== 'object') return '';
+        const lines = [];
+        for (const [group, topics] of Object.entries(json)) {
+            if (!Array.isArray(topics)) continue;
+            for (const topic of topics) {
+                lines.push(group === defaultGroup ? topic : `${topic} @${group}`);
+            }
         }
+        return lines.join('\n');
     }
 
     // --- History Query Management ---
@@ -580,7 +598,7 @@ class AgentDetailManager {
         this.renderSubAgentCheckboxes(d.subAgents || []);
 
         // Populate Context Data
-        document.getElementById('agent-context-lastval-topics').value = d.contextLastvalTopics ? JSON.stringify(d.contextLastvalTopics, null, 2) : '';
+        document.getElementById('agent-context-lastval-topics').value = this.lastvalTopicsToLines(d.contextLastvalTopics, d.defaultArchiveGroup || 'Agents');
         document.getElementById('agent-context-retained').value = (d.contextRetainedTopics || []).join('\n');
         this.renderHistoryQueries(d.contextHistoryQueries);
 
@@ -1007,8 +1025,8 @@ function setupContextDropZones() {
         });
     });
 
-    // For JSON archive-group textareas: add topic under the selected archive group
-    function setupJsonArchiveGroupDrop(textarea) {
+    // For lastval textarea: add topic as a line with optional @ArchiveGroup suffix
+    function setupLastvalTopicDrop(textarea) {
         if (!textarea) return;
         addDragStyles(textarea);
         textarea.addEventListener('drop', (e) => {
@@ -1017,30 +1035,29 @@ function setupContextDropZones() {
             textarea.classList.remove('drag-over');
             const topic = e.dataTransfer.getData('text/plain');
             if (topic) {
-                // Get the archive group from the side panel selector
                 const archiveGroupSelect = document.getElementById('topic-panel-archive-group');
-                const archiveGroup = archiveGroupSelect ? archiveGroupSelect.value || 'Agents' : 'Agents';
+                const archiveGroup = archiveGroupSelect ? archiveGroupSelect.value || '' : '';
+                const defaultGroup = document.getElementById('agent-default-archive-group').value.trim() || 'Agents';
 
-                // Parse existing JSON or start fresh
-                let obj = {};
-                try {
-                    const current = textarea.value.trim();
-                    if (current) obj = JSON.parse(current);
-                } catch (_) { /* start fresh if invalid JSON */ }
+                // Build the line: plain topic if default group, otherwise topic @Group
+                const line = (archiveGroup && archiveGroup !== defaultGroup)
+                    ? `${topic} @${archiveGroup}`
+                    : topic;
 
-                // Ensure the archive group array exists and append topic (no duplicates)
-                if (!Array.isArray(obj[archiveGroup])) obj[archiveGroup] = [];
-                if (!obj[archiveGroup].includes(topic)) obj[archiveGroup].push(topic);
-
-                textarea.value = JSON.stringify(obj, null, 2);
-                textarea.focus();
-                textarea.dispatchEvent(new Event('change', { bubbles: true }));
-                flashGreen(textarea);
+                // Check for duplicates in existing lines
+                const existing = textarea.value.trim();
+                const lines = existing ? existing.split('\n').map(l => l.trim()) : [];
+                if (!lines.includes(line)) {
+                    textarea.value = existing ? existing + '\n' + line : line;
+                    textarea.focus();
+                    textarea.dispatchEvent(new Event('change', { bubbles: true }));
+                    flashGreen(textarea);
+                }
             }
         });
     }
 
-    setupJsonArchiveGroupDrop(lastvalTextarea);
+    setupLastvalTopicDrop(lastvalTextarea);
 }
 
 // Initialize

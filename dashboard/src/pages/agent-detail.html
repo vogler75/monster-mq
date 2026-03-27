@@ -412,9 +412,9 @@
                     </small>
                     <div class="form-group">
                         <label for="agent-context-lastval-topics">Lastval Message Topics</label>
-                        <textarea id="agent-context-lastval-topics" rows="4" data-drop-zone-enabled="true" placeholder='{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}' style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        <textarea id="agent-context-lastval-topics" rows="4" data-drop-zone-enabled="true" placeholder="sensors/#&#10;enterprise/+/value @SCADA" style="font-family: monospace; font-size: 0.85rem;"></textarea>
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
-                            JSON mapping archive group names to topic filters, e.g. <code>{"Default": ["sensors/#"], "SCADA": ["enterprise/+/value"]}</code>. Last values from each group's store are included as context.
+                            One topic per line. Topics use the agent's default archive group unless specified with <code>@GroupName</code>, e.g. <code>enterprise/+/value @SCADA</code>.
                         </small>
                     </div>
                     <div class="form-group">
