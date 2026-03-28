@@ -423,7 +423,7 @@ class PrometheusServer(
             return
         }
 
-        vertx.executeBlocking(java.util.concurrent.Callable {
+        vertx.executeBlocking<JsonArray>(java.util.concurrent.Callable {
             val result = JsonArray()
 
             if (stepSeconds < 60 && parsed.function == null) {
@@ -496,7 +496,7 @@ class PrometheusServer(
             }
 
             result
-        }).onSuccess { result ->
+        }).onSuccess { result: JsonArray ->
             sendRangeResult(ctx, result)
         }.onFailure { err ->
             logger.severe("query_range: error executing query: ${err.message}")

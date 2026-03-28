@@ -352,7 +352,7 @@ class QueryResolver(
                 }
             }
             
-            vertx.executeBlocking(Callable {
+            vertx.executeBlocking<MutableList<ArchivedMessage>>(Callable {
                 val jsonArray = archiveStore.getHistory(
                     topic = topicFilter,
                     startTime = startTimeStr?.let { Instant.parse(it) },
@@ -399,8 +399,8 @@ class QueryResolver(
                     )
                 }
                 archived
-            }).onSuccess {
-                future.complete(it)
+            }).onSuccess { result: MutableList<ArchivedMessage> ->
+                future.complete(result)
             }.onFailure {
                 future.completeExceptionally(it)
             }
@@ -487,7 +487,7 @@ class QueryResolver(
             }
 
             // Execute aggregation query on worker thread to avoid blocking the event loop
-            vertx.executeBlocking(Callable {
+            vertx.executeBlocking<AggregatedResult>(Callable {
                 val result = archiveStore.getAggregatedHistory(
                     topics = topics,
                     startTime = startTime,
@@ -517,8 +517,8 @@ class QueryResolver(
                     topicCount = topics.size,
                     rowCount = rows.size
                 )
-            }).onSuccess {
-                future.complete(it)
+            }).onSuccess { result: AggregatedResult ->
+                future.complete(result)
             }.onFailure {
                 logger.severe("Error executing aggregated query: ${it.message}")
                 future.completeExceptionally(GraphQLException("Error executing aggregation: ${it.message}"))
