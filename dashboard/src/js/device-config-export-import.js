@@ -77,16 +77,18 @@ function filterDeviceList() {
     if (filtered.length === 0) {
         deviceList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No devices match the filter</div></div>';
     } else {
-        deviceList.innerHTML = filtered.map((device, index) => `
-            <div class="device-item">
-                <input type="checkbox" id="device-checkbox-${index}" data-device-name="${device.name}" onchange="updateSelectionCount()">
-                <label for="device-checkbox-${index}">
-                    <div class="device-item-name">${device.name}</div>
-                    <div class="device-item-info">${device.namespace} @ ${device.nodeId} (${device.enabled ? 'Enabled' : 'Disabled'})</div>
-                </label>
-                <div class="device-type-badge">${device.type || 'UNKNOWN'}</div>
-            </div>
-        `).join('');
+        deviceList.innerHTML = `<table class="device-table">
+            <thead><tr><th></th><th>Name</th><th>Namespace</th><th>Node ID</th><th>Status</th><th>Type</th></tr></thead>
+            <tbody>${filtered.map((device, index) => `
+                <tr>
+                    <td><input type="checkbox" id="device-checkbox-${index}" data-device-name="${device.name}" onchange="updateSelectionCount()"></td>
+                    <td><label for="device-checkbox-${index}">${device.name}</label></td>
+                    <td class="device-item-info">${device.namespace || ''}</td>
+                    <td class="device-item-info">${device.nodeId || ''}</td>
+                    <td class="${device.enabled ? 'device-enabled' : 'device-disabled'}">${device.enabled ? 'Enabled' : 'Disabled'}</td>
+                    <td><span class="device-type-badge">${device.type || 'UNKNOWN'}</span></td>
+                </tr>`).join('')}
+            </tbody></table>`;
     }
 
     updateSelectionCount();
@@ -249,16 +251,18 @@ function filterImportList() {
     if (filtered.length === 0) {
         deviceList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No devices match the filter</div></div>';
     } else {
-        deviceList.innerHTML = filtered.map((device, index) => `
-            <div class="device-item">
-                <input type="checkbox" id="import-checkbox-${index}" data-device-name="${device.name}" onchange="updateImportSelectionCount()" checked>
-                <label for="import-checkbox-${index}">
-                    <div class="device-item-name">${device.name}</div>
-                    <div class="device-item-info">${device.namespace} @ ${device.nodeId} (${device.enabled ? 'Enabled' : 'Disabled'})</div>
-                </label>
-                <div class="device-type-badge">${device.type || 'UNKNOWN'}</div>
-            </div>
-        `).join('');
+        deviceList.innerHTML = `<table class="device-table">
+            <thead><tr><th></th><th>Name</th><th>Namespace</th><th>Node ID</th><th>Status</th><th>Type</th></tr></thead>
+            <tbody>${filtered.map((device, index) => `
+                <tr>
+                    <td><input type="checkbox" id="import-checkbox-${index}" data-device-name="${device.name}" onchange="updateImportSelectionCount()" checked></td>
+                    <td><label for="import-checkbox-${index}">${device.name}</label></td>
+                    <td class="device-item-info">${device.namespace || ''}</td>
+                    <td class="device-item-info">${device.nodeId || ''}</td>
+                    <td class="${device.enabled ? 'device-enabled' : 'device-disabled'}">${device.enabled ? 'Enabled' : 'Disabled'}</td>
+                    <td><span class="device-type-badge">${device.type || 'UNKNOWN'}</span></td>
+                </tr>`).join('')}
+            </tbody></table>`;
     }
     updateImportSelectionCount();
 }

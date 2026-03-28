@@ -13,8 +13,8 @@
     <style>
         /* Main Container */
         .export-import-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-direction: column;
             gap: 2rem;
             margin-bottom: 2rem;
         }
@@ -28,7 +28,7 @@
         }
 
         .section-header {
-            padding: 1.5rem;
+            padding: 1rem 1.5rem;
             background: var(--dark-bg);
             border-bottom: 1px solid var(--dark-border);
             display: flex;
@@ -39,81 +39,116 @@
         .section-header h2 {
             margin: 0;
             color: var(--text-primary);
-            font-size: 1.25rem;
+            font-size: 1.1rem;
             font-weight: 600;
         }
 
         .section-header-icon {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
         }
 
         .section-body {
-            padding: 2rem;
+            padding: 1.25rem 1.5rem;
         }
 
-        /* Device List */
+        .section-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .section-controls select {
+            padding: 0.35rem 0.6rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            cursor: pointer;
+            min-width: 160px;
+        }
+
+        /* Device Table */
         .device-list {
-            max-height: 500px;
+            max-height: 360px;
             overflow-y: auto;
             border: 1px solid var(--dark-border);
             border-radius: 8px;
             background: var(--dark-bg);
         }
 
-        .device-item {
-            padding: 1rem;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            transition: background 0.2s ease;
+        .device-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
         }
 
-        .device-item:hover {
-            background: rgba(124, 58, 237, 0.05);
+        .device-table thead th {
+            padding: 0.4rem 0.6rem;
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border-bottom: 1px solid var(--dark-border);
+            background: var(--dark-surface);
+            position: sticky;
+            top: 0;
         }
 
-        .device-item:last-child {
+        .device-table tbody tr {
+            border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+            transition: background 0.15s ease;
+        }
+
+        .device-table tbody tr:last-child {
             border-bottom: none;
         }
 
-        .device-item input[type="checkbox"] {
+        .device-table tbody tr:hover {
+            background: rgba(124, 58, 237, 0.06);
+        }
+
+        .device-table td {
+            padding: 0.3rem 0.6rem;
+            vertical-align: middle;
+        }
+
+        .device-table td input[type="checkbox"] {
             accent-color: var(--monster-purple);
-            transform: scale(1.2);
             cursor: pointer;
-            flex-shrink: 0;
         }
 
-        .device-item label {
-            flex: 1;
+        .device-table td label {
             cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-            margin: 0;
-        }
-
-        .device-item-name {
             color: var(--text-primary);
             font-weight: 500;
+            margin: 0;
+            white-space: nowrap;
         }
 
         .device-item-info {
             color: var(--text-muted);
             font-size: 0.75rem;
+            white-space: nowrap;
         }
 
         .device-type-badge {
             display: inline-block;
-            padding: 0.25rem 0.5rem;
+            padding: 0.15rem 0.4rem;
             background: rgba(124, 58, 237, 0.2);
             color: var(--monster-purple);
             border-radius: 4px;
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             font-weight: 600;
-            margin-left: auto;
-            flex-shrink: 0;
+            white-space: nowrap;
         }
+
+        .device-enabled { color: var(--monster-green); }
+        .device-disabled { color: var(--text-muted); }
 
         /* Empty State */
         .empty-state {
@@ -127,30 +162,13 @@
             margin-bottom: 0.5rem;
         }
 
-        /* Selection Controls */
-        .selection-controls {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .selection-controls .btn {
-            flex: 1;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-        }
-
         .selection-info {
-            text-align: center;
-            padding: 0.75rem;
-            background: rgba(124, 58, 237, 0.1);
-            border-radius: 8px;
             color: var(--text-muted);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
+            font-size: 0.8rem;
+            margin-left: auto;
         }
 
-        .selection-info-count {
+        .selection-info span {
             color: var(--monster-purple);
             font-weight: 600;
         }
@@ -300,25 +318,9 @@
             flex: 1;
         }
 
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .export-import-container {
-                grid-template-columns: 1fr;
-            }
-        }
-
         @media (max-width: 768px) {
-            .section-body {
-                padding: 1.5rem;
-            }
-
-            .device-list {
-                max-height: 300px;
-            }
-
-            .action-buttons {
-                flex-direction: column;
-            }
+            .action-buttons { flex-direction: column; }
+            .section-controls { flex-wrap: wrap; }
         }
     </style>
 </head>
@@ -341,33 +343,23 @@
                         <h2>Export Configurations</h2>
                     </div>
                     <div class="section-body">
-                        <p style="color: var(--text-muted); margin-bottom: 1rem;">Select devices to export and download as a JSON file</p>
-
-                        <div style="margin-bottom: 1rem;">
-                            <select id="type-filter" onchange="filterDeviceList()" style="width: 100%; padding: 0.5rem 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem; cursor: pointer;">
+                        <div class="section-controls">
+                            <select id="type-filter" onchange="filterDeviceList()">
                                 <option value="">All Types</option>
                             </select>
+                            <button class="btn btn-secondary" onclick="selectAllDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Select All</button>
+                            <button class="btn btn-secondary" onclick="deselectAllDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Deselect All</button>
+                            <div id="export-selection-info" class="selection-info" style="display: none;"><span id="export-selected-count">0</span> selected</div>
+                            <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                                <button class="btn btn-secondary" onclick="loadExportDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Refresh</button>
+                                <button class="btn btn-primary" onclick="exportSelectedDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Export as JSON</button>
+                            </div>
                         </div>
-
-                        <div class="selection-controls">
-                            <button class="btn btn-secondary" onclick="selectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Select All</button>
-                            <button class="btn btn-secondary" onclick="deselectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Deselect All</button>
-                        </div>
-
-                        <div id="export-selection-info" class="selection-info" style="display: none;">
-                            <span id="export-selected-count">0</span> device(s) selected
-                        </div>
-
                         <div class="device-list" id="export-device-list">
                             <div class="empty-state">
                                 <div class="empty-state-icon">📦</div>
                                 <div>Loading devices...</div>
                             </div>
-                        </div>
-
-                        <div class="action-buttons">
-                            <button class="btn btn-secondary" onclick="loadExportDevices()" style="flex: 0.5;">Refresh</button>
-                            <button class="btn btn-primary" onclick="exportSelectedDevices()">Export as JSON</button>
                         </div>
                     </div>
                 </div>
@@ -379,8 +371,6 @@
                         <h2>Import Configurations</h2>
                     </div>
                     <div class="section-body">
-                        <p style="color: var(--text-muted); margin-bottom: 1rem;">Upload a JSON file containing device configurations to import</p>
-
                         <input type="file" id="file-input" accept=".json" onchange="handleFileSelect(event)">
                         <div class="file-upload-area" onclick="document.getElementById('file-input').click()" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
                             <div class="file-upload-icon">📤</div>
@@ -394,19 +384,15 @@
                         </div>
 
                         <div id="import-device-section" style="display:none; margin-top: 1rem;">
-                            <div style="margin-bottom: 0.75rem;">
-                                <select id="import-type-filter" onchange="filterImportList()" style="width: 100%; padding: 0.5rem 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem; cursor: pointer;">
+                            <div class="section-controls">
+                                <select id="import-type-filter" onchange="filterImportList()">
                                     <option value="">All Types</option>
                                 </select>
+                                <button class="btn btn-secondary" onclick="selectAllImportDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Select All</button>
+                                <button class="btn btn-secondary" onclick="deselectAllImportDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Deselect All</button>
+                                <div id="import-selection-info" class="selection-info" style="display: none;"><span id="import-selected-count">0</span> selected</div>
                             </div>
-                            <div class="selection-controls">
-                                <button class="btn btn-secondary" onclick="selectAllImportDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Select All</button>
-                                <button class="btn btn-secondary" onclick="deselectAllImportDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Deselect All</button>
-                            </div>
-                            <div id="import-selection-info" class="selection-info" style="display: none; margin-top: 0.5rem;">
-                                <span id="import-selected-count">0</span> device(s) selected
-                            </div>
-                            <div id="import-device-list" class="device-list" style="margin-top: 0.75rem;"></div>
+                            <div id="import-device-list" class="device-list"></div>
                         </div>
 
                         <div id="import-progress" class="import-progress">
@@ -417,7 +403,7 @@
                             <div id="import-results-content"></div>
                         </div>
 
-                        <div class="action-buttons">
+                        <div class="action-buttons" style="margin-top: 1rem;">
                             <button class="btn btn-secondary" onclick="resetImportForm()">Clear File</button>
                             <button class="btn btn-primary" id="import-button" onclick="importDevices()" disabled>Import Configurations</button>
                         </div>
