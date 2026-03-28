@@ -343,6 +343,12 @@
                     <div class="section-body">
                         <p style="color: var(--text-muted); margin-bottom: 1rem;">Select devices to export and download as a JSON file</p>
 
+                        <div style="margin-bottom: 1rem;">
+                            <select id="type-filter" onchange="filterDeviceList()" style="width: 100%; padding: 0.5rem 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem; cursor: pointer;">
+                                <option value="">All Types</option>
+                            </select>
+                        </div>
+
                         <div class="selection-controls">
                             <button class="btn btn-secondary" onclick="selectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Select All</button>
                             <button class="btn btn-secondary" onclick="deselectAllDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Deselect All</button>

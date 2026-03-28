@@ -58,18 +58,36 @@ async function loadExportDevices() {
 
 // Render device list with checkboxes
 function renderDeviceList() {
-    const deviceList = document.getElementById('export-device-list');
+    // Populate type filter dropdown
+    const typeFilter = document.getElementById('type-filter');
+    const currentFilter = typeFilter.value;
+    const types = [...new Set(allDevices.map(d => d.type || 'UNKNOWN'))].sort();
+    typeFilter.innerHTML = '<option value="">All Types</option>' +
+        types.map(t => `<option value="${t}" ${t === currentFilter ? 'selected' : ''}>${t}</option>`).join('');
 
-    deviceList.innerHTML = allDevices.map((device, index) => `
-        <div class="device-item">
-            <input type="checkbox" id="device-checkbox-${index}" data-device-name="${device.name}" onchange="updateSelectionCount()">
-            <label for="device-checkbox-${index}">
-                <div class="device-item-name">${device.name}</div>
-                <div class="device-item-info">${device.namespace} @ ${device.nodeId} (${device.enabled ? 'Enabled' : 'Disabled'})</div>
-            </label>
-            <div class="device-type-badge">${device.type || 'UNKNOWN'}</div>
-        </div>
-    `).join('');
+    filterDeviceList();
+}
+
+// Filter device list by selected type
+function filterDeviceList() {
+    const typeFilter = document.getElementById('type-filter').value;
+    const deviceList = document.getElementById('export-device-list');
+    const filtered = typeFilter ? allDevices.filter(d => (d.type || 'UNKNOWN') === typeFilter) : allDevices;
+
+    if (filtered.length === 0) {
+        deviceList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No devices match the filter</div></div>';
+    } else {
+        deviceList.innerHTML = filtered.map((device, index) => `
+            <div class="device-item">
+                <input type="checkbox" id="device-checkbox-${index}" data-device-name="${device.name}" onchange="updateSelectionCount()">
+                <label for="device-checkbox-${index}">
+                    <div class="device-item-name">${device.name}</div>
+                    <div class="device-item-info">${device.namespace} @ ${device.nodeId} (${device.enabled ? 'Enabled' : 'Disabled'})</div>
+                </label>
+                <div class="device-type-badge">${device.type || 'UNKNOWN'}</div>
+            </div>
+        `).join('');
+    }
 
     updateSelectionCount();
 }
