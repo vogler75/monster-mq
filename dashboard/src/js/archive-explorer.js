@@ -134,6 +134,8 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') this.closeDetail();
         });
+
+        document.getElementById('btn-export-csv').addEventListener('click', () => this.exportCSV());
     }
 
     async executeQuery() {
@@ -179,6 +181,7 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
             this.renderTable();
             document.getElementById('result-count').textContent =
                 this.messages.length + ' message' + (this.messages.length !== 1 ? 's' : '') + ' returned';
+            document.getElementById('btn-export-csv').disabled = this.messages.length === 0;
         } catch (e) {
             console.error('Archive query failed:', e);
             tbody.innerHTML = '<tr><td colspan="' + this.visibleColumns.size + '" class="empty-state">Query failed: ' + this.escapeHtml(e.message) + '</td></tr>';
@@ -458,6 +461,42 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
     detailField(label, value) {
         return '<div class="detail-field"><div class="detail-field-label">' + label +
             '</div><div class="detail-field-value">' + value + '</div></div>';
+    }
+
+    exportCSV() {
+        if (this.messages.length === 0) return;
+        const csvField = (v) => {
+            const s = v == null ? '' : String(v);
+            return '"' + s.replace(/"/g, '""') + '"';
+        };
+        const headers = ['timestamp', 'topic', 'payload', 'qos', 'clientId', 'format',
+            'contentType', 'responseTopic', 'payloadFormatIndicator', 'userProperties'];
+        const rows = [headers.join(',')];
+        for (const msg of this.messages) {
+            const ups = (msg.userProperties || []).map(p => p.key + '=' + p.value).join(';');
+            rows.push([
+                csvField(msg.timestamp),
+                csvField(msg.topic),
+                csvField(msg.payload),
+                csvField(msg.qos),
+                csvField(msg.clientId),
+                csvField(msg.format),
+                csvField(msg.contentType),
+                csvField(msg.responseTopic),
+                csvField(msg.payloadFormatIndicator),
+                csvField(ups)
+            ].join(','));
+        }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const blob = new Blob([rows.join('\r\n')], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'archive-messages-' + ts + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 };
 

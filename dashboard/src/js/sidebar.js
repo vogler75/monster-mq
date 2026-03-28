@@ -98,16 +98,6 @@ class SidebarManager {
                 ]
             },
             {
-                section: 'Agents', sectionIcon: 'rocket',
-                items: [
-                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
-                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
-                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
-                    { href: '/pages/genai-providers.html', icon: 'hierarchy', text: 'AI Providers' },
-                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
-                ]
-            },
-            {
                 section: 'Configuration', sectionIcon: 'cogwheel',
                 items: [
                     { href: '/pages/archive-groups.html', icon: 'health', text: 'Archives' },
@@ -121,6 +111,16 @@ class SidebarManager {
                 items: [
                     { href: '/pages/topic-schema-policies.html', icon: 'shield-check', text: 'Schema Policies' },
                     { href: '/pages/topic-namespaces.html', icon: 'folder', text: 'Topic Namespaces' }
+                ]
+            },
+            {
+                section: 'Agents', sectionIcon: 'rocket',
+                items: [
+                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
+                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
+                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
+                    { href: '/pages/genai-providers.html', icon: 'hierarchy', text: 'AI Providers' },
+                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
                 ]
             },
             {
