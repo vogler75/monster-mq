@@ -499,50 +499,59 @@ class I3xServer(
         val limit = body.getInteger("limit", 1000)
         val maxDepth = body.getInteger("maxDepth") ?: 1
         val groups = archiveHandler.getDeployedArchiveGroups()
-        val result = JsonObject()
 
-        for (i in 0 until elementIds.size()) {
-            val elementId = elementIds.getString(i) ?: continue
-            val (groupName, topicName) = parseElementId(elementId) ?: continue
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            val result = JsonObject()
 
-            val topicsToQuery = mutableListOf<Pair<String, String>>() // (elementId, mqttTopic)
-            topicsToQuery.add(elementId to topicName)
-            if (maxDepth != 1) {
-                val lastValStore = groups[groupName]?.lastValStore
-                lastValStore?.findMatchingMessages("$topicName/#") { msg ->
-                    if (msg.topicName != topicName && topicMatchesDepth(topicName, msg.topicName, maxDepth)) {
-                        topicsToQuery.add("$groupName/${msg.topicName}" to msg.topicName)
-                    }
-                    true
-                }
-            }
+            for (i in 0 until elementIds.size()) {
+                val elementId = elementIds.getString(i) ?: continue
+                val (groupName, topicName) = parseElementId(elementId) ?: continue
 
-            for ((eid, mqttTopic) in topicsToQuery) {
-                val archiveStore = groups[groupName]?.archiveStore as? IMessageArchiveExtended ?: continue
-                try {
-                    val history = archiveStore.getHistory(mqttTopic, startTime, endTime, limit)
-                    val data = JsonArray()
-                    for (j in 0 until history.size()) {
-                        val record = history.getJsonObject(j)
-                        val timestampMs = record.getLong("timestamp") ?: continue
-                        val payloadStr = extractPayloadString(record) ?: continue
-                        val value: Any = try { JsonObject(payloadStr) } catch (_: Exception) {
-                            try { JsonArray(payloadStr) } catch (_: Exception) {
-                                payloadStr.toDoubleOrNull() ?: payloadStr
-                            }
+                val topicsToQuery = mutableListOf<Pair<String, String>>() // (elementId, mqttTopic)
+                topicsToQuery.add(elementId to topicName)
+                if (maxDepth != 1) {
+                    val lastValStore = groups[groupName]?.lastValStore
+                    lastValStore?.findMatchingMessages("$topicName/#") { msg ->
+                        if (msg.topicName != topicName && topicMatchesDepth(topicName, msg.topicName, maxDepth)) {
+                            topicsToQuery.add("$groupName/${msg.topicName}" to msg.topicName)
                         }
-                        data.add(JsonObject()
-                            .put("value", value)
-                            .put("quality", "GOOD")
-                            .put("timestamp", Instant.ofEpochMilli(timestampMs).toString()))
+                        true
                     }
-                    result.put(eid, JsonObject().put("data", data))
-                } catch (e: Exception) {
-                    logger.warning("I3X history error for '$eid': ${e.message}")
+                }
+
+                for ((eid, mqttTopic) in topicsToQuery) {
+                    val archiveStore = groups[groupName]?.archiveStore as? IMessageArchiveExtended ?: continue
+                    try {
+                        val history = archiveStore.getHistory(mqttTopic, startTime, endTime, limit)
+                        val data = JsonArray()
+                        for (j in 0 until history.size()) {
+                            val record = history.getJsonObject(j)
+                            val timestampMs = record.getLong("timestamp") ?: continue
+                            val payloadStr = extractPayloadString(record) ?: continue
+                            val value: Any = try { JsonObject(payloadStr) } catch (_: Exception) {
+                                try { JsonArray(payloadStr) } catch (_: Exception) {
+                                    payloadStr.toDoubleOrNull() ?: payloadStr
+                                }
+                            }
+                            data.add(JsonObject()
+                                .put("value", value)
+                                .put("quality", "GOOD")
+                                .put("timestamp", Instant.ofEpochMilli(timestampMs).toString()))
+                        }
+                        result.put(eid, JsonObject().put("data", data))
+                    } catch (e: Exception) {
+                        logger.warning("I3X history error for '$eid': ${e.message}")
+                    }
                 }
             }
+
+            result
+        }).onSuccess { result ->
+            ok(ctx, result)
+        }.onFailure { err ->
+            logger.severe("I3X history query error: ${err.message}")
+            err(ctx, 500, "History query failed: ${err.message}")
         }
-        ok(ctx, result)
     }
 
     // --- Update Handlers ---

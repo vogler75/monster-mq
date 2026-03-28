@@ -4,7 +4,6 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.stores.*
 import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters
@@ -39,7 +38,7 @@ class ArchiveConfigStoreMongoDB(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
+            mongoClient = MongoClientPool.getClient(connectionString)
             database = mongoClient.getDatabase(databaseName)
             collection = database.getCollection(collectionName)
 
@@ -65,8 +64,8 @@ class ArchiveConfigStoreMongoDB(
     override fun stop(stopPromise: Promise<Void>) {
         try {
             if (::mongoClient.isInitialized) {
-                mongoClient.close()
-                logger.info("MongoDB ConfigStore connection closed")
+                MongoClientPool.releaseClient(connectionString)
+                logger.info("MongoDB ConfigStore connection released")
             }
             stopPromise.complete()
         } catch (e: Exception) {

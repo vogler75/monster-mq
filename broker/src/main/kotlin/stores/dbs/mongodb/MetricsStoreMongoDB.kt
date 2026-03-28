@@ -9,11 +9,7 @@ import at.rocworks.stores.IMetricsStoreAsync
 import at.rocworks.stores.MetricsStoreType
 import at.rocworks.stores.MetricKind
 import io.vertx.core.json.JsonObject
-import com.mongodb.ConnectionString
-import com.mongodb.MongoClientSettings
-import com.mongodb.WriteConcern
 import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.*
@@ -26,7 +22,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.*
 import java.util.concurrent.Callable
-import java.util.concurrent.TimeUnit
+
 
 class MetricsStoreMongoDB(
     private val name: String,
@@ -44,26 +40,7 @@ class MetricsStoreMongoDB(
 
     fun start(vertx: Vertx, startPromise: Promise<Void>) {
         try {
-            val clientSettings = MongoClientSettings.builder()
-                .applyConnectionString(ConnectionString(connectionString))
-                .applyToConnectionPoolSettings { builder ->
-                    builder.maxSize(50)
-                    builder.minSize(10)
-                    builder.maxWaitTime(2, TimeUnit.SECONDS)
-                    builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
-                    builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
-                }
-                .applyToSocketSettings { builder ->
-                    builder.connectTimeout(5, TimeUnit.SECONDS)
-                    builder.readTimeout(10, TimeUnit.SECONDS)
-                }
-                .applyToClusterSettings { builder ->
-                    builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
-                }
-                .writeConcern(WriteConcern.MAJORITY.withWTimeout(5000, TimeUnit.MILLISECONDS))
-                .build()
-
-            mongoClient = MongoClients.create(clientSettings)
+            mongoClient = MongoClientPool.getClient(connectionString)
             database = mongoClient.getDatabase(databaseName)
             collection = database.getCollection(collectionName)
 
@@ -109,7 +86,7 @@ class MetricsStoreMongoDB(
         val promise = Promise.promise<Void>()
         try {
             if (::mongoClient.isInitialized) {
-                mongoClient.close()
+                MongoClientPool.releaseClient(connectionString)
             }
             promise.complete()
         } catch (e: Exception) {

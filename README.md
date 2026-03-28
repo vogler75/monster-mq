@@ -330,13 +330,18 @@ See `doc/` for full documentation:
 - [users.md](doc/users.md) - user management
 - [acl.md](doc/acl.md) - access control lists
 - [ai-agents.md](doc/ai-agents.md) - AI agents
-- [development.md](doc/development.md) - build, test, and development notes
+
+See also `dev/` for developer and AI coding documentation (iX guidelines, device integration guide, implementation plans). Start with [dev/INDEX.md](dev/INDEX.md).
 
 ## Requirements
 
 - Java 21+
 - Maven 3.6+ for builds
 - PostgreSQL, MongoDB, CrateDB, SQLite, or another supported backend
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request. All contributions require a signed Copyright Assignment Agreement.
 
 ## License
 

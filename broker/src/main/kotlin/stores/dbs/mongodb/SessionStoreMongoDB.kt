@@ -7,7 +7,6 @@ import at.rocworks.data.MqttSubscription
 import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
 import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.Filters.*
@@ -41,7 +40,7 @@ class SessionStoreMongoDB(
 
     override fun start(startPromise: Promise<Void>) {
         try {
-            mongoClient = MongoClients.create(MongoClientSettingsFactory.createSettings(connectionString))
+            mongoClient = MongoClientPool.getClient(connectionString)
             database = mongoClient.getDatabase(databaseName)
 
             // Initialize collections
@@ -676,8 +675,8 @@ class SessionStoreMongoDB(
     }
 
     override fun stop() {
-        mongoClient.close()
-        logger.info("MongoDB connection closed.")
+        MongoClientPool.releaseClient(connectionString)
+        logger.info("MongoDB connection released.")
     }
 
     override fun countQueuedMessages(): Long {

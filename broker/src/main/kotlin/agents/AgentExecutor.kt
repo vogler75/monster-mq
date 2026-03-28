@@ -54,6 +54,7 @@ class AgentExecutor(
     private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
 
     private val clientId = "agent-${deviceConfig.name}"
+    private val forwardingClientId = "agent-${deviceConfig.name}-fwd"
     private val agentName get() = deviceConfig.name
 
     // A2A topic helpers
@@ -249,13 +250,16 @@ class AgentExecutor(
             // Unsubscribe MQTT topics
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
-                // Unsubscribe task topics
+                // Unsubscribe task topics from main client
                 sessionHandler.unsubscribeInternalClient(clientId, a2aInboxTopic())
                 sessionHandler.unsubscribeInternalClient(clientId, "${a2aInboxTopic()}/+")
-                agentConfig.inputTopics.forEach { topic ->
-                    sessionHandler.unsubscribeInternalClient(clientId, topic)
-                }
                 sessionHandler.unregisterInternalClient(clientId)
+
+                // Unsubscribe input topics from forwarding client
+                agentConfig.inputTopics.forEach { topic ->
+                    sessionHandler.unsubscribeInternalClient(forwardingClientId, topic)
+                }
+                sessionHandler.unregisterInternalClient(forwardingClientId)
             }
 
             // Close MCP clients
@@ -341,10 +345,26 @@ class AgentExecutor(
     }
 
     private fun setupMqttSubscriptions(sessionHandler: at.rocworks.handlers.SessionHandler) {
-        // Subscribe to each input topic
+        // Subscribe to each input topic using a separate forwarding client so that
+        // incoming messages are re-published to the inbox as normal MQTT messages
+        // without causing a duplicate delivery on the main agent consumer.
         agentConfig.inputTopics.forEach { topicFilter ->
-            logger.fine("Agent ${deviceConfig.name} subscribing to: $topicFilter")
-            sessionHandler.subscribeInternalClient(clientId, topicFilter, 0)
+            logger.fine("Agent ${deviceConfig.name} subscribing forwarding client to: $topicFilter")
+            sessionHandler.subscribeInternalClient(forwardingClientId, topicFilter, 0)
+        }
+
+        // Register a dedicated EventBus consumer for the forwarding client
+        val fwdAddress = EventBusAddresses.Client.messages(forwardingClientId)
+        vertx.eventBus().consumer<Any>(fwdAddress) { busMessage ->
+            try {
+                when (val body = busMessage.body()) {
+                    is BrokerMessage -> forwardInputToInbox(body)
+                    is BulkClientMessage -> body.messages.forEach { forwardInputToInbox(it) }
+                    else -> logger.warning("Unknown message type in forwarding consumer: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                logger.warning("Error in forwarding consumer for agent ${deviceConfig.name}: ${e.message}")
+            }
         }
     }
 
@@ -594,8 +614,8 @@ class AgentExecutor(
             return
         }
 
-        // 3. Normal MQTT input topic — forward to inbox/{taskId}
-        forwardInputToInbox(msg)
+        // 3. Unexpected topic — input topics are handled by the forwarding client
+        logger.warning("Agent $agentName received unexpected message on topic: ${msg.topicName}")
     }
 
     private fun forwardInputToInbox(msg: BrokerMessage) {

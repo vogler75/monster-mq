@@ -6,10 +6,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.data.PurgeResult
-import com.mongodb.ConnectionString
-import com.mongodb.MongoClientSettings
 import com.mongodb.client.MongoClient
-import com.mongodb.client.MongoClients
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
 import com.mongodb.client.model.*
@@ -51,6 +48,8 @@ class MessageArchiveMongoDB(
     private var isConnected: Boolean = false
     @Volatile
     private var lastConnectionAttempt: Long = 0
+    @Volatile
+    private var reconnectOngoing: Boolean = false
 
     private val connectionRetryInterval = 30_000L // 30 seconds
     private val healthCheckInterval = 10_000L // 10 seconds for more responsive detection
@@ -65,9 +64,12 @@ class MessageArchiveMongoDB(
         // Start connection establishment in background
         initiateConnection()
 
-        // Set up periodic health check and reconnection
-        vertx.setPeriodic(healthCheckInterval) {
-            performHealthCheck()
+        // Set up periodic health check with random offset to stagger across stores
+        val staggerDelay = (Math.random() * 5000).toLong()
+        vertx.setTimer(staggerDelay) {
+            vertx.setPeriodic(healthCheckInterval) {
+                performHealthCheck()
+            }
         }
 
         // Complete startup immediately - connections will be established asynchronously
@@ -79,36 +81,19 @@ class MessageArchiveMongoDB(
      * Initiates MongoDB connection in background thread
      */
     private fun initiateConnection() {
+        if (reconnectOngoing) return
         if (System.currentTimeMillis() - lastConnectionAttempt < connectionRetryInterval) {
             return // Too soon to retry
         }
 
         lastConnectionAttempt = System.currentTimeMillis()
+        reconnectOngoing = true
 
         vertx.executeBlocking(java.util.concurrent.Callable {
             try {
                 logger.info("Attempting to connect to MongoDB for archive [$name]...")
 
-                // Enhanced connection settings with pooling
-                val settings = MongoClientSettings.builder()
-                    .applyConnectionString(ConnectionString(connectionString))
-                    .applyToConnectionPoolSettings { builder ->
-                        builder.maxSize(50)              // Max connections in pool
-                        builder.minSize(10)              // Min connections to maintain
-                        builder.maxWaitTime(2, TimeUnit.SECONDS)
-                        builder.maxConnectionLifeTime(30, TimeUnit.MINUTES)
-                        builder.maxConnectionIdleTime(10, TimeUnit.MINUTES)
-                    }
-                    .applyToSocketSettings { builder ->
-                        builder.connectTimeout(5, TimeUnit.SECONDS)
-                        builder.readTimeout(10, TimeUnit.SECONDS)
-                    }
-                    .applyToClusterSettings { builder ->
-                        builder.serverSelectionTimeout(5, TimeUnit.SECONDS)
-                    }
-                    .build()
-
-                val newClient = MongoClients.create(settings)
+                val newClient = MongoClientPool.getClient(connectionString)
                 val newDatabase = newClient.getDatabase(databaseName)
 
                 // Test connection with ping
@@ -118,11 +103,11 @@ class MessageArchiveMongoDB(
                 if (!newDatabase.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
                     val timeSeriesOptions = TimeSeriesOptions("time")
                         .metaField("meta")
-                        .granularity(TimeSeriesGranularity.SECONDS) // Better for MQTT
+                        .granularity(TimeSeriesGranularity.SECONDS)
 
                     val createCollectionOptions = CreateCollectionOptions()
                         .timeSeriesOptions(timeSeriesOptions)
-                        .expireAfter(365, TimeUnit.DAYS) // Optional: auto-expire old data
+                        .expireAfter(365, TimeUnit.DAYS)
 
                     newDatabase.createCollection(collectionName, createCollectionOptions)
                     logger.info("Created time-series collection: $collectionName")
@@ -135,9 +120,10 @@ class MessageArchiveMongoDB(
 
                 // Update connection state atomically
                 synchronized(this) {
-                    // Close old connection if exists
-                    mongoClient?.close()
-
+                    // Release old pool reference if we had one
+                    if (mongoClient != null) {
+                        MongoClientPool.releaseClient(connectionString)
+                    }
                     mongoClient = newClient
                     database = newDatabase
                     collection = newCollection
@@ -151,6 +137,8 @@ class MessageArchiveMongoDB(
                 synchronized(this) {
                     isConnected = false
                 }
+            } finally {
+                reconnectOngoing = false
             }
         })
     }
@@ -659,8 +647,11 @@ class MessageArchiveMongoDB(
     }
 
     override fun stop() {
-        mongoClient?.close()
-        logger.info("MongoDB connection closed.")
+        if (mongoClient != null) {
+            MongoClientPool.releaseClient(connectionString)
+            mongoClient = null
+        }
+        logger.info("MongoDB connection released.")
     }
 
     override suspend fun tableExists(): Boolean {

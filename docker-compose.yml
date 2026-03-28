@@ -34,7 +34,6 @@ services:
       - "1883:1883"
       - "9000:9000"
       - "4000:4000"   # GraphQL/API
-     # - "4840:4840"   # MCP
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:4000/ || exit 1"]
       interval: 10s
@@ -42,15 +41,6 @@ services:
       retries: 12
     extra_hosts:
       - 'host.docker.internal:host-gateway'
-
-  provisioner:
-    image: curlimages/curl:latest
-    # This service runs once at startup and attempts to provision users and ACLs via the broker API.
-    depends_on:
-      - monstermq
-    volumes:
-      - ./init:/docker-entrypoint-init:ro
-    entrypoint: ["/bin/sh","-c","sh /docker-entrypoint-init/provision.sh"]
 
 volumes:
   pgdata:

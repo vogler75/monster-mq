@@ -13,6 +13,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.core.Vertx
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import java.util.concurrent.Callable
 import java.util.concurrent.CompletableFuture
 import java.util.logging.Logger
 
@@ -351,53 +352,58 @@ class QueryResolver(
                 }
             }
             
-            val jsonArray = archiveStore.getHistory(
-                topic = topicFilter,
-                startTime = startTimeStr?.let { Instant.parse(it) },
-                endTime = endTimeStr?.let { Instant.parse(it) },
-                limit = limit
-            )
-            
-            val archived = mutableListOf<ArchivedMessage>()
-            for (i in 0 until jsonArray.size()) {
-                val obj = jsonArray.getJsonObject(i)
-                val payloadBytes = when {
-                    format == DataFormat.JSON && obj.containsKey("payload_json") && obj.getString("payload_json") != null -> {
-                        // For JSON format, prefer the payload_json column if available
-                        obj.getString("payload_json").toByteArray(Charsets.UTF_8)
-                    }
-                    obj.containsKey("payload_base64") -> {
-                        java.util.Base64.getDecoder().decode(obj.getString("payload_base64"))
-                    }
-                    else -> {
-                        obj.getString("payload", "").toByteArray()
-                    }
-                }
-                
-                val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                    payloadBytes,
-                    format
+            vertx.executeBlocking<MutableList<ArchivedMessage>>(Callable {
+                val jsonArray = archiveStore.getHistory(
+                    topic = topicFilter,
+                    startTime = startTimeStr?.let { Instant.parse(it) },
+                    endTime = endTimeStr?.let { Instant.parse(it) },
+                    limit = limit
                 )
-                
-                archived.add(
-                    ArchivedMessage(
-                        topic = if (includeTopic) obj.getString("topic") ?: "" else "",
-                        payload = payload,
-                        format = actualFormat,
-                        timestamp = obj.getLong("timestamp", 0L),
-                        qos = obj.getInteger("qos", 0),
-                        clientId = obj.getString("client_id"),
-                        messageExpiryInterval = obj.getLong("message_expiry_interval"),
-                        contentType = obj.getString("content_type"),
-                        responseTopic = obj.getString("response_topic"),
-                        payloadFormatIndicator = obj.getInteger("payload_format_indicator"),
-                        userProperties = obj.getJsonObject("user_properties")?.map?.mapNotNull { (k, v) -> 
-                            if (v is String) at.rocworks.extensions.graphql.UserProperty(k, v) else null 
+
+                val archived = mutableListOf<ArchivedMessage>()
+                for (i in 0 until jsonArray.size()) {
+                    val obj = jsonArray.getJsonObject(i)
+                    val payloadBytes = when {
+                        format == DataFormat.JSON && obj.containsKey("payload_json") && obj.getString("payload_json") != null -> {
+                            obj.getString("payload_json").toByteArray(Charsets.UTF_8)
                         }
+                        obj.containsKey("payload_base64") -> {
+                            java.util.Base64.getDecoder().decode(obj.getString("payload_base64"))
+                        }
+                        else -> {
+                            obj.getString("payload", "").toByteArray()
+                        }
+                    }
+
+                    val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                        payloadBytes,
+                        format
                     )
-                )
+
+                    archived.add(
+                        ArchivedMessage(
+                            topic = if (includeTopic) obj.getString("topic") ?: "" else "",
+                            payload = payload,
+                            format = actualFormat,
+                            timestamp = obj.getLong("timestamp", 0L),
+                            qos = obj.getInteger("qos", 0),
+                            clientId = obj.getString("client_id"),
+                            messageExpiryInterval = obj.getLong("message_expiry_interval"),
+                            contentType = obj.getString("content_type"),
+                            responseTopic = obj.getString("response_topic"),
+                            payloadFormatIndicator = obj.getInteger("payload_format_indicator"),
+                            userProperties = obj.getJsonObject("user_properties")?.map?.mapNotNull { (k, v) ->
+                                if (v is String) at.rocworks.extensions.graphql.UserProperty(k, v) else null
+                            }
+                        )
+                    )
+                }
+                archived
+            }).onSuccess { result: MutableList<ArchivedMessage> ->
+                future.complete(result)
+            }.onFailure {
+                future.completeExceptionally(it)
             }
-            future.complete(archived)
 
             future
         }
@@ -480,8 +486,8 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            // Execute aggregation query
-            try {
+            // Execute aggregation query on worker thread to avoid blocking the event loop
+            vertx.executeBlocking<AggregatedResult>(Callable {
                 val result = archiveStore.getAggregatedHistory(
                     topics = topics,
                     startTime = startTime,
@@ -491,7 +497,6 @@ class QueryResolver(
                     fields = fields
                 )
 
-                // Extract columns and rows from result
                 val columnsArray = result.getJsonArray("columns") ?: io.vertx.core.json.JsonArray()
                 val rowsArray = result.getJsonArray("rows") ?: io.vertx.core.json.JsonArray()
 
@@ -503,20 +508,20 @@ class QueryResolver(
                     }
                 }
 
-                future.complete(
-                    AggregatedResult(
-                        columns = columns,
-                        rows = rows,
-                        interval = intervalStr,
-                        startTime = startTimeStr,
-                        endTime = endTimeStr,
-                        topicCount = topics.size,
-                        rowCount = rows.size
-                    )
+                AggregatedResult(
+                    columns = columns,
+                    rows = rows,
+                    interval = intervalStr,
+                    startTime = startTimeStr,
+                    endTime = endTimeStr,
+                    topicCount = topics.size,
+                    rowCount = rows.size
                 )
-            } catch (e: Exception) {
-                logger.severe("Error executing aggregated query: ${e.message}")
-                future.completeExceptionally(GraphQLException("Error executing aggregation: ${e.message}"))
+            }).onSuccess { result: AggregatedResult ->
+                future.complete(result)
+            }.onFailure {
+                logger.severe("Error executing aggregated query: ${it.message}")
+                future.completeExceptionally(GraphQLException("Error executing aggregation: ${it.message}"))
             }
 
             future

@@ -1,0 +1,7 @@
+Release v1.8.6
+Built from commit: b3dd3e5
+Date: 2026-03-27 21:50:28
+
+Changes since v1.8.5:
+---
+b3dd3e5 Move blocking history queries to worker threads via executeBlocking

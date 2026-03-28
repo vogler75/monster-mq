@@ -39,7 +39,7 @@ class UserManager(
         
         val userMgmtConfig = config.getJsonObject("UserManagement") ?: JsonObject()
         isEnabled = userMgmtConfig.getBoolean("Enabled", false)
-        storeType = StoreType.valueOf(Monster.getStoreType(config))
+        storeType = StoreType.valueOf(userMgmtConfig.getString("StoreType") ?: Monster.getStoreType(config))
         passwordAlgorithm = userMgmtConfig.getString("PasswordAlgorithm", "bcrypt")
         cacheRefreshInterval = userMgmtConfig.getLong("CacheRefreshInterval", 60)
         disconnectOnUnauthorized = userMgmtConfig.getBoolean("DisconnectOnUnauthorized", true)
