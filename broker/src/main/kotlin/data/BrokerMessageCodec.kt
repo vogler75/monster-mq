@@ -30,7 +30,8 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         addString(s.topicName)
         addString(s.clientId)
         buffer.appendLong(s.time.toEpochMilli())
-        buffer.appendBuffer(Buffer.buffer(s.payload))
+        buffer.appendInt(s.payload.size)
+        buffer.appendBytes(s.payload)
     }
 
     override fun decodeFromWire(pos: Int, buffer: Buffer): BrokerMessage {
@@ -69,13 +70,15 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         val clientId = readString()
         val time = buffer.getLong(position)
         position += 8
-        val payload = buffer.slice(position, buffer.length())
+        val payloadLen = buffer.getInt(position)
+        position += 4
+        val payload = buffer.getBytes(position, position + payloadLen)
 
         return BrokerMessage(
             messageUuid,
             messageId,
             topicName,
-            payload.bytes,
+            payload,
             qos,
             isRetain,
             isDup,
