@@ -9,6 +9,20 @@ NC='\033[0m' # No Color
 # Multi-arch platforms for buildx
 PLATFORMS="linux/amd64,linux/arm64"
 
+# Detect buildx command (standalone on Mac vs subcommand on Linux)
+if command -v docker-buildx > /dev/null 2>&1; then
+    BUILDX="docker-buildx"
+elif docker buildx version > /dev/null 2>&1; then
+    BUILDX="docker buildx"
+else
+    BUILDX=""
+fi
+
+# Named volumes for container builds (avoids root-owned files on Mac host)
+DASHBOARD_VOLUME="monstermq-dashboard-build"
+BROKER_VOLUME="monstermq-broker-build"
+M2_VOLUME="monstermq-m2-cache"
+
 # Parse command line arguments
 TESTING=false
 PUBLISH_MODE="ask"  # can be "ask", "yes", or "no"
@@ -65,7 +79,8 @@ if [ "$CLEAN" = true ]; then
     rm -rf ../dashboard/dist
     rm -rf ../dashboard/node_modules
     rm -rf target
-    echo -e "${GREEN}✓ Output directories cleaned${NC}"
+    docker volume rm "${DASHBOARD_VOLUME}" "${BROKER_VOLUME}" 2>/dev/null || true
+    echo -e "${GREEN}✓ Output directories and build volumes cleaned${NC}"
 fi
 
 # Build the broker with Maven (unless -d flag is set)
@@ -77,16 +92,13 @@ if [ "$DOCKER_ONLY" = false ]; then
 
     if [ "$CONTAINER_BUILD" = true ]; then
         echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
+        # Source bind-mounted read-only; node_modules in named volume to avoid root-owned files on host
         docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "${DASHBOARD_DIR}:/app/dashboard" \
-            -w /app/dashboard \
-            node:22-slim \
-            /bin/bash -c "
-                set -e
-                npm ci
-                npm run build
-            "
+            -v "${DASHBOARD_DIR}:/app" \
+            -v "${DASHBOARD_VOLUME}:/app/node_modules" \
+            -w /app \
+            node:24-slim \
+            bash -c "set -e && npm ci && npm run build"
         if [ $? -ne 0 ]; then
             echo -e "${RED}✗ Dashboard build failed${NC}"
             exit 1
@@ -103,13 +115,9 @@ if [ "$DOCKER_ONLY" = false ]; then
     rm -f "${BROKER_RESOURCES_DIR}/dashboard/config/brokers.json"
 
     if [ "$CONTAINER_BUILD" = true ]; then
-        echo -e "${YELLOW}Running mvn package in Docker container (GraalVM 21)...${NC}"
+        echo -e "${YELLOW}Running mvn package in Docker volume (GraalVM 21)...${NC}"
         BROKER_DIR=$(cd ../broker && pwd)
-        MAVEN_REPO="${HOME}/.m2"
         MAVEN_BUILDER_IMAGE="monstermq-maven-builder:graalvm21"
-
-        # Create .m2 directory if it doesn't exist (for caching dependencies)
-        mkdir -p "${MAVEN_REPO}"
 
         # Build the Maven builder image if it doesn't exist
         if ! docker image inspect "${MAVEN_BUILDER_IMAGE}" > /dev/null 2>&1; then
@@ -122,18 +130,30 @@ if [ "$DOCKER_ONLY" = false ]; then
             echo -e "${GREEN}✓ Maven builder image created${NC}"
         fi
 
-        # Run Maven build in container
+        # Source bind-mounted; target in named volume to avoid root-owned files on host
         docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "${BROKER_DIR}:/app/broker" \
-            -v "${MAVEN_REPO}:/home/${USER}/.m2" \
-            -e MAVEN_OPTS="-Duser.home=/home/${USER}" \
-            -w /app/broker \
+            -v "${BROKER_DIR}:/build" \
+            -v "${BROKER_VOLUME}:/build/target" \
+            -v "${M2_VOLUME}:/root/.m2" \
+            -e MAVEN_OPTS="-Duser.home=/root" \
+            -w /build \
             "${MAVEN_BUILDER_IMAGE}" \
             mvn package -DskipTests
         BUILD_RESULT=$?
+
+        if [ $BUILD_RESULT -eq 0 ]; then
+            # Copy artifacts directly from volume into docker/target (no intermediate broker/target copy)
+            echo -e "${YELLOW}Copying JAR and dependencies from build volume...${NC}"
+            TEMP_CID=$(docker create -v "${BROKER_VOLUME}:/build/target" "${MAVEN_BUILDER_IMAGE}" sh)
+            rm -rf target
+            mkdir -p target
+            docker cp "${TEMP_CID}:/build/target/broker-1.0-SNAPSHOT.jar" target/
+            docker cp "${TEMP_CID}:/build/target/dependencies" target/
+            docker rm "${TEMP_CID}"
+        fi
     else
         echo -e "${YELLOW}Running mvn package in broker directory...${NC}"
+        BROKER_DIR=$(cd ../broker && pwd)
         cd ../broker
         mvn package
         BUILD_RESULT=$?
@@ -148,20 +168,13 @@ else
     echo -e "${YELLOW}Skipping Maven build (-d flag set)${NC}"
 fi
 
-# Copy files from broker/target to docker/target for Docker build
-echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
-rm -rf target
-mkdir -p target
-cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
-cp -r ../broker/target/dependencies target/
-
-# Ensure buildx builder exists
-BUILDER_NAME="monstermq-builder"
-if ! docker buildx inspect "$BUILDER_NAME" > /dev/null 2>&1; then
-    echo -e "${YELLOW}Creating buildx builder '${BUILDER_NAME}'...${NC}"
-    docker buildx create --name "$BUILDER_NAME" --use
-else
-    docker buildx use "$BUILDER_NAME"
+# Copy files from broker/target to docker/target for Docker build (local/non-container builds only)
+if [ "$DOCKER_ONLY" = true ] || [ "$CONTAINER_BUILD" = false ]; then
+    echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
+    rm -rf target
+    mkdir -p target
+    cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
+    cp -r ../broker/target/dependencies target/
 fi
 
 # Determine if we should push (needed before build because buildx combines build+push for multi-arch)
@@ -180,14 +193,22 @@ fi
 
 # Build Docker image(s)
 if [ "$SHOULD_PUSH" = true ]; then
-    # Multi-arch build + push (buildx requires --push for multi-platform)
+    # Multi-arch build + push requires buildx
+    BUILDER_NAME="monstermq-builder"
+    if ! $BUILDX inspect "$BUILDER_NAME" > /dev/null 2>&1; then
+        echo -e "${YELLOW}Creating buildx builder '${BUILDER_NAME}'...${NC}"
+        $BUILDX create --name "$BUILDER_NAME" --use
+    else
+        $BUILDX use "$BUILDER_NAME"
+    fi
+
     echo -e "${YELLOW}Building and pushing multi-arch images (${PLATFORMS})...${NC}"
     if [ "$TESTING" = true ]; then
-        docker buildx build --platform "$PLATFORMS" --push \
+        $BUILDX build --platform "$PLATFORMS" --push \
             -t rocworks/monstermq:testing \
             .
     else
-        docker buildx build --platform "$PLATFORMS" --push \
+        $BUILDX build --platform "$PLATFORMS" --push \
             -t rocworks/monstermq:$version \
             -t rocworks/monstermq:latest \
             .
@@ -209,7 +230,7 @@ if [ "$SHOULD_PUSH" = true ]; then
     # Build and push compat image (GraalVM JDK 21)
     if [ "$TESTING" = false ]; then
         echo -e "${YELLOW}Building and pushing multi-arch compat image (GraalVM JDK 21)...${NC}"
-        docker buildx build --platform "$PLATFORMS" --push \
+        $BUILDX build --platform "$PLATFORMS" --push \
             --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
             -t rocworks/monstermq:$version-jdk21 \
             -t rocworks/monstermq:latest-jdk21 \
@@ -223,14 +244,22 @@ if [ "$SHOULD_PUSH" = true ]; then
         echo -e "${GREEN}  - rocworks/monstermq:latest-jdk21${NC}"
     fi
 else
-    # Local build only (native platform, loaded into local Docker)
+    # Local build only (native platform)
+    # Use buildx --load if available, otherwise fall back to legacy builder
+    if [ -n "$BUILDX" ]; then
+        DOCKER_BUILD_LOCAL="$BUILDX build --load"
+    else
+        echo -e "${YELLOW}buildx not available, using legacy builder${NC}"
+        DOCKER_BUILD_LOCAL="DOCKER_BUILDKIT=0 docker build"
+    fi
+
     echo -e "${YELLOW}Building Docker image (local, native platform only)...${NC}"
     if [ "$TESTING" = true ]; then
-        docker buildx build --load \
+        eval $DOCKER_BUILD_LOCAL \
             -t rocworks/monstermq:testing \
             .
     else
-        docker buildx build --load \
+        eval $DOCKER_BUILD_LOCAL \
             -t rocworks/monstermq:$version \
             -t rocworks/monstermq:latest \
             .
@@ -252,7 +281,7 @@ else
     # Build compat image (GraalVM JDK 21)
     if [ "$TESTING" = false ]; then
         echo -e "${YELLOW}Building compat Docker image (GraalVM JDK 21)...${NC}"
-        docker buildx build --load \
+        eval $DOCKER_BUILD_LOCAL \
             --build-arg BASE_IMAGE=ghcr.io/graalvm/jdk-community:21 \
             -t rocworks/monstermq:$version-jdk21 \
             -t rocworks/monstermq:latest-jdk21 \
