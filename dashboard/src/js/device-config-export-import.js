@@ -217,6 +217,7 @@ function handleFileSelect(event) {
             document.getElementById('file-info').classList.add('show');
             document.getElementById('import-button').disabled = false;
 
+            renderImportList();
             showSuccessMessage(`File loaded with ${importedConfigs.length} device(s)`);
         } catch (error) {
             showErrorMessage('Failed to parse JSON file: ' + error.message);
@@ -226,6 +227,62 @@ function handleFileSelect(event) {
     };
 
     reader.readAsText(file);
+}
+
+// Render import device list with checkboxes
+function renderImportList() {
+    const typeFilter = document.getElementById('import-type-filter');
+    const types = [...new Set(importedConfigs.map(d => d.type || 'UNKNOWN'))].sort();
+    typeFilter.innerHTML = '<option value="">All Types</option>' +
+        types.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    document.getElementById('import-device-section').style.display = 'block';
+    filterImportList();
+}
+
+// Filter import list by selected type
+function filterImportList() {
+    const typeFilter = document.getElementById('import-type-filter').value;
+    const deviceList = document.getElementById('import-device-list');
+    const filtered = typeFilter ? importedConfigs.filter(d => (d.type || 'UNKNOWN') === typeFilter) : importedConfigs;
+
+    if (filtered.length === 0) {
+        deviceList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div>No devices match the filter</div></div>';
+    } else {
+        deviceList.innerHTML = filtered.map((device, index) => `
+            <div class="device-item">
+                <input type="checkbox" id="import-checkbox-${index}" data-device-name="${device.name}" onchange="updateImportSelectionCount()" checked>
+                <label for="import-checkbox-${index}">
+                    <div class="device-item-name">${device.name}</div>
+                    <div class="device-item-info">${device.namespace} @ ${device.nodeId} (${device.enabled ? 'Enabled' : 'Disabled'})</div>
+                </label>
+                <div class="device-type-badge">${device.type || 'UNKNOWN'}</div>
+            </div>
+        `).join('');
+    }
+    updateImportSelectionCount();
+}
+
+// Update import selection count display
+function updateImportSelectionCount() {
+    const checkboxes = document.querySelectorAll('#import-device-list input[type="checkbox"]:checked');
+    const count = checkboxes.length;
+    const selectionInfo = document.getElementById('import-selection-info');
+    document.getElementById('import-selected-count').textContent = count;
+    selectionInfo.style.display = count > 0 ? 'block' : 'none';
+    document.getElementById('import-button').disabled = count === 0;
+}
+
+// Select all import devices
+function selectAllImportDevices() {
+    document.querySelectorAll('#import-device-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+    updateImportSelectionCount();
+}
+
+// Deselect all import devices
+function deselectAllImportDevices() {
+    document.querySelectorAll('#import-device-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    updateImportSelectionCount();
 }
 
 // Handle drag over
@@ -284,7 +341,14 @@ async function importDevices() {
             }
         `;
 
-        const variables = { configs: importedConfigs };
+        const selectedNames = new Set(
+            Array.from(document.querySelectorAll('#import-device-list input[type="checkbox"]:checked'))
+                .map(cb => cb.dataset.deviceName)
+        );
+        const configs = selectedNames.size > 0
+            ? importedConfigs.filter(d => selectedNames.has(d.name))
+            : importedConfigs;
+        const variables = { configs };
         const result = await window.graphqlClient.query(query, variables);
 
         if (result.errors) {
@@ -351,6 +415,9 @@ function resetImportForm() {
     importedConfigs = [];
     document.getElementById('file-input').value = '';
     document.getElementById('file-info').classList.remove('show');
+    document.getElementById('import-device-section').style.display = 'none';
+    document.getElementById('import-device-list').innerHTML = '';
+    document.getElementById('import-selection-info').style.display = 'none';
     document.getElementById('import-progress').classList.remove('show');
     document.getElementById('import-results').classList.remove('show');
     document.getElementById('import-button').disabled = true;

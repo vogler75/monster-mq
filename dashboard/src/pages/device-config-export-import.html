@@ -390,7 +390,23 @@
 
                         <div id="file-info" class="file-info">
                             <div class="file-info-name">📄 <span id="file-name"></span></div>
-                            <div class="file-info-count">Ready to import <span id="file-device-count">0</span> device(s)</div>
+                            <div class="file-info-count"><span id="file-device-count">0</span> device(s) in file</div>
+                        </div>
+
+                        <div id="import-device-section" style="display:none; margin-top: 1rem;">
+                            <div style="margin-bottom: 0.75rem;">
+                                <select id="import-type-filter" onchange="filterImportList()" style="width: 100%; padding: 0.5rem 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 6px; color: var(--text-primary); font-size: 0.875rem; cursor: pointer;">
+                                    <option value="">All Types</option>
+                                </select>
+                            </div>
+                            <div class="selection-controls">
+                                <button class="btn btn-secondary" onclick="selectAllImportDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Select All</button>
+                                <button class="btn btn-secondary" onclick="deselectAllImportDevices()" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Deselect All</button>
+                            </div>
+                            <div id="import-selection-info" class="selection-info" style="display: none; margin-top: 0.5rem;">
+                                <span id="import-selected-count">0</span> device(s) selected
+                            </div>
+                            <div id="import-device-list" class="device-list" style="margin-top: 0.75rem;"></div>
                         </div>
 
                         <div id="import-progress" class="import-progress">
