@@ -1,0 +1,40 @@
+# Example ArchiveGroups configuration file
+# Use with: java -jar monstermq.jar -archiveConfig example-archive-config.yaml
+
+ArchiveGroups:
+  - Name: "Default"
+    Enabled: true
+    TopicFilter: [ "+/+/data", "sensors/+/temperature" ]
+    RetainedOnly: false
+    LastValType: "POSTGRES"
+    ArchiveType: "POSTGRES"
+    LastValRetention: "30d"
+    ArchiveRetention: "1y"
+    PurgeInterval: "1d"
+
+  - Name: "DeviceMetrics"
+    Enabled: true
+    TopicFilter: [ "device/+/metrics/+", "system/+/status" ]
+    RetainedOnly: false
+    LastValType: "MEMORY"
+    ArchiveType: "POSTGRES"
+    LastValRetention: "7d"
+    ArchiveRetention: "6m"
+    PurgeInterval: "12h"
+
+  - Name: "Alarms"
+    Enabled: true
+    TopicFilter: [ "alarm/+/+", "alert/+/critical" ]
+    RetainedOnly: true
+    LastValType: "HAZELCAST"
+    ArchiveType: "POSTGRES"
+    LastValRetention: "90d"
+    ArchiveRetention: "5y"
+    PurgeInterval: "1d"
+
+  - Name: "DebugData"
+    Enabled: false
+    TopicFilter: [ "debug/+/+", "test/+/+" ]
+    RetainedOnly: false
+    LastValType: "NONE"
+    ArchiveType: "NONE"
