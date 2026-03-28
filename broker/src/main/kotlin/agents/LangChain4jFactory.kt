@@ -9,6 +9,7 @@ import dev.langchain4j.model.anthropic.AnthropicChatModel
 import dev.langchain4j.model.openai.OpenAiChatModel
 import dev.langchain4j.model.ollama.OllamaChatModel
 import io.vertx.core.json.JsonObject
+import java.time.Duration
 import java.util.logging.Logger
 
 /**
@@ -61,12 +62,20 @@ object LangChain4jFactory {
                 .listeners(listeners)
                 .build()
 
-            "ollama" -> OllamaChatModel.builder()
-                .baseUrl(apiKey)
-                .modelName(model ?: "llama3")
-                .temperature(config.temperature)
-                .listeners(listeners)
-                .build()
+            "ollama" -> {
+                val ollamaTimeoutSeconds = globalConfig
+                    .getJsonObject("GenAI", JsonObject())
+                    .getJsonObject("Providers", JsonObject())
+                    .getJsonObject("Ollama", JsonObject())
+                    .getInteger("TimeoutSeconds")
+                OllamaChatModel.builder()
+                    .baseUrl(apiKey)
+                    .modelName(model ?: "llama3")
+                    .temperature(config.temperature)
+                    .apply { ollamaTimeoutSeconds?.let { timeout(Duration.ofSeconds(it.toLong())) } }
+                    .listeners(listeners)
+                    .build()
+            }
 
             "azure-openai" -> {
                 val endpoint = resolveEndpoint(config.endpoint, globalConfig)

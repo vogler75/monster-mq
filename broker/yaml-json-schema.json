@@ -487,7 +487,8 @@
             "Ollama": {
               "type": "object",
               "properties": {
-                "BaseUrl": { "type": "string", "description": "Ollama base URL (e.g., http://localhost:11434)", "default": "http://localhost:11434" }
+                "BaseUrl": { "type": "string", "description": "Ollama base URL (e.g., http://localhost:11434)", "default": "http://localhost:11434" },
+                "TimeoutSeconds": { "type": "integer", "description": "HTTP request timeout in seconds for Ollama requests (default: no timeout)" }
               }
             }
           }
