@@ -4,9 +4,12 @@ services:
     image: rocworks/monstermq:testing
     restart: always
     ports:
-      - "10010:1883"
-      - "10020:4000"
-      - "10030:4840"
+      - "11883:1883"
+      - "11884:1884"
+      - "14000:4000"
+      - "13001:3001"
+      - "13002:3002"
+      - "13003:3003"
     environment:
       - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]
@@ -19,11 +22,14 @@ services:
     image: rocworks/monstermq:testing
     restart: always
     ports:
-      - "10011:1883"
-      - "10021:4000"
-      - "10031:4840"
+      - "21883:1883"
+      - "21884:1884"
+      - "24000:4000"
+      - "23001:3001"
+      - "23002:3002"
+      - "23003:3003"  
     environment:
-      - HAZELCAST_CONFIG=hazelcast.xml
+      - HAZELCAST_CONFIG=hazelcast.xml^
     command: ["-cluster"]
     volumes:
       - ./security:/app/security
@@ -34,9 +40,12 @@ services:
     image: rocworks/monstermq:testing
     restart: always
     ports:
-      - "10012:1883"
-      - "10022:4000"
-      - "10032:4840"
+      - "31883:1883"
+      - "31884:1884"
+      - "34000:4000"
+      - "33001:3001"
+      - "33002:3002"
+      - "33003:3003"    
     environment:
       - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]

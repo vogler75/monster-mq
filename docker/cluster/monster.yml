@@ -5,6 +5,30 @@ QueuedMessagesEnabled: true
 
 DefaultStoreType: POSTGRES
 
+GraphQL:
+  Enabled: true
+  Port: 4000
+  Path: /graphql
+
+Dashboard:
+  Enabled: true
+
+BulkProcessing:
+  Enabled: true
+  TimeoutMS: 50
+  BulkSize: 1000
+  WorkerThreads: 4
+
+BulkMessaging:
+  Enabled: true
+  TimeoutMS: 100
+  BulkSize: 1000
+
+Metrics:
+  Enabled: true
+  RetentionHours: 1   # Default 1 hour
+  CollectionInterval: 10  # Collection interval in seconds (default: 1)  
+
 Logging:
   Mqtt:
     Enabled: false
@@ -17,3 +41,40 @@ Postgres:
   User: system
   Pass: manager
   Schema: public
+
+MongoDB:
+  Url: mongodb://system:manager@192.168.1.35:27017
+  Database: monster-cluster
+
+Prometheus:
+  Enabled: true
+  Port: 3001  # Default port  
+  RawQueryLimit: 10000  # RawQueryLimit: 0  # Set to 0 for unlimited
+
+I3x:
+  Enabled: true
+  Port: 3002
+  DefaultArchiveGroup: Default
+
+MCP:
+  Enabled: true
+  Port: 3003
+
+# GenAI Configuration
+GenAI:
+  Enabled: true
+  Providers:
+    Gemini:
+      ApiKey: "${GEMINI_API_KEY}"
+      Model: "gemini-3.1-flash-lite-preview"
+    Claude:
+      ApiKey: "${ANTHROPIC_API_KEY}"
+    OpenAI:
+      ApiKey: "${OPENAI_API_KEY}"
+    Ollama:
+      BaseUrl: http://etm-pc:11434
+      Model: "qwen3:8b"
+  Assistant:
+    Provider: "gemini"
+    Model: "gemini-3.1-flash-lite-preview"
+

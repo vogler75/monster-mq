@@ -17,11 +17,6 @@
                 <member>monster3:5701</member>
             </tcp-ip>
         </join>
-
-        <!-- Optional: Restrict communication to specific interfaces -->
-        <interfaces enabled="true">
-            <interface>192.168.1.*</interface>
-        </interfaces>
     </network>
 </hazelcast>
 
