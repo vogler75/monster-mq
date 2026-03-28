@@ -330,7 +330,8 @@ See `doc/` for full documentation:
 - [users.md](doc/users.md) - user management
 - [acl.md](doc/acl.md) - access control lists
 - [ai-agents.md](doc/ai-agents.md) - AI agents
-- [development.md](doc/development.md) - build, test, and development notes
+
+See also `dev/` for developer and AI coding documentation (iX guidelines, device integration guide, implementation plans). Start with [dev/INDEX.md](dev/INDEX.md).
 
 ## Requirements
 

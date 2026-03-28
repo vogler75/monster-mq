@@ -115,7 +115,7 @@ Devices follow a pattern of Extension (cluster-aware coordinator) + Connector (p
 - `devices/neo4j/` - Neo4j graph database bridge
 - `devices/sparkplugb/` - SparkplugB decoder
 
-For device integration guidance, see `plans/DEVICE_INTEGRATION.md`.
+For device integration guidance, see `dev/plans/DEVICE_INTEGRATION.md`.
 
 ### Key Directories
 
@@ -219,7 +219,7 @@ Key configuration sections:
 - Clustering is optional and controlled via `-cluster` command line argument
 - Logging level can be configured via command line or properties files in `src/main/resources/`
 - The MCP Server integration uses the official MCP SDK (io.modelcontextprotocol.sdk)
-- Device integrations follow the Extension + Connector pattern (see `plans/DEVICE_INTEGRATION.md`)
+- Device integrations follow the Extension + Connector pattern (see `dev/plans/DEVICE_INTEGRATION.md`)
 - The iX dashboard uses vanilla JS with `GraphQLDashboardClient` and Vite for bundling
 - GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files
-- Planning documents are in `plans/` (MQTT5 implementation, device integration, GraalVM analysis)
+- Developer and AI coding documentation is in `dev/` — see `dev/INDEX.md` for a full index. Implementation plans are in `dev/plans/`
