@@ -1134,7 +1134,7 @@ open class SessionHandler(
                     buffer.lastFlushTime = currentTime
 
                     vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                    messageBusOut.incrementAndGet()
+                    messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
                     bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
                     logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (timeout)" }
                 }
@@ -1361,7 +1361,7 @@ open class SessionHandler(
                                 buffer.messages.clear()
                                 buffer.lastFlushTime = System.currentTimeMillis()
                                 vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                                messageBusOut.incrementAndGet()
+                                messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
                                 logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
                             }
                         } finally {
@@ -1663,7 +1663,7 @@ open class SessionHandler(
                             buffer.messages.clear()
                             buffer.lastFlushTime = System.currentTimeMillis()
                             vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                            messageBusOut.incrementAndGet()
+                            messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
                             bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
                             logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages" }
                         }
