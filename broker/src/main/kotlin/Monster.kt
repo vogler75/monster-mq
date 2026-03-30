@@ -22,6 +22,7 @@ import at.rocworks.stores.*
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.cratedb.SessionStoreCrateDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
+import at.rocworks.stores.mongodb.MongoClientPool
 import at.rocworks.stores.mongodb.SessionStoreMongoDB
 import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.postgres.SessionStorePostgres
@@ -98,6 +99,7 @@ class Monster(args: Array<String>) {
     private val mongoDbConfig = object {
         var url: String = ""
         var database: String = ""
+        var readTimeoutMs: Long = 60000
     }
     private val sqliteConfig = object {
         var path: String = ""
@@ -601,6 +603,8 @@ MORE INFO:
                 configJson.getJsonObject("MongoDB", JsonObject()).let { mongo ->
                     mongoDbConfig.url = mongo.getString("Url", "mongodb://localhost:27017")
                     mongoDbConfig.database = mongo.getString("Database", "monster")
+                    mongoDbConfig.readTimeoutMs = mongo.getLong("ReadTimeoutMs", 60000L)
+                    MongoClientPool.defaultReadTimeoutMs = mongoDbConfig.readTimeoutMs
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
                     sqliteConfig.path = sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)

@@ -247,6 +247,11 @@
         },
         "Database": {
           "type": "string"
+        },
+        "ReadTimeoutMs": {
+          "type": "integer",
+          "description": "Socket read timeout in milliseconds for MongoDB operations (default: 60000)",
+          "default": 60000
         }
       },
       "required": [

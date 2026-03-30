@@ -20,7 +20,7 @@ object MongoClientSettingsFactory {
         poolMaxLifeTimeMinutes: Long = 30,
         poolMaxIdleTimeMinutes: Long = 10,
         connectTimeoutMs: Long = 5000,
-        readTimeoutMs: Long = 10000,
+        readTimeoutMs: Long = 60000,
         serverSelectionTimeoutMs: Long = 5000
     ): MongoClientSettings {
         return MongoClientSettings.builder()

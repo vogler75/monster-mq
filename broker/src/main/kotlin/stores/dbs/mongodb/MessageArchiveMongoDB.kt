@@ -476,6 +476,7 @@ class MessageArchiveMongoDB(
 
             activeCollection.aggregate(pipeline)
                 .allowDiskUse(true)
+                .maxTime(55, TimeUnit.SECONDS)
                 .forEach { doc ->
                     val id = doc.get("_id", Document::class.java)
                     val bucket = id?.getDate("bucket")?.toInstant()?.toString() ?: return@forEach
@@ -534,8 +535,13 @@ class MessageArchiveMongoDB(
             }
 
         } catch (e: Exception) {
-            logger.severe("Error executing MongoDB aggregation query: ${e.message}")
-            e.printStackTrace()
+            val caller = e.stackTrace.firstOrNull { frame ->
+                !frame.className.startsWith("at.rocworks.stores.")
+                        && !frame.className.startsWith("java.")
+                        && !frame.className.startsWith("kotlin.")
+                        && !frame.className.startsWith("com.mongodb.")
+            }?.let { "${it.className}.${it.methodName}" } ?: "unknown"
+            logger.severe("Error executing MongoDB aggregation query (caller=$caller, topics=$topics, interval=${intervalMinutes}min): ${e.message}")
         }
 
         result.put("columns", columns)
@@ -560,6 +566,7 @@ class MessageArchiveMongoDB(
 
             activeCollection.aggregate(pipeline)
                 .allowDiskUse(true)  // Allow using disk for large aggregations
+                .maxTime(55, TimeUnit.SECONDS)
                 .forEach { doc ->
                     result.add(JsonObject(doc.toJson()))
                 }
