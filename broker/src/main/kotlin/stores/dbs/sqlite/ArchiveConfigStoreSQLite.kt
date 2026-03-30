@@ -27,6 +27,11 @@ class ArchiveConfigStoreSQLite(
         override fun init(connection: Connection): io.vertx.core.Future<Void> {
             val promise = Promise.promise<Void>()
             try {
+                connection.createStatement().use { stmt ->
+                    stmt.executeUpdate("PRAGMA journal_mode = WAL")
+                    stmt.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
+                    stmt.executeUpdate("PRAGMA busy_timeout = 60000")
+                }
                 createConfigTable(connection)
                 promise.complete()
             } catch (e: Exception) {

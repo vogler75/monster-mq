@@ -10,6 +10,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.SQLException
 import java.sql.Types
 import java.util.concurrent.ConcurrentHashMap
 
@@ -125,55 +126,80 @@ class SQLiteVerticle : AbstractVerticle() {
         
         logger.finest("SQL UPDATE: $sql with params: $params")
         
-        try {
-            val connection = getOrCreateConnection(dbPath)
-            
-            if (useTransaction) {
-                connection.autoCommit = false
-            }
-            
-            val rowsAffected = connection.prepareStatement(sql).use { preparedStatement ->
-                // Set parameters
-                params.forEachIndexed { index, value ->
-                    when (value) {
-                        null -> preparedStatement.setNull(index + 1, Types.NULL)
-                        is String -> preparedStatement.setString(index + 1, value)
-                        is Number -> {
-                            when (value) {
-                                is Int -> preparedStatement.setInt(index + 1, value)
-                                is Long -> preparedStatement.setLong(index + 1, value)
-                                is Double -> preparedStatement.setDouble(index + 1, value)
-                                is Float -> preparedStatement.setFloat(index + 1, value)
-                                else -> preparedStatement.setObject(index + 1, value)
-                            }
-                        }
-                        is Boolean -> preparedStatement.setBoolean(index + 1, value)
-                        is ByteArray -> preparedStatement.setBytes(index + 1, value)
-                        is JsonArray -> preparedStatement.setString(index + 1, value.encode())
-                        is JsonObject -> preparedStatement.setString(index + 1, value.encode())
-                        else -> preparedStatement.setObject(index + 1, value)
-                    }
-                }
-                preparedStatement.executeUpdate()
-            }
-            
-            if (useTransaction) {
-                connection.commit()
-                connection.autoCommit = true
-            }
-            
-            message.reply(JsonObject().put("success", true).put("rowsAffected", rowsAffected))
-        } catch (e: Exception) {
-            logger.severe("Error executing update: ${e.message}")
+        val maxRetries = 3
+        var lastException: Exception? = null
+        
+        for (attempt in 1..maxRetries) {
             try {
-                val connection = connections[dbPath]
-                connection?.rollback()
-                connection?.autoCommit = true
-            } catch (re: Exception) {
-                logger.warning("Error rolling back transaction: ${re.message}")
+                val connection = getOrCreateConnection(dbPath)
+                
+                if (useTransaction) {
+                    connection.autoCommit = false
+                }
+                
+                val rowsAffected = connection.prepareStatement(sql).use { preparedStatement ->
+                    // Set parameters
+                    params.forEachIndexed { index, value ->
+                        when (value) {
+                            null -> preparedStatement.setNull(index + 1, Types.NULL)
+                            is String -> preparedStatement.setString(index + 1, value)
+                            is Number -> {
+                                when (value) {
+                                    is Int -> preparedStatement.setInt(index + 1, value)
+                                    is Long -> preparedStatement.setLong(index + 1, value)
+                                    is Double -> preparedStatement.setDouble(index + 1, value)
+                                    is Float -> preparedStatement.setFloat(index + 1, value)
+                                    else -> preparedStatement.setObject(index + 1, value)
+                                }
+                            }
+                            is Boolean -> preparedStatement.setBoolean(index + 1, value)
+                            is ByteArray -> preparedStatement.setBytes(index + 1, value)
+                            is JsonArray -> preparedStatement.setString(index + 1, value.encode())
+                            is JsonObject -> preparedStatement.setString(index + 1, value.encode())
+                            else -> preparedStatement.setObject(index + 1, value)
+                        }
+                    }
+                    preparedStatement.executeUpdate()
+                }
+                
+                if (useTransaction) {
+                    connection.commit()
+                    connection.autoCommit = true
+                }
+                
+                message.reply(JsonObject().put("success", true).put("rowsAffected", rowsAffected))
+                return
+            } catch (e: SQLException) {
+                lastException = e
+                if (e.message?.contains("SQLITE_BUSY") == true && attempt < maxRetries) {
+                    logger.warning("SQLITE_BUSY on update attempt $attempt/$maxRetries, retrying: ${e.message}")
+                    try {
+                        val connection = connections[dbPath]
+                        connection?.rollback()
+                        connection?.autoCommit = true
+                    } catch (re: Exception) {
+                        logger.warning("Error rolling back before retry: ${re.message}")
+                    }
+                    Thread.sleep(100L * attempt)
+                    continue
+                }
+                // Non-SQLITE_BUSY error or last attempt — fall through to fail
+                break
+            } catch (e: Exception) {
+                lastException = e
+                break
             }
-            message.fail(500, e.message)
         }
+        
+        logger.severe("Error executing update: ${lastException?.message}")
+        try {
+            val connection = connections[dbPath]
+            connection?.rollback()
+            connection?.autoCommit = true
+        } catch (re: Exception) {
+            logger.warning("Error rolling back transaction: ${re.message}")
+        }
+        message.fail(500, lastException?.message)
     }
     
     private fun handleExecuteQuery(message: Message<JsonObject>) {
@@ -247,52 +273,76 @@ class SQLiteVerticle : AbstractVerticle() {
         val sql = request.getString("sql")
         val batchParams = request.getJsonArray("batchParams", JsonArray())
         
-        try {
-            val connection = getOrCreateConnection(dbPath)
-            connection.autoCommit = false
-            
-            connection.prepareStatement(sql).use { preparedStatement ->
-                batchParams.forEach { paramsObj ->
-                    val params = paramsObj as JsonArray
-                    params.forEachIndexed { index, value ->
-                        when (value) {
-                            null -> preparedStatement.setNull(index + 1, Types.NULL)
-                            is String -> preparedStatement.setString(index + 1, value)
-                            is Number -> {
-                                when (value) {
-                                    is Int -> preparedStatement.setInt(index + 1, value)
-                                    is Long -> preparedStatement.setLong(index + 1, value)
-                                    is Double -> preparedStatement.setDouble(index + 1, value)
-                                    is Float -> preparedStatement.setFloat(index + 1, value)
-                                    else -> preparedStatement.setObject(index + 1, value)
-                                }
-                            }
-                            is Boolean -> preparedStatement.setBoolean(index + 1, value)
-                            is ByteArray -> preparedStatement.setBytes(index + 1, value)
-                            is JsonArray -> preparedStatement.setString(index + 1, value.encode())
-                            is JsonObject -> preparedStatement.setString(index + 1, value.encode())
-                            else -> preparedStatement.setObject(index + 1, value)
-                        }
-                    }
-                    preparedStatement.addBatch()
-                }
-                
-                val results = preparedStatement.executeBatch()
-                connection.commit()
-                connection.autoCommit = true
-                
-                message.reply(JsonObject().put("success", true).put("results", JsonArray(results.toList())))
-            }
-        } catch (e: Exception) {
-            logger.severe("Error executing batch: ${e.message}")
+        val maxRetries = 3
+        var lastException: Exception? = null
+        
+        for (attempt in 1..maxRetries) {
             try {
-                val connection = connections[dbPath]
-                connection?.rollback()
-                connection?.autoCommit = true
-            } catch (re: Exception) {
-                logger.warning("Error rolling back transaction: ${re.message}")
+                val connection = getOrCreateConnection(dbPath)
+                connection.autoCommit = false
+                
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    batchParams.forEach { paramsObj ->
+                        val params = paramsObj as JsonArray
+                        params.forEachIndexed { index, value ->
+                            when (value) {
+                                null -> preparedStatement.setNull(index + 1, Types.NULL)
+                                is String -> preparedStatement.setString(index + 1, value)
+                                is Number -> {
+                                    when (value) {
+                                        is Int -> preparedStatement.setInt(index + 1, value)
+                                        is Long -> preparedStatement.setLong(index + 1, value)
+                                        is Double -> preparedStatement.setDouble(index + 1, value)
+                                        is Float -> preparedStatement.setFloat(index + 1, value)
+                                        else -> preparedStatement.setObject(index + 1, value)
+                                    }
+                                }
+                                is Boolean -> preparedStatement.setBoolean(index + 1, value)
+                                is ByteArray -> preparedStatement.setBytes(index + 1, value)
+                                is JsonArray -> preparedStatement.setString(index + 1, value.encode())
+                                is JsonObject -> preparedStatement.setString(index + 1, value.encode())
+                                else -> preparedStatement.setObject(index + 1, value)
+                            }
+                        }
+                        preparedStatement.addBatch()
+                    }
+                    
+                    val results = preparedStatement.executeBatch()
+                    connection.commit()
+                    connection.autoCommit = true
+                    
+                    message.reply(JsonObject().put("success", true).put("results", JsonArray(results.toList())))
+                    return
+                }
+            } catch (e: SQLException) {
+                lastException = e
+                if (e.message?.contains("SQLITE_BUSY") == true && attempt < maxRetries) {
+                    logger.warning("SQLITE_BUSY on batch attempt $attempt/$maxRetries, retrying: ${e.message}")
+                    try {
+                        val connection = connections[dbPath]
+                        connection?.rollback()
+                        connection?.autoCommit = true
+                    } catch (re: Exception) {
+                        logger.warning("Error rolling back before retry: ${re.message}")
+                    }
+                    Thread.sleep(100L * attempt)
+                    continue
+                }
+                break
+            } catch (e: Exception) {
+                lastException = e
+                break
             }
-            message.fail(500, e.message)
         }
+        
+        logger.severe("Error executing batch: ${lastException?.message}")
+        try {
+            val connection = connections[dbPath]
+            connection?.rollback()
+            connection?.autoCommit = true
+        } catch (re: Exception) {
+            logger.warning("Error rolling back transaction: ${re.message}")
+        }
+        message.fail(500, lastException?.message)
     }
 }
