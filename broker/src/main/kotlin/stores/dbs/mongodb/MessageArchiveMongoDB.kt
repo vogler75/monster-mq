@@ -47,6 +47,8 @@ class MessageArchiveMongoDB(
     @Volatile
     private var isConnected: Boolean = false
     @Volatile
+    private var disconnectedLogged: Boolean = false
+    @Volatile
     private var lastConnectionAttempt: Long = 0
     @Volatile
     private var reconnectOngoing: Boolean = false
@@ -128,6 +130,10 @@ class MessageArchiveMongoDB(
                     database = newDatabase
                     collection = newCollection
                     isConnected = true
+                    if (disconnectedLogged) {
+                        disconnectedLogged = false
+                        logger.info("MongoDB Message Archive [$name] connection restored")
+                    }
                 }
 
                 logger.info("MongoDB Message Archive [$name] connected successfully")
@@ -225,7 +231,10 @@ class MessageArchiveMongoDB(
                 .bypassDocumentValidation(true)  // Faster inserts
 
             getActiveCollection()?.insertMany(documents, options) ?: run {
-                logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                if (!disconnectedLogged) {
+                    disconnectedLogged = true
+                    logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                }
             }
         } catch (e: Exception) {
             logger.warning("Error inserting batch data: ${e.message}")

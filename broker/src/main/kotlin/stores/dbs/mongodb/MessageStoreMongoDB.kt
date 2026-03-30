@@ -42,6 +42,8 @@ class MessageStoreMongoDB(
     @Volatile
     private var isConnected: Boolean = false
     @Volatile
+    private var disconnectedLogged: Boolean = false
+    @Volatile
     private var lastConnectionAttempt: Long = 0
     @Volatile
     private var reconnectOngoing: Boolean = false
@@ -131,6 +133,10 @@ class MessageStoreMongoDB(
                     database = newDatabase
                     collection = newCollection
                     isConnected = true
+                    if (disconnectedLogged) {
+                        disconnectedLogged = false
+                        logger.info("MongoDB Message Store [$name] connection restored")
+                    }
                 }
 
                 logger.info("MongoDB Message Store [$name] connected successfully")
@@ -283,7 +289,10 @@ class MessageStoreMongoDB(
 
         try {
             val activeCollection = getActiveCollection() ?: run {
-                logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                if (!disconnectedLogged) {
+                    disconnectedLogged = true
+                    logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                }
                 return
             }
 
