@@ -49,7 +49,6 @@ import select
 import os
 import tty
 import termios
-import pytest
 from datetime import datetime
 from typing import Optional, List
 
@@ -115,8 +114,8 @@ class GraphQLTopicSubscriptionClient:
 
         # Build GraphQL subscription query
         query = """
-        subscription MultiTopicUpdates($filters: [String!]!, $format: DataFormat) {
-            multiTopicUpdates(topicFilters: $filters, format: $format) {
+        subscription TopicUpdates($filters: [String!]!, $format: DataFormat) {
+            topicUpdates(topicFilters: $filters, format: $format) {
                 topic
                 payload
                 format
@@ -286,10 +285,11 @@ class GraphQLTopicSubscriptionClient:
                     # Wait for message with timeout
                     message = await asyncio.wait_for(self.websocket.recv(), timeout=0.5)
                     msg = json.loads(message)
+                    print(f"  [DEBUG] Received: {message}", flush=True)
 
                     if msg.get("type") == "next":
                         # Extract topic update from the message
-                        topic_update = msg.get("payload", {}).get("data", {}).get("multiTopicUpdates")
+                        topic_update = msg.get("payload", {}).get("data", {}).get("topicUpdates")
                         if topic_update and self.is_subscribed:
                             self.message_count += 1
                             self.print_topic_update(topic_update)

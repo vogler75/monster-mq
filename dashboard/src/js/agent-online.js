@@ -4,9 +4,8 @@ class AgentOnlineGraphManager {
     constructor() {
         this.client = new GraphQLDashboardClient();
         this.chart = null;
-        this.agents = new Map();       // agentId -> { card, health, isInternal, org, site }
+        this.agents = new Map();       // agentId -> { name, org, site, provider, model, enabled, subAgents, health }
         this.edges = new Map();        // "caller->target" -> { caller, target, count, lastSeen }
-        this.internalAgentNames = new Set();
         this.ws = null;
         this.subscriptionId = 0;
         this.reconnectTimer = null;
@@ -24,7 +23,7 @@ class AgentOnlineGraphManager {
 
     async init() {
         this.initChart();
-        await this.loadData();
+        await this.loadAgents();
         this.renderGraph();
         this.connectWebSocket();
         window.registerPageCleanup(() => this.cleanup());
@@ -46,7 +45,6 @@ class AgentOnlineGraphManager {
         if (!container || typeof echarts === 'undefined') return;
         this.chart = echarts.init(container, null, { renderer: 'canvas' });
 
-        // Click node to navigate to detail
         this.chart.on('click', (params) => {
             if (params.dataType === 'node' && params.data) {
                 const a = this.agents.get(params.data.id);
@@ -60,33 +58,44 @@ class AgentOnlineGraphManager {
 
     // ===================== Data Loading =====================
 
-    async loadData() {
+    async loadAgents() {
         try {
-            const [discoveryResult, healthResult, agentsResult] = await Promise.all([
-                this.client.query(`query { retainedMessages(topicFilter: "a2a/v1/+/+/discovery/+", format: JSON, limit: 1000) { topic payload } }`),
-                this.client.query(`query { retainedMessages(topicFilter: "a2a/v1/+/+/agents/+/health", format: JSON, limit: 1000) { topic payload } }`),
-                this.client.query(`query { agents { name } }`)
+            const [agentsResult, healthResult] = await Promise.all([
+                this.client.query(`query { agents { name org site enabled provider model subAgents } }`),
+                this.client.query(`query { retainedMessages(topicFilter: "a2a/v1/+/+/agents/+/health", format: JSON, limit: 1000) { topic payload } }`)
             ]);
 
-            this.internalAgentNames.clear();
+            // Build agent nodes from config
             if (agentsResult && agentsResult.agents) {
-                agentsResult.agents.forEach(a => this.internalAgentNames.add(a.name));
-            }
-
-            if (discoveryResult && discoveryResult.retainedMessages) {
-                discoveryResult.retainedMessages.forEach(msg => {
-                    const parsed = this.parseDiscoveryTopic(msg.topic);
-                    if (!parsed) return;
-                    const card = this.parseJSON(msg.payload);
-                    if (!card) return;
-                    const existing = this.agents.get(parsed.agentId) || {};
-                    this.agents.set(parsed.agentId, {
-                        ...existing, card, org: parsed.org, site: parsed.site,
-                        isInternal: this.internalAgentNames.has(card.name || parsed.agentId)
+                agentsResult.agents.forEach(agent => {
+                    const existing = this.agents.get(agent.name) || {};
+                    this.agents.set(agent.name, {
+                        ...existing,
+                        name: agent.name,
+                        org: agent.org,
+                        site: agent.site,
+                        enabled: agent.enabled,
+                        provider: agent.provider,
+                        model: agent.model,
+                        subAgents: agent.subAgents || [],
+                        isInternal: true
                     });
+                });
+
+                // Build edges from subAgents relationships
+                agentsResult.agents.forEach(agent => {
+                    if (agent.subAgents) {
+                        agent.subAgents.forEach(sub => {
+                            const edgeKey = `${agent.name}->${sub}`;
+                            if (!this.edges.has(edgeKey)) {
+                                this.edges.set(edgeKey, { caller: agent.name, target: sub, count: 0, lastSeen: 0 });
+                            }
+                        });
+                    }
                 });
             }
 
+            // Apply current health state from retained messages
             if (healthResult && healthResult.retainedMessages) {
                 healthResult.retainedMessages.forEach(msg => {
                     const parsed = this.parseHealthTopic(msg.topic);
@@ -98,34 +107,11 @@ class AgentOnlineGraphManager {
                 });
             }
         } catch(e) {
-            console.error('Error loading graph data:', e);
+            console.error('Error loading agents:', e);
         }
     }
 
-    processInboxMessage(topic, payload, timestamp) {
-        const parsed = this.parseInboxTopic(topic);
-        if (!parsed) return;
-
-        const data = this.parseJSON(payload);
-        if (!data || !data.callerAgent) return;
-
-        const caller = data.callerAgent;
-        const target = parsed.agentId;
-        const edgeKey = `${caller}->${target}`;
-        const existing = this.edges.get(edgeKey) || { caller, target, count: 0, lastSeen: 0 };
-        existing.count++;
-        existing.lastSeen = Math.max(existing.lastSeen,
-            timestamp ? (typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime()) : Date.now());
-        this.edges.set(edgeKey, existing);
-    }
-
     // ===================== Topic Parsing =====================
-
-    parseDiscoveryTopic(topic) {
-        const p = topic.split('/');
-        if (p.length < 6 || p[0] !== 'a2a' || p[4] !== 'discovery') return null;
-        return { org: p[2], site: p[3], agentId: p[5] };
-    }
 
     parseHealthTopic(topic) {
         const p = topic.split('/');
@@ -135,7 +121,6 @@ class AgentOnlineGraphManager {
 
     parseInboxTopic(topic) {
         const p = topic.split('/');
-        // Accept both inbox (7 segments) and inbox/{taskId} (8 segments)
         if (p.length < 7 || p[0] !== 'a2a' || p[4] !== 'agents' || p[6] !== 'inbox') return null;
         return { org: p[2], site: p[3], agentId: p[5], taskId: p[7] || null };
     }
@@ -168,11 +153,13 @@ class AgentOnlineGraphManager {
                 const payload = {};
                 const token = safeStorage.getItem('monstermq_token');
                 if (token && token !== 'null') payload.authorization = `Bearer ${token}`;
-                this.ws.send(JSON.stringify({ type: 'connection_init', payload }));
+                this.wsSend({ type: 'connection_init', payload });
             };
 
             this.ws.onmessage = (ev) => {
-                try { this.handleWsMessage(JSON.parse(ev.data)); } catch(e) {}
+                try {
+                    this.handleWsMessage(JSON.parse(ev.data));
+                } catch(e) { console.error('Agent graph WS error:', e); }
             };
 
             this.ws.onerror = () => this.updateWsStatus('disconnected');
@@ -186,63 +173,81 @@ class AgentOnlineGraphManager {
         }
     }
 
+    wsSend(msg) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(msg));
+        }
+    }
+
     handleWsMessage(msg) {
         switch (msg.type) {
             case 'connection_ack':
                 this.updateWsStatus('connected');
                 this.subscribeToUpdates();
                 break;
+            case 'ping':
+                this.wsSend({ type: 'pong' });
+                break;
             case 'next':
                 if (msg.payload && msg.payload.data && msg.payload.data.topicUpdates) {
                     this.handleTopicUpdate(msg.payload.data.topicUpdates);
                 }
+                break;
+            case 'error':
+                console.error('Agent graph subscription error:', msg.payload);
                 break;
         }
     }
 
     subscribeToUpdates() {
         this.subscriptionId++;
-        const query = `subscription {
-            topicUpdates(topicFilters: ["a2a/v1/+/+/discovery/+", "a2a/v1/+/+/agents/+/health", "a2a/v1/+/+/agents/+/inbox", "a2a/v1/+/+/agents/+/inbox/+"]) {
-                topic payload format timestamp
-            }
-        }`;
-        this.ws.send(JSON.stringify({
+        const topicFilters = [
+            'a2a/v1/+/+/agents/+/health',
+            'a2a/v1/+/+/agents/+/inbox',
+            'a2a/v1/+/+/agents/+/inbox/+'
+        ];
+        const query = `subscription { topicUpdates(topicFilters: ${JSON.stringify(topicFilters)}) { topic payload format timestamp } }`;
+        this.wsSend({
             id: String(this.subscriptionId),
             type: 'subscribe',
             payload: { query }
-        }));
+        });
     }
 
     handleTopicUpdate(update) {
         const topic = update.topic;
 
-        if (topic.includes('/discovery/')) {
-            const parsed = this.parseDiscoveryTopic(topic);
-            if (parsed) {
-                const card = this.parseJSON(update.payload);
-                if (card) {
-                    const existing = this.agents.get(parsed.agentId) || {};
-                    this.agents.set(parsed.agentId, {
-                        ...existing, card, org: parsed.org, site: parsed.site,
-                        isInternal: this.internalAgentNames.has(card.name || parsed.agentId)
-                    });
-                }
-            }
-        } else if (topic.endsWith('/health')) {
+        if (topic.endsWith('/health')) {
             const parsed = this.parseHealthTopic(topic);
             if (parsed) {
                 const health = this.parseJSON(update.payload);
                 if (health) {
                     const existing = this.agents.get(parsed.agentId) || {};
-                    this.agents.set(parsed.agentId, { ...existing, health });
+                    this.agents.set(parsed.agentId, {
+                        ...existing,
+                        name: health.name || parsed.agentId,
+                        org: existing.org || parsed.org,
+                        site: existing.site || parsed.site,
+                        health
+                    });
+                    this.renderGraph();
                 }
             }
         } else if (topic.includes('/inbox')) {
-            this.processInboxMessage(topic, update.payload, update.timestamp || Date.now());
-        }
+            const parsed = this.parseInboxTopic(topic);
+            if (!parsed) return;
+            const data = this.parseJSON(update.payload);
+            if (!data || !data.callerAgent) return;
 
-        this.renderGraph();
+            const caller = data.callerAgent;
+            const target = parsed.agentId;
+            const edgeKey = `${caller}->${target}`;
+            const existing = this.edges.get(edgeKey) || { caller, target, count: 0, lastSeen: 0 };
+            existing.count++;
+            existing.lastSeen = update.timestamp || Date.now();
+            this.edges.set(edgeKey, existing);
+            this.renderGraph();
+        }
     }
 
     updateWsStatus(state) {
@@ -257,6 +262,7 @@ class AgentOnlineGraphManager {
 
     renderGraph() {
         if (!this.chart) return;
+        this.chart.resize();
 
         const { nodes, links } = this.buildNodesAndLinks();
 
@@ -268,12 +274,11 @@ class AgentOnlineGraphManager {
                     if (params.dataType === 'node') {
                         const a = this.agents.get(params.data.id);
                         if (!a) return params.data.name;
-                        const card = a.card || {};
                         const health = a.health || {};
                         return `<b>${this.esc(params.data.name)}</b><br/>` +
-                            `Status: ${health.status || card.status || 'unknown'}<br/>` +
+                            `Status: ${health.status || 'unknown'}<br/>` +
                             `Type: ${a.isInternal ? 'Internal' : 'External'}<br/>` +
-                            (card.provider ? `Provider: ${card.provider}${card.model ? ' / ' + card.model : ''}<br/>` : '') +
+                            (a.provider ? `Provider: ${a.provider}${a.model ? ' / ' + a.model : ''}<br/>` : '') +
                             (health.messagesProcessed != null ? `Messages: ${health.messagesProcessed}<br/>` : '') +
                             (health.llmCalls != null ? `LLM Calls: ${health.llmCalls}<br/>` : '');
                     }
@@ -324,7 +329,6 @@ class AgentOnlineGraphManager {
             }]
         };
 
-        // Preserve zoom/pan when updating (setOption with true resets it)
         const prevZoom = this.chart.getOption()?.series?.[0]?.zoom;
         const prevCenter = this.chart.getOption()?.series?.[0]?.center;
 
@@ -339,20 +343,18 @@ class AgentOnlineGraphManager {
         const nodes = [];
         const links = [];
         const now = Date.now();
-        const recentThreshold = 30000; // 30s for "active" animation
+        const recentThreshold = 30000;
 
-        // Build nodes from agents
         this.agents.forEach((agent, agentId) => {
-            const card = agent.card || {};
             const health = agent.health || {};
-            const status = (health.status || card.status || 'unknown').toLowerCase();
+            const status = (health.status || 'unknown').toLowerCase();
             const color = this.STATUS_COLORS[status] || this.STATUS_COLORS.unknown;
             const msgs = health.messagesProcessed || 0;
             const size = Math.max(25, Math.min(65, 25 + Math.sqrt(msgs) * 2));
 
             nodes.push({
                 id: agentId,
-                name: card.name || agentId,
+                name: agent.name || agentId,
                 symbolSize: size,
                 itemStyle: {
                     color: color,
@@ -362,46 +364,24 @@ class AgentOnlineGraphManager {
                     shadowBlur: status === 'running' ? 12 : 0,
                     shadowColor: status === 'running' ? color : 'transparent'
                 },
-                label: {
-                    color: '#f0f6fc'
-                }
+                label: { color: '#f0f6fc' }
             });
         });
 
-        // Build links from edges
-        this.edges.forEach((edge, key) => {
-
-            // Check that both nodes exist
-            const sourceExists = this.agents.has(edge.caller);
-            const targetExists = this.agents.has(edge.target);
-
-            // If a node doesn't exist in discovery, add a placeholder
-            if (!sourceExists) {
-                this.agents.set(edge.caller, { card: { name: edge.caller }, isInternal: this.internalAgentNames.has(edge.caller) });
+        this.edges.forEach((edge) => {
+            // Add placeholder nodes for agents not yet known
+            if (!this.agents.has(edge.caller)) {
+                this.agents.set(edge.caller, { name: edge.caller, isInternal: false });
                 nodes.push({
-                    id: edge.caller,
-                    name: edge.caller,
-                    symbolSize: 20,
-                    itemStyle: {
-                        color: this.STATUS_COLORS.unknown,
-                        borderWidth: 2,
-                        borderType: this.internalAgentNames.has(edge.caller) ? 'solid' : 'dashed',
-                        borderColor: 'rgba(255,255,255,0.3)'
-                    }
+                    id: edge.caller, name: edge.caller, symbolSize: 20,
+                    itemStyle: { color: this.STATUS_COLORS.unknown, borderWidth: 2, borderType: 'dashed', borderColor: 'rgba(255,255,255,0.3)' }
                 });
             }
-            if (!targetExists) {
-                this.agents.set(edge.target, { card: { name: edge.target }, isInternal: this.internalAgentNames.has(edge.target) });
+            if (!this.agents.has(edge.target)) {
+                this.agents.set(edge.target, { name: edge.target, isInternal: false });
                 nodes.push({
-                    id: edge.target,
-                    name: edge.target,
-                    symbolSize: 20,
-                    itemStyle: {
-                        color: this.STATUS_COLORS.unknown,
-                        borderWidth: 2,
-                        borderType: this.internalAgentNames.has(edge.target) ? 'solid' : 'dashed',
-                        borderColor: 'rgba(255,255,255,0.3)'
-                    }
+                    id: edge.target, name: edge.target, symbolSize: 20,
+                    itemStyle: { color: this.STATUS_COLORS.unknown, borderWidth: 2, borderType: 'dashed', borderColor: 'rgba(255,255,255,0.3)' }
                 });
             }
 
@@ -418,19 +398,13 @@ class AgentOnlineGraphManager {
                     type: isActive ? 'solid' : 'dashed'
                 },
                 effect: isActive ? {
-                    show: true,
-                    period: 3,
-                    trailLength: 0.3,
-                    symbolSize: 4,
-                    color: '#A78BFA'
+                    show: true, period: 3, trailLength: 0.3, symbolSize: 4, color: '#A78BFA'
                 } : undefined
             });
         });
 
         return { nodes, links };
     }
-
-    // ===================== Edge Management =====================
 
     // ===================== Controls =====================
 
@@ -440,9 +414,13 @@ class AgentOnlineGraphManager {
     }
 
     async refresh() {
+        this.agents.clear();
         this.edges.clear();
-        await this.loadData();
+        await this.loadAgents();
         this.renderGraph();
+        // Resubscribe to get fresh state
+        this.wsSend({ id: String(this.subscriptionId), type: 'complete' });
+        this.subscribeToUpdates();
     }
 
     // ===================== Helpers =====================

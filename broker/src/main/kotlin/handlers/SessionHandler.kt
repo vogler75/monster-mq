@@ -1439,6 +1439,8 @@ open class SessionHandler(
      * Made internal so PublishWorker can call it.
      */
     internal fun processTopic(topicName: String, messages: List<BrokerMessage>) {
+        notifyMessageListeners(topicName, messages)
+
         // Group messages by sender for noLocal filtering
         messages.groupBy { it.senderId }.forEach { (senderId, msgsFromSender) ->
             // Single subscription lookup with noLocal filtering
@@ -1719,20 +1721,30 @@ open class SessionHandler(
     // REMOVED: consumeMessageFromBus - no longer needed
     // External messages from Kafka now go through publishMessage() for targeted distribution
 
+    /**
+     * Notify external message listeners (GraphQL subscriptions, I3X) for messages on a given topic.
+     * Called from both the single-message and bulk-processing paths.
+     */
+    private fun notifyMessageListeners(topicName: String, messages: List<BrokerMessage>) {
+        if (messageListeners.isEmpty()) return
+        messageListeners.values.forEach { (topicFilters, callback) ->
+            if (topicFilters.any { filter -> matchesTopicFilter(topicName, filter) }) {
+                messages.forEach { message ->
+                    try {
+                        callback(message)
+                    } catch (e: Exception) {
+                        logger.warning("Error invoking message listener: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
     // Process messages for local clients only (used for both external and targeted internal messages)
     private fun processMessageForLocalClients(message: BrokerMessage) {
         val localNodeId = Monster.getClusterNodeId(vertx)
 
-        // Invoke external message listeners (e.g., GraphQL subscriptions)
-        messageListeners.values.forEach { (topicFilters, callback) ->
-            if (topicFilters.any { filter -> matchesTopicFilter(message.topicName, filter) }) {
-                try {
-                    callback(message)
-                } catch (e: Exception) {
-                    logger.warning("Error invoking message listener: ${e.message}")
-                }
-            }
-        }
+        notifyMessageListeners(message.topicName, listOf(message))
 
         // MQTT v5: Filter out senders with noLocal subscriptions
         val filteredClients = findClientsFiltered(message.topicName, message.senderId)
