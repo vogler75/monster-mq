@@ -415,36 +415,12 @@ class MessageArchiveMongoDB(
             for ((fieldIndex, field) in effectiveFields.withIndex()) {
                 val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
 
-                // Build the value expression inline — JSON field path only ($function removed)
+                // Pure native MQL — aggregation only works with JSON payloads
                 val valueExpr: Any = if (field.isEmpty()) {
-                    // Plain numeric payload stored as payload_blob — requires JS to decode binary
-                    Document("\$function", Document(mapOf(
-                        "body" to """
-                            function(payload, payload_blob, payload_json) {
-                                if (payload !== null && payload !== undefined) {
-                                    if (typeof payload === 'number') return payload;
-                                    if (typeof payload === 'string') { var n = parseFloat(payload); return isNaN(n) ? null : n; }
-                                    return null;
-                                }
-                                if (payload_blob !== null && payload_blob !== undefined) {
-                                    try {
-                                        var base64 = payload_blob.base64();
-                                        var bin = atob(base64);
-                                        var n = parseFloat(bin);
-                                        return isNaN(n) ? null : n;
-                                    } catch(e) { return null; }
-                                }
-                                if (payload_json !== null && payload_json !== undefined) {
-                                    var n = parseFloat(payload_json); return isNaN(n) ? null : n;
-                                }
-                                return null;
-                            }
-                        """.trimIndent(),
-                        "args" to listOf("\$payload", "\$payload_blob", "\$payload_json"),
-                        "lang" to "js"
-                    )))
+                    // No field specified: treat payload as a numeric value (native MQL, no JS)
+                    Document("\$toDouble", "\$payload")
                 } else {
-                    // JSON field — pure native MQL, inlined directly into the accumulator
+                    // JSON field path: extract nested field from payload document
                     Document("\$toDouble", "\$payload.${field.split(".").joinToString(".")}")
                 }
 
