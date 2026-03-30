@@ -134,16 +134,18 @@ class UserManager(
     
     /**
      * Check if user can subscribe to a topic
+     * @param clientId optional MQTT client ID for %c substitution in ACL patterns
      */
-    fun canSubscribe(username: String, topicFilter: String): Boolean {
-        return aclCache.checkSubscribePermission(username, topicFilter)
+    fun canSubscribe(username: String, topicFilter: String, clientId: String? = null): Boolean {
+        return aclCache.checkSubscribePermission(username, topicFilter, clientId)
     }
     
     /**
      * Check if user can publish to a topic
+     * @param clientId optional MQTT client ID for %c substitution in ACL patterns
      */
-    fun canPublish(username: String, topic: String): Boolean {
-        return aclCache.checkPublishPermission(username, topic)
+    fun canPublish(username: String, topic: String, clientId: String? = null): Boolean {
+        return aclCache.checkPublishPermission(username, topic, clientId)
     }
     
     /**

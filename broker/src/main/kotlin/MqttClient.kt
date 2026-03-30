@@ -694,7 +694,7 @@ class MqttClient(
                     allowed = false
                     reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
                     logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
-                } else if (allowed && userManager.isUserManagementEnabled() && !userManager.canSubscribe(username, topic)) {
+                } else if (allowed && userManager.isUserManagementEnabled() && !userManager.canSubscribe(username, topic, clientId)) {
                     // ACL check
                     allowed = false
                     reasonCode = MqttSubAckReasonCode.NOT_AUTHORIZED
@@ -733,7 +733,7 @@ class MqttClient(
 
                 // ACL check (only if still allowed so far and user management enabled)
                 if (allowed && userManager.isUserManagementEnabled()) {
-                    if (!userManager.canSubscribe(username, topic)) {
+                    if (!userManager.canSubscribe(username, topic, clientId)) {
                         allowed = false
                         logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
                     }
@@ -911,7 +911,7 @@ class MqttClient(
         // Check ACL permissions
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
         val canPublish = if (userManager.isUserManagementEnabled()) {
-            userManager.canPublish(username, topicName)
+            userManager.canPublish(username, topicName, clientId)
         } else {
             true // Allow all if user management is disabled
         }

@@ -16,7 +16,8 @@ MonsterMQ provides a robust user authentication and authorization system that co
 - ⚡ **High-Performance Caching**: In-memory ACL cache with topic tree optimization
 - 🌐 **GraphQL API**: Complete CRUD operations for users and ACL rules
 - 🎯 **MQTT Topic Wildcards**: Full support for `+` and `#` wildcards in ACL rules
-- 🔄 **Real-time Updates**: Automatic cache refresh on changes
+- � **Pattern Substitution**: `%c` (client ID) and `%u` (username) placeholders in topic patterns
+- �🔄 **Real-time Updates**: Automatic cache refresh on changes
 - 👤 **Anonymous Access**: Configurable anonymous user support
 
 ## Configuration
@@ -143,6 +144,27 @@ ACL rules support full MQTT wildcard syntax:
 - `building/+/sensor/#` matches:
   - `building/floor1/sensor/temperature`
   - `building/floor2/sensor/humidity/current`
+
+### Pattern Substitution
+
+ACL topic patterns support `%c` and `%u` placeholders that are dynamically replaced at evaluation time, similar to Mosquitto's ACL substitution:
+
+#### Client ID (`%c`)
+Replaced with the connecting client's MQTT client ID. Useful for restricting each device to its own topic namespace.
+
+- `devices/%c/#` — for client `sensor-42` matches `devices/sensor-42/temperature`
+- `clients/%c/command` — for client `pump-01` matches `clients/pump-01/command`
+
+**Note**: `%c` is only available for MQTT connections. Rules using `%c` will not match for GraphQL or NATS clients (which have no MQTT client ID).
+
+#### Username (`%u`)
+Replaced with the authenticated username. Useful when usernames map to logical scopes.
+
+- `users/%u/status` — for user `device1` matches `users/device1/status`
+- `home/%u/#` — for user `alice` matches `home/alice/lights/kitchen`
+
+#### Combined Placeholders
+- `data/%u/%c/telemetry` — for user `device1` with client ID `sensor-42` matches `data/device1/sensor-42/telemetry`
 
 ### Permission Resolution
 

@@ -318,7 +318,8 @@
                         <div style="margin-bottom:1rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; flex-shrink: 0;">
                             <div style="flex:1 1 200px;">
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
-                                <input type="text" id="acl-topic-pattern" class="form-control acl-drop-zone" placeholder="sensors/+/temp" />
+                                <input type="text" id="acl-topic-pattern" class="form-control acl-drop-zone" placeholder="devices/%c/#" />
+                                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">Use <code>%c</code> for client ID, <code>%u</code> for username, <code>+</code> / <code>#</code> for MQTT wildcards</div>
                             </div>
                             <div>
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>

@@ -116,14 +116,15 @@ class AclCache {
     
     /**
      * Check if user can subscribe to a specific topic
+     * @param clientId optional MQTT client ID for %c substitution in ACL patterns
      */
-    fun checkSubscribePermission(username: String, topicFilter: String): Boolean {
-        val cacheKey = "SUB:$username:$topicFilter"
+    fun checkSubscribePermission(username: String, topicFilter: String, clientId: String? = null): Boolean {
+        val cacheKey = "SUB:$username:${clientId ?: ""}:$topicFilter"
         
         // Check cache first
         permissionCache[cacheKey]?.let { return it }
         
-        val result = checkPermissionInternal(username, topicFilter, true)
+        val result = checkPermissionInternal(username, topicFilter, true, clientId)
         
         // Cache the result if cache isn't full
         if (permissionCache.size < maxCacheSize) {
@@ -135,14 +136,15 @@ class AclCache {
     
     /**
      * Check if user can publish to a specific topic
+     * @param clientId optional MQTT client ID for %c substitution in ACL patterns
      */
-    fun checkPublishPermission(username: String, topic: String): Boolean {
-        val cacheKey = "PUB:$username:$topic"
+    fun checkPublishPermission(username: String, topic: String, clientId: String? = null): Boolean {
+        val cacheKey = "PUB:$username:${clientId ?: ""}:$topic"
         
         // Check cache first
         permissionCache[cacheKey]?.let { return it }
         
-        val result = checkPermissionInternal(username, topic, false)
+        val result = checkPermissionInternal(username, topic, false, clientId)
         
         // Cache the result if cache isn't full
         if (permissionCache.size < maxCacheSize) {
@@ -153,9 +155,11 @@ class AclCache {
     }
     
     /**
-     * Internal permission checking logic
+     * Internal permission checking logic.
+     * Supports %c (client ID) and %u (username) placeholders in ACL topic patterns,
+     * similar to Mosquitto's ACL substitution.
      */
-    private fun checkPermissionInternal(username: String, topic: String, isSubscribe: Boolean): Boolean {
+    private fun checkPermissionInternal(username: String, topic: String, isSubscribe: Boolean, clientId: String? = null): Boolean {
         val user = users[username] ?: return false
         
         // Admin users bypass ACL checks
@@ -179,8 +183,9 @@ class AclCache {
             val ruleApplies = if (isSubscribe) rule.canSubscribe else rule.canPublish
             if (!ruleApplies) continue
             
-            if (topicMatches(rule.topicPattern, topic)) {
-                logger.finest { "ACL rule match: user=$username, topic=$topic, pattern=${rule.topicPattern}, allow=${if (isSubscribe) "subscribe" else "publish"}" }
+            val resolvedPattern = resolvePattern(rule.topicPattern, username, clientId)
+            if (resolvedPattern != null && topicMatches(resolvedPattern, topic)) {
+                logger.finest { "ACL rule match: user=$username, topic=$topic, pattern=${rule.topicPattern}, resolved=$resolvedPattern, allow=${if (isSubscribe) "subscribe" else "publish"}" }
                 return true
             }
         }
@@ -188,6 +193,22 @@ class AclCache {
         // No matching allow rule found among existing rules
         logger.finest { "No ACL rule match: user=$username, topic=$topic, operation=${if (isSubscribe) "subscribe" else "publish"}" }
         return false
+    }
+    
+    /**
+     * Resolve %c and %u placeholders in an ACL topic pattern.
+     * - %u is replaced with the username
+     * - %c is replaced with the client ID (if available)
+     * Returns null if the pattern contains %c but no client ID is available (no match possible).
+     */
+    private fun resolvePattern(pattern: String, username: String, clientId: String?): String? {
+        if (!pattern.contains('%')) return pattern
+        var resolved = pattern.replace("%u", username)
+        if (resolved.contains("%c")) {
+            if (clientId == null) return null
+            resolved = resolved.replace("%c", clientId)
+        }
+        return resolved
     }
     
     /**

@@ -23,6 +23,9 @@ fun main(args: Array<String>) {
     // Test ACL cache
     testAclCache()
     
+    // Test ACL pattern substitution (%c and %u)
+    testAclPatternSubstitution()
+    
     // Test SQLite store
     testSqliteStore()
     
@@ -128,6 +131,94 @@ fun testAclCache() {
                     println("✓ Permission caching appears to be working")
                 } else {
                     println("Failed ACL cache test: ${result.cause()?.message}")
+                }
+                latch.countDown()
+            }
+        }
+
+        latch.await(10, TimeUnit.SECONDS)
+    } finally {
+        vertx.close()
+    }
+}
+
+fun testAclPatternSubstitution() {
+    println("\n--- Testing ACL Pattern Substitution (%c and %u) ---")
+
+    val tempDbFile = File.createTempFile("test_acl_patterns", ".db")
+    tempDbFile.deleteOnExit()
+
+    val cache = AclCache()
+    val vertx = Vertx.vertx()
+
+    try {
+        val latch = CountDownLatch(1)
+        val store = UserStoreSqlite(tempDbFile.absolutePath, vertx)
+        store.init().onComplete { initResult: io.vertx.core.AsyncResult<Boolean> ->
+            assert(initResult.succeeded()) { "Store initialization should succeed" }
+
+            val deviceUser = User("device1", auth.PasswordEncoder.hash("password"), true, true, true, false)
+
+            store.createUser(deviceUser).compose { _ ->
+                // Rule with %c: each client can only pub/sub to its own topic tree
+                store.createAclRule(AclRule("", "device1", "devices/%c/#", true, true, 10))
+            }.compose { _ ->
+                // Rule with %u: each user can only pub/sub to its own topic tree
+                store.createAclRule(AclRule("", "device1", "users/%u/status", true, false, 10))
+            }.compose { _ ->
+                // Rule with both %c and %u
+                store.createAclRule(AclRule("", "device1", "data/%u/%c/telemetry", false, true, 10))
+            }.compose { _ ->
+                cache.loadFromStore(store)
+            }.compose { _: Void ->
+                store.close()
+            }.onComplete { result: io.vertx.core.AsyncResult<Void> ->
+                if (result.succeeded()) {
+                    // Test %c substitution with matching client ID
+                    assert(cache.checkSubscribePermission("device1", "devices/sensor-42/temperature", "sensor-42")) {
+                        "%c should match client ID 'sensor-42'"
+                    }
+                    assert(cache.checkPublishPermission("device1", "devices/sensor-42/data", "sensor-42")) {
+                        "%c should allow publish for matching client ID"
+                    }
+                    println("✓ %c substitution matches correct client ID")
+
+                    // Test %c substitution with non-matching client ID
+                    assert(!cache.checkSubscribePermission("device1", "devices/sensor-99/temperature", "sensor-42")) {
+                        "%c should NOT match a different client ID"
+                    }
+                    println("✓ %c substitution rejects wrong client ID")
+
+                    // Test %c without client ID (e.g. GraphQL/NATS) - should not match
+                    assert(!cache.checkSubscribePermission("device1", "devices/sensor-42/temperature")) {
+                        "%c patterns should not match when no client ID is provided"
+                    }
+                    println("✓ %c patterns do not match without client ID")
+
+                    // Test %u substitution
+                    assert(cache.checkSubscribePermission("device1", "users/device1/status")) {
+                        "%u should match username 'device1'"
+                    }
+                    assert(!cache.checkSubscribePermission("device1", "users/otheruser/status")) {
+                        "%u should NOT match a different username"
+                    }
+                    println("✓ %u substitution works correctly")
+
+                    // Test combined %u and %c
+                    assert(cache.checkPublishPermission("device1", "data/device1/sensor-42/telemetry", "sensor-42")) {
+                        "Combined %u/%c should match when both are correct"
+                    }
+                    assert(!cache.checkPublishPermission("device1", "data/device1/sensor-99/telemetry", "sensor-42")) {
+                        "Combined %u/%c should NOT match when client ID is wrong"
+                    }
+                    assert(!cache.checkPublishPermission("device1", "data/otheruser/sensor-42/telemetry", "sensor-42")) {
+                        "Combined %u/%c should NOT match when username part is wrong"
+                    }
+                    println("✓ Combined %u and %c substitution works correctly")
+
+                    println("✓ All ACL pattern substitution tests passed")
+                } else {
+                    println("Failed ACL pattern substitution test: ${result.cause()?.message}")
                 }
                 latch.countDown()
             }
