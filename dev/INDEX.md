@@ -23,6 +23,7 @@ This directory contains documentation for developers and AI coding agents workin
 - [plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md](plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md) — Amazon Kinesis client integration
 
 **Performance optimization:**
+- [plans/QUEUEDB_EMBEDDED_DATABASE.md](plans/QUEUEDB_EMBEDDED_DATABASE.md) — Embedded QueueDB with Hazelcast IMap clustering (sequence-based inbox model, reference counting, EntryProcessor)
 - [plans/QUEUED_MESSAGES_OPTIMIZATION.md](plans/QUEUED_MESSAGES_OPTIMIZATION.md) — QoS > 0 queued messages PostgreSQL optimization (FOR UPDATE SKIP LOCKED, PGMQ-inspired redesign)
 
 **Strategic architecture:**
