@@ -86,7 +86,9 @@ abstract class DatabaseConnection(
                 connection!!.prepareStatement("SELECT 1").use { stmt ->
                     stmt.executeQuery().use { rs ->
                         if (rs.next()) {
-                            connection!!.commit() // Avoid holding an open transaction from the health check
+                            // Commit to avoid holding an open transaction from the health check
+                            // (only when autoCommit is off — some stores use autoCommit=true)
+                            if (!connection!!.autoCommit) connection!!.commit()
                             return true // Connection is good
                         }
                     }
