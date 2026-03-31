@@ -950,7 +950,7 @@ MORE INFO:
 
                 // MCP Server
                 val mcpConfig = configJson.getJsonObject("MCP", JsonObject())
-                val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
+                val mcpEnabled = mcpConfig.getBoolean("Enabled", false)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpServer = if (mcpEnabled) {
                     McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, userManager)
