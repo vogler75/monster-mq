@@ -226,15 +226,22 @@ class SQLiteVerticle : AbstractVerticle() {
                     val row = JsonObject()
                     for (i in 1..columnCount) {
                         val columnName = metaData.getColumnName(i)
-                        val value = when (metaData.getColumnType(i)) {
-                            Types.VARCHAR, Types.CHAR, Types.LONGVARCHAR -> resultSet.getString(i)
-                            Types.INTEGER, Types.SMALLINT, Types.TINYINT -> resultSet.getInt(i)
-                            Types.BIGINT -> resultSet.getLong(i)
-                            Types.FLOAT, Types.REAL -> resultSet.getFloat(i)
-                            Types.DOUBLE -> resultSet.getDouble(i)
-                            Types.BOOLEAN, Types.BIT -> resultSet.getBoolean(i)
+                        val columnType = metaData.getColumnType(i)
+                        val columnTypeName = metaData.getColumnTypeName(i)?.uppercase() ?: ""
+                        val rawValue = when (columnType) {
                             Types.BLOB, Types.BINARY, Types.VARBINARY, Types.LONGVARBINARY -> resultSet.getBytes(i)
                             else -> resultSet.getObject(i)
+                        }
+                        val value = when {
+                            resultSet.wasNull() -> null
+                            rawValue is ByteArray -> rawValue
+                            rawValue is Boolean -> rawValue
+                            rawValue is Number && (columnType == Types.BOOLEAN || columnType == Types.BIT || columnTypeName == "BOOLEAN") ->
+                                rawValue.toInt() != 0
+                            rawValue is Byte || rawValue is Short || rawValue is Int || rawValue is Long ->
+                                (rawValue as Number).toLong()
+                            rawValue is Float || rawValue is Double -> rawValue
+                            else -> rawValue
                         }
                         if (value != null) {
                             row.put(columnName, value)
