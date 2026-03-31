@@ -505,10 +505,10 @@ class MessageStoreSQLite(
 
         val params = JsonArray().add(sqlNamespacePattern).add(sqlSearchPattern)
         
-        val results = sqlClient.executeQuerySync(sql, params)
-        results.forEach { row ->
-            val rowObj = row as JsonObject
-            val fullTopic = rowObj.getString("topic") ?: ""
+        val results = sqlClient.executeQueryDirect(sql, params)
+        results.forEach {
+            val row = it as JsonObject
+            val fullTopic = row.getString("topic") ?: ""
             resultTopics.add(fullTopic)
         }
 
@@ -533,11 +533,11 @@ class MessageStoreSQLite(
 
         val params = JsonArray().add(sqlNamespacePattern).add("%$sqlSearchPattern%")
         
-        val results = sqlClient.executeQuerySync(sql, params)
-        results.forEach { row ->
-            val rowObj = row as JsonObject
-            val fullTopic = rowObj.getString("topic") ?: ""
-            val configJson = rowObj.getString("config") ?: ""
+        val results = sqlClient.executeQueryDirect(sql, params)
+        results.forEach {
+            val row = it as JsonObject
+            val fullTopic = row.getString("topic") ?: ""
+            val configJson = row.getString("config") ?: ""
             resultTopics.add(Pair(fullTopic, configJson))
         }
 
