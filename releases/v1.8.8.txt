@@ -1,0 +1,9 @@
+Release v1.8.8
+Built from commit: 82eef75
+Date: 2026-03-31 23:32:28
+
+Changes since v1.8.7:
+---
+82eef75 feat: add agent monitor test console
+5b05fc6 fix: stabilize sqlite retained message lookups
+84323c5 docs: add Codex repository guidance and skills
