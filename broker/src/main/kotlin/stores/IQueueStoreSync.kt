@@ -4,6 +4,7 @@ import at.rocworks.data.BrokerMessage
 
 enum class QueueStoreType {
     POSTGRES,
+    POSTGRES_V1,
     POSTGRES_V2,
     MONGODB,
     SQLITE

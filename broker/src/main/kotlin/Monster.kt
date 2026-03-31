@@ -1437,7 +1437,7 @@ MORE INFO:
 
         sqliteReady.compose { _ ->
             val store: IQueueStoreSync = when (queueStoreType) {
-                QueueStoreType.POSTGRES -> {
+                QueueStoreType.POSTGRES, QueueStoreType.POSTGRES_V1 -> {
                     QueueStorePostgresV1(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 }
                 QueueStoreType.POSTGRES_V2 -> {

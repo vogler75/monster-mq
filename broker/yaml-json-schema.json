@@ -85,11 +85,12 @@
       "type": "string",
       "enum": [
         "POSTGRES",
+        "POSTGRES_V1",
         "POSTGRES_V2",
         "MONGODB",
         "SQLITE"
       ],
-      "description": "Queue store backend. Defaults to matching SessionStoreType if not set."
+      "description": "Queue store backend. Defaults to matching SessionStoreType if not set. POSTGRES and POSTGRES_V1 both use the two-table design. POSTGRES_V2 uses the single-table PGMQ-inspired design."
     },
     "QueueVisibilityTimeoutSeconds": {
       "type": "integer",
