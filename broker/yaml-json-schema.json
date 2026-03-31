@@ -63,14 +63,38 @@
         "Servers"
       ]
     },
+    "DefaultStoreType": {
+      "type": "string",
+      "enum": [
+        "POSTGRES",
+        "MONGODB",
+        "SQLITE"
+      ],
+      "description": "Default database backend for all store types unless overridden individually."
+    },
     "SessionStoreType": {
       "type": "string",
       "enum": [
         "POSTGRES",
-        "CRATEDB",
         "MONGODB",
         "SQLITE"
-      ]
+      ],
+      "description": "Session store backend."
+    },
+    "QueueStoreType": {
+      "type": "string",
+      "enum": [
+        "POSTGRES",
+        "POSTGRES_V2",
+        "MONGODB",
+        "SQLITE"
+      ],
+      "description": "Queue store backend. Defaults to matching SessionStoreType if not set."
+    },
+    "QueueVisibilityTimeoutSeconds": {
+      "type": "integer",
+      "default": 30,
+      "description": "Visibility timeout for V2 queue stores (seconds). Messages not ACKed within this time become visible again."
     },
     "RetainedStoreType": {
       "type": "string",
@@ -183,11 +207,10 @@
       "type": "string",
       "enum": [
         "POSTGRES",
-        "CRATEDB",
         "MONGODB",
         "SQLITE"
       ],
-      "description": "Database type for storing archive configuration"
+      "description": "Database type for storing archive configuration."
     },
     "Postgres": {
       "type": "object",

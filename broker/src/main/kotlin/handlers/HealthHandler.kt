@@ -11,7 +11,6 @@ import io.vertx.core.Promise
 import io.vertx.core.Vertx
 // VertxInternal removed in Vert.x 5 - using alternative approaches
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
-import java.util.concurrent.Callable
 import kotlin.system.exitProcess
 
 
@@ -82,13 +81,12 @@ class HealthHandler(
     }
 
     private fun singleInstanceCheck(startPromise: Promise<Void>) {
-        vertx.executeBlocking(Callable {
-            sessionHandler.purgeSessions()
+        sessionHandler.purgeSessions().compose {
             sessionHandler.purgeQueuedMessages()
-        }).onComplete {
+        }.onComplete {
             logger.fine("Purged sessions and queued messages")
             vertx.setPeriodic(60_000 * 10) {
-                vertx.executeBlocking(Callable { sessionHandler.purgeQueuedMessages() })
+                sessionHandler.purgeQueuedMessages()
             }
             startPromise.complete()
         }
@@ -164,14 +162,13 @@ class HealthHandler(
     private fun weBecameTheLeader(first: Boolean) {
         logger.info("We are the ${if (first) "first " else ""}leader now.")
         if (first) {
-            sessionHandler.purgeSessions()
-            sessionHandler.purgeQueuedMessages()
+            sessionHandler.purgeSessions().compose {
+                sessionHandler.purgeQueuedMessages()
+            }
         }
         if (periodicId == 0L) {
             periodicId = vertx.setPeriodic(600_000) { // every 10 minutes
-                vertx.executeBlocking(Callable {
-                    sessionHandler.purgeQueuedMessages()
-                })
+                sessionHandler.purgeQueuedMessages()
             }
         }
     }

@@ -259,16 +259,19 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 
 ## Database Support
 
-| Database | Session Store | Retained Store | Message Archive | Clustering |
-|----------|:-------------:|:--------------:|:---------------:|:----------:|
-| PostgreSQL | Yes | Yes | Yes | Yes |
-| CrateDB | Yes | Yes | Yes | Yes |
-| MongoDB | Yes | Yes | Yes | Yes |
-| SQLite | Yes | Yes | Yes | No |
-| Memory | No | Yes | No | Yes |
-| Hazelcast | No | Yes | No | Yes |
+| Database | Session Store | Queue Store | Retained / Last Value | Message Archive | Config Store |
+|----------|:---:|:---:|:---:|:---:|:---:|
+| PostgreSQL | Yes | Yes (V1, V2) | Yes | Yes | Yes |
+| MongoDB | Yes | Yes | Yes | Yes | Yes |
+| SQLite | Yes | Yes | Yes | Yes | Yes |
+| CrateDB | - | - | Yes | Yes | - |
+| Memory | - | - | Yes | - | - |
+| Hazelcast | - | - | Yes | - | - |
+| Kafka | - | - | - | Yes | - |
 
-SQLite is not suitable for cluster mode; use PostgreSQL, CrateDB, or MongoDB instead.
+- **Session Store**, **Queue Store**, and **Config Store** require strict read-after-write consistency. CrateDB is not supported for these due to its eventual consistency model.
+- **Queue Store V2** (PostgreSQL only) uses a PGMQ-inspired single-table design with visibility timeout for higher throughput.
+- SQLite is not suitable for cluster mode; use PostgreSQL or MongoDB instead.
 
 ## Default Endpoints
 
