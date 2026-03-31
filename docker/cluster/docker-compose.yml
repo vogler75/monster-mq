@@ -29,7 +29,7 @@ services:
       - "23002:3002"
       - "23003:3003"  
     environment:
-      - HAZELCAST_CONFIG=hazelcast.xml^
+      - HAZELCAST_CONFIG=hazelcast.xml
     command: ["-cluster"]
     volumes:
       - ./security:/app/security
