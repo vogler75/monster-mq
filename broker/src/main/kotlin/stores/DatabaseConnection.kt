@@ -86,6 +86,7 @@ abstract class DatabaseConnection(
                 connection!!.prepareStatement("SELECT 1").use { stmt ->
                     stmt.executeQuery().use { rs ->
                         if (rs.next()) {
+                            connection!!.commit() // Avoid holding an open transaction from the health check
                             return true // Connection is good
                         }
                     }
