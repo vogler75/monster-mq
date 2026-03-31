@@ -5,14 +5,40 @@ import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import java.io.File
+import java.sql.Connection
+import java.sql.DriverManager
+import java.sql.Types
 import java.util.concurrent.TimeUnit
 
 /**
  * Client helper for interacting with SQLiteVerticle via event bus.
  * Provides convenient methods for common database operations.
+ *
+ * Also provides a direct read-only JDBC connection for synchronous queries
+ * that would otherwise deadlock when called from within vertx.executeBlocking
+ * (the event bus reply cannot be dispatched while the caller blocks).
+ * SQLite WAL mode supports concurrent readers safely.
  */
 class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
     private val logger = Utils.getLogger(this::class.java)
+
+    /** Absolute path to the DB file, resolved at construction time when the working directory is correct. */
+    private val absoluteDbPath: String = File(dbPath).absolutePath
+
+    /** Direct read-only JDBC connection for synchronous queries (thread-safe for reads in WAL mode) */
+    private val readConnection: Connection by lazy {
+        val conn = DriverManager.getConnection("jdbc:sqlite:$absoluteDbPath", "", "")
+        conn.createStatement().use { stmt ->
+            stmt.executeUpdate("PRAGMA journal_mode = WAL")
+            stmt.executeUpdate("PRAGMA synchronous = NORMAL")
+            stmt.executeUpdate("PRAGMA cache_size = -16000")
+            stmt.executeUpdate("PRAGMA query_only = ON")
+            stmt.executeUpdate("PRAGMA busy_timeout = 5000")
+        }
+        logger.info { "Created direct read-only SQLite connection for [$absoluteDbPath]" }
+        conn
+    }
     
     /**
      * Execute an UPDATE/INSERT/DELETE statement asynchronously
@@ -128,5 +154,65 @@ class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
         return vertx.eventBus()
             .request<JsonObject>(SQLiteVerticle.EB_INIT_DB, request)
             .mapEmpty()
+    }
+
+    /**
+     * Execute a SELECT query using a direct JDBC connection, bypassing the event bus.
+     * Use this for synchronous queries called from within vertx.executeBlocking or worker threads,
+     * where executeQuerySync would deadlock waiting for an event bus reply.
+     * Safe for reads in WAL mode — all writes remain serialized through the SQLiteVerticle.
+     */
+    @Synchronized
+    fun executeQueryDirect(sql: String, params: JsonArray = JsonArray()): JsonArray {
+        val results = JsonArray()
+        try {
+            readConnection.prepareStatement(sql).use { stmt ->
+                params.forEachIndexed { index, value ->
+                    when (value) {
+                        null -> stmt.setNull(index + 1, Types.NULL)
+                        is String -> stmt.setString(index + 1, value)
+                        is Number -> {
+                            when (value) {
+                                is Int -> stmt.setInt(index + 1, value)
+                                is Long -> stmt.setLong(index + 1, value)
+                                is Double -> stmt.setDouble(index + 1, value)
+                                is Float -> stmt.setFloat(index + 1, value)
+                                else -> stmt.setObject(index + 1, value)
+                            }
+                        }
+                        is Boolean -> stmt.setBoolean(index + 1, value)
+                        else -> stmt.setObject(index + 1, value)
+                    }
+                }
+                val rs = stmt.executeQuery()
+                val meta = rs.metaData
+                val columnCount = meta.columnCount
+                while (rs.next()) {
+                    val row = JsonObject()
+                    for (i in 1..columnCount) {
+                        val columnName = meta.getColumnName(i)
+                        // SQLite JDBC driver reports unreliable column types (e.g. BLOB as VARCHAR).
+                        // Use getObject() and dispatch on the actual Java runtime type instead.
+                        val rawValue = rs.getObject(i)
+                        if (rawValue != null) {
+                            when (rawValue) {
+                                is ByteArray -> row.put(columnName, rawValue)
+                                is Int -> row.put(columnName, rawValue)
+                                is Long -> row.put(columnName, rawValue)
+                                is Float -> row.put(columnName, rawValue)
+                                is Double -> row.put(columnName, rawValue)
+                                is Boolean -> row.put(columnName, rawValue)
+                                is String -> row.put(columnName, rawValue)
+                                else -> row.put(columnName, rawValue.toString())
+                            }
+                        }
+                    }
+                    results.add(row)
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Direct query failed [$sql]: ${e.message}")
+        }
+        return results
     }
 }

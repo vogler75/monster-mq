@@ -314,46 +314,44 @@ class MessageStoreSQLite(
 
         logger.fine { "SQL: $sql [findMatchingMessages]" }
 
-        sqlClient.executeQuery(sql, params).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                val currentTimeMillis = System.currentTimeMillis()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
-                    val topic = rowObj.getString("topic")
-                    val payload = rowObj.getBinary("payload_blob") ?: ByteArray(0)
-                    val qos = rowObj.getInteger("qos", 0)
-                    val clientId = rowObj.getString("client_id", "")
-                    val messageUuid = rowObj.getString("message_uuid", "")
-                    val creationTime = rowObj.getLong("creation_time", currentTimeMillis)
-                    val messageExpiryInterval = if (rowObj.getValue("message_expiry_interval") == null) null else rowObj.getLong("message_expiry_interval")
-                    
-                    // Phase 5: Check if message has expired
-                    if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
-                        val ageSeconds = (currentTimeMillis - creationTime) / 1000
-                        if (ageSeconds >= messageExpiryInterval) {
-                            return@forEach // Skip expired message
-                        }
+        try {
+            val results = sqlClient.executeQueryDirect(sql, params)
+            val currentTimeMillis = System.currentTimeMillis()
+            results.forEach { row ->
+                val rowObj = row as JsonObject
+                val topic = rowObj.getString("topic")
+                val payload = rowObj.getBinary("payload_blob") ?: ByteArray(0)
+                val qos = rowObj.getInteger("qos", 0)
+                val clientId = rowObj.getString("client_id", "")
+                val messageUuid = rowObj.getString("message_uuid", "")
+                val creationTime = rowObj.getLong("creation_time", currentTimeMillis)
+                val messageExpiryInterval = if (rowObj.getValue("message_expiry_interval") == null) null else rowObj.getLong("message_expiry_interval")
+                
+                // Phase 5: Check if message has expired
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) {
+                        return@forEach // Skip expired message
                     }
-                    
-                    val message = BrokerMessage(
-                        messageUuid = messageUuid,
-                        messageId = 0,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = qos,
-                        isRetain = true,
-                        isDup = false,
-                        isQueued = false,
-                        clientId = clientId,
-                        time = java.time.Instant.ofEpochMilli(creationTime),
-                        messageExpiryInterval = messageExpiryInterval
-                    )
-                    callback(message)
                 }
-            } else {
-                logger.severe("Error finding data for topic [$topicName]: ${result.cause()?.message}")
+                
+                val message = BrokerMessage(
+                    messageUuid = messageUuid,
+                    messageId = 0,
+                    topicName = topic,
+                    payload = payload,
+                    qosLevel = qos,
+                    isRetain = true,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = clientId,
+                    time = java.time.Instant.ofEpochMilli(creationTime),
+                    messageExpiryInterval = messageExpiryInterval
+                )
+                callback(message)
             }
+        } catch (e: Exception) {
+            logger.severe("Error finding data for topic [$topicName]: ${e.message}")
         }
     }
 
@@ -365,13 +363,9 @@ class MessageStoreSQLite(
             val sql = "SELECT 1 FROM $tableName WHERE topic = ? LIMIT 1"
             val params = JsonArray().add(topicPattern)
 
-            sqlClient.executeQuery(sql, params).onComplete { result ->
-                if (result.succeeded()) {
-                    val results = result.result()
-                    if (results.size() > 0) {
-                        callback(topicPattern)
-                    }
-                }
+            val results = sqlClient.executeQueryDirect(sql, params)
+            if (results.size() > 0) {
+                callback(topicPattern)
             }
             return
         }
@@ -438,55 +432,53 @@ class MessageStoreSQLite(
 
         logger.fine { "Optimized SQL for findMatchingTopics: $sql" }
 
-        sqlClient.executeQuery(sql, params).onComplete { result ->
-            if (result.succeeded()) {
-                val results = result.result()
-                results.forEach { row ->
-                    val rowObj = row as JsonObject
+        try {
+            val results = sqlClient.executeQueryDirect(sql, params)
+            results.forEach { row ->
+                val rowObj = row as JsonObject
 
-                    // Reconstruct topic name from the selected columns
-                    val topicParts = mutableListOf<String>()
+                // Reconstruct topic name from the selected columns
+                val topicParts = mutableListOf<String>()
 
-                    if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
-                        // All from fixed columns
-                        for (i in 0 until extractDepth) {
-                            val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
-                            if (part != null && part.isNotEmpty()) {
-                                topicParts.add(part)
-                            }
+                if (extractDepth <= MAX_FIXED_TOPIC_LEVELS) {
+                    // All from fixed columns
+                    for (i in 0 until extractDepth) {
+                        val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
+                        if (part != null && part.isNotEmpty()) {
+                            topicParts.add(part)
                         }
-                    } else {
-                        // Fixed columns + JSON array
-                        for (i in 0 until MAX_FIXED_TOPIC_LEVELS) {
-                            val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
-                            if (part != null && part.isNotEmpty()) {
-                                topicParts.add(part)
-                            }
-                        }
-
-                        // Add from JSON array
-                        val topicRArray = rowObj.getJsonArray("topic_r")
-                        if (topicRArray != null) {
-                            val remainingLevels = extractDepth - MAX_FIXED_TOPIC_LEVELS
-                            for (i in 0 until minOf(remainingLevels, topicRArray.size())) {
-                                val part = topicRArray.getString(i)
-                                if (part != null && part.isNotEmpty()) {
-                                    topicParts.add(part)
-                                }
-                            }
+                    }
+                } else {
+                    // Fixed columns + JSON array
+                    for (i in 0 until MAX_FIXED_TOPIC_LEVELS) {
+                        val part = rowObj.getString(FIXED_TOPIC_COLUMN_NAMES[i])
+                        if (part != null && part.isNotEmpty()) {
+                            topicParts.add(part)
                         }
                     }
 
-                    if (topicParts.isNotEmpty()) {
-                        val topic = topicParts.joinToString("/")
-                        if (!callback(topic)) {
-                            return@forEach // Stop if callback returns false
+                    // Add from JSON array
+                    val topicRArray = rowObj.getJsonArray("topic_r")
+                    if (topicRArray != null) {
+                        val remainingLevels = extractDepth - MAX_FIXED_TOPIC_LEVELS
+                        for (i in 0 until minOf(remainingLevels, topicRArray.size())) {
+                            val part = topicRArray.getString(i)
+                            if (part != null && part.isNotEmpty()) {
+                                topicParts.add(part)
+                            }
                         }
                     }
                 }
-            } else {
-                logger.severe("Error finding topics for pattern [$topicPattern]: ${result.cause()?.message}")
+
+                if (topicParts.isNotEmpty()) {
+                    val topic = topicParts.joinToString("/")
+                    if (!callback(topic)) {
+                        return@forEach // Stop if callback returns false
+                    }
+                }
             }
+        } catch (e: Exception) {
+            logger.severe("Error finding topics for pattern [$topicPattern]: ${e.message}")
         }
     }
 
