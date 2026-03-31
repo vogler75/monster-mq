@@ -3,6 +3,12 @@ class UserManager {
         this.users = [];
         this.currentEditingUser = null;
         this.currentAclUsername = null;
+        this._abortController = new AbortController();
+
+        // Clean up document-level listeners on SPA navigation
+        if (window.registerPageCleanup) {
+            window.registerPageCleanup(() => this._abortController.abort());
+        }
 
         this.init();
     }
@@ -101,7 +107,7 @@ class UserManager {
                     this.addAclRule(this.currentAclUsername);
                 }
             }
-        });
+        }, { signal: this._abortController.signal });
 
         document.getElementById('user-form').addEventListener('submit', (e) => {
             this.handleUserSubmit(e);
@@ -127,7 +133,7 @@ class UserManager {
                 const username = deleteAclBtn.dataset.username;
                 this.deleteAclRule(username, ruleId);
             }
-        });
+        }, { signal: this._abortController.signal });
     }
 
     logout() {
