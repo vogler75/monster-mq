@@ -1,5 +1,5 @@
-TCP: 1885
-WS: 2885
+TCP: 31883
+WS: 31884
 
 NodeName: "node3"
 
@@ -22,7 +22,7 @@ Metrics:
 
 GraphQL:
   Enabled: true
-  Port: 4003
+  Port: 34000
   Path: /graphql
 
 # PostgreSQL configuration
