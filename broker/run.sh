@@ -102,9 +102,25 @@ if [ "$NO_RUN" = true ]; then
     exit 0
 fi
 
-# Kill any existing MonsterMQ instances
-echo "Checking for existing MonsterMQ instances..."
-EXISTING_PIDS=$(pgrep -f "at.rocworks.MonsterKt")
+# Kill any existing MonsterMQ instances (skip in cluster mode)
+IS_CLUSTER=false
+for arg in "${REMAINING_ARGS[@]}"; do
+    if [ "$arg" = "-cluster" ]; then
+        IS_CLUSTER=true
+        break
+    fi
+done
+
+if [ "$IS_CLUSTER" = true ]; then
+    echo "Cluster mode: skipping kill of existing instances."
+else
+    echo "Checking for existing MonsterMQ instances..."
+fi
+
+EXISTING_PIDS=""
+if [ "$IS_CLUSTER" = false ]; then
+    EXISTING_PIDS=$(pgrep -f "at.rocworks.MonsterKt")
+fi
 
 if [ ! -z "$EXISTING_PIDS" ]; then
     echo "Found existing MonsterMQ processes: $EXISTING_PIDS"

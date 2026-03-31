@@ -61,36 +61,40 @@ class MessageArchiveMongoDB(
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting MongoDB Message Archive [$name] with async connection management")
+        logger.info("Starting MongoDB Message Archive [$name]")
 
-        // Start connection establishment in background
-        initiateConnection()
+        // Wait for initial connection before completing startup
+        initiateConnection().onComplete { result ->
+            // Set up periodic health check with random offset to stagger across stores
+            val staggerDelay = (Math.random() * 5000).toLong()
+            vertx.setTimer(staggerDelay) {
+                vertx.setPeriodic(healthCheckInterval) {
+                    performHealthCheck()
+                }
+            }
 
-        // Set up periodic health check with random offset to stagger across stores
-        val staggerDelay = (Math.random() * 5000).toLong()
-        vertx.setTimer(staggerDelay) {
-            vertx.setPeriodic(healthCheckInterval) {
-                performHealthCheck()
+            if (result.succeeded()) {
+                startPromise.complete()
+            } else {
+                logger.warning("MongoDB Message Archive [$name] initial connection failed: ${result.cause()?.message} - will retry in background")
+                startPromise.complete() // Still complete to not block startup, health check will reconnect
             }
         }
-
-        // Complete startup immediately - connections will be established asynchronously
-        startPromise.complete()
-        logger.info("MongoDB Message Archive [$name] startup completed - connections will be established in background")
     }
 
     /**
      * Initiates MongoDB connection in background thread
      */
-    private fun initiateConnection() {
-        if (reconnectOngoing) return
+    private fun initiateConnection(): io.vertx.core.Future<Void> {
+        if (reconnectOngoing) return io.vertx.core.Future.succeededFuture()
         if (System.currentTimeMillis() - lastConnectionAttempt < connectionRetryInterval) {
-            return // Too soon to retry
+            return io.vertx.core.Future.succeededFuture()
         }
 
         lastConnectionAttempt = System.currentTimeMillis()
         reconnectOngoing = true
 
+        val promise = io.vertx.core.Promise.promise<Void>()
         vertx.executeBlocking(java.util.concurrent.Callable {
             try {
                 logger.info("Attempting to connect to MongoDB for archive [$name]...")
@@ -137,16 +141,19 @@ class MessageArchiveMongoDB(
                 }
 
                 logger.info("MongoDB Message Archive [$name] connected successfully")
+                promise.tryComplete()
 
             } catch (e: Exception) {
                 logger.warning("Failed to connect to MongoDB for archive [$name]: ${e.message}")
                 synchronized(this) {
                     isConnected = false
                 }
+                promise.tryFail(e)
             } finally {
                 reconnectOngoing = false
             }
         })
+        return promise.future()
     }
 
     /**
