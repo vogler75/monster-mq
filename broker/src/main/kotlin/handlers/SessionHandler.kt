@@ -1446,9 +1446,26 @@ open class SessionHandler(
         notifyMessageListeners(topicName, messages)
 
         // Group messages by sender for noLocal filtering
+        val localNodeId = Monster.getClusterNodeId(vertx)
         messages.groupBy { it.senderId }.forEach { (senderId, msgsFromSender) ->
             // Single subscription lookup with noLocal filtering
-            val subscribers = findClientsFiltered(topicName, senderId)
+            val allSubscribers = findClientsFiltered(topicName, senderId)
+
+            if (allSubscribers.isEmpty()) {
+                return@forEach
+            }
+
+            // In cluster mode, only process clients on this node.
+            // Remote clients will be handled when the message is forwarded to their node
+            // via forwardToRemoteNode() below.
+            val subscribers = if (Monster.isClustered()) {
+                allSubscribers.filter { (clientId, _) ->
+                    val clientNodeId = clientNodeMapping.get(clientId)
+                    clientNodeId == null || clientNodeId == localNodeId
+                }
+            } else {
+                allSubscribers
+            }
 
             if (subscribers.isEmpty()) {
                 return@forEach
@@ -1472,7 +1489,6 @@ open class SessionHandler(
         // Handle remote nodes
         if (Monster.isClustered()) {
             val targetNodes = getTargetNodesForTopic(topicName)
-            val localNodeId = Monster.getClusterNodeId(vertx)
             val remoteNodes = targetNodes.filter { it != localNodeId }
 
             remoteNodes.forEach { nodeId ->
