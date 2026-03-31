@@ -187,11 +187,11 @@ class UserStoreSqlite(
     }
 
     override fun validateCredentials(username: String, password: String): Future<User?> {
-        return getUser(username).map { user ->
+        return getUser(username).compose { user ->
             if (user != null && user.enabled && BCrypt.checkpw(password, user.passwordHash)) {
-                user
+                Future.succeededFuture(user)
             } else {
-                null
+                Future.succeededFuture(null)
             }
         }.otherwise { e ->
             logger.severe("Error in validateCredentials: ${e.message}")

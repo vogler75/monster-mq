@@ -117,7 +117,7 @@ class QueueStorePostgresV2(
                             ps.setString(7, message.clientId)
                             ps.setLong(8, message.time.toEpochMilli())
                             if (message.messageExpiryInterval != null) {
-                                ps.setLong(9, message.messageExpiryInterval!!)
+                                ps.setLong(9, message.messageExpiryInterval)
                             } else {
                                 ps.setNull(9, Types.BIGINT)
                             }

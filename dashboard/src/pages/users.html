@@ -315,29 +315,32 @@
                 <!-- Left Panel: ACL Rules Management -->
                 <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
                     <div style="padding: 1rem; background: var(--dark-bg); border-radius: 8px; height: 100%; display: flex; flex-direction: column;">
-                        <div style="margin-bottom:1rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; flex-shrink: 0;">
+                        <div style="margin-bottom:0.25rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end; flex-shrink: 0;">
                             <div style="flex:1 1 200px;">
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Topic Pattern</label>
                                 <input type="text" id="acl-topic-pattern" class="form-control acl-drop-zone" placeholder="devices/%c/#" />
-                                <div style="font-size:0.7rem; color:var(--text-muted); margin-top:0.25rem;">Use <code>%c</code> for client ID, <code>%u</code> for username, <code>+</code> / <code>#</code> for MQTT wildcards</div>
                             </div>
                             <div>
                                 <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Priority</label>
                                 <input type="number" id="acl-priority" class="form-control" value="0" style="width:80px;" />
                             </div>
-                            <div style="display:flex; gap:0.5rem; font-size:0.85rem;">
-                                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                                    <input type="checkbox" id="acl-can-subscribe" />
-                                    <span>Sub</span>
-                                </label>
-                                <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-                                    <input type="checkbox" id="acl-can-publish" />
-                                    <span>Pub</span>
-                                </label>
+                            <div>
+                                <label style="display:block; font-size:0.8rem; margin-bottom:0.25rem;">Permissions</label>
+                                <div style="display:flex; gap:0.5rem;">
+                                    <label style="display:flex; align-items:center; justify-content:center; gap:0.4rem; cursor:pointer; padding:0 0.6rem; border-radius:4px; border:1px solid var(--theme-color-std-bdr); font-size:0.8rem; height:2.25rem; box-sizing:border-box;">
+                                        <input type="checkbox" id="acl-can-subscribe" style="accent-color:var(--theme-color-primary); margin:0;" /> Sub
+                                    </label>
+                                    <label style="display:flex; align-items:center; justify-content:center; gap:0.4rem; cursor:pointer; padding:0 0.6rem; border-radius:4px; border:1px solid var(--theme-color-std-bdr); font-size:0.8rem; height:2.25rem; box-sizing:border-box;">
+                                        <input type="checkbox" id="acl-can-publish" style="accent-color:var(--theme-color-primary); margin:0;" /> Pub
+                                    </label>
+                                </div>
                             </div>
                             <div>
-                                <button id="add-acl-rule-btn" class="btn btn-primary" style="margin-top:0.25rem; padding: 0.5rem 0.75rem; font-size: 0.875rem;">Add</button>
+                                <button id="add-acl-rule-btn" class="btn btn-primary" style="padding: 0.5rem 0.75rem; font-size: 0.875rem;">Add</button>
                             </div>
+                        </div>
+                        <div style="margin-bottom:0.75rem; font-size:0.7rem; color:var(--theme-color-std-text); opacity:0.7; flex-shrink:0;">
+                            Use <b>%u</b> for username, <b>%c</b> for client ID, <b>+</b> single-level, <b>#</b> multi-level wildcard
                         </div>
                         <div id="acl-rules-content" class="acl-drop-zone" style="flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0;">
                             <!-- ACL rules will be populated here -->
