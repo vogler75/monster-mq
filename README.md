@@ -240,7 +240,8 @@ BulkMessaging:
 
 ### Storage and Archiving
 
-- Session, retained, archive, and last-value storage
+- Session, retained, archive, last-value, and queue storage
+- Queue store with V1 (two-table design) and V2 (single-table PGMQ-inspired design) for PostgreSQL, MongoDB, and SQLite
 - Archive groups with retention and performance metrics
 - JDBC logger with JSON schema validation, field mapping, and bulk writes
 - Optional PostgreSQL schema support for multi-tenant setups

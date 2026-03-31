@@ -88,9 +88,13 @@
         "POSTGRES_V1",
         "POSTGRES_V2",
         "MONGODB",
-        "SQLITE"
+        "MONGODB_V1",
+        "MONGODB_V2",
+        "SQLITE",
+        "SQLITE_V1",
+        "SQLITE_V2"
       ],
-      "description": "Queue store backend. Defaults to matching SessionStoreType if not set. POSTGRES and POSTGRES_V1 both use the two-table design. POSTGRES_V2 uses the single-table PGMQ-inspired design."
+      "description": "Queue store backend. Defaults to matching SessionStoreType if not set."
     },
     "QueueVisibilityTimeoutSeconds": {
       "type": "integer",
