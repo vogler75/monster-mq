@@ -7,6 +7,8 @@ enum class QueueStoreType {
     POSTGRES_V1,
     POSTGRES_V2,
     MONGODB,
+    MONGODB_V1,
+    MONGODB_V2,
     SQLITE
 }
 

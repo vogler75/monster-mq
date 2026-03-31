@@ -23,6 +23,7 @@ import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
 import at.rocworks.stores.mongodb.MongoClientPool
 import at.rocworks.stores.mongodb.QueueStoreMongoDBV1
+import at.rocworks.stores.mongodb.QueueStoreMongoDBV2
 import at.rocworks.stores.mongodb.SessionStoreMongoDB
 import at.rocworks.stores.postgres.MessageStorePostgres
 import at.rocworks.stores.postgres.QueueStorePostgresV1
@@ -1444,8 +1445,12 @@ MORE INFO:
                     val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
                     QueueStorePostgresV2(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema, vtSeconds)
                 }
-                QueueStoreType.MONGODB -> {
+                QueueStoreType.MONGODB, QueueStoreType.MONGODB_V1 -> {
                     QueueStoreMongoDBV1(mongoDbConfig.url, mongoDbConfig.database)
+                }
+                QueueStoreType.MONGODB_V2 -> {
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStoreMongoDBV2(mongoDbConfig.url, mongoDbConfig.database, vtSeconds)
                 }
                 QueueStoreType.SQLITE -> {
                     val configDbPath = "${sqliteConfig.path}/monstermq.db"
