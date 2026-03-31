@@ -2,7 +2,7 @@ TCP: 1884
 
 NodeName: "node2"
 
-axMessageSizeKb: 512
+MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
 DefaultStoreType: POSTGRES

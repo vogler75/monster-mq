@@ -2,7 +2,7 @@ TCP: 1885
 
 NodeName: "node3"
 
-axMessageSizeKb: 512
+MaxMessageSizeKb: 512
 QueuedMessagesEnabled: true
 
 DefaultStoreType: POSTGRES
