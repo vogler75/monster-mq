@@ -9,7 +9,9 @@ enum class QueueStoreType {
     MONGODB,
     MONGODB_V1,
     MONGODB_V2,
-    SQLITE
+    SQLITE,
+    SQLITE_V1,
+    SQLITE_V2
 }
 
 interface IQueueStoreSync {

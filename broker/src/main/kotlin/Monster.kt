@@ -31,6 +31,7 @@ import at.rocworks.stores.postgres.QueueStorePostgresV2
 import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.QueueStoreSQLiteV1
+import at.rocworks.stores.sqlite.QueueStoreSQLiteV2
 import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
@@ -1452,9 +1453,14 @@ MORE INFO:
                     val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
                     QueueStoreMongoDBV2(mongoDbConfig.url, mongoDbConfig.database, vtSeconds)
                 }
-                QueueStoreType.SQLITE -> {
+                QueueStoreType.SQLITE, QueueStoreType.SQLITE_V1 -> {
                     val configDbPath = "${sqliteConfig.path}/monstermq.db"
                     QueueStoreSQLiteV1(configDbPath)
+                }
+                QueueStoreType.SQLITE_V2 -> {
+                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStoreSQLiteV2(configDbPath, vtSeconds)
                 }
             }
             val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
