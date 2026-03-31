@@ -20,6 +20,7 @@
 # Parse script options (before --) and monster options (after --)
 BUILD_FIRST=false
 NO_RUN=false
+NO_KILL=false
 REMAINING_ARGS=()
 FOUND_SEPARATOR=false
 
@@ -36,6 +37,9 @@ for arg in "$@"; do
             -norun|-n)
                 NO_RUN=true
                 ;;
+            -nokill|-nk)
+                NO_KILL=true
+                ;;
             -help|--help|-h)
                 echo "MonsterMQ Run Script"
                 echo ""
@@ -44,6 +48,7 @@ for arg in "$@"; do
                 echo "Script Options (before --):"
                 echo "  -build, -b          Build dashboard and broker with Maven before starting"
                 echo "  -norun, -n          Do not run the broker (useful with -b for build-only)"
+                echo "  -nokill, -nk        Do not kill existing instances before starting"
                 echo "  -help, --help, -h   Show this help message"
                 echo ""
                 echo "Monster Options (after --):"
@@ -102,23 +107,22 @@ if [ "$NO_RUN" = true ]; then
     exit 0
 fi
 
-# Kill any existing MonsterMQ instances (skip in cluster mode)
-IS_CLUSTER=false
-for arg in "${REMAINING_ARGS[@]}"; do
-    if [ "$arg" = "-cluster" ]; then
-        IS_CLUSTER=true
-        break
-    fi
-done
-
-if [ "$IS_CLUSTER" = true ]; then
-    echo "Cluster mode: skipping kill of existing instances."
-else
-    echo "Checking for existing MonsterMQ instances..."
+# Kill any existing MonsterMQ instances (skip in cluster mode or with -nokill)
+SKIP_KILL=$NO_KILL
+if [ "$SKIP_KILL" = false ]; then
+    for arg in "${REMAINING_ARGS[@]}"; do
+        if [ "$arg" = "-cluster" ]; then
+            SKIP_KILL=true
+            break
+        fi
+    done
 fi
 
 EXISTING_PIDS=""
-if [ "$IS_CLUSTER" = false ]; then
+if [ "$SKIP_KILL" = true ]; then
+    echo "Skipping kill of existing instances."
+else
+    echo "Checking for existing MonsterMQ instances..."
     EXISTING_PIDS=$(pgrep -f "at.rocworks.MonsterKt")
 fi
 
