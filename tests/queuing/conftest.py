@@ -20,6 +20,8 @@ def pytest_addoption(parser):
                      help="Seconds the subscriber stays disconnected (default: 5)")
     parser.addoption("--no-disconnect", action="store_true", default=False,
                      help="Keep subscriber connected the entire time (no disconnect cycles)")
+    parser.addoption("--subscribers", default=3, type=int,
+                     help="Number of concurrent subscribers (default: 3)")
     parser.addoption("--username", default=os.getenv("MQTT_USERNAME", "Test"),
                      help="MQTT username")
     parser.addoption("--password", default=os.getenv("MQTT_PASSWORD", "Test"),
@@ -39,6 +41,7 @@ def cfg(request):
         "qos": request.config.getoption("--qos"),
         "disconnect_seconds": request.config.getoption("--disconnect-seconds"),
         "no_disconnect": request.config.getoption("--no-disconnect"),
+        "subscribers": request.config.getoption("--subscribers"),
         "username": request.config.getoption("--username"),
         "password": request.config.getoption("--password"),
     }

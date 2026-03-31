@@ -16,6 +16,9 @@ Usage:
     # Clustering: different hosts for publisher and subscriber
     pytest test_queuing.py -v -s --pub-host broker1 --sub-host broker2
 
+    # Multiple subscribers
+    pytest test_queuing.py -v -s --subscribers 3
+
     # All rates
     pytest test_queuing.py -v -s -k "rate"
 
@@ -92,54 +95,74 @@ def _disconnect(client):
 # Core test logic
 # ---------------------------------------------------------------------------
 
-def _run_queuing_test(cfg, rate, label=""):
-    """
-    1. Subscriber connects with clean_session=False, subscribes, waits for
-       CONNACK+SUBACK before publisher starts.
-    2. Publisher publishes until subscriber confirms receipt of the first
-       message — only then does the "real" sequence begin.
-    3. Subscriber disconnects; publisher keeps going at *rate* msg/s.
-    4. Subscriber reconnects (persistent session) and drains the queue.
-    5. Verify the sequence from first-received to last-published has no gaps.
-    """
-    qos = cfg["qos"]
-    disconnect_seconds = cfg["disconnect_seconds"]
-    uid = uuid.uuid4().hex[:8]
-    topic = f"test/queuing/{uid}"
-    sub_client_id = f"sub_queuing_{uid}"
-    pub_client_id = f"pub_queuing_{uid}"
+class SubscriberState:
+    """Per-subscriber state for tracking received messages and latency."""
+    def __init__(self, index, client_id):
+        self.index = index
+        self.client_id = client_id
+        self.received_sequences = []
+        self.latencies = []  # (seq, latency_ms) tuples
+        self.lock = threading.Lock()
+        self.first_received = threading.Event()
+        self.client = None
+        self.online = False
 
-    received_sequences = []
-    latencies = []  # (seq, latency_ms) tuples
-    receive_lock = threading.Lock()
-    first_received = threading.Event()
-
-    def on_message(client, userdata, msg):
+    def on_message(self, client, userdata, msg):
         recv_ts = time.time()
         try:
             data = json.loads(msg.payload)
-            with receive_lock:
-                received_sequences.append(data["seq"])
+            with self.lock:
+                self.received_sequences.append(data["seq"])
                 if "ts" in data:
-                    latencies.append((data["seq"], (recv_ts - data["ts"]) * 1000.0))
-                if not first_received.is_set():
-                    first_received.set()
+                    self.latencies.append((data["seq"], (recv_ts - data["ts"]) * 1000.0))
+                if not self.first_received.is_set():
+                    self.first_received.set()
         except (json.JSONDecodeError, KeyError):
             pass
 
-    # -- Phase 1: subscriber connects + subscribes ----------------------------
+    @property
+    def tag(self):
+        return f"[SUB-{self.index}]"
+
+
+def _run_queuing_test(cfg, rate, label=""):
+    """
+    1. Subscribers connect with clean_session=False, subscribe, wait for
+       CONNACK+SUBACK before publisher starts.
+    2. Publisher publishes until all subscribers confirm receipt of the first
+       message — only then does the "real" sequence begin.
+    3. Subscribers disconnect; publisher keeps going at *rate* msg/s.
+    4. Subscribers reconnect (persistent session) and drain the queue.
+    5. Verify the sequence from first-received to last-published has no gaps
+       for each subscriber independently.
+    """
+    qos = cfg["qos"]
+    disconnect_seconds = cfg["disconnect_seconds"]
+    num_subscribers = cfg.get("subscribers", 1)
+    uid = uuid.uuid4().hex[:8]
+    topic = f"test/queuing/{uid}"
+    pub_client_id = f"pub_queuing_{uid}"
+
+    # -- Phase 1: subscribers connect + subscribe -----------------------------
     print(f"\n{'='*60}")
-    print(f"[{label}] QoS={qos}  rate={rate} msg/s  disconnect={disconnect_seconds}s")
+    print(f"[{label}] QoS={qos}  rate={rate} msg/s  disconnect={disconnect_seconds}s  subscribers={num_subscribers}")
     print(f"{'='*60}")
 
-    sub = _make_client(sub_client_id, cfg["username"], cfg["password"],
-                       clean_session=False)
-    sub.on_message = on_message
-    _connect(sub, cfg["sub_host"], cfg["sub_port"])
-    _subscribe(sub, topic, qos)
-    print(f"[SUB] Connected and subscribed to {topic} (QoS {qos}, persistent session)")
+    subs = []
+    for i in range(num_subscribers):
+        sub_client_id = f"sub_queuing_{uid}_{i}"
+        state = SubscriberState(i, sub_client_id)
+        client = _make_client(sub_client_id, cfg["username"], cfg["password"],
+                              clean_session=False)
+        client.on_message = state.on_message
+        _connect(client, cfg["sub_host"], cfg["sub_port"])
+        _subscribe(client, topic, qos)
+        state.client = client
+        state.online = True
+        subs.append(state)
+        print(f"{state.tag} Connected and subscribed to {topic} (QoS {qos}, persistent session)")
 
-    # -- Phase 2: publisher connects AFTER subscriber is ready ----------------
+    # -- Phase 2: publisher connects AFTER subscribers are ready --------------
     pub = _make_client(pub_client_id, cfg["username"], cfg["password"],
                        clean_session=True)
     _connect(pub, cfg["pub_host"], cfg["pub_port"])
@@ -147,20 +170,21 @@ def _run_queuing_test(cfg, rate, label=""):
     interval = 1.0 / rate
     seq = 0
 
-    # Publish until subscriber confirms receipt of at least one message.
-    # This guarantees the subscription path is fully active end-to-end.
-    print(f"[PUB] Sending messages until subscriber confirms receipt ...")
+    # Publish until all subscribers confirm receipt of at least one message.
+    print(f"[PUB] Sending messages until all subscribers confirm receipt ...")
     deadline = time.time() + 15.0
-    while not first_received.is_set() and time.time() < deadline:
+    while time.time() < deadline:
+        if all(s.first_received.is_set() for s in subs):
+            break
         pub.publish(topic, json.dumps({"seq": seq, "ts": time.time()}), qos=qos)
         seq += 1
         time.sleep(interval)
-    assert first_received.is_set(), "Subscriber never received any message within 15s"
+    for s in subs:
+        assert s.first_received.is_set(), f"{s.tag} never received any message within 15s"
 
-    # Record which sequence number was first received — that's our baseline
-    with receive_lock:
-        first_seq = received_sequences[0]
-    print(f"[SUB] First message received: seq={first_seq}")
+    # Record which sequence number was first received across all subscribers
+    first_seq = max(s.received_sequences[0] for s in subs)
+    print(f"[PUB] All subscribers confirmed. Baseline seq={first_seq}")
 
     # Continue warmup for a bit to build confidence
     warmup_extra = max(3, rate // 2)
@@ -170,26 +194,26 @@ def _run_queuing_test(cfg, rate, label=""):
         time.sleep(interval)
 
     time.sleep(0.5)
-    with receive_lock:
-        warmup_received = len(received_sequences)
-    print(f"[SUB] Received {warmup_received} messages while online")
+    for s in subs:
+        with s.lock:
+            warmup_received = len(s.received_sequences)
+        print(f"{s.tag} Received {warmup_received} messages while online")
     print(f"[PUB] Publishing at {rate} msg/s")
 
-    # -- Phase 3: publish continuously while subscriber cycles on/off ----------
+    # -- Phase 3: publish continuously while subscribers cycle on/off ---------
     no_disconnect = cfg.get("no_disconnect", False)
     total_phase3 = rate * disconnect_seconds
     quarter = max(1, total_phase3 // 4)
     reconnect_pause = 1.0  # seconds offline between cycles
 
-    sub_online = True
     phase3_start_seq = seq
     msgs_since_reconnect = 0
     cycle = 0
 
     if no_disconnect:
-        print(f"[PUB] Publishing {total_phase3} messages; subscriber stays connected (--no-disconnect)")
+        print(f"[PUB] Publishing {total_phase3} messages; subscribers stay connected (--no-disconnect)")
     else:
-        print(f"[PUB] Publishing {total_phase3} messages; subscriber disconnects every {quarter} msgs")
+        print(f"[PUB] Publishing {total_phase3} messages; subscribers disconnect every {quarter} msgs")
 
     for i in range(total_phase3):
         pub.publish(topic, json.dumps({"seq": seq, "ts": time.time()}), qos=qos)
@@ -197,29 +221,34 @@ def _run_queuing_test(cfg, rate, label=""):
         msgs_since_reconnect += 1
         time.sleep(interval)
 
-        # Every 25% of messages: disconnect subscriber, wait, reconnect
-        if not no_disconnect and sub_online and msgs_since_reconnect >= quarter:
-            cycle += 1
-            print(f"[SUB] Cycle {cycle}: disconnecting at seq {seq} "
-                  f"({msgs_since_reconnect} msgs since last reconnect)")
-            _disconnect(sub)
-            sub_online = False
-            msgs_since_reconnect = 0
+        # Every 25% of messages: disconnect all subscribers, wait, reconnect
+        if not no_disconnect and msgs_since_reconnect >= quarter:
+            any_online = any(s.online for s in subs)
+            if any_online:
+                cycle += 1
+                for s in subs:
+                    if s.online:
+                        print(f"{s.tag} Cycle {cycle}: disconnecting at seq {seq}")
+                        _disconnect(s.client)
+                        s.online = False
+                msgs_since_reconnect = 0
 
-            # Keep publishing during the offline pause
-            pause_end = time.time() + reconnect_pause
-            while time.time() < pause_end:
-                pub.publish(topic, json.dumps({"seq": seq, "ts": time.time()}), qos=qos)
-                seq += 1
-                time.sleep(interval)
+                # Keep publishing during the offline pause
+                pause_end = time.time() + reconnect_pause
+                while time.time() < pause_end:
+                    pub.publish(topic, json.dumps({"seq": seq, "ts": time.time()}), qos=qos)
+                    seq += 1
+                    time.sleep(interval)
 
-            # Reconnect
-            print(f"[SUB] Cycle {cycle}: reconnecting at seq {seq}")
-            sub = _make_client(sub_client_id, cfg["username"], cfg["password"],
-                               clean_session=False)
-            sub.on_message = on_message
-            _connect(sub, cfg["sub_host"], cfg["sub_port"])
-            sub_online = True
+                # Reconnect all
+                for s in subs:
+                    print(f"{s.tag} Cycle {cycle}: reconnecting at seq {seq}")
+                    client = _make_client(s.client_id, cfg["username"], cfg["password"],
+                                          clean_session=False)
+                    client.on_message = s.on_message
+                    _connect(client, cfg["sub_host"], cfg["sub_port"])
+                    s.client = client
+                    s.online = True
 
     phase3_published = seq - phase3_start_seq
     print(f"[PUB] Phase 3 done: published {phase3_published} messages with "
@@ -228,13 +257,15 @@ def _run_queuing_test(cfg, rate, label=""):
     # Small buffer so broker finishes persisting / delivering
     time.sleep(0.5)
 
-    # Ensure subscriber is connected for final drain
-    if not sub_online:
-        sub = _make_client(sub_client_id, cfg["username"], cfg["password"],
-                           clean_session=False)
-        sub.on_message = on_message
-        _connect(sub, cfg["sub_host"], cfg["sub_port"])
-        sub_online = True
+    # Ensure all subscribers are connected for final drain
+    for s in subs:
+        if not s.online:
+            client = _make_client(s.client_id, cfg["username"], cfg["password"],
+                                  clean_session=False)
+            client.on_message = s.on_message
+            _connect(client, cfg["sub_host"], cfg["sub_port"])
+            s.client = client
+            s.online = True
 
     # Publish tail messages to confirm stream is alive after all cycles
     tail_count = max(5, rate)
@@ -244,87 +275,104 @@ def _run_queuing_test(cfg, rate, label=""):
         time.sleep(interval)
 
     last_seq = seq  # exclusive upper bound
-    print(f"[PUB] Total published: seq {first_seq}..{last_seq - 1} "
-          f"({last_seq - first_seq} messages in validated range)")
-
-    # Wait for queued + tail messages to arrive
     expected_count = last_seq - first_seq
+    print(f"[PUB] Total published: seq {first_seq}..{last_seq - 1} "
+          f"({expected_count} messages in validated range)")
+
+    # Wait for queued + tail messages to arrive on all subscribers
     drain_timeout = max(15, disconnect_seconds * 3)
     deadline = time.time() + drain_timeout
     while time.time() < deadline:
-        with receive_lock:
-            count = sum(1 for s in received_sequences if first_seq <= s < last_seq)
-            if count >= expected_count:
-                break
+        all_done = True
+        for s in subs:
+            with s.lock:
+                count = sum(1 for sq in s.received_sequences if first_seq <= sq < last_seq)
+                if count < expected_count:
+                    all_done = False
+                    break
+        if all_done:
+            break
         time.sleep(0.2)
 
     time.sleep(1.0)
 
     # -- Phase 5: cleanup -----------------------------------------------------
     _disconnect(pub)
-    _disconnect(sub)
+    for s in subs:
+        _disconnect(s.client)
 
-    # Clean up persistent session
-    cleanup = _make_client(sub_client_id, cfg["username"], cfg["password"],
-                           clean_session=True)
-    _connect(cleanup, cfg["sub_host"], cfg["sub_port"])
-    _disconnect(cleanup)
+    # Clean up persistent sessions
+    for s in subs:
+        cleanup = _make_client(s.client_id, cfg["username"], cfg["password"],
+                               clean_session=True)
+        _connect(cleanup, cfg["sub_host"], cfg["sub_port"])
+        _disconnect(cleanup)
 
-    # -- Phase 6: verify sequence integrity ------------------------------------
-    with receive_lock:
-        # Only validate from first_seq onwards (ignore any messages before
-        # the subscription was confirmed active)
-        relevant = [s for s in received_sequences if first_seq <= s < last_seq]
-        unique = sorted(set(relevant))
+    # -- Phase 6: verify sequence integrity per subscriber --------------------
+    all_passed = True
+    for s in subs:
+        with s.lock:
+            relevant = [sq for sq in s.received_sequences if first_seq <= sq < last_seq]
+            unique = sorted(set(relevant))
+            lat_values = [lat for (sq, lat) in s.latencies if first_seq <= sq < last_seq]
 
-    # -- Latency statistics -----------------------------------------------------
-    with receive_lock:
-        lat_values = [lat for (s, lat) in latencies if first_seq <= s < last_seq]
+        # Latency statistics
+        if lat_values:
+            lat_values.sort()
+            n = len(lat_values)
+            avg = statistics.mean(lat_values)
+            med = statistics.median(lat_values)
+            p95 = lat_values[int(n * 0.95)] if n > 1 else lat_values[0]
+            p99 = lat_values[int(n * 0.99)] if n > 1 else lat_values[0]
+            print(f"\n{s.tag} [LATENCY] {n} samples")
+            print(f"  Min:  {lat_values[0]:.2f} ms")
+            print(f"  Max:  {lat_values[-1]:.2f} ms")
+            print(f"  Avg:  {avg:.2f} ms")
+            print(f"  Med:  {med:.2f} ms")
+            print(f"  P95:  {p95:.2f} ms")
+            print(f"  P99:  {p99:.2f} ms")
 
-    if lat_values:
-        lat_values.sort()
-        n = len(lat_values)
-        avg = statistics.mean(lat_values)
-        med = statistics.median(lat_values)
-        p95 = lat_values[int(n * 0.95)] if n > 1 else lat_values[0]
-        p99 = lat_values[int(n * 0.99)] if n > 1 else lat_values[0]
-        print(f"\n[LATENCY] {n} samples")
-        print(f"  Min:  {lat_values[0]:.2f} ms")
-        print(f"  Max:  {lat_values[-1]:.2f} ms")
-        print(f"  Avg:  {avg:.2f} ms")
-        print(f"  Med:  {med:.2f} ms")
-        print(f"  P95:  {p95:.2f} ms")
-        print(f"  P99:  {p99:.2f} ms")
+        print(f"\n{s.tag} [RESULT] Received {len(relevant)} messages ({len(unique)} unique) "
+              f"in range [{first_seq}..{last_seq - 1}]")
 
-    print(f"\n[RESULT] Received {len(relevant)} messages ({len(unique)} unique) "
-          f"in range [{first_seq}..{last_seq - 1}]")
+        if len(unique) == 0:
+            pytest.fail(f"{s.tag} No messages received at all")
 
-    if len(unique) == 0:
-        pytest.fail("No messages received at all")
+        expected = set(range(first_seq, last_seq))
+        missing = sorted(expected - set(unique))
+        duplicates = len(relevant) - len(unique)
 
-    expected = set(range(first_seq, last_seq))
-    missing = sorted(expected - set(unique))
-    duplicates = len(relevant) - len(unique)
+        if missing:
+            sample = missing[:20]
+            print(f"{s.tag} [FAIL] Missing {len(missing)} messages: {sample}"
+                  f"{'...' if len(missing) > 20 else ''}")
+            all_passed = False
 
-    if missing:
-        sample = missing[:20]
-        print(f"[FAIL] Missing {len(missing)} messages: {sample}"
-              f"{'...' if len(missing) > 20 else ''}")
+        if duplicates > 0:
+            print(f"{s.tag} [INFO] {duplicates} duplicate(s) received (expected with QoS >= 1)")
 
-    if duplicates > 0:
-        print(f"[INFO] {duplicates} duplicate(s) received (expected with QoS >= 1)")
+        print(f"{s.tag} [RESULT] {len(unique)}/{expected_count} unique messages received")
 
-    print(f"[RESULT] {len(unique)}/{expected_count} unique messages received")
+        if qos == 2 and duplicates > 0:
+            print(f"{s.tag} [FAIL] QoS 2 should have no duplicates, got {duplicates}")
+            all_passed = False
 
-    assert len(missing) == 0, (
-        f"Missing {len(missing)}/{expected_count} messages. "
-        f"First missing: {missing[:10]}"
-    )
+    # Final assertions after reporting all subscribers
+    for s in subs:
+        with s.lock:
+            relevant = [sq for sq in s.received_sequences if first_seq <= sq < last_seq]
+            unique = sorted(set(relevant))
+        missing = sorted(set(range(first_seq, last_seq)) - set(unique))
+        duplicates = len(relevant) - len(unique)
 
-    if qos == 2:
-        assert duplicates == 0, f"QoS 2 should have no duplicates, got {duplicates}"
+        assert len(missing) == 0, (
+            f"{s.tag} Missing {len(missing)}/{expected_count} messages. "
+            f"First missing: {missing[:10]}"
+        )
+        if qos == 2:
+            assert duplicates == 0, f"{s.tag} QoS 2 should have no duplicates, got {duplicates}"
 
-    print(f"[PASS] All {expected_count} messages received successfully")
+    print(f"\n[PASS] All {expected_count} messages received successfully by all {num_subscribers} subscriber(s)")
 
 
 # ---------------------------------------------------------------------------
