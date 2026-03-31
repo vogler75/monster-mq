@@ -207,6 +207,28 @@ Omitting a key defaults to `true`. GraphQL mutations for a disabled feature retu
 
 See [configuration.md](doc/configuration.md) for details.
 
+## Performance Tuning
+
+### BulkProcessing and BulkMessaging
+
+MonsterMQ supports two bulk operation modes that batch multiple operations together for higher throughput at the cost of added latency.
+
+```yaml
+BulkProcessing:
+  Enabled: false       # Batch subscription matching and message routing
+  TimeoutMS: 50        # Max wait time before flushing a partial batch
+  BulkSize: 1000       # Max messages per batch
+  WorkerThreads: 4     # Parallel processing threads
+
+BulkMessaging:
+  Enabled: true        # Batch message delivery to subscribers
+  TimeoutMS: 100       # Max wait time before flushing a partial batch
+  BulkSize: 1000       # Max messages per batch
+```
+
+- **High throughput**: Enable both options. Messages are collected into batches and processed together, reducing per-message overhead. Best for telemetry, data collection, and high-volume IoT workloads.
+- **Low latency**: Disable both options. Messages are processed individually as they arrive, minimizing delivery delay. Best for real-time control, command/response patterns, and interactive applications.
+
 ## Core Capabilities
 
 ### Messaging and Protocols
@@ -218,7 +240,8 @@ See [configuration.md](doc/configuration.md) for details.
 
 ### Storage and Archiving
 
-- Session, retained, archive, and last-value storage
+- Session, retained, archive, last-value, and queue storage
+- Queue store with V1 (two-table design) and V2 (single-table PGMQ-inspired design) for PostgreSQL, MongoDB, and SQLite
 - Archive groups with retention and performance metrics
 - JDBC logger with JSON schema validation, field mapping, and bulk writes
 - Optional PostgreSQL schema support for multi-tenant setups
@@ -259,16 +282,19 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 
 ## Database Support
 
-| Database | Session Store | Retained Store | Message Archive | Clustering |
-|----------|:-------------:|:--------------:|:---------------:|:----------:|
-| PostgreSQL | Yes | Yes | Yes | Yes |
-| CrateDB | Yes | Yes | Yes | Yes |
-| MongoDB | Yes | Yes | Yes | Yes |
-| SQLite | Yes | Yes | Yes | No |
-| Memory | No | Yes | No | Yes |
-| Hazelcast | No | Yes | No | Yes |
+| Database | Session Store | Queue Store | Retained / Last Value | Message Archive | Config Store |
+|----------|:---:|:---:|:---:|:---:|:---:|
+| PostgreSQL | Yes | Yes (V1, V2) | Yes | Yes | Yes |
+| MongoDB | Yes | Yes | Yes | Yes | Yes |
+| SQLite | Yes | Yes | Yes | Yes | Yes |
+| CrateDB | - | - | Yes | Yes | - |
+| Memory | - | - | Yes | - | - |
+| Hazelcast | - | - | Yes | - | - |
+| Kafka | - | - | - | Yes | - |
 
-SQLite is not suitable for cluster mode; use PostgreSQL, CrateDB, or MongoDB instead.
+- **Session Store**, **Queue Store**, and **Config Store** require strict read-after-write consistency. CrateDB is not supported for these due to its eventual consistency model.
+- **Queue Store V2** (PostgreSQL only) uses a PGMQ-inspired single-table design with visibility timeout for higher throughput.
+- SQLite is not suitable for cluster mode; use PostgreSQL or MongoDB instead.
 
 ## Default Endpoints
 

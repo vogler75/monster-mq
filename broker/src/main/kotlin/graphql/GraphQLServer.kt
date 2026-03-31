@@ -10,6 +10,7 @@ import at.rocworks.handlers.SessionHandler
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
+import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.graphql.OpcUaClientConfigMutations
@@ -79,6 +80,7 @@ class GraphQLServer(
     private val archiveGroups: Map<String, ArchiveGroup>,
     private val userManager: UserManager,
     private val sessionStore: ISessionStoreAsync,
+    private val queueStore: IQueueStoreAsync,
     private val sessionHandler: SessionHandler,
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
@@ -333,8 +335,8 @@ class GraphQLServer(
 
         // Initialize resolvers after device store is ready
         val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext, deviceStore)
-        val metricsResolver = MetricsResolver(vertx, sessionStore, sessionHandler, metricsStore, config, userManager)
-        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, sessionHandler, authContext, deviceStore)
+        val metricsResolver = MetricsResolver(vertx, sessionStore, queueStore, sessionHandler, metricsStore, config, userManager)
+        val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, queueStore, sessionHandler, authContext, deviceStore)
         val subscriptionResolver = SubscriptionResolver(vertx)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)

@@ -12,6 +12,7 @@ import at.rocworks.extensions.Oa4jBridge
 import at.rocworks.cluster.DataReplicator
 import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
+import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import java.util.concurrent.locks.ReentrantLock
 import io.netty.handler.codec.mqtt.MqttQoS
@@ -30,6 +31,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 open class SessionHandler(
     private val sessionStore: ISessionStoreAsync,
+    private val queueStore: IQueueStoreAsync,
     private val messageBus: IMessageBus,
     private val messageHandler: MessageHandler,
     private val enqueueMessages: Boolean
@@ -426,7 +428,7 @@ open class SessionHandler(
         queueWorkerThread("SubDelQueue", subDelQueue, 1000, sessionStore::delSubscriptions)
 
         queueWorkerThread("MsgAddQueue", msgAddQueue, 1000) { block ->
-            val future = sessionStore.enqueueMessages(block)
+            val future = queueStore.enqueueMessages(block)
             future.onComplete {
                 // After DB write completes, send triggers to all affected clients
                 val clientIds = block.flatMap { it.second }.toSet()
@@ -436,7 +438,7 @@ open class SessionHandler(
             }
             future
         }
-        queueWorkerThread("MsgDelQueue", msgDelQueue, 1000, sessionStore::removeMessages)
+        queueWorkerThread("MsgDelQueue", msgDelQueue, 1000, queueStore::removeMessages)
 
         // Only subscribe to message bus if it's Kafka (external source)
         // Internal Vert.x message bus broadcast is no longer used - we use targeted messaging
@@ -569,7 +571,7 @@ open class SessionHandler(
 
         // Start periodic cleanup of delivered messages (every 60 seconds)
         vertx.setPeriodic(60_000) {
-            sessionStore.purgeDeliveredMessages().onComplete { result ->
+            queueStore.purgeDeliveredMessages().onComplete { result ->
                 if (result.succeeded()) {
                     val count = result.result()
                     if (count > 0) {
@@ -583,7 +585,7 @@ open class SessionHandler(
 
         // Start periodic cleanup of expired messages (every 60 seconds)
         vertx.setPeriodic(60_000) {
-            sessionStore.purgeExpiredMessages().onComplete { result ->
+            queueStore.purgeExpiredMessages().onComplete { result ->
                 if (result.succeeded()) {
                     val count = result.result()
                     if (count > 0) {
@@ -929,7 +931,7 @@ open class SessionHandler(
         }
     }
 
-    fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) = sessionStore.dequeueMessages(clientId, callback)
+    fun dequeueMessages(clientId: String, callback: (BrokerMessage)->Boolean) = queueStore.dequeueMessages(clientId, callback)
 
     fun removeMessage(clientId: String, messageUuid: String) {
         try {
@@ -940,12 +942,13 @@ open class SessionHandler(
     }
 
     // Status-based message tracking methods
-    fun markMessageDelivered(clientId: String, messageUuid: String) = sessionStore.markMessageDelivered(clientId, messageUuid)
-    fun resetInFlightMessages(clientId: String) = sessionStore.resetInFlightMessages(clientId)
-    fun markMessagesInFlight(clientId: String, messageUuids: List<String>) = sessionStore.markMessagesInFlight(clientId, messageUuids)
-    fun markMessageInFlight(clientId: String, messageUuid: String) = sessionStore.markMessageInFlight(clientId, messageUuid)
-    fun fetchNextPendingMessage(clientId: String) = sessionStore.fetchNextPendingMessage(clientId)
-    fun fetchPendingMessages(clientId: String, limit: Int) = sessionStore.fetchPendingMessages(clientId, limit)
+    fun markMessageDelivered(clientId: String, messageUuid: String) = queueStore.markMessageDelivered(clientId, messageUuid)
+    fun resetInFlightMessages(clientId: String) = queueStore.resetInFlightMessages(clientId)
+    fun markMessagesInFlight(clientId: String, messageUuids: List<String>) = queueStore.markMessagesInFlight(clientId, messageUuids)
+    fun markMessageInFlight(clientId: String, messageUuid: String) = queueStore.markMessageInFlight(clientId, messageUuid)
+    fun fetchNextPendingMessage(clientId: String) = queueStore.fetchNextPendingMessage(clientId)
+    fun fetchPendingMessages(clientId: String, limit: Int) = queueStore.fetchPendingMessages(clientId, limit)
+    fun fetchAndLockPendingMessages(clientId: String, limit: Int) = queueStore.fetchAndLockPendingMessages(clientId, limit)
 
     /**
      * Send a trigger to the client indicating that a message is available in the queue.
@@ -1011,7 +1014,8 @@ open class SessionHandler(
 
     fun purgeSessions() = sessionStore.purgeSessions()
 
-    fun purgeQueuedMessages() = sessionStore.purgeQueuedMessages()
+    fun purgeQueuedMessages() = queueStore.purgeQueuedMessages()
+    fun deleteClientMessages(clientId: String) = queueStore.deleteClientMessages(clientId)
 
     fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit)
     = sessionStore.iterateNodeClients(nodeId, callback)
@@ -1442,9 +1446,26 @@ open class SessionHandler(
         notifyMessageListeners(topicName, messages)
 
         // Group messages by sender for noLocal filtering
+        val localNodeId = Monster.getClusterNodeId(vertx)
         messages.groupBy { it.senderId }.forEach { (senderId, msgsFromSender) ->
             // Single subscription lookup with noLocal filtering
-            val subscribers = findClientsFiltered(topicName, senderId)
+            val allSubscribers = findClientsFiltered(topicName, senderId)
+
+            if (allSubscribers.isEmpty()) {
+                return@forEach
+            }
+
+            // In cluster mode, only process clients on this node.
+            // Remote clients will be handled when the message is forwarded to their node
+            // via forwardToRemoteNode() below.
+            val subscribers = if (Monster.isClustered()) {
+                allSubscribers.filter { (clientId, _) ->
+                    val clientNodeId = clientNodeMapping.get(clientId)
+                    clientNodeId == null || clientNodeId == localNodeId
+                }
+            } else {
+                allSubscribers
+            }
 
             if (subscribers.isEmpty()) {
                 return@forEach
@@ -1468,7 +1489,6 @@ open class SessionHandler(
         // Handle remote nodes
         if (Monster.isClustered()) {
             val targetNodes = getTargetNodesForTopic(topicName)
-            val localNodeId = Monster.getClusterNodeId(vertx)
             val remoteNodes = targetNodes.filter { it != localNodeId }
 
             remoteNodes.forEach { nodeId ->

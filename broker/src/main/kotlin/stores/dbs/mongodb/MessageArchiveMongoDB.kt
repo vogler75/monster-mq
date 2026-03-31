@@ -47,6 +47,8 @@ class MessageArchiveMongoDB(
     @Volatile
     private var isConnected: Boolean = false
     @Volatile
+    private var disconnectedLogged: Boolean = false
+    @Volatile
     private var lastConnectionAttempt: Long = 0
     @Volatile
     private var reconnectOngoing: Boolean = false
@@ -59,36 +61,40 @@ class MessageArchiveMongoDB(
     }
 
     override fun start(startPromise: Promise<Void>) {
-        logger.info("Starting MongoDB Message Archive [$name] with async connection management")
+        logger.info("Starting MongoDB Message Archive [$name]")
 
-        // Start connection establishment in background
-        initiateConnection()
+        // Wait for initial connection before completing startup
+        initiateConnection().onComplete { result ->
+            // Set up periodic health check with random offset to stagger across stores
+            val staggerDelay = (Math.random() * 5000).toLong()
+            vertx.setTimer(staggerDelay) {
+                vertx.setPeriodic(healthCheckInterval) {
+                    performHealthCheck()
+                }
+            }
 
-        // Set up periodic health check with random offset to stagger across stores
-        val staggerDelay = (Math.random() * 5000).toLong()
-        vertx.setTimer(staggerDelay) {
-            vertx.setPeriodic(healthCheckInterval) {
-                performHealthCheck()
+            if (result.succeeded()) {
+                startPromise.complete()
+            } else {
+                logger.warning("MongoDB Message Archive [$name] initial connection failed: ${result.cause()?.message} - will retry in background")
+                startPromise.complete() // Still complete to not block startup, health check will reconnect
             }
         }
-
-        // Complete startup immediately - connections will be established asynchronously
-        startPromise.complete()
-        logger.info("MongoDB Message Archive [$name] startup completed - connections will be established in background")
     }
 
     /**
      * Initiates MongoDB connection in background thread
      */
-    private fun initiateConnection() {
-        if (reconnectOngoing) return
+    private fun initiateConnection(): io.vertx.core.Future<Void> {
+        if (reconnectOngoing) return io.vertx.core.Future.succeededFuture()
         if (System.currentTimeMillis() - lastConnectionAttempt < connectionRetryInterval) {
-            return // Too soon to retry
+            return io.vertx.core.Future.succeededFuture()
         }
 
         lastConnectionAttempt = System.currentTimeMillis()
         reconnectOngoing = true
 
+        val promise = io.vertx.core.Promise.promise<Void>()
         vertx.executeBlocking(java.util.concurrent.Callable {
             try {
                 logger.info("Attempting to connect to MongoDB for archive [$name]...")
@@ -128,19 +134,26 @@ class MessageArchiveMongoDB(
                     database = newDatabase
                     collection = newCollection
                     isConnected = true
+                    if (disconnectedLogged) {
+                        disconnectedLogged = false
+                        logger.info("MongoDB Message Archive [$name] connection restored")
+                    }
                 }
 
                 logger.info("MongoDB Message Archive [$name] connected successfully")
+                promise.tryComplete()
 
             } catch (e: Exception) {
                 logger.warning("Failed to connect to MongoDB for archive [$name]: ${e.message}")
                 synchronized(this) {
                     isConnected = false
                 }
+                promise.tryFail(e)
             } finally {
                 reconnectOngoing = false
             }
         })
+        return promise.future()
     }
 
     /**
@@ -225,7 +238,10 @@ class MessageArchiveMongoDB(
                 .bypassDocumentValidation(true)  // Faster inserts
 
             getActiveCollection()?.insertMany(documents, options) ?: run {
-                logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                if (!disconnectedLogged) {
+                    disconnectedLogged = true
+                    logger.warning("MongoDB not connected, skipping batch insert for [$name]")
+                }
             }
         } catch (e: Exception) {
             logger.warning("Error inserting batch data: ${e.message}")
@@ -406,36 +422,12 @@ class MessageArchiveMongoDB(
             for ((fieldIndex, field) in effectiveFields.withIndex()) {
                 val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
 
-                // Build the value expression inline — JSON field path only ($function removed)
+                // Pure native MQL — aggregation only works with JSON payloads
                 val valueExpr: Any = if (field.isEmpty()) {
-                    // Plain numeric payload stored as payload_blob — requires JS to decode binary
-                    Document("\$function", Document(mapOf(
-                        "body" to """
-                            function(payload, payload_blob, payload_json) {
-                                if (payload !== null && payload !== undefined) {
-                                    if (typeof payload === 'number') return payload;
-                                    if (typeof payload === 'string') { var n = parseFloat(payload); return isNaN(n) ? null : n; }
-                                    return null;
-                                }
-                                if (payload_blob !== null && payload_blob !== undefined) {
-                                    try {
-                                        var base64 = payload_blob.base64();
-                                        var bin = atob(base64);
-                                        var n = parseFloat(bin);
-                                        return isNaN(n) ? null : n;
-                                    } catch(e) { return null; }
-                                }
-                                if (payload_json !== null && payload_json !== undefined) {
-                                    var n = parseFloat(payload_json); return isNaN(n) ? null : n;
-                                }
-                                return null;
-                            }
-                        """.trimIndent(),
-                        "args" to listOf("\$payload", "\$payload_blob", "\$payload_json"),
-                        "lang" to "js"
-                    )))
+                    // No field specified: treat payload as a numeric value (native MQL, no JS)
+                    Document("\$toDouble", "\$payload")
                 } else {
-                    // JSON field — pure native MQL, inlined directly into the accumulator
+                    // JSON field path: extract nested field from payload document
                     Document("\$toDouble", "\$payload.${field.split(".").joinToString(".")}")
                 }
 
@@ -467,6 +459,7 @@ class MessageArchiveMongoDB(
 
             activeCollection.aggregate(pipeline)
                 .allowDiskUse(true)
+                .maxTime(55, TimeUnit.SECONDS)
                 .forEach { doc ->
                     val id = doc.get("_id", Document::class.java)
                     val bucket = id?.getDate("bucket")?.toInstant()?.toString() ?: return@forEach
@@ -525,8 +518,13 @@ class MessageArchiveMongoDB(
             }
 
         } catch (e: Exception) {
-            logger.severe("Error executing MongoDB aggregation query: ${e.message}")
-            e.printStackTrace()
+            val caller = e.stackTrace.firstOrNull { frame ->
+                !frame.className.startsWith("at.rocworks.stores.")
+                        && !frame.className.startsWith("java.")
+                        && !frame.className.startsWith("kotlin.")
+                        && !frame.className.startsWith("com.mongodb.")
+            }?.let { "${it.className}.${it.methodName}" } ?: "unknown"
+            logger.severe("Error executing MongoDB aggregation query (caller=$caller, topics=$topics, interval=${intervalMinutes}min): ${e.message}")
         }
 
         result.put("columns", columns)
@@ -551,6 +549,7 @@ class MessageArchiveMongoDB(
 
             activeCollection.aggregate(pipeline)
                 .allowDiskUse(true)  // Allow using disk for large aggregations
+                .maxTime(55, TimeUnit.SECONDS)
                 .forEach { doc ->
                     result.add(JsonObject(doc.toJson()))
                 }

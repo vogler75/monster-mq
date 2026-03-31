@@ -95,6 +95,7 @@ docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monsterm
 
 The system uses different store types for different purposes:
 - **SessionStore**: Persistent client sessions (PostgreSQL, CrateDB, MongoDB, SQLite)
+- **QueueStore**: Queued messages for offline clients (PostgreSQL, MongoDB, SQLite). V1 uses a two-table design, V2 uses a single-table PGMQ-inspired design. Defaults to matching SessionStoreType if not set.
 - **RetainedStore**: Retained MQTT messages (Memory, Hazelcast, PostgreSQL, CrateDB)
 - **MessageArchive**: Historical message storage (PostgreSQL, CrateDB, MongoDB, SQLite, Kafka)
 - **LastValueStore**: Current value cache for topics (Memory, Hazelcast, PostgreSQL, CrateDB)
@@ -175,7 +176,7 @@ Configuration is done via YAML file (`config.yaml`). The schema is defined in `b
 
 Key configuration sections:
 - Network ports (TCP, TCPS, WS, WSS, HTTP)
-- Storage backends (SessionStoreType, RetainedStoreType, LastValueStoreType)
+- Storage backends (SessionStoreType, QueueStoreType, RetainedStoreType, LastValueStoreType)
 - Archive groups with topic filters
 - Database connections (PostgreSQL, CrateDB, MongoDB)
 - Kafka configuration

@@ -20,12 +20,18 @@ import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
-import at.rocworks.stores.cratedb.SessionStoreCrateDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
+import at.rocworks.stores.mongodb.MongoClientPool
+import at.rocworks.stores.mongodb.QueueStoreMongoDBV1
+import at.rocworks.stores.mongodb.QueueStoreMongoDBV2
 import at.rocworks.stores.mongodb.SessionStoreMongoDB
 import at.rocworks.stores.postgres.MessageStorePostgres
+import at.rocworks.stores.postgres.QueueStorePostgresV1
+import at.rocworks.stores.postgres.QueueStorePostgresV2
 import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageStoreSQLite
+import at.rocworks.stores.sqlite.QueueStoreSQLiteV1
+import at.rocworks.stores.sqlite.QueueStoreSQLiteV2
 import at.rocworks.stores.sqlite.SessionStoreSQLite
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
@@ -98,6 +104,7 @@ class Monster(args: Array<String>) {
     private val mongoDbConfig = object {
         var url: String = ""
         var database: String = ""
+        var readTimeoutMs: Long = 60000
     }
     private val sqliteConfig = object {
         var path: String = ""
@@ -137,10 +144,26 @@ class Monster(args: Array<String>) {
         fun getRetainedStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "RetainedStoreType", "SQLITE")
 
         @JvmStatic
-        fun getConfigStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "ConfigStoreType", "SQLITE")
+        fun getConfigStoreType(configJson: JsonObject): String {
+            val type = getStoreTypeWithDefault(configJson, "ConfigStoreType", "SQLITE")
+            if (type == "CRATEDB") {
+                logger.severe("Unsupported ConfigStoreType 'CRATEDB'. CrateDB is not supported for config storage due to eventual consistency. Use POSTGRES, MONGODB, or SQLITE.")
+                exitProcess(1)
+            }
+            return type
+        }
 
         @JvmStatic
         fun getStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "StoreType", "SQLITE")
+
+        @JvmStatic
+        fun getQueueStoreType(configJson: JsonObject): String {
+            // If QueueStoreType is explicitly set, use it
+            val explicit = configJson.getString("QueueStoreType")
+            if (explicit != null) return explicit
+            // Otherwise, derive from SessionStoreType for backward compatibility
+            return getSessionStoreType(configJson)
+        }
 
         fun isClustered() = getInstance().isClustered
 
@@ -601,6 +624,8 @@ MORE INFO:
                 configJson.getJsonObject("MongoDB", JsonObject()).let { mongo ->
                     mongoDbConfig.url = mongo.getString("Url", "mongodb://localhost:27017")
                     mongoDbConfig.database = mongo.getString("Database", "monster")
+                    mongoDbConfig.readTimeoutMs = mongo.getLong("ReadTimeoutMs", 60000L)
+                    MongoClientPool.defaultReadTimeoutMs = mongoDbConfig.readTimeoutMs
                 }
                 configJson.getJsonObject("SQLite", JsonObject()).let { sqlite ->
                     sqliteConfig.path = sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)
@@ -833,7 +858,9 @@ MORE INFO:
         vertx.eventBus().registerDefaultCodec(BulkClientMessage::class.java, BulkClientMessageCodec())
         vertx.eventBus().registerDefaultCodec(BulkNodeMessage::class.java, BulkNodeMessageCodec())
 
-        getSessionStore(vertx).onSuccess { sessionStore ->
+        getSessionStore(vertx).compose { sessionStore ->
+            getQueueStore(vertx).map { queueStore -> Pair(sessionStore, queueStore) }
+        }.onSuccess { (sessionStore, queueStore) ->
             // Message bus
             val (messageBus, messageBusReady) = getMessageBus(vertx)
 
@@ -857,7 +884,7 @@ MORE INFO:
                 val messageHandler = MessageHandler(retainedStore!!, archiveGroups)
 
                 // Session handler
-                val sessionHandler = SessionHandler(sessionStore, messageBus, messageHandler, queuedMessagesEnabled)
+                val sessionHandler = SessionHandler(sessionStore, queueStore, messageBus, messageHandler, queuedMessagesEnabled)
 
                 // Store ArchiveHandler, SessionHandler, and MessageBus for later access
                 singleton?.let { instance ->
@@ -923,7 +950,7 @@ MORE INFO:
 
                 // MCP Server
                 val mcpConfig = configJson.getJsonObject("MCP", JsonObject())
-                val mcpEnabled = mcpConfig.getBoolean("Enabled", true)
+                val mcpEnabled = mcpConfig.getBoolean("Enabled", false)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpServer = if (mcpEnabled) {
                     McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, userManager)
@@ -1017,6 +1044,7 @@ MORE INFO:
                         archiveGroupsMap,
                         userManager,
                         sessionStore,
+                        queueStore,
                         sessionHandler,
                         metricsStore,
                         this.archiveHandler,
@@ -1346,9 +1374,14 @@ MORE INFO:
 
     private fun getSessionStore(vertx: Vertx): Future<ISessionStoreAsync> {
         val promise = Promise.promise<ISessionStoreAsync>()
-        val sessionStoreType = SessionStoreType.valueOf(
-            Monster.getSessionStoreType(configJson)
-        )
+        val sessionStoreTypeStr = Monster.getSessionStoreType(configJson)
+        val sessionStoreType = try {
+            SessionStoreType.valueOf(sessionStoreTypeStr)
+        } catch (e: IllegalArgumentException) {
+            val supported = SessionStoreType.entries.joinToString(", ")
+            logger.severe("Unsupported SessionStoreType '$sessionStoreTypeStr'. Supported values: $supported")
+            exitProcess(1)
+        }
         
         // For SQLite, ensure SQLiteVerticle is deployed first
         val sqliteReady = if (sessionStoreType == SessionStoreType.SQLITE) {
@@ -1362,9 +1395,6 @@ MORE INFO:
                 SessionStoreType.POSTGRES -> {
                     SessionStorePostgres(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 }
-                SessionStoreType.CRATEDB -> {
-                    SessionStoreCrateDB(crateDbConfig.url, crateDbConfig.user, crateDbConfig.pass)
-                }
                 SessionStoreType.MONGODB -> {
                     SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
                 }
@@ -1377,6 +1407,66 @@ MORE INFO:
             vertx.deployVerticle(store, options).compose { _ ->
                 val async = SessionStoreAsync(store)
                 vertx.deployVerticle(async).map { async }
+            }
+        }.onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                promise.fail(result.cause())
+            }
+        }
+
+        return promise.future()
+    }
+
+    private fun getQueueStore(vertx: Vertx): Future<IQueueStoreAsync> {
+        val promise = Promise.promise<IQueueStoreAsync>()
+        val queueStoreTypeStr = Monster.getQueueStoreType(configJson)
+        val queueStoreType = try {
+            QueueStoreType.valueOf(queueStoreTypeStr)
+        } catch (e: IllegalArgumentException) {
+            val supported = QueueStoreType.entries.joinToString(", ")
+            logger.severe("Unsupported QueueStoreType '$queueStoreTypeStr'. Supported values: $supported")
+            exitProcess(1)
+        }
+
+        // For SQLite, ensure SQLiteVerticle is deployed first
+        val sqliteReady = if (queueStoreType == QueueStoreType.SQLITE) {
+            ensureSQLiteVerticleDeployed(vertx)
+        } else {
+            Future.succeededFuture("N/A")
+        }
+
+        sqliteReady.compose { _ ->
+            val store: IQueueStoreSync = when (queueStoreType) {
+                QueueStoreType.POSTGRES, QueueStoreType.POSTGRES_V1 -> {
+                    QueueStorePostgresV1(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
+                }
+                QueueStoreType.POSTGRES_V2 -> {
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStorePostgresV2(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema, vtSeconds)
+                }
+                QueueStoreType.MONGODB, QueueStoreType.MONGODB_V1 -> {
+                    QueueStoreMongoDBV1(mongoDbConfig.url, mongoDbConfig.database)
+                }
+                QueueStoreType.MONGODB_V2 -> {
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStoreMongoDBV2(mongoDbConfig.url, mongoDbConfig.database, vtSeconds)
+                }
+                QueueStoreType.SQLITE, QueueStoreType.SQLITE_V1 -> {
+                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
+                    QueueStoreSQLiteV1(configDbPath)
+                }
+                QueueStoreType.SQLITE_V2 -> {
+                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStoreSQLiteV2(configDbPath, vtSeconds)
+                }
+            }
+            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            vertx.deployVerticle(store as AbstractVerticle, options).compose { _ ->
+                val async = QueueStoreAsync(store)
+                vertx.deployVerticle(async).map { async as IQueueStoreAsync }
             }
         }.onComplete { result ->
             if (result.succeeded()) {

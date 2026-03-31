@@ -22,6 +22,10 @@ This directory contains documentation for developers and AI coding agents workin
 - [plans/TOPIC_SCHEMA_GOVERNANCE_ISSUE_112.md](plans/TOPIC_SCHEMA_GOVERNANCE_ISSUE_112.md) — Topic schema governance and validation
 - [plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md](plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md) — Amazon Kinesis client integration
 
+**Performance optimization:**
+- [plans/QUEUEDB_EMBEDDED_DATABASE.md](plans/QUEUEDB_EMBEDDED_DATABASE.md) — Embedded QueueDB with Hazelcast IMap clustering (sequence-based inbox model, reference counting, EntryProcessor)
+- [plans/QUEUED_MESSAGES_OPTIMIZATION.md](plans/QUEUED_MESSAGES_OPTIMIZATION.md) — QoS > 0 queued messages PostgreSQL optimization (FOR UPDATE SKIP LOCKED, PGMQ-inspired redesign)
+
 **Strategic architecture:**
 - [plans/GRAALVM-CAPABILITIES-ANALYSIS.md](plans/GRAALVM-CAPABILITIES-ANALYSIS.md) — GraalVM capabilities analysis
 - [plans/OPEN_INDUSTRIAL_CLAW.md](plans/OPEN_INDUSTRIAL_CLAW.md) — Open Industrial standards integration initiative

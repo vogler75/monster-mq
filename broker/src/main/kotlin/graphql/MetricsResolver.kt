@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.Version
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
+import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore
 import at.rocworks.stores.IMetricsStore
@@ -16,6 +17,7 @@ import java.util.logging.Logger
 class MetricsResolver(
     private val vertx: Vertx,
     private val sessionStore: ISessionStoreAsync,
+    private val queueStore: IQueueStoreAsync,
     private val sessionHandler: at.rocworks.handlers.SessionHandler,
     private val metricsStore: IMetricsStore?,
     private val config: io.vertx.core.json.JsonObject = io.vertx.core.json.JsonObject(),
@@ -478,7 +480,7 @@ class MetricsResolver(
     private fun getQueuedMessagesCount(): Long {
         // This method is used synchronously in broker metrics within executeBlocking blocks
         return try {
-            sessionStore.sync.countQueuedMessages()
+            queueStore.sync.countQueuedMessages()
         } catch (e: Exception) {
             logger.warning("Error getting queued messages count: ${e.message}")
             0L
@@ -494,7 +496,7 @@ class MetricsResolver(
             val clientId = session?.clientId
 
             if (clientId != null) {
-                sessionStore.countQueuedMessagesForClient(clientId).onComplete { result ->
+                queueStore.countQueuedMessagesForClient(clientId).onComplete { result ->
                     if (result.succeeded()) {
                         future.complete(result.result())
                     } else {

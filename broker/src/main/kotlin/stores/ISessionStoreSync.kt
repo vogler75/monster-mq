@@ -6,7 +6,6 @@ import io.vertx.core.json.JsonObject
 
 enum class SessionStoreType {
     POSTGRES,
-    CRATEDB,
     MONGODB,
     SQLITE
 }
@@ -31,27 +30,5 @@ interface ISessionStoreSync {
     fun delSubscriptions(subscriptions: List<MqttSubscription>)
     fun delClient(clientId: String, callback: (MqttSubscription) -> Unit)
 
-    fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>)
-    fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean)
-    fun removeMessages(messages: List<Pair<String, String>>)
-
-    // Fetch ONE pending message for queue-first delivery (returns null if none)
-    fun fetchNextPendingMessage(clientId: String): BrokerMessage?
-
-    // Fetch multiple pending messages for bulk delivery (returns empty list if none)
-    fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage>
-
-    // Status-based message tracking for QoS 1+ delivery
-    fun markMessageInFlight(clientId: String, messageUuid: String)
-    fun markMessagesInFlight(clientId: String, messageUuids: List<String>)
-    fun markMessageDelivered(clientId: String, messageUuid: String)
-    fun resetInFlightMessages(clientId: String)
-    fun purgeDeliveredMessages(): Int
-    fun purgeExpiredMessages(): Int
-
-    fun purgeQueuedMessages()
     fun purgeSessions()
-
-    fun countQueuedMessages(): Long
-    fun countQueuedMessagesForClient(clientId: String): Long
 }

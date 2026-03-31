@@ -29,6 +29,10 @@ object MongoClientPool {
     private val pool = ConcurrentHashMap<String, PoolEntry>()
     private val lock = ReentrantLock()
 
+    /** Default socket read timeout used when creating new clients. */
+    @Volatile
+    var defaultReadTimeoutMs: Long = 60000
+
     /**
      * Get or create a shared MongoClient for the given connection string.
      * Each call increments the reference count; callers must call [releaseClient] when done.
@@ -42,10 +46,10 @@ object MongoClientPool {
                 return existing.client
             }
 
-            val settings = MongoClientSettingsFactory.createSettings(connectionString)
+            val settings = MongoClientSettingsFactory.createSettings(connectionString, readTimeoutMs = defaultReadTimeoutMs)
             val client = MongoClients.create(settings)
             pool[connectionString] = PoolEntry(client)
-            logger.info("Created shared MongoClient for [$connectionString] (refs=1)")
+            logger.info("Created shared MongoClient for [$connectionString] (refs=1, readTimeoutMs=$defaultReadTimeoutMs)")
             return client
         }
     }

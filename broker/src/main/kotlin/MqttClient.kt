@@ -223,15 +223,11 @@ class MqttClient(
             }
         }
 
-        // Cache empty - fetch a batch from database
-        return sessionHandler.fetchPendingMessages(clientId, MESSAGE_CACHE_SIZE).map { messages ->
+        // Cache empty - fetch a batch from database (atomically marked in-flight)
+        return sessionHandler.fetchAndLockPendingMessages(clientId, MESSAGE_CACHE_SIZE).map { messages ->
             if (messages.isEmpty()) {
                 null
             } else {
-                // Mark all fetched messages as in-flight at once
-                val uuids = messages.map { it.messageUuid }
-                sessionHandler.markMessagesInFlight(clientId, uuids)
-
                 // Put remaining messages in cache (all except first)
                 synchronized(messageCacheLock) {
                     if (messages.size > 1) {

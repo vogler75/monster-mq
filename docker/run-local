@@ -1,0 +1,1 @@
+docker run --rm -v $PWD/log:/app/log -v $PWD/config-local.yaml:/app/config.yaml -p 11883:1883 rocworks/monstermq

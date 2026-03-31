@@ -1,5 +1,5 @@
 TCP: 1883
-TPCS: 8883
+TCPS: 8883
 WS: 9000
 WSS: 9001
 
@@ -7,6 +7,11 @@ QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
 DefaultStoreType: POSTGRES
+
+#SessionStoreType: POSTGRES      # Persistent sessions
+#RetainedStoreType: POSTGRES     # Persistent retained messages
+#ConfigStoreType: POSTGRES       # Persistent broker configuration (users, ACL, SparkplugB decoders, etc.)
+#QueueStoreType: POSTGRES        # Persistent message queues (for QoS 1/2 messages when clients are offline)
 
 # User Management configuration
 UserManagement:

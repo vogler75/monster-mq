@@ -9,8 +9,8 @@ import at.rocworks.stores.SessionStoreType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
-import com.mongodb.client.model.Filters.*
 import com.mongodb.client.model.UpdateOptions
+import com.mongodb.client.model.Filters.*
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -29,8 +29,6 @@ class SessionStoreMongoDB(
 
     private lateinit var sessionsCollection: MongoCollection<Document>
     private lateinit var subscriptionsCollection: MongoCollection<Document>
-    private lateinit var queuedMessagesCollection: MongoCollection<Document>
-    private lateinit var queuedMessagesClientsCollection: MongoCollection<Document>
 
     init {
         logger.level = Const.DEBUG_LEVEL
@@ -46,18 +44,12 @@ class SessionStoreMongoDB(
             // Initialize collections
             sessionsCollection = database.getCollection("sessions")
             subscriptionsCollection = database.getCollection("subscriptions")
-            queuedMessagesCollection = database.getCollection("queuedmessages")
-            queuedMessagesClientsCollection = database.getCollection("queuedmessagesclients")
 
             // Create indexes in background to avoid blocking the event loop
             vertx.executeBlocking(Callable {
                 try {
                     sessionsCollection.createIndex(Document("client_id", 1))
                     subscriptionsCollection.createIndex(Document("client_id", 1).append("topic", 1))
-                    queuedMessagesCollection.createIndex(Document("client_id", 1))
-                    queuedMessagesCollection.createIndex(Document("message_uuid", 1))  // For $lookup joins
-                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
-                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
                     logger.info("MongoDB session store indexes created successfully")
                 } catch (e: Exception) {
                     logger.warning("Failed to create indexes: ${e.message}")
@@ -291,349 +283,8 @@ class SessionStoreMongoDB(
             }
             subscriptionsCollection.deleteMany(eq("client_id", clientId))
             sessionsCollection.deleteOne(eq("client_id", clientId))
-            queuedMessagesClientsCollection.deleteMany(eq("client_id", clientId))
         } catch (e: Exception) {
             logger.warning("Error while deleting client: ${e.message}")
-        }
-    }
-
-    override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
-        try {
-            messages.forEach { (message, clientIds) ->
-                val messageDocument = Document(mapOf(
-                    "message_uuid" to message.messageUuid,
-                    "message_id" to message.messageId,
-                    "topic" to message.topicName,
-                    "payload" to Binary(message.payload),
-                    "qos" to message.qosLevel,
-                    "retained" to message.isRetain,
-                    "client_id" to message.clientId,
-                    "creation_time" to message.time.toEpochMilli(),
-                    "message_expiry_interval" to message.messageExpiryInterval
-                ))
-                queuedMessagesCollection.updateOne(
-                    eq("message_uuid", message.messageUuid),
-                    Document("\$setOnInsert", messageDocument),
-                    UpdateOptions().upsert(true)
-                )
-
-                clientIds.forEach { clientId ->
-                    val clientMessageDocument = Document(mapOf(
-                        "client_id" to clientId,
-                        "message_uuid" to message.messageUuid,
-                        "status" to 0
-                    ))
-                    queuedMessagesClientsCollection.updateOne(
-                        and(
-                            eq("client_id", clientId),
-                            eq("message_uuid", message.messageUuid)
-                        ),
-                        Document("\$setOnInsert", clientMessageDocument),
-                        UpdateOptions().upsert(true)
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            logger.warning("Error while enqueuing messages: ${e.message}")
-        }
-    }
-
-    override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
-        try {
-            val pipeline = listOf(
-                Document("\$match", Document("client_id", clientId)),
-                Document(
-                    "\$lookup", Document(mapOf(
-                        "from" to "QueuedMessages",
-                        "localField" to "message_uuid",
-                        "foreignField" to "message_uuid",
-                        "as" to "message"
-                    ))
-                ),
-                Document("\$unwind", "\$message"),
-                Document("\$sort", Document("message.message_uuid", 1))
-            )
-
-            val currentTimeMillis = System.currentTimeMillis()
-            val results = queuedMessagesClientsCollection.aggregate(pipeline)
-            for (doc in results) {
-                val messageDoc = doc.get("message", Document::class.java)
-                val messageUuid = messageDoc.getString("message_uuid")
-                val messageId = messageDoc.getInteger("message_id")
-                val topic = messageDoc.getString("topic")
-                val payload = messageDoc.get("payload", Binary::class.java).data
-                val qos = messageDoc.getInteger("qos")
-                val retained = messageDoc.getBoolean("retained")
-                val clientIdPublisher = messageDoc.getString("client_id")
-                val creationTime = messageDoc.getLong("creation_time") ?: currentTimeMillis
-                val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
-                
-                // Check if message has expired
-                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
-                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
-                    if (ageSeconds >= messageExpiryInterval) {
-                        // Skip expired message
-                        continue
-                    }
-                }
-
-                val continueProcessing = callback(
-                    BrokerMessage(
-                        messageUuid = messageUuid,
-                        messageId = messageId,
-                        topicName = topic,
-                        payload = payload,
-                        qosLevel = qos,
-                        isRetain = retained,
-                        isDup = false,
-                        isQueued = true,
-                        clientId = clientIdPublisher,
-                        time = java.time.Instant.ofEpochMilli(creationTime),
-                        messageExpiryInterval = messageExpiryInterval
-                    )
-                )
-                if (!continueProcessing) break
-            }
-        } catch (e: Exception) {
-            logger.warning("Error while fetching queued messages: ${e.message}")
-        }
-    }
-
-    override fun removeMessages(messages: List<Pair<String, String>>) { // clientId, messageUuid
-        try {
-            val groupedMessages = messages.groupBy({ it.first }, { it.second })
-            groupedMessages.forEach { (clientId, messageUuids) ->
-                queuedMessagesClientsCollection.deleteMany(
-                    and(
-                        eq("client_id", clientId),
-                        `in`("message_uuid", messageUuids)
-                    )
-                )
-            }
-        } catch (e: Exception) {
-            logger.warning("Error while removing dequeued messages: ${e.message}")
-        }
-    }
-
-    override fun fetchNextPendingMessage(clientId: String): BrokerMessage? {
-        return fetchPendingMessages(clientId, 1).firstOrNull()
-    }
-
-    override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
-        return try {
-            val pipeline = listOf(
-                Document("\$match", Document(mapOf("client_id" to clientId, "status" to 0))),
-                Document(
-                    "\$lookup", Document(mapOf(
-                        "from" to "queuedmessages",
-                        "localField" to "message_uuid",
-                        "foreignField" to "message_uuid",
-                        "as" to "message"
-                    ))
-                ),
-                Document("\$unwind", "\$message"),
-                Document("\$sort", Document("message.message_uuid", 1)),
-                Document("\$limit", limit)
-            )
-
-            val currentTimeMillis = System.currentTimeMillis()
-            val results = queuedMessagesClientsCollection.aggregate(pipeline)
-            results.mapNotNull { doc ->
-                val messageDoc = doc.get("message", Document::class.java)
-                if (messageDoc != null) {
-                    val creationTime = messageDoc.getLong("creation_time") ?: currentTimeMillis
-                    val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
-                    
-                    // Check if message has expired
-                    if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
-                        val ageSeconds = (currentTimeMillis - creationTime) / 1000
-                        if (ageSeconds >= messageExpiryInterval) {
-                            // Skip expired message
-                            return@mapNotNull null
-                        }
-                    }
-                    
-                    BrokerMessage(
-                        messageUuid = messageDoc.getString("message_uuid"),
-                        messageId = messageDoc.getInteger("message_id"),
-                        topicName = messageDoc.getString("topic"),
-                        payload = messageDoc.get("payload", Binary::class.java).data,
-                        qosLevel = messageDoc.getInteger("qos"),
-                        isRetain = messageDoc.getBoolean("retained"),
-                        isDup = false,
-                        isQueued = true,
-                        clientId = messageDoc.getString("client_id"),
-                        time = java.time.Instant.ofEpochMilli(creationTime),
-                        messageExpiryInterval = messageExpiryInterval
-                    )
-                } else null
-            }.toList()
-        } catch (e: Exception) {
-            logger.warning("Error fetching pending messages: ${e.message}")
-            emptyList()
-        }
-    }
-
-    override fun markMessageInFlight(clientId: String, messageUuid: String) {
-        try {
-            queuedMessagesClientsCollection.updateOne(
-                and(
-                    eq("client_id", clientId),
-                    eq("message_uuid", messageUuid),
-                    eq("status", 0)
-                ),
-                Document("\$set", Document("status", 1))
-            )
-        } catch (e: Exception) {
-            logger.warning("Error marking message in-flight: ${e.message}")
-        }
-    }
-
-    override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
-        if (messageUuids.isEmpty()) return
-        try {
-            queuedMessagesClientsCollection.updateMany(
-                and(
-                    eq("client_id", clientId),
-                    `in`("message_uuid", messageUuids),
-                    eq("status", 0)
-                ),
-                Document("\$set", Document("status", 1))
-            )
-        } catch (e: Exception) {
-            logger.warning("Error marking messages in-flight: ${e.message}")
-        }
-    }
-
-    override fun markMessageDelivered(clientId: String, messageUuid: String) {
-        try {
-            queuedMessagesClientsCollection.updateOne(
-                and(
-                    eq("client_id", clientId),
-                    eq("message_uuid", messageUuid)
-                ),
-                Document("\$set", Document("status", 2))
-            )
-        } catch (e: Exception) {
-            logger.warning("Error marking message delivered: ${e.message}")
-        }
-    }
-
-    override fun resetInFlightMessages(clientId: String) {
-        try {
-            queuedMessagesClientsCollection.updateMany(
-                and(
-                    eq("client_id", clientId),
-                    eq("status", 1)
-                ),
-                Document("\$set", Document("status", 0))
-            )
-        } catch (e: Exception) {
-            logger.warning("Error resetting in-flight messages: ${e.message}")
-        }
-    }
-
-    override fun purgeDeliveredMessages(): Int {
-        return try {
-            val result = queuedMessagesClientsCollection.deleteMany(eq("status", 2))
-            result.deletedCount.toInt()
-        } catch (e: Exception) {
-            logger.warning("Error purging delivered messages: ${e.message}")
-            0
-        }
-    }
-
-    override fun purgeExpiredMessages(): Int {
-        val currentTimeMillis = System.currentTimeMillis()
-        
-        return try {
-            // Find expired messages
-            val expiredMessages = queuedMessagesCollection.find(
-                and(
-                    exists("message_expiry_interval"),
-                    exists("creation_time"),
-                    Document("\$expr", Document("\$gte", listOf(
-                        Document("\$divide", listOf(
-                            Document("\$subtract", listOf(currentTimeMillis, "\$creation_time")),
-                            1000
-                        )),
-                        "\$message_expiry_interval"
-                    )))
-                )
-            ).projection(Document("message_uuid", 1))
-            
-            val expiredUuids = mutableListOf<String>()
-            expiredMessages.forEach { doc ->
-                expiredUuids.add(doc.getString("message_uuid"))
-            }
-            
-            if (expiredUuids.isEmpty()) {
-                return 0
-            }
-            
-            // Delete expired message client mappings
-            val result = queuedMessagesClientsCollection.deleteMany(
-                `in`("message_uuid", expiredUuids)
-            )
-            
-            val count = result.deletedCount.toInt()
-            if (count > 0) {
-                logger.fine { "Purged $count expired messages" }
-            }
-            count
-        } catch (e: Exception) {
-            logger.warning("Error purging expired messages: ${e.message}")
-            0
-        }
-    }
-
-    override fun purgeQueuedMessages() {
-        val batchSize = 5000
-        val delayBetweenBatchesMs = 100L
-        var totalDeleted = 0L
-        val startTime = System.currentTimeMillis()
-
-        try {
-            // Use batched aggregation with $lookup to find orphaned messages
-            // This avoids loading all UUIDs into memory at once
-            var deleted: Long
-            do {
-                // Find orphaned message UUIDs in batches using $lookup
-                val orphanedUuids = queuedMessagesCollection.aggregate(listOf(
-                    Document("\$lookup", Document(mapOf(
-                        "from" to "queuedmessagesclients",
-                        "localField" to "message_uuid",
-                        "foreignField" to "message_uuid",
-                        "as" to "clients"
-                    ))),
-                    Document("\$match", Document("clients", Document("\$size", 0))),
-                    Document("\$limit", batchSize),
-                    Document("\$project", Document("message_uuid", 1))
-                )).map { it.getString("message_uuid") }.toList()
-
-                if (orphanedUuids.isNotEmpty()) {
-                    val result = queuedMessagesCollection.deleteMany(`in`("message_uuid", orphanedUuids))
-                    deleted = result.deletedCount
-                    totalDeleted += deleted
-
-                    logger.fine { "Purge batch: deleted $deleted orphaned messages (total: $totalDeleted)" }
-
-                    if (deleted >= batchSize) {
-                        Thread.sleep(delayBetweenBatchesMs)
-                    }
-                } else {
-                    deleted = 0
-                }
-            } while (deleted >= batchSize)
-
-            val duration = (System.currentTimeMillis() - startTime) / 1000.0
-            if (totalDeleted > 0) {
-                logger.info("Purging queued messages finished: deleted $totalDeleted in $duration seconds")
-            } else {
-                logger.fine { "Purging queued messages finished: no orphaned messages found in $duration seconds" }
-            }
-        } catch (e: Exception) {
-            logger.warning("Error while purging queued messages: ${e.message}")
         }
     }
 
@@ -677,23 +328,5 @@ class SessionStoreMongoDB(
     override fun stop() {
         MongoClientPool.releaseClient(connectionString)
         logger.info("MongoDB connection released.")
-    }
-
-    override fun countQueuedMessages(): Long {
-        return try {
-            queuedMessagesCollection.countDocuments()
-        } catch (e: Exception) {
-            logger.warning("Error counting queued messages: ${e.message}")
-            0L
-        }
-    }
-
-    override fun countQueuedMessagesForClient(clientId: String): Long {
-        return try {
-            queuedMessagesClientsCollection.countDocuments(and(eq("client_id", clientId), lt("status", 2)))
-        } catch (e: Exception) {
-            logger.warning("Error counting queued messages for client $clientId: ${e.message}")
-            0L
-        }
     }
 }

@@ -136,7 +136,7 @@ class DeviceConfigStoreSQLite(
                     migrateDropBackupNodeId()
                 }
                 .onSuccess {
-                    logger.info("DeviceConfigStoreSQLite initialized successfully")
+                    logger.fine("DeviceConfigStoreSQLite initialized successfully")
                     promise.complete()
                 }
                 .onFailure { error ->

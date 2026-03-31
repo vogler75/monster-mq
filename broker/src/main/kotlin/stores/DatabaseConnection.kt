@@ -18,6 +18,8 @@ abstract class DatabaseConnection(
     var connection: Connection? = null
     private val defaultRetryWaitTime = 3000L
     private var reconnectOngoing = false
+    @Volatile
+    private var disconnectedLogged = false
 
     fun start(vertx: Vertx, startPromise: Promise<Void>) = connect(vertx, startPromise)
 
@@ -63,7 +65,12 @@ abstract class DatabaseConnection(
             DriverManager.getConnection(url, username, password)
                 ?.let { connection ->
                     this.connection = connection
-                    logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
+                    if (disconnectedLogged) {
+                        disconnectedLogged = false
+                        logger.info("Database connection restored [${Utils.getCurrentFunctionName()}]")
+                    } else {
+                        logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
+                    }
                     init(connection).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 }
         } catch (e: Exception) {
@@ -79,6 +86,9 @@ abstract class DatabaseConnection(
                 connection!!.prepareStatement("SELECT 1").use { stmt ->
                     stmt.executeQuery().use { rs ->
                         if (rs.next()) {
+                            // Commit to avoid holding an open transaction from the health check
+                            // (only when autoCommit is off — some stores use autoCommit=true)
+                            if (!connection!!.autoCommit) connection!!.commit()
                             return true // Connection is good
                         }
                     }
@@ -102,7 +112,10 @@ abstract class DatabaseConnection(
 
     private fun reconnect(vertx: Vertx) {
         if (!reconnectOngoing) {
-            logger.info("Reconnect [${Utils.getCurrentFunctionName()}]")
+            if (!disconnectedLogged) {
+                disconnectedLogged = true
+                logger.warning("Database connection lost, attempting reconnect [${Utils.getCurrentFunctionName()}]")
+            }
             reconnectOngoing = true
             val promise = Promise.promise<Void>()
             promise.future().onComplete {

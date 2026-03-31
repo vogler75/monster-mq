@@ -3,6 +3,7 @@ package at.rocworks.extensions.graphql
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.BrokerMessage
+import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
 import graphql.schema.DataFetcher
@@ -16,6 +17,7 @@ class MutationResolver(
     private val messageBus: IMessageBus,
     private val messageHandler: at.rocworks.handlers.MessageHandler,
     private val sessionStore: ISessionStoreAsync,
+    private val queueStore: IQueueStoreAsync,
     private val sessionHandler: at.rocworks.handlers.SessionHandler,
     private val authContext: GraphQLAuthContext,
     private val deviceStore: IDeviceConfigStore?
@@ -193,12 +195,10 @@ class MutationResolver(
             try {
                 if (clientId != null) {
                     // Purge queued messages for specific client using async calls
-                    sessionStore.countQueuedMessagesForClient(clientId).onComplete { countResult ->
+                    queueStore.countQueuedMessagesForClient(clientId).onComplete { countResult ->
                         if (countResult.succeeded()) {
                             val deletedCount = countResult.result()
-                            sessionStore.delClient(clientId) { subscription ->
-                                // We don't need the subscription callback but it's required
-                            }.onComplete { delResult ->
+                            queueStore.deleteClientMessages(clientId).onComplete { delResult ->
                                 if (delResult.succeeded()) {
                                     future.complete(
                                         PurgeResult(
@@ -229,10 +229,10 @@ class MutationResolver(
                     }
                 } else {
                     // Purge all queued messages using async calls
-                    sessionStore.countQueuedMessages().onComplete { countResult ->
+                    queueStore.countQueuedMessages().onComplete { countResult ->
                         if (countResult.succeeded()) {
                             val countBefore = countResult.result()
-                            sessionStore.purgeQueuedMessages().onComplete { purgeResult ->
+                            queueStore.purgeQueuedMessages().onComplete { purgeResult ->
                                 if (purgeResult.succeeded()) {
                                     future.complete(
                                         PurgeResult(
