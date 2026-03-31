@@ -191,40 +191,30 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            // Use findMatchingMessages to get the exact topic (works async)
-            var found = false
-            retainedStore.findMatchingMessages(topic) { message ->
-                if (!found && message.topicName == topic) {
-                    found = true
-                    val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
-                        message.payload,
-                        format
-                    )
-                    future.complete(
-                        RetainedMessage(
-                            topic = message.topicName,
-                            payload = payload,
-                            format = actualFormat,
-                            timestamp = message.time.toEpochMilli(),
-                            qos = message.qosLevel,
-                            messageExpiryInterval = message.messageExpiryInterval,
-                            contentType = message.contentType,
-                            responseTopic = message.responseTopic,
-                            payloadFormatIndicator = message.payloadFormatIndicator,
-                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
-                        )
-                    )
-                    true // stop processing
-                } else {
-                    false // continue searching
-                }
-            }
-            
-            // If not found after async search, complete with null
-            vertx.setTimer(100) {
-                if (!found) {
+            retainedStore.getAsync(topic) { message ->
+                if (message == null) {
                     future.complete(null)
+                    return@getAsync
                 }
+
+                val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
+                    message.payload,
+                    format
+                )
+                future.complete(
+                    RetainedMessage(
+                        topic = message.topicName,
+                        payload = payload,
+                        format = actualFormat,
+                        timestamp = message.time.toEpochMilli(),
+                        qos = message.qosLevel,
+                        messageExpiryInterval = message.messageExpiryInterval,
+                        contentType = message.contentType,
+                        responseTopic = message.responseTopic,
+                        payloadFormatIndicator = message.payloadFormatIndicator,
+                        userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                    )
+                )
             }
 
             future

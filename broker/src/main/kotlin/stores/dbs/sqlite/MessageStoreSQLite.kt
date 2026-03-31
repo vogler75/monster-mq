@@ -11,6 +11,7 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
+import java.util.Base64
 
 /**
  * Clean SQLiteVerticle-only implementation of MessageStore
@@ -43,6 +44,59 @@ class MessageStoreSQLite(
 
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.SQLITE
+
+    private fun JsonObject.readBinary(key: String): ByteArray? {
+        return when (val value = getValue(key)) {
+            null -> null
+            is ByteArray -> value
+            is String -> {
+                try {
+                    Base64.getDecoder().decode(value)
+                } catch (_: IllegalArgumentException) {
+                    value.toByteArray()
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun JsonObject.readInt(key: String, default: Int = 0): Int {
+        return when (val value = getValue(key)) {
+            null -> default
+            is Number -> value.toInt()
+            is Boolean -> if (value) 1 else 0
+            is String -> value.toIntOrNull() ?: default
+            else -> default
+        }
+    }
+
+    private fun JsonObject.readBoolean(key: String, default: Boolean = false): Boolean {
+        return when (val value = getValue(key)) {
+            null -> default
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> value == "1" || value.equals("true", ignoreCase = true)
+            else -> default
+        }
+    }
+
+    private fun JsonObject.readLong(key: String, default: Long): Long {
+        return when (val value = getValue(key)) {
+            null -> default
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull() ?: default
+            else -> default
+        }
+    }
+
+    private fun JsonObject.readLongOrNull(key: String): Long? {
+        return when (val value = getValue(key)) {
+            null -> null
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull()
+            else -> null
+        }
+    }
 
     override fun start(startPromise: Promise<Void>) {
         // Initialize SQLiteClient - assumes SQLiteVerticle is already deployed by Monster.kt
@@ -121,7 +175,7 @@ class MessageStoreSQLite(
     }
 
     override fun get(topicName: String): BrokerMessage? {
-        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
         
@@ -129,11 +183,13 @@ class MessageStoreSQLite(
             val results = sqlClient.executeQuerySync(sql, params)
             if (results.size() > 0) {
                 val row = results.getJsonObject(0)
-                val payload = row.getBinary("payload_blob") ?: ByteArray(0)
-                val qos = row.getInteger("qos", 0)
-                val retained = row.getBoolean("retained", false)
+                val payload = row.readBinary("payload_blob") ?: ByteArray(0)
+                val qos = row.readInt("qos", 0)
+                val retained = row.readBoolean("retained", false)
                 val clientId = row.getString("client_id") ?: ""
                 val messageUuid = row.getString("message_uuid") ?: ""
+                val creationTime = row.readLong("creation_time", System.currentTimeMillis())
+                val messageExpiryInterval = row.readLongOrNull("message_expiry_interval")
 
                 BrokerMessage(
                     messageUuid = messageUuid,
@@ -144,7 +200,9 @@ class MessageStoreSQLite(
                     isRetain = retained,
                     isQueued = false,
                     clientId = clientId,
-                    isDup = false
+                    isDup = false,
+                    time = Instant.ofEpochMilli(creationTime),
+                    messageExpiryInterval = messageExpiryInterval
                 )
             } else {
                 null
@@ -159,7 +217,7 @@ class MessageStoreSQLite(
      * Async version of get() for better performance with GraphQL queries
      */
     override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
-        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
         
@@ -169,11 +227,13 @@ class MessageStoreSQLite(
                 if (results.size() > 0) {
                     try {
                         val row = results.getJsonObject(0)
-                        val payload = row.getBinary("payload_blob") ?: ByteArray(0)
-                        val qos = row.getInteger("qos", 0)
-                        val retained = row.getBoolean("retained", false)
+                        val payload = row.readBinary("payload_blob") ?: ByteArray(0)
+                        val qos = row.readInt("qos", 0)
+                        val retained = row.readBoolean("retained", false)
                         val clientId = row.getString("client_id") ?: ""
                         val messageUuid = row.getString("message_uuid") ?: ""
+                        val creationTime = row.readLong("creation_time", System.currentTimeMillis())
+                        val messageExpiryInterval = row.readLongOrNull("message_expiry_interval")
 
                         val message = BrokerMessage(
                             messageUuid = messageUuid,
@@ -184,7 +244,9 @@ class MessageStoreSQLite(
                             isRetain = retained,
                             isQueued = false,
                             clientId = clientId,
-                            isDup = false
+                            isDup = false,
+                            time = Instant.ofEpochMilli(creationTime),
+                            messageExpiryInterval = messageExpiryInterval
                         )
                         callback(message)
                     } catch (e: Exception) {
@@ -320,12 +382,12 @@ class MessageStoreSQLite(
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val topic = rowObj.getString("topic")
-                val payload = rowObj.getBinary("payload_blob") ?: ByteArray(0)
-                val qos = rowObj.getInteger("qos", 0)
+                val payload = rowObj.readBinary("payload_blob") ?: ByteArray(0)
+                val qos = rowObj.readInt("qos", 0)
                 val clientId = rowObj.getString("client_id", "")
                 val messageUuid = rowObj.getString("message_uuid", "")
-                val creationTime = rowObj.getLong("creation_time", currentTimeMillis)
-                val messageExpiryInterval = if (rowObj.getValue("message_expiry_interval") == null) null else rowObj.getLong("message_expiry_interval")
+                val creationTime = rowObj.readLong("creation_time", currentTimeMillis)
+                val messageExpiryInterval = rowObj.readLongOrNull("message_expiry_interval")
                 
                 // Phase 5: Check if message has expired
                 if (messageExpiryInterval != null && messageExpiryInterval >= 0) {

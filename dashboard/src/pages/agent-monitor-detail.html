@@ -241,6 +241,237 @@
         }
         .ws-dot.connected { background: var(--monster-green); }
         .ws-dot.connecting { background: var(--monster-orange); }
+
+        .test-stack {
+            display: grid;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .test-card {
+            background: var(--dark-surface);
+            border: 1px solid var(--dark-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            min-width: 0;
+        }
+        .test-stream-card {
+            display: flex;
+            flex-direction: column;
+        }
+        .test-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .test-card-title {
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .test-card-subtitle {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            line-height: 1.5;
+        }
+        .test-topic-list {
+            display: grid;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .test-topic-row {
+            display: grid;
+            grid-template-columns: 84px 1fr;
+            gap: 0.75rem;
+            align-items: start;
+        }
+        .test-topic-label {
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding-top: 0.2rem;
+        }
+        .test-topic-value {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+        .topic-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            background: rgba(124,58,237,0.12);
+            border: 1px solid rgba(124,58,237,0.22);
+            color: var(--monster-light);
+            font-size: 0.76rem;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            word-break: break-all;
+        }
+        .test-message-input {
+            width: 100%;
+            min-height: 180px;
+            padding: 0.8rem 0.95rem;
+            border-radius: 8px;
+            border: 1px solid var(--dark-border);
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.84rem;
+            line-height: 1.6;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        .test-message-input:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+        .test-hint {
+            margin-top: 0.55rem;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            line-height: 1.5;
+        }
+        .test-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            background: var(--dark-surface-2);
+            color: var(--text-primary);
+            border: 1px solid var(--dark-border);
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .btn-secondary:hover {
+            border-color: var(--monster-purple);
+            color: var(--text-primary);
+        }
+        .test-send-status {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+        .test-send-status.success { color: var(--monster-green); }
+        .test-send-status.error { color: var(--monster-red); }
+        .active-task-summary {
+            margin-top: 1rem;
+            padding: 0.8rem 0.95rem;
+            border-radius: 8px;
+            border: 1px solid var(--dark-border);
+            background: rgba(15,23,42,0.55);
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            line-height: 1.6;
+        }
+        .active-task-summary code {
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .live-feed {
+            max-height: 420px;
+            overflow-y: auto;
+            display: grid;
+            gap: 0.85rem;
+        }
+        .test-stream-card .live-feed {
+            flex: 1;
+            min-height: 640px;
+            max-height: none;
+        }
+        .event-card {
+            border: 1px solid rgba(71,85,105,0.45);
+            border-radius: 10px;
+            background: var(--dark-bg);
+            padding: 0.9rem 1rem;
+        }
+        .event-card.active {
+            border-color: rgba(124,58,237,0.7);
+            box-shadow: 0 0 0 1px rgba(124,58,237,0.18);
+        }
+        .event-meta {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.55rem;
+            font-size: 0.76rem;
+        }
+        .event-time { color: var(--text-muted); }
+        .event-topic {
+            color: var(--monster-light);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .event-task {
+            color: var(--text-secondary);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .event-state {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            border: 1px solid transparent;
+        }
+        .event-state.working {
+            color: var(--monster-orange);
+            background: rgba(249,115,22,0.14);
+            border-color: rgba(249,115,22,0.26);
+        }
+        .event-state.completed, .event-state.response {
+            color: var(--monster-green);
+            background: rgba(16,185,129,0.14);
+            border-color: rgba(16,185,129,0.26);
+        }
+        .event-state.failed, .event-state.error {
+            color: var(--monster-red);
+            background: rgba(239,68,68,0.14);
+            border-color: rgba(239,68,68,0.26);
+        }
+        .event-state.sent {
+            color: var(--accent-blue);
+            background: rgba(59,130,246,0.14);
+            border-color: rgba(59,130,246,0.26);
+        }
+        .event-summary {
+            color: var(--text-primary);
+            font-size: 0.84rem;
+            line-height: 1.55;
+            margin-bottom: 0.55rem;
+            word-break: break-word;
+        }
+        .event-payload {
+            margin: 0;
+            padding: 0.8rem;
+            border-radius: 8px;
+            background: rgba(30,41,59,0.58);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            line-height: 1.5;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-x: auto;
+        }
+        .response-section {
+            margin-bottom: 1.5rem;
+        }
     </style>
 </head>
 <body>
@@ -295,6 +526,65 @@
                 </div>
             </div>
 
+            <h3 class="section-title">Test Agent</h3>
+            <div class="test-stack">
+                <div class="test-card">
+                    <div class="test-card-header">
+                        <div>
+                            <div class="test-card-title">Send to Inbox</div>
+                            <div class="test-card-subtitle">Creates a correlated task and publishes it to the agent inbox so you can verify request handling end to end.</div>
+                        </div>
+                    </div>
+                    <div class="test-topic-list">
+                        <div class="test-topic-row">
+                            <div class="test-topic-label">Inbox</div>
+                            <div class="test-topic-value" id="test-inbox-topic"></div>
+                        </div>
+                        <div class="test-topic-row">
+                            <div class="test-topic-label">Responses</div>
+                            <div class="test-topic-value" id="test-response-topics"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="test-message">Task Input</label>
+                        <textarea id="test-message" class="test-message-input" rows="8" placeholder="Write the task to send to this agent. Valid JSON is embedded as structured input; everything else is sent as plain text."></textarea>
+                        <div class="test-hint">The monitor subscribes to the task status topic and the agent response topics so the reply stream appears below without a manual refresh.</div>
+                    </div>
+                    <div class="test-actions">
+                        <button class="btn-primary" id="send-test-message" type="button">Send to Inbox</button>
+                        <button class="btn-secondary" id="clear-live-results" type="button">Clear Live Results</button>
+                        <span class="test-send-status" id="test-send-status">No test message sent yet.</span>
+                    </div>
+                    <div class="active-task-summary" id="active-task-summary">
+                        Waiting for a test task. The latest task ID and state will appear here.
+                    </div>
+                </div>
+
+                <div class="test-card test-stream-card">
+                    <div class="test-card-header">
+                        <div>
+                            <div class="test-card-title">Task Status Stream</div>
+                            <div class="test-card-subtitle">Live updates from <code>status/{taskId}</code> for test runs and other correlated tasks.</div>
+                        </div>
+                    </div>
+                    <div class="live-feed" id="task-status-stream">
+                        <div class="log-empty">Waiting for task status updates...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="test-card response-section">
+                <div class="test-card-header">
+                    <div>
+                        <div class="test-card-title">Response Stream</div>
+                        <div class="test-card-subtitle">All live agent responses published to the configured output topics are collected here.</div>
+                    </div>
+                </div>
+                <div class="live-feed" id="response-stream">
+                    <div class="log-empty">Waiting for agent responses...</div>
+                </div>
+            </div>
+
             <!-- History Browser -->
             <h3 class="section-title">History</h3>
             <div class="history-controls">
@@ -303,6 +593,8 @@
                     <select id="history-subtopic">
                         <option value="health">health</option>
                         <option value="inbox/#">inbox</option>
+                        <option value="status/#">status</option>
+                        <option value="response">response</option>
                         <option value="logs/tools">logs/tools</option>
                         <option value="logs/mcp">logs/mcp</option>
                         <option value="logs/llm">logs/llm</option>
