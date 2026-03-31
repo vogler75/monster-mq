@@ -18,6 +18,8 @@ def pytest_addoption(parser):
                      help="Publish rate in msg/s (overrides parametrized rates)")
     parser.addoption("--disconnect-seconds", default=5, type=int,
                      help="Seconds the subscriber stays disconnected (default: 5)")
+    parser.addoption("--no-disconnect", action="store_true", default=False,
+                     help="Keep subscriber connected the entire time (no disconnect cycles)")
     parser.addoption("--username", default=os.getenv("MQTT_USERNAME", "Test"),
                      help="MQTT username")
     parser.addoption("--password", default=os.getenv("MQTT_PASSWORD", "Test"),
@@ -36,6 +38,7 @@ def cfg(request):
         "sub_port": request.config.getoption("--sub-port") or pub_port,
         "qos": request.config.getoption("--qos"),
         "disconnect_seconds": request.config.getoption("--disconnect-seconds"),
+        "no_disconnect": request.config.getoption("--no-disconnect"),
         "username": request.config.getoption("--username"),
         "password": request.config.getoption("--password"),
     }

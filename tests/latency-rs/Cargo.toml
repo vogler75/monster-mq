@@ -1,0 +1,9 @@
+[package]
+name = "latency-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rumqttc = "0.24"
+clap = { version = "4", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
