@@ -8,13 +8,29 @@ use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 #[derive(Parser, Debug)]
 #[command(name = "latency-test", about = "MQTT publish-subscribe latency measurement")]
 struct Args {
-    /// Broker host
+    /// Broker host (used for both publisher and subscriber unless overridden)
     #[arg(long, default_value = "localhost")]
     host: String,
 
-    /// Broker port
+    /// Broker port (used for both publisher and subscriber unless overridden)
     #[arg(long, default_value_t = 1883)]
     port: u16,
+
+    /// Publisher broker host (overrides --host for the publisher)
+    #[arg(long)]
+    pub_host: Option<String>,
+
+    /// Publisher broker port (overrides --port for the publisher)
+    #[arg(long)]
+    pub_port: Option<u16>,
+
+    /// Subscriber broker host (overrides --host for the subscriber)
+    #[arg(long)]
+    sub_host: Option<String>,
+
+    /// Subscriber broker port (overrides --port for the subscriber)
+    #[arg(long)]
+    sub_port: Option<u16>,
 
     /// MQTT username
     #[arg(long, default_value = "Test")]
@@ -73,6 +89,11 @@ fn main() {
     let interval = Duration::from_millis(args.interval_ms);
     let duration = Duration::from_secs(args.duration);
 
+    let sub_host = args.sub_host.as_deref().unwrap_or(&args.host);
+    let sub_port = args.sub_port.unwrap_or(args.port);
+    let pub_host = args.pub_host.as_deref().unwrap_or(&args.host);
+    let pub_port = args.pub_port.unwrap_or(args.port);
+
     let uid = &uuid::Uuid::new_v4().to_string()[..8];
     let topic = format!("test/latency/{uid}");
 
@@ -85,11 +106,12 @@ fn main() {
         "Latency test: QoS={}  interval={}ms  duration={}s  persistent={}",
         args.qos, args.interval_ms, args.duration, args.persistent
     );
+    println!("  pub: {}:{}  sub: {}:{}", pub_host, pub_port, sub_host, sub_port);
     println!("============================================================");
 
     // -- Subscriber -----------------------------------------------------------
     let sub_id = format!("lat_sub_{uid}");
-    let mut sub_opts = MqttOptions::new(&sub_id, &args.host, args.port);
+    let mut sub_opts = MqttOptions::new(&sub_id, sub_host, sub_port);
     sub_opts.set_keep_alive(Duration::from_secs(60));
     sub_opts.set_credentials(&args.username, &args.password);
     sub_opts.set_clean_session(!args.persistent);
@@ -145,7 +167,7 @@ fn main() {
 
     // -- Publisher -------------------------------------------------------------
     let pub_id = format!("lat_pub_{uid}");
-    let mut pub_opts = MqttOptions::new(&pub_id, &args.host, args.port);
+    let mut pub_opts = MqttOptions::new(&pub_id, pub_host, pub_port);
     pub_opts.set_keep_alive(Duration::from_secs(60));
     pub_opts.set_credentials(&args.username, &args.password);
     pub_opts.set_clean_session(true);
