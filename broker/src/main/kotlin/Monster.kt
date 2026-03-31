@@ -1439,25 +1439,25 @@ MORE INFO:
 
         sqliteReady.compose { _ ->
             val store: IQueueStoreSync = when (queueStoreType) {
-                QueueStoreType.POSTGRES, QueueStoreType.POSTGRES_V1 -> {
+                QueueStoreType.POSTGRES_V1 -> {
                     QueueStorePostgresV1(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 }
-                QueueStoreType.POSTGRES_V2 -> {
+                QueueStoreType.POSTGRES, QueueStoreType.POSTGRES_V2 -> {
                     val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
                     QueueStorePostgresV2(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema, vtSeconds)
                 }
-                QueueStoreType.MONGODB, QueueStoreType.MONGODB_V1 -> {
+                QueueStoreType.MONGODB_V1 -> {
                     QueueStoreMongoDBV1(mongoDbConfig.url, mongoDbConfig.database)
                 }
-                QueueStoreType.MONGODB_V2 -> {
+                QueueStoreType.MONGODB, QueueStoreType.MONGODB_V2 -> {
                     val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
                     QueueStoreMongoDBV2(mongoDbConfig.url, mongoDbConfig.database, vtSeconds)
                 }
-                QueueStoreType.SQLITE, QueueStoreType.SQLITE_V1 -> {
+                QueueStoreType.SQLITE_V1 -> {
                     val configDbPath = "${sqliteConfig.path}/monstermq.db"
                     QueueStoreSQLiteV1(configDbPath)
                 }
-                QueueStoreType.SQLITE_V2 -> {
+                QueueStoreType.SQLITE, QueueStoreType.SQLITE_V2 -> {
                     val configDbPath = "${sqliteConfig.path}/monstermq.db"
                     val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
                     QueueStoreSQLiteV2(configDbPath, vtSeconds)

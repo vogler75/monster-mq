@@ -241,7 +241,7 @@ BulkMessaging:
 ### Storage and Archiving
 
 - Session, retained, archive, last-value, and queue storage
-- Queue store with V1 (two-table design) and V2 (single-table PGMQ-inspired design) for PostgreSQL, MongoDB, and SQLite
+- Queue store with V2 (single-table PGMQ-inspired design, default) and V1 (two-table design) for PostgreSQL, MongoDB, and SQLite
 - Archive groups with retention and performance metrics
 - JDBC logger with JSON schema validation, field mapping, and bulk writes
 - Optional PostgreSQL schema support for multi-tenant setups
@@ -284,16 +284,16 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 
 | Database | Session Store | Queue Store | Retained / Last Value | Message Archive | Config Store |
 |----------|:---:|:---:|:---:|:---:|:---:|
-| PostgreSQL | Yes | Yes (V1, V2) | Yes | Yes | Yes |
-| MongoDB | Yes | Yes | Yes | Yes | Yes |
-| SQLite | Yes | Yes | Yes | Yes | Yes |
+| PostgreSQL | Yes | Yes (V2 default, V1) | Yes | Yes | Yes |
+| MongoDB | Yes | Yes (V2 default, V1) | Yes | Yes | Yes |
+| SQLite | Yes | Yes (V2 default, V1) | Yes | Yes | Yes |
 | CrateDB | - | - | Yes | Yes | - |
 | Memory | - | - | Yes | - | - |
 | Hazelcast | - | - | Yes | - | - |
 | Kafka | - | - | - | Yes | - |
 
 - **Session Store**, **Queue Store**, and **Config Store** require strict read-after-write consistency. CrateDB is not supported for these due to its eventual consistency model.
-- **Queue Store V2** (PostgreSQL only) uses a PGMQ-inspired single-table design with visibility timeout for higher throughput.
+- **Queue Store V2** is the default for all databases. It uses a PGMQ-inspired single-table design with visibility timeout for higher throughput. Use `POSTGRES_V1`, `MONGODB_V1`, or `SQLITE_V1` to select the legacy two-table design.
 - SQLite is not suitable for cluster mode; use PostgreSQL or MongoDB instead.
 
 ## Default Endpoints
