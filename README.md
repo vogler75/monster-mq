@@ -207,6 +207,28 @@ Omitting a key defaults to `true`. GraphQL mutations for a disabled feature retu
 
 See [configuration.md](doc/configuration.md) for details.
 
+## Performance Tuning
+
+### BulkProcessing and BulkMessaging
+
+MonsterMQ supports two bulk operation modes that batch multiple operations together for higher throughput at the cost of added latency.
+
+```yaml
+BulkProcessing:
+  Enabled: false       # Batch subscription matching and message routing
+  TimeoutMS: 50        # Max wait time before flushing a partial batch
+  BulkSize: 1000       # Max messages per batch
+  WorkerThreads: 4     # Parallel processing threads
+
+BulkMessaging:
+  Enabled: true        # Batch message delivery to subscribers
+  TimeoutMS: 100       # Max wait time before flushing a partial batch
+  BulkSize: 1000       # Max messages per batch
+```
+
+- **High throughput**: Enable both options. Messages are collected into batches and processed together, reducing per-message overhead. Best for telemetry, data collection, and high-volume IoT workloads.
+- **Low latency**: Disable both options. Messages are processed individually as they arrive, minimizing delivery delay. Best for real-time control, command/response patterns, and interactive applications.
+
 ## Core Capabilities
 
 ### Messaging and Protocols
