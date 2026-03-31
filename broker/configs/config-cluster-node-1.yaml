@@ -1,4 +1,5 @@
 TCP: 1883
+WS: 2883
 
 NodeName: "node1"
 
