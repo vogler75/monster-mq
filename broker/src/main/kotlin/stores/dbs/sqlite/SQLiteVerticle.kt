@@ -31,6 +31,10 @@ class SQLiteVerticle : AbstractVerticle() {
         const val EB_EXECUTE_QUERY = EventBusAddresses.Store.SQLITE_QUERY
         const val EB_EXECUTE_BATCH = EventBusAddresses.Store.SQLITE_BATCH
         const val EB_INIT_DB = EventBusAddresses.Store.SQLITE_INIT
+
+        // SQLITE_BUSY retry configuration
+        const val MAX_RETRY_ATTEMPTS = 3
+        const val RETRY_BACKOFF_MS = 100L
     }
     
     override fun start(startPromise: Promise<Void>) {
@@ -116,22 +120,22 @@ class SQLiteVerticle : AbstractVerticle() {
         }
     }
     
-    private fun handleExecuteUpdate(message: Message<JsonObject>) {
+    private fun handleExecuteUpdate(message: Message<JsonObject>, attempt: Int = 1) {
         val request = message.body()
         val dbPath = request.getString("dbPath")
         val sql = request.getString("sql")
         val params = request.getJsonArray("params", JsonArray())
         val useTransaction = request.getBoolean("transaction", true)
-        
+
         logger.finest("SQL UPDATE: $sql with params: $params")
-        
+
         try {
             val connection = getOrCreateConnection(dbPath)
-            
+
             if (useTransaction) {
                 connection.autoCommit = false
             }
-            
+
             val rowsAffected = connection.prepareStatement(sql).use { preparedStatement ->
                 // Set parameters
                 params.forEachIndexed { index, value ->
@@ -156,15 +160,14 @@ class SQLiteVerticle : AbstractVerticle() {
                 }
                 preparedStatement.executeUpdate()
             }
-            
+
             if (useTransaction) {
                 connection.commit()
                 connection.autoCommit = true
             }
-            
+
             message.reply(JsonObject().put("success", true).put("rowsAffected", rowsAffected))
         } catch (e: Exception) {
-            logger.severe("Error executing update: ${e.message}")
             try {
                 val connection = connections[dbPath]
                 connection?.rollback()
@@ -172,7 +175,14 @@ class SQLiteVerticle : AbstractVerticle() {
             } catch (re: Exception) {
                 logger.warning("Error rolling back transaction: ${re.message}")
             }
-            message.fail(500, e.message)
+            if (isSqliteBusy(e) && attempt < MAX_RETRY_ATTEMPTS) {
+                val delayMs = attempt * RETRY_BACKOFF_MS
+                logger.warning("SQLITE_BUSY on update (attempt $attempt/$MAX_RETRY_ATTEMPTS), retrying in ${delayMs}ms")
+                vertx.setTimer(delayMs) { handleExecuteUpdate(message, attempt + 1) }
+            } else {
+                logger.severe("Error executing update: ${e.message}")
+                message.fail(500, e.message)
+            }
         }
     }
     
@@ -241,16 +251,16 @@ class SQLiteVerticle : AbstractVerticle() {
         }
     }
     
-    private fun handleExecuteBatch(message: Message<JsonObject>) {
+    private fun handleExecuteBatch(message: Message<JsonObject>, attempt: Int = 1) {
         val request = message.body()
         val dbPath = request.getString("dbPath")
         val sql = request.getString("sql")
         val batchParams = request.getJsonArray("batchParams", JsonArray())
-        
+
         try {
             val connection = getOrCreateConnection(dbPath)
             connection.autoCommit = false
-            
+
             connection.prepareStatement(sql).use { preparedStatement ->
                 batchParams.forEach { paramsObj ->
                     val params = paramsObj as JsonArray
@@ -276,15 +286,14 @@ class SQLiteVerticle : AbstractVerticle() {
                     }
                     preparedStatement.addBatch()
                 }
-                
+
                 val results = preparedStatement.executeBatch()
                 connection.commit()
                 connection.autoCommit = true
-                
+
                 message.reply(JsonObject().put("success", true).put("results", JsonArray(results.toList())))
             }
         } catch (e: Exception) {
-            logger.severe("Error executing batch: ${e.message}")
             try {
                 val connection = connections[dbPath]
                 connection?.rollback()
@@ -292,7 +301,19 @@ class SQLiteVerticle : AbstractVerticle() {
             } catch (re: Exception) {
                 logger.warning("Error rolling back transaction: ${re.message}")
             }
-            message.fail(500, e.message)
+            if (isSqliteBusy(e) && attempt < MAX_RETRY_ATTEMPTS) {
+                val delayMs = attempt * RETRY_BACKOFF_MS
+                logger.warning("SQLITE_BUSY on batch (attempt $attempt/$MAX_RETRY_ATTEMPTS), retrying in ${delayMs}ms")
+                vertx.setTimer(delayMs) { handleExecuteBatch(message, attempt + 1) }
+            } else {
+                logger.severe("Error executing batch: ${e.message}")
+                message.fail(500, e.message)
+            }
         }
+    }
+
+    private fun isSqliteBusy(e: Exception): Boolean {
+        val msg = e.message ?: return false
+        return msg.contains("SQLITE_BUSY") && !msg.contains("SQLITE_BUSY_SNAPSHOT")
     }
 }
