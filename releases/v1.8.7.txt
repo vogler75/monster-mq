@@ -1,0 +1,60 @@
+Release v1.8.7
+Built from commit: 0a43a08
+Date: 2026-03-31 18:54:15
+
+Changes since v1.8.6:
+---
+0a43a08 Fix KT-80247 nullable type annotation warning in UserStoreSqlite
+a0d8147 Default QueueStore to V2 for all databases
+a722b58 Fix compile warnings and improve ACL rule input UI
+d78b69d Merge branch 'main' into pr/137
+5cc736f Document QueueStoreType and add MongoDB/SQLite V1/V2 variants to JSON schema
+cb27317 Fix duplicate delete calls on users page during SPA navigation
+df3592c Fix SQLITE_BUSY_SNAPSHOT on runtime user/ACL mutations (#138)
+6e5abab Fix duplicate message delivery to remote cluster subscribers
+d7a3240 Adjust cluster node ports
+bf4afc9 Delete run.bat
+a68847d Remove cluster Docker files, add run-local
+c58edb9 Add WebSocket ports to cluster node configs
+93dcdeb Add separate pub/sub host and port options to latency-rs
+b1ba1ed Fix typo MaxMessageSizeKb in cluster configs
+59363e8 Add -nokill option to run.sh and use it in start_cluster.sh
+e220f33 Fix MongoDB startup race and skip kill in cluster mode
+74c2cbe Update cluster configs, remove node4, update startup
+a735852 Disable MCP server by default
+19199a9 Fix health check commit for stores with autoCommit enabled
+45b7f5c Add BulkProcessing and BulkMessaging documentation to README
+4d09516 Fix PostgreSQL hang when multiple broker instances share one database
+ce533e1 Add multi-subscriber support to queuing test (default: 3)
+407f3a1 Add SQLite V2 single-table QueueStore with visibility timeout
+aee2e92 Add MongoDB V2 single-collection QueueStore with visibility timeout
+f33fcba Add MQTT latency benchmark tests (Python + Rust) and enhance queuing test
+0ec26b3 Add POSTGRES_V1 as explicit QueueStoreType option
+26a20e8 Separate QueueStore from SessionStore with V1/V2 versioning
+80376a5 Add pytest queuing test for persistent session message delivery
+17121c5 Optimize queued message delivery with atomic fetch-and-lock across all backends
+4f1a465 feat: add %c (client ID) and %u (username) placeholders in ACL topic patterns
+16c7e1d Add QUEUEDB embedded database design plan
+005b4ea Add queued messages optimization plan
+4ab1200 Fixed typo in example config files.
+6de5910 Replace JavaScript $function with native MQL $toDouble in MongoDB aggregation
+1ecb67f Make MongoDB read timeout configurable and fix aggregation timeouts
+bb396d3 Log database disconnect/reconnect once in DatabaseConnection
+9cf6058 Suppress repeated MongoDB disconnected warnings in batch insert
+11df361 Notify message listeners and update agent graph
+68830d5 Add cluster configs, archive; update .gitignore
+6bea5f0 Add Ollama timeout config and apply it
+ee029ab Create .gitignore
+600afbb Count messageBusOut by flushed messages
+d2a1abd Include payload length in BrokerMessageCodec
+c21c353 Update Docker cluster configs and features
+263aa7c Merge branch 'develop' of github.com:vogler75/monster-mq into develop
+cde8972 Update build
+c3571f1 Remove provisioner and sensitive defaults
+220a3fa Update documentation links to dev/ directory
+9f117d4 Separate user docs (doc/) from developer/AI coding docs (dev/)
+0a49640 Render device lists as tables and update UI
+923dfb1 Add import device list with filtering & selection
+76189b2 Add type filter dropdown to device config export
+b44973b Add CSV export to archive explorer
+a980d95 Specify types for vertx.executeBlocking results
