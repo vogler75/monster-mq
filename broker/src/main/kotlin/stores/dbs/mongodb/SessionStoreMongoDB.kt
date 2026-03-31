@@ -9,8 +9,8 @@ import at.rocworks.stores.SessionStoreType
 import com.mongodb.client.MongoClient
 import com.mongodb.client.MongoCollection
 import com.mongodb.client.MongoDatabase
+import com.mongodb.client.model.*
 import com.mongodb.client.model.Filters.*
-import com.mongodb.client.model.UpdateOptions
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
@@ -57,7 +57,7 @@ class SessionStoreMongoDB(
                     queuedMessagesCollection.createIndex(Document("client_id", 1))
                     queuedMessagesCollection.createIndex(Document("message_uuid", 1))  // For $lookup joins
                     queuedMessagesClientsCollection.createIndex(Document("client_id", 1))
-                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1))
+                    queuedMessagesClientsCollection.createIndex(Document("client_id", 1).append("status", 1).append("message_uuid", 1))
                     logger.info("MongoDB session store indexes created successfully")
                 } catch (e: Exception) {
                     logger.warning("Failed to create indexes: ${e.message}")
@@ -299,7 +299,8 @@ class SessionStoreMongoDB(
 
     override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
         try {
-            messages.forEach { (message, clientIds) ->
+            // Batch message upserts
+            val messageOps = messages.map { (message, _) ->
                 val messageDocument = Document(mapOf(
                     "message_uuid" to message.messageUuid,
                     "message_id" to message.messageId,
@@ -311,19 +312,22 @@ class SessionStoreMongoDB(
                     "creation_time" to message.time.toEpochMilli(),
                     "message_expiry_interval" to message.messageExpiryInterval
                 ))
-                queuedMessagesCollection.updateOne(
+                UpdateOneModel<Document>(
                     eq("message_uuid", message.messageUuid),
                     Document("\$setOnInsert", messageDocument),
                     UpdateOptions().upsert(true)
                 )
+            }
 
-                clientIds.forEach { clientId ->
+            // Batch client mapping upserts
+            val clientOps = messages.flatMap { (message, clientIds) ->
+                clientIds.map { clientId ->
                     val clientMessageDocument = Document(mapOf(
                         "client_id" to clientId,
                         "message_uuid" to message.messageUuid,
                         "status" to 0
                     ))
-                    queuedMessagesClientsCollection.updateOne(
+                    UpdateOneModel<Document>(
                         and(
                             eq("client_id", clientId),
                             eq("message_uuid", message.messageUuid)
@@ -332,6 +336,13 @@ class SessionStoreMongoDB(
                         UpdateOptions().upsert(true)
                     )
                 }
+            }
+
+            if (messageOps.isNotEmpty()) {
+                queuedMessagesCollection.bulkWrite(messageOps, BulkWriteOptions().ordered(false))
+            }
+            if (clientOps.isNotEmpty()) {
+                queuedMessagesClientsCollection.bulkWrite(clientOps, BulkWriteOptions().ordered(false))
             }
         } catch (e: Exception) {
             logger.warning("Error while enqueuing messages: ${e.message}")
@@ -474,6 +485,70 @@ class SessionStoreMongoDB(
         }
     }
 
+    override fun fetchAndLockPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
+        return try {
+            val currentTimeMillis = System.currentTimeMillis()
+
+            // Step 1: Find pending client mappings (single query)
+            val pendingDocs = queuedMessagesClientsCollection.find(
+                and(eq("client_id", clientId), eq("status", 0))
+            ).sort(Document("_id", 1)).limit(limit).toList()
+
+            if (pendingDocs.isEmpty()) return emptyList()
+
+            val uuids = pendingDocs.map { it.getString("message_uuid") }
+
+            // Step 2: Atomically mark as in-flight with status=0 re-check (single updateMany)
+            queuedMessagesClientsCollection.updateMany(
+                and(
+                    eq("client_id", clientId),
+                    `in`("message_uuid", uuids),
+                    eq("status", 0)
+                ),
+                Document("\$set", Document("status", 1))
+            )
+
+            // Step 3: Batch-fetch message content (single query)
+            val messageDocs = queuedMessagesCollection.find(`in`("message_uuid", uuids))
+            val messageMap = mutableMapOf<String, Document>()
+            for (doc in messageDocs) {
+                messageMap[doc.getString("message_uuid")] = doc
+            }
+
+            // Build result in order, filtering expired messages
+            val messages = mutableListOf<BrokerMessage>()
+            for (uuid in uuids) {
+                val messageDoc = messageMap[uuid] ?: continue
+                val creationTime = messageDoc.getLong("creation_time") ?: currentTimeMillis
+                val messageExpiryInterval = messageDoc.getLong("message_expiry_interval")
+
+                if (messageExpiryInterval != null && messageExpiryInterval >= 0) {
+                    val ageSeconds = (currentTimeMillis - creationTime) / 1000
+                    if (ageSeconds >= messageExpiryInterval) continue
+                }
+
+                messages.add(BrokerMessage(
+                    messageUuid = messageDoc.getString("message_uuid"),
+                    messageId = messageDoc.getInteger("message_id"),
+                    topicName = messageDoc.getString("topic"),
+                    payload = messageDoc.get("payload", Binary::class.java).data,
+                    qosLevel = messageDoc.getInteger("qos"),
+                    isRetain = messageDoc.getBoolean("retained"),
+                    isDup = false,
+                    isQueued = true,
+                    clientId = messageDoc.getString("client_id"),
+                    time = java.time.Instant.ofEpochMilli(creationTime),
+                    messageExpiryInterval = messageExpiryInterval
+                ))
+            }
+
+            messages
+        } catch (e: Exception) {
+            logger.warning("Error in atomic fetch-and-lock [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            emptyList()
+        }
+    }
+
     override fun markMessageInFlight(clientId: String, messageUuid: String) {
         try {
             queuedMessagesClientsCollection.updateOne(
@@ -510,7 +585,8 @@ class SessionStoreMongoDB(
             queuedMessagesClientsCollection.updateOne(
                 and(
                     eq("client_id", clientId),
-                    eq("message_uuid", messageUuid)
+                    eq("message_uuid", messageUuid),
+                    eq("status", 1)
                 ),
                 Document("\$set", Document("status", 2))
             )

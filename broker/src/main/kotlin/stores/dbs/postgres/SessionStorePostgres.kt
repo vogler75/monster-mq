@@ -493,6 +493,7 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error at inserting queued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
@@ -569,6 +570,7 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error at removing dequeued message [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
@@ -634,6 +636,63 @@ class SessionStorePostgres(
         }
     }
 
+    override fun fetchAndLockPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
+        val currentTimeMillis = System.currentTimeMillis()
+        val fetchSql = """
+            SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained,
+                   m.client_id, m.creation_time, m.message_expiry_interval
+            FROM $queuedMessagesClientsTableName c
+            JOIN $queuedMessagesTableName m USING (message_uuid)
+            WHERE c.client_id = ?
+              AND c.status = 0
+              AND (m.message_expiry_interval IS NULL
+                   OR ((? - m.creation_time) / 1000) < m.message_expiry_interval)
+            ORDER BY m.message_uuid ASC
+            LIMIT ?
+            FOR UPDATE OF c SKIP LOCKED
+        """.trimIndent()
+        val markSql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ANY (?) AND status = 0"
+        return try {
+            db.connection?.let { connection ->
+                val messages = mutableListOf<BrokerMessage>()
+                connection.prepareStatement(fetchSql).use { preparedStatement ->
+                    preparedStatement.setString(1, clientId)
+                    preparedStatement.setLong(2, currentTimeMillis)
+                    preparedStatement.setInt(3, limit)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        messages.add(BrokerMessage(
+                            messageUuid = resultSet.getString(1),
+                            messageId = resultSet.getInt(2),
+                            topicName = resultSet.getString(3),
+                            payload = resultSet.getBytes(4),
+                            qosLevel = resultSet.getInt(5),
+                            isRetain = resultSet.getBoolean(6),
+                            isDup = false,
+                            isQueued = true,
+                            clientId = resultSet.getString(7),
+                            time = java.time.Instant.ofEpochMilli(resultSet.getLong(8)),
+                            messageExpiryInterval = resultSet.getLong(9).let { if (resultSet.wasNull()) null else it }
+                        ))
+                    }
+                }
+                if (messages.isNotEmpty()) {
+                    connection.prepareStatement(markSql).use { preparedStatement ->
+                        preparedStatement.setString(1, clientId)
+                        preparedStatement.setArray(2, connection.createArrayOf("text", messages.map { it.messageUuid }.toTypedArray()))
+                        preparedStatement.executeUpdate()
+                    }
+                }
+                connection.commit()
+                messages
+            } ?: emptyList()
+        } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
+            logger.warning("Error in atomic fetch-and-lock [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            emptyList()
+        }
+    }
+
     override fun markMessageInFlight(clientId: String, messageUuid: String) {
         val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
         try {
@@ -646,6 +705,7 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error marking message in-flight [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
@@ -663,12 +723,13 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error marking messages in-flight [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
 
     override fun markMessageDelivered(clientId: String, messageUuid: String) {
-        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ?"
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ? AND status = 1"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
@@ -679,6 +740,7 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error marking message delivered [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
@@ -694,6 +756,7 @@ class SessionStorePostgres(
                 connection.commit()
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error resetting in-flight messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }
@@ -709,6 +772,7 @@ class SessionStorePostgres(
                 }
             } ?: 0
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error purging delivered messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
             0
         }
@@ -740,6 +804,7 @@ class SessionStorePostgres(
                 }
             } ?: 0
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error purging expired messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
             0
         }
@@ -791,6 +856,7 @@ class SessionStorePostgres(
                 logger.fine("Purging queued messages finished: no orphaned messages found in $duration seconds [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error at purging queued messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
         }
     }

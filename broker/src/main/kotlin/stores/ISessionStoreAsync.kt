@@ -37,6 +37,9 @@ interface ISessionStoreAsync {
     // Fetch multiple pending messages for bulk delivery (returns empty list if none)
     fun fetchPendingMessages(clientId: String, limit: Int): Future<List<BrokerMessage>>
 
+    // Atomically fetch pending messages and mark them in-flight (returns empty list if none)
+    fun fetchAndLockPendingMessages(clientId: String, limit: Int): Future<List<BrokerMessage>>
+
     // Status-based message tracking for QoS 1+ delivery
     fun markMessageInFlight(clientId: String, messageUuid: String): Future<Void>
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>): Future<Void>

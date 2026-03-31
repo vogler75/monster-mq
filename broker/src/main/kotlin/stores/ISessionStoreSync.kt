@@ -41,6 +41,16 @@ interface ISessionStoreSync {
     // Fetch multiple pending messages for bulk delivery (returns empty list if none)
     fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage>
 
+    // Atomically fetch pending messages and mark them in-flight (returns empty list if none)
+    // Default implementation falls back to separate fetch + mark for backends that don't support atomic CTE
+    fun fetchAndLockPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
+        val messages = fetchPendingMessages(clientId, limit)
+        if (messages.isNotEmpty()) {
+            markMessagesInFlight(clientId, messages.map { it.messageUuid })
+        }
+        return messages
+    }
+
     // Status-based message tracking for QoS 1+ delivery
     fun markMessageInFlight(clientId: String, messageUuid: String)
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>)

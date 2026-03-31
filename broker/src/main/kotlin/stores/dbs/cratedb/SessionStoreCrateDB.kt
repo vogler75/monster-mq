@@ -679,7 +679,7 @@ class SessionStoreCrateDB(
     }
 
     override fun markMessageDelivered(clientId: String, messageUuid: String) {
-        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ?"
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ? AND status = 1"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->

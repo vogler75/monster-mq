@@ -88,6 +88,9 @@ class SessionStoreSQLite(
             """.trimIndent())
             .add("CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);")
             .add("CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = 1;")
+            .add("CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_status_idx ON $queuedMessagesClientsTableName (status);")
+            .add("CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_message_uuid_idx ON $queuedMessagesClientsTableName (message_uuid);")
+            .add("CREATE INDEX IF NOT EXISTS ${queuedMessagesClientsTableName}_client_status_idx ON $queuedMessagesClientsTableName (client_id, status);")
 
         sqlClient.initDatabase(createTableSQL).onComplete { result ->
             if (result.succeeded()) {
@@ -601,6 +604,63 @@ class SessionStoreSQLite(
         }
     }
 
+    override fun fetchAndLockPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
+        // SQLite single-writer model makes separate fetch + mark safe without FOR UPDATE SKIP LOCKED
+        // Filter expired messages in SQL and use a single IN-clause UPDATE for marking
+        val currentTimeMillis = System.currentTimeMillis()
+        val sql = """SELECT m.message_uuid, m.message_id, m.topic, m.payload, m.qos, m.retained, m.client_id, m.creation_time, m.message_expiry_interval
+                    FROM $queuedMessagesTableName m
+                    JOIN $queuedMessagesClientsTableName c ON m.message_uuid = c.message_uuid
+                    WHERE c.client_id = ? AND c.status = 0
+                      AND (m.message_expiry_interval IS NULL
+                           OR m.message_expiry_interval < 0
+                           OR ((? - m.creation_time) / 1000) < m.message_expiry_interval)
+                    ORDER BY c.rowid
+                    LIMIT ?"""
+
+        val params = JsonArray().add(clientId).add(currentTimeMillis).add(limit)
+
+        return try {
+            val results = sqlClient.executeQuerySync(sql, params)
+            val messages = mutableListOf<BrokerMessage>()
+
+            for (i in 0 until results.size()) {
+                val rowObj = results.getJsonObject(i)
+                val messageExpiryIntervalRaw = rowObj.getLong("message_expiry_interval", -1L)
+                val messageExpiryInterval = if (messageExpiryIntervalRaw == -1L) null else messageExpiryIntervalRaw
+
+                messages.add(BrokerMessage(
+                    messageUuid = rowObj.getString("message_uuid"),
+                    messageId = rowObj.getInteger("message_id"),
+                    topicName = rowObj.getString("topic"),
+                    payload = rowObj.getBinary("payload") ?: ByteArray(0),
+                    qosLevel = rowObj.getInteger("qos"),
+                    isRetain = rowObj.getBoolean("retained", false),
+                    isDup = false,
+                    isQueued = true,
+                    clientId = rowObj.getString("client_id"),
+                    messageExpiryInterval = messageExpiryInterval,
+                    time = java.time.Instant.ofEpochMilli(rowObj.getLong("creation_time") ?: currentTimeMillis)
+                ))
+            }
+
+            // Mark all fetched messages in-flight with a single statement using dynamic IN clause
+            if (messages.isNotEmpty()) {
+                val uuids = messages.map { it.messageUuid }
+                val placeholders = uuids.joinToString(",") { "?" }
+                val updateSql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid IN ($placeholders) AND status = 0"
+                val updateParams = JsonArray().add(clientId)
+                uuids.forEach { updateParams.add(it) }
+                sqlClient.executeUpdateSync(updateSql, updateParams)
+            }
+
+            messages
+        } catch (e: Exception) {
+            logger.warning("Error in atomic fetch-and-lock [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            emptyList()
+        }
+    }
+
     override fun markMessageInFlight(clientId: String, messageUuid: String) {
         val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
         val params = JsonArray().add(clientId).add(messageUuid)
@@ -613,21 +673,20 @@ class SessionStoreSQLite(
 
     override fun markMessagesInFlight(clientId: String, messageUuids: List<String>) {
         if (messageUuids.isEmpty()) return
-        // SQLite doesn't support arrays, so we use batch updates
-        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid = ? AND status = 0"
-        val batchParams = JsonArray()
-        messageUuids.forEach { uuid ->
-            batchParams.add(JsonArray().add(clientId).add(uuid))
-        }
+        // Use dynamic IN clause for single statement instead of N batch updates
+        val placeholders = messageUuids.joinToString(",") { "?" }
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 1 WHERE client_id = ? AND message_uuid IN ($placeholders) AND status = 0"
+        val params = JsonArray().add(clientId)
+        messageUuids.forEach { params.add(it) }
         try {
-            sqlClient.executeBatch(sql, batchParams)
+            sqlClient.executeUpdateSync(sql, params)
         } catch (e: Exception) {
             logger.warning("Error marking messages in-flight: ${e.message}")
         }
     }
 
     override fun markMessageDelivered(clientId: String, messageUuid: String) {
-        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ?"
+        val sql = "UPDATE $queuedMessagesClientsTableName SET status = 2 WHERE client_id = ? AND message_uuid = ? AND status = 1"
         val params = JsonArray().add(clientId).add(messageUuid)
         try {
             sqlClient.executeUpdateSync(sql, params)

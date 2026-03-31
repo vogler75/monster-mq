@@ -946,6 +946,7 @@ open class SessionHandler(
     fun markMessageInFlight(clientId: String, messageUuid: String) = sessionStore.markMessageInFlight(clientId, messageUuid)
     fun fetchNextPendingMessage(clientId: String) = sessionStore.fetchNextPendingMessage(clientId)
     fun fetchPendingMessages(clientId: String, limit: Int) = sessionStore.fetchPendingMessages(clientId, limit)
+    fun fetchAndLockPendingMessages(clientId: String, limit: Int) = sessionStore.fetchAndLockPendingMessages(clientId, limit)
 
     /**
      * Send a trigger to the client indicating that a message is available in the queue.
