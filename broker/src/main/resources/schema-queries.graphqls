@@ -1040,6 +1040,8 @@ type RedisClientAddress {
     usePatternMatch: Boolean!
     # Polling interval in ms for KV_SYNC reads (0 = disabled)
     kvPollIntervalMs: Long
+    # Only publish to MQTT when the value has changed since the last poll (KV_SYNC only)
+    publishOnChangeOnly: Boolean!
     # Strip base path before wildcard and prepend target prefix
     removePath: Boolean!
 }

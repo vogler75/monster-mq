@@ -22,7 +22,7 @@ class RedisClientManager {
                 query GetRedisClients {
                     redisClients {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
-                        config { host port database useSsl loopPrevention addresses { mode redisChannel mqttTopic qos usePatternSubscribe usePatternMatch kvPollIntervalMs removePath } }
+                        config { host port database useSsl loopPrevention addresses { mode redisChannel mqttTopic qos usePatternSubscribe usePatternMatch kvPollIntervalMs publishOnChangeOnly removePath } }
                         metrics { messagesIn messagesOut }
                     }
                 }

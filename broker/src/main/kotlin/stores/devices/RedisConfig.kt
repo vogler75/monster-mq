@@ -17,6 +17,7 @@ data class RedisClientAddress(
     val usePatternSubscribe: Boolean = false,  // Use PSUBSCRIBE for glob patterns (Pub/Sub only)
     val usePatternMatch: Boolean = false,      // Use SCAN MATCH for wildcard key discovery (KV_SYNC only)
     val kvPollIntervalMs: Long = 0,            // Polling interval for KV_SYNC reads (0 = disabled)
+    val publishOnChangeOnly: Boolean = false,  // Only publish to MQTT when the value has changed (KV_SYNC only)
     val removePath: Boolean = true             // Strip base path before wildcard and prepend target prefix
 ) {
     companion object {
@@ -32,6 +33,7 @@ data class RedisClientAddress(
             usePatternSubscribe = json.getBoolean("usePatternSubscribe", false),
             usePatternMatch = json.getBoolean("usePatternMatch", false),
             kvPollIntervalMs = json.getLong("kvPollIntervalMs", 0L),
+            publishOnChangeOnly = json.getBoolean("publishOnChangeOnly", false),
             removePath = json.getBoolean("removePath", true)
         )
     }
@@ -44,6 +46,7 @@ data class RedisClientAddress(
         .put("usePatternSubscribe", usePatternSubscribe)
         .put("usePatternMatch", usePatternMatch)
         .put("kvPollIntervalMs", kvPollIntervalMs)
+        .put("publishOnChangeOnly", publishOnChangeOnly)
         .put("removePath", removePath)
 
     fun validate(): List<String> {

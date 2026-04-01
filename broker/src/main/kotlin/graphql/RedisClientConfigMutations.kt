@@ -384,6 +384,7 @@ class RedisClientConfigMutations(
         usePatternSubscribe = map["usePatternSubscribe"] as? Boolean ?: false,
         usePatternMatch = map["usePatternMatch"] as? Boolean ?: false,
         kvPollIntervalMs = (map["kvPollIntervalMs"] as? Number)?.toLong() ?: 0L,
+        publishOnChangeOnly = map["publishOnChangeOnly"] as? Boolean ?: false,
         removePath = map["removePath"] as? Boolean ?: true
     )
 

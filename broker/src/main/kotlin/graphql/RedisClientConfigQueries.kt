@@ -145,6 +145,7 @@ class RedisClientConfigQueries(
                 "usePatternSubscribe" to addr.usePatternSubscribe,
                 "usePatternMatch" to addr.usePatternMatch,
                 "kvPollIntervalMs" to addr.kvPollIntervalMs,
+                "publishOnChangeOnly" to addr.publishOnChangeOnly,
                 "removePath" to addr.removePath
             )
         }

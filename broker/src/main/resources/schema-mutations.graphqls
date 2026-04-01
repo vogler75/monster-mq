@@ -1647,6 +1647,8 @@ input RedisClientAddressInput {
     usePatternMatch: Boolean = false
     # Polling interval in ms for KV_SYNC reads (0 = disabled)
     kvPollIntervalMs: Long = 0
+    # Only publish to MQTT when the value has changed since the last poll (KV_SYNC only)
+    publishOnChangeOnly: Boolean = false
     # Strip base path before wildcard and prepend target prefix (default true)
     removePath: Boolean = true
 }

@@ -13,6 +13,7 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import io.vertx.redis.client.*
 import io.vertx.redis.client.impl.types.BulkType
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Level
@@ -53,6 +54,9 @@ class RedisClientConnector : AbstractVerticle() {
 
     // Internal MQTT client identity for the outbound direction
     private val internalClientId get() = "redisclient-${device.name}"
+
+    // KV_SYNC change detection: stores last-seen payload per key (keyed by Redis key name)
+    private val kvLastValues = ConcurrentHashMap<String, ByteArray>()
 
     // -- Lifecycle --
 
@@ -309,15 +313,16 @@ class RedisClientConnector : AbstractVerticle() {
         if (!isConnected) return
 
         if (addr.usePatternMatch) {
-            // Use SCAN to discover matching keys
-            scanAndGetKeys(client, addr, "0")
+            // Use SCAN to discover matching keys; track seen keys to detect removals
+            val seenKeys = ConcurrentHashMap.newKeySet<String>()
+            scanAndGetKeys(client, addr, "0", seenKeys)
         } else {
             // Single key: detect type and read accordingly
             readKeyByType(client, addr.redisChannel, addr)
         }
     }
 
-    private fun scanAndGetKeys(client: Redis, addr: RedisClientAddress, cursor: String) {
+    private fun scanAndGetKeys(client: Redis, addr: RedisClientAddress, cursor: String, seenKeys: MutableSet<String>) {
         client.send(Request.cmd(Command.SCAN).arg(cursor).arg("MATCH").arg(addr.redisChannel).arg("COUNT").arg("100"))
             .onSuccess { response: Response? ->
                 val newCursor = response!![0].toString()
@@ -325,12 +330,22 @@ class RedisClientConnector : AbstractVerticle() {
 
                 for (i in 0 until keys.size()) {
                     val key = keys[i].toString()
+                    seenKeys.add(key)
                     readKeyByType(client, key, addr)
                 }
 
-                // Continue scanning if not complete
                 if (newCursor != "0") {
-                    scanAndGetKeys(client, addr, newCursor)
+                    // Continue scanning
+                    scanAndGetKeys(client, addr, newCursor, seenKeys)
+                } else {
+                    // SCAN complete: remove cached values for keys no longer returned
+                    if (addr.publishOnChangeOnly) {
+                        val prefix = addr.redisChannel.replace(Regex("[*?].*"), "")
+                        val staleKeys = kvLastValues.keys().toList().filter { k ->
+                            k.startsWith(prefix) && k !in seenKeys
+                        }
+                        staleKeys.forEach { kvLastValues.remove(it) }
+                    }
                 }
             }.onFailure { e ->
                 errors.incrementAndGet()
@@ -372,9 +387,7 @@ class RedisClientConnector : AbstractVerticle() {
     private fun readStringKey(client: Redis, key: String, addr: RedisClientAddress) {
         client.send(Request.cmd(Command.GET).arg(key)).onSuccess { response: Response? ->
             if (response != null) {
-                val payload = responseToBytes(response)
-                publishToMqtt(addr.redisToMqttTopic(key), payload, addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, responseToBytes(response), addr)
             }
         }.onFailure { e ->
             errors.incrementAndGet()
@@ -385,15 +398,13 @@ class RedisClientConnector : AbstractVerticle() {
     private fun readHashKey(client: Redis, key: String, addr: RedisClientAddress) {
         client.send(Request.cmd(Command.HGETALL).arg(key)).onSuccess { response: Response? ->
             if (response != null && response.size() > 0) {
-                // HGETALL returns alternating key, value pairs — convert to JSON object
                 val json = JsonObject()
                 var i = 0
                 while (i < response.size() - 1) {
                     json.put(response[i].toString(), response[i + 1].toString())
                     i += 2
                 }
-                publishToMqtt(addr.redisToMqttTopic(key), json.encode().toByteArray(), addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, json.encode().toByteArray(), addr)
             }
         }.onFailure { e ->
             errors.incrementAndGet()
@@ -408,8 +419,7 @@ class RedisClientConnector : AbstractVerticle() {
                 for (i in 0 until response.size()) {
                     arr.add(response[i].toString())
                 }
-                publishToMqtt(addr.redisToMqttTopic(key), arr.encode().toByteArray(), addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, arr.encode().toByteArray(), addr)
             }
         }.onFailure { e ->
             errors.incrementAndGet()
@@ -424,8 +434,7 @@ class RedisClientConnector : AbstractVerticle() {
                 for (i in 0 until response.size()) {
                     arr.add(response[i].toString())
                 }
-                publishToMqtt(addr.redisToMqttTopic(key), arr.encode().toByteArray(), addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, arr.encode().toByteArray(), addr)
             }
         }.onFailure { e ->
             errors.incrementAndGet()
@@ -436,15 +445,13 @@ class RedisClientConnector : AbstractVerticle() {
     private fun readZsetKey(client: Redis, key: String, addr: RedisClientAddress) {
         client.send(Request.cmd(Command.ZRANGE).arg(key).arg("0").arg("-1").arg("WITHSCORES")).onSuccess { response: Response? ->
             if (response != null) {
-                // ZRANGE WITHSCORES returns alternating member, score pairs — convert to JSON object
                 val json = JsonObject()
                 var i = 0
                 while (i < response.size() - 1) {
                     json.put(response[i].toString(), response[i + 1].toString().toDoubleOrNull() ?: 0.0)
                     i += 2
                 }
-                publishToMqtt(addr.redisToMqttTopic(key), json.encode().toByteArray(), addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, json.encode().toByteArray(), addr)
             }
         }.onFailure { e ->
             errors.incrementAndGet()
@@ -455,14 +462,26 @@ class RedisClientConnector : AbstractVerticle() {
     private fun readJsonKey(client: Redis, key: String, addr: RedisClientAddress) {
         client.send(Request.cmd(Command.create("JSON.GET")).arg(key)).onSuccess { response: Response? ->
             if (response != null) {
-                val payload = responseToBytes(response)
-                publishToMqtt(addr.redisToMqttTopic(key), payload, addr.qos)
-                messagesIn.incrementAndGet()
+                publishKvValue(key, responseToBytes(response), addr)
             }
         }.onFailure { e ->
             // JSON.GET not available (no RedisJSON module) — try plain GET as last resort
             readStringKey(client, key, addr)
         }
+    }
+
+    /**
+     * Publish a polled KV value to MQTT. When [RedisClientAddress.publishOnChangeOnly] is true,
+     * the value is compared to the last-seen value for this key and only published if it changed.
+     * Stale keys (removed from Redis) are cleaned up in [scanAndGetKeys] after a full SCAN cycle.
+     */
+    private fun publishKvValue(key: String, payload: ByteArray, addr: RedisClientAddress) {
+        if (addr.publishOnChangeOnly) {
+            val previous = kvLastValues.put(key, payload)
+            if (previous != null && previous.contentEquals(payload)) return // unchanged
+        }
+        publishToMqtt(addr.redisToMqttTopic(key), payload, addr.qos)
+        messagesIn.incrementAndGet()
     }
 
     /**

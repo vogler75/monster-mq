@@ -73,7 +73,7 @@ class RedisClientDetailManager {
                             host port database useSsl sslTrustAll connectionString
                             maxPoolSize reconnectDelayMs maxReconnectAttempts loopPrevention
                             addresses {
-                                mode redisChannel mqttTopic qos usePatternSubscribe usePatternMatch kvPollIntervalMs removePath
+                                mode redisChannel mqttTopic qos usePatternSubscribe usePatternMatch kvPollIntervalMs publishOnChangeOnly removePath
                             }
                         }
                         metrics { messagesIn messagesOut timestamp }
@@ -212,6 +212,7 @@ class RedisClientDetailManager {
         document.getElementById('addr-pattern-subscribe').checked = false;
         document.getElementById('addr-pattern-match').checked = false;
         document.getElementById('addr-kv-poll').value = '0';
+        document.getElementById('addr-publish-on-change').checked = false;
         document.getElementById('addr-remove-path').checked = true;
         onAddrModeChange('SUBSCRIBE');
         document.getElementById('add-address-modal').style.display = 'flex';
@@ -230,6 +231,7 @@ class RedisClientDetailManager {
         document.getElementById('addr-pattern-subscribe').checked = addr.usePatternSubscribe || false;
         document.getElementById('addr-pattern-match').checked = addr.usePatternMatch || false;
         document.getElementById('addr-kv-poll').value = addr.kvPollIntervalMs || 0;
+        document.getElementById('addr-publish-on-change').checked = addr.publishOnChangeOnly || false;
         document.getElementById('addr-remove-path').checked = addr.removePath !== false;
         onAddrModeChange(addr.mode || 'SUBSCRIBE');
         document.getElementById('add-address-modal').style.display = 'flex';
@@ -257,6 +259,7 @@ class RedisClientDetailManager {
             usePatternSubscribe: document.getElementById('addr-pattern-subscribe').checked,
             usePatternMatch: document.getElementById('addr-pattern-match').checked,
             kvPollIntervalMs: parseInt(document.getElementById('addr-kv-poll').value) || 0,
+            publishOnChangeOnly: document.getElementById('addr-publish-on-change').checked,
             removePath: document.getElementById('addr-remove-path').checked
         };
 
@@ -375,6 +378,7 @@ class RedisClientDetailManager {
             usePatternSubscribe: a.usePatternSubscribe || false,
             usePatternMatch: a.usePatternMatch || false,
             kvPollIntervalMs: a.kvPollIntervalMs || 0,
+            publishOnChangeOnly: a.publishOnChangeOnly || false,
             removePath: a.removePath
         }));
         return {
