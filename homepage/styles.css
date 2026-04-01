@@ -271,6 +271,194 @@ body {
     letter-spacing: 0.05em;
 }
 
+/* Factory State Section */
+.factory-state {
+    padding: 80px 0;
+    background: var(--dark-bg);
+    position: relative;
+    overflow: hidden;
+}
+
+.factory-state::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: radial-gradient(ellipse at 50% 30%, rgba(16, 185, 129, 0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at 50% 70%, rgba(124, 58, 237, 0.06) 0%, transparent 60%);
+    pointer-events: none;
+}
+
+.factory-state .container {
+    position: relative;
+    z-index: 1;
+}
+
+.factory-state-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.factory-state-banner .section-title {
+    margin-bottom: 0;
+}
+
+.factory-state-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+/* Flow diagram */
+.factory-state-visual {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: 1rem;
+    padding: 2.5rem;
+}
+
+.state-flow {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.state-flow-source,
+.state-flow-broker,
+.state-flow-consumers {
+    flex: 1;
+    max-width: 320px;
+}
+
+.state-flow-label {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.state-flow-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.state-flow-item {
+    background: var(--dark-bg);
+    border: 1px solid var(--dark-border);
+    padding: 0.6rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.state-flow-consumers .state-flow-item {
+    border-color: var(--monster-purple);
+    color: var(--monster-light);
+}
+
+.state-flow-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 2rem;
+    color: var(--monster-green);
+    flex-shrink: 0;
+}
+
+.state-store-box {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(124, 58, 237, 0.08) 100%);
+    border: 2px solid var(--monster-green);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.state-entry {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0.75rem;
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 0.35rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+}
+
+.state-topic {
+    color: var(--text-muted);
+}
+
+.state-value {
+    color: var(--monster-green);
+    font-weight: 600;
+}
+
+/* State feature cards */
+.factory-state-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+}
+
+.state-card {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: 1rem;
+    padding: 1.75rem;
+    transition: all 0.3s;
+}
+
+.state-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--monster-green);
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.15);
+}
+
+.state-card-icon {
+    font-size: 2.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.state-card h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.state-card p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.65;
+}
+
+@media (max-width: 768px) {
+    .state-flow {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .state-flow-source,
+    .state-flow-broker,
+    .state-flow-consumers {
+        max-width: 100%;
+        width: 100%;
+    }
+
+    .state-flow-arrow {
+        transform: rotate(90deg);
+    }
+}
+
 /* AI Agents Section */
 .ai-agents {
     padding: 80px 0;

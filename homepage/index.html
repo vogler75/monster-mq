@@ -22,6 +22,7 @@
             </div>
             <div class="nav-links">
                 <a href="#features">Features</a>
+                <a href="#factory-state">Factory State</a>
                 <a href="#ai-agents">AI Agents</a>
                 <a href="#databases">Databases</a>
                 <a href="#clustering">Clustering</a>
@@ -35,7 +36,7 @@
             <h1 class="hero-title">MQTT Broker for<br><span class="highlight">Factory Automation</span></h1>
             <p class="hero-subtitle">
                 High-performance, database-backed MQTT broker built on Vert.X and Hazelcast.<br>
-                Store messages persistently, scale horizontally, and deploy AI agents that reason over your data.
+                Store the current state of every topic, scale horizontally, and deploy AI agents that query your factory in real-time.
             </p>
             <div class="hero-buttons">
                 <a href="https://github.com/vogler75/monster-mq#-quick-start" class="btn btn-primary">Get Started</a>
@@ -50,9 +51,10 @@
                 <div class="feature-badge">✓ NATS</div>
                 <div class="feature-badge">✓ Workflows</div>
                 <div class="feature-badge">✓ Dashboard</div>
+                <div class="feature-badge">✓ Last Value Store</div>
                 <div class="feature-badge">✓ Clustering</div>
                 <div class="feature-badge">✓ I3X API</div>
-                <div class="feature-badge badge-new">★ AI Agents</div>
+                <div class="feature-badge">✓ AI Agents</div>
                 <div class="feature-badge">✓ MCP Ready</div>
                 <div class="feature-badge">✓ Prometheus</div>
                 <div class="feature-badge">✓ JSON Schema</div>
@@ -75,7 +77,11 @@
                     <p>Built-in Hazelcast clustering enables seamless horizontal scaling. Deploy from production line to enterprise with automatic failover and load balancing.</p>
                 </div>
                 <div class="feature-card feature-card-highlight">
-                    <div class="feature-new-badge">NEW</div>
+                    <div class="feature-icon">📌</div>
+                    <h3>Last Value Store</h3>
+                    <p>Automatically capture and persist the most recent value for every topic. AI agents, dashboards, and external systems can query the current state of your entire factory at any time — no need to wait for the next publish. The always-up-to-date snapshot that makes your broker a queryable digital twin.</p>
+                </div>
+                <div class="feature-card feature-card-highlight">
                     <div class="feature-icon">🤖</div>
                     <h3>AI Agents</h3>
                     <p>Built-in AI agent framework powered by LangChain4j. Deploy LLM-driven agents that react to MQTT messages, run on schedules, and orchestrate multi-agent workflows — all managed from the dashboard.</p>
@@ -179,12 +185,78 @@
         </div>
     </section>
 
+    <section id="factory-state" class="factory-state">
+        <div class="container">
+            <h2 class="section-title">Always Know Your Factory State</h2>
+            <p class="section-subtitle">
+                MonsterMQ persistently stores the last known value of every topic — creating a queryable<br>
+                snapshot of your entire factory. Agents, dashboards, and APIs always have current state on demand.
+            </p>
+
+            <div class="factory-state-layout">
+                <div class="factory-state-visual">
+                    <div class="state-flow">
+                        <div class="state-flow-source">
+                            <div class="state-flow-label">Devices &amp; Sensors</div>
+                            <div class="state-flow-items">
+                                <div class="state-flow-item">Temperature: 72.4&deg;C</div>
+                                <div class="state-flow-item">Pressure: 3.2 bar</div>
+                                <div class="state-flow-item">Motor RPM: 1480</div>
+                                <div class="state-flow-item">Conveyor: Running</div>
+                            </div>
+                        </div>
+                        <div class="state-flow-arrow">&#x27A1;</div>
+                        <div class="state-flow-broker">
+                            <div class="state-flow-label">Last Value Store</div>
+                            <div class="state-store-box">
+                                <div class="state-entry"><span class="state-topic">factory/line1/temp</span> <span class="state-value">72.4</span></div>
+                                <div class="state-entry"><span class="state-topic">factory/line1/pressure</span> <span class="state-value">3.2</span></div>
+                                <div class="state-entry"><span class="state-topic">factory/line1/motor/rpm</span> <span class="state-value">1480</span></div>
+                                <div class="state-entry"><span class="state-topic">factory/line1/conveyor</span> <span class="state-value">Running</span></div>
+                            </div>
+                        </div>
+                        <div class="state-flow-arrow">&#x27A1;</div>
+                        <div class="state-flow-consumers">
+                            <div class="state-flow-label">Query Anytime</div>
+                            <div class="state-flow-items">
+                                <div class="state-flow-item">AI Agents</div>
+                                <div class="state-flow-item">GraphQL API</div>
+                                <div class="state-flow-item">MCP Server</div>
+                                <div class="state-flow-item">SQL Queries</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="factory-state-cards">
+                    <div class="state-card">
+                        <div class="state-card-icon">🤖</div>
+                        <h3>Agent-Ready State</h3>
+                        <p>AI agents can query the current state of any topic before making decisions. Ask "What is the temperature on Line 1?" and get an instant answer — no need to subscribe and wait for the next publish cycle.</p>
+                    </div>
+                    <div class="state-card">
+                        <div class="state-card-icon">🔍</div>
+                        <h3>Query via GraphQL, MCP &amp; SQL</h3>
+                        <p>Access the last known value of any topic through GraphQL queries, the MCP server for AI tool calls, or direct SQL when using database-backed stores. Every interface sees the same consistent state.</p>
+                    </div>
+                    <div class="state-card">
+                        <div class="state-card-icon">⚡</div>
+                        <h3>Instant Factory Snapshot</h3>
+                        <p>Unlike traditional brokers that only forward messages, MonsterMQ remembers. Get the complete picture of your factory in a single query — temperatures, pressures, alarms, machine status — all at once.</p>
+                    </div>
+                    <div class="state-card">
+                        <div class="state-card-icon">🗄️</div>
+                        <h3>Flexible Storage Backends</h3>
+                        <p>Store last values in memory for maximum speed, in Hazelcast for cluster-wide access, or in PostgreSQL/CrateDB for persistence across restarts. Choose the backend that matches your reliability needs.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section id="ai-agents" class="ai-agents">
         <div class="container">
-            <div class="ai-agents-banner">
-                <span class="new-label">NEW</span>
-                <h2 class="section-title">AI Agents</h2>
-            </div>
+            <h2 class="section-title">AI Agents</h2>
             <p class="section-subtitle">
                 Deploy intelligent agents directly inside the broker. Agents subscribe to MQTT topics,<br>
                 reason with LLMs, call broker tools, and publish results — no external orchestration needed.
@@ -209,7 +281,7 @@
                 <div class="ai-agent-card">
                     <div class="ai-agent-icon">🔧</div>
                     <h3>Broker Tools</h3>
-                    <p>Agents can publish messages, query archive history, read retained values, and access last-value caches. Full read/write access to broker data through LangChain4j tool annotations.</p>
+                    <p>Agents can publish messages, query archive history, read retained values, and <strong>query the Last Value Store for the current state of any topic</strong>. Full read/write access to broker data through LangChain4j tool annotations.</p>
                 </div>
                 <div class="ai-agent-card">
                     <div class="ai-agent-icon">🔗</div>
@@ -224,7 +296,7 @@
                 <div class="ai-agent-card">
                     <div class="ai-agent-icon">💾</div>
                     <h3>Memory &amp; Context</h3>
-                    <p>Sliding-window conversation memory with optional persistent state. Inject last-value data, retained messages, or historical queries as context so agents always have the information they need.</p>
+                    <p>Sliding-window conversation memory with optional persistent state. Inject <strong>current factory state from the Last Value Store</strong>, retained messages, or historical queries as context so agents always reason with up-to-date information.</p>
                 </div>
                 <div class="ai-agent-card">
                     <div class="ai-agent-icon">🖥️</div>
@@ -296,6 +368,7 @@
                             <th>Database</th>
                             <th>Session Store</th>
                             <th>Retained Store</th>
+                            <th>Last Value Store</th>
                             <th>Message Archive</th>
                             <th>Clustering</th>
                             <th>SQL Queries</th>
@@ -309,9 +382,11 @@
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
+                            <td class="yes">✓</td>
                         </tr>
                         <tr>
                             <td><strong>MongoDB</strong></td>
+                            <td class="yes">✓</td>
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
@@ -323,8 +398,18 @@
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
                             <td class="yes">✓</td>
+                            <td class="yes">✓</td>
                             <td class="no">✗</td>
                             <td class="yes">✓</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Memory / Hazelcast</strong></td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓</td>
+                            <td class="yes">✓</td>
+                            <td class="no">✗</td>
+                            <td class="yes">✓ <small>(Hazelcast)</small></td>
+                            <td class="no">✗</td>
                         </tr>
                     </tbody>
                 </table>
