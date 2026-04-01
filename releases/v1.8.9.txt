@@ -1,0 +1,18 @@
+Release v1.8.9
+Built from commit: a93ad54
+Date: 2026-04-01 20:54:20
+
+Changes since v1.8.8:
+---
+a93ad54 feat: Redis bridge KV_SYNC type-aware reads and change detection
+1703299 feat: add Redis bridge device integration (#141)
+deca17c Update index.html
+475788f Merge branch 'develop'
+e4a15f3 refactor: add getPayloadAsString and getPayloadAsJsonValueOrString to BrokerMessage
+696325d Skip tests in broker build
+20373bd Add Factory State section highlighting Last Value Store on homepage
+0dc2e28 feat: add REST API for publish, read, and subscribe (#103)
+07cfdba Delete pr.md
+364e8a4 Merge remote-tracking branch 'origin/main' into fix/sqlite-retained-delivery
+a875585 Fix findTopicsByName and findTopicsByConfig to use executeQueryDirect
+abe5bb5 Fix SQLite retained messages not delivered on subscribe
