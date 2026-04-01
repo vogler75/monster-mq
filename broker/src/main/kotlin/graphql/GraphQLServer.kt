@@ -35,6 +35,8 @@ import at.rocworks.graphql.JDBCLoggerQueries
 import at.rocworks.graphql.JDBCLoggerMutations
 import at.rocworks.graphql.NatsClientConfigQueries
 import at.rocworks.graphql.NatsClientConfigMutations
+import at.rocworks.graphql.RedisClientConfigQueries
+import at.rocworks.graphql.RedisClientConfigMutations
 import at.rocworks.graphql.TelegramClientConfigQueries
 import at.rocworks.graphql.TelegramClientConfigMutations
 import at.rocworks.graphql.SparkplugBDecoderQueries
@@ -394,6 +396,10 @@ class GraphQLServer(
         val natsClientQueries = deviceStore?.let { NatsClientConfigQueries(vertx, it) }
         val natsClientMutations = deviceStore?.let { NatsClientConfigMutations(vertx, it) }
 
+        // Initialize Redis Client resolvers
+        val redisClientQueries = deviceStore?.let { RedisClientConfigQueries(vertx, it) }
+        val redisClientMutations = deviceStore?.let { RedisClientConfigMutations(vertx, it) }
+
         // Initialize Telegram Client resolvers
         val telegramClientQueries = deviceStore?.let { TelegramClientConfigQueries(vertx, it) }
         val telegramClientMutations = deviceStore?.let { TelegramClientConfigMutations(vertx, it) }
@@ -500,6 +506,12 @@ class GraphQLServer(
                     .apply {
                         natsClientQueries?.let { resolver ->
                             dataFetcher("natsClients", resolver.natsClients())
+                        }
+                    }
+                    // Redis Client queries
+                    .apply {
+                        redisClientQueries?.let { resolver ->
+                            dataFetcher("redisClients", resolver.redisClients())
                         }
                     }
                     // Telegram Client queries
@@ -685,6 +697,16 @@ class GraphQLServer(
                             }
                         }
                     }
+                    // Redis Client mutations - grouped under redisClient
+                    .apply {
+                        redisClientMutations?.let { _ ->
+                            dataFetcher("redisClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
                     // Telegram Client mutations - grouped under telegramClient
                     .apply {
                         telegramClientMutations?.let { _ ->
@@ -861,6 +883,23 @@ class GraphQLServer(
                         dataFetcher("addAddress", resolver.addNatsClientAddress())
                         dataFetcher("updateAddress", resolver.updateNatsClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteNatsClientAddress())
+                    }
+                }
+            }
+            // Register Redis Client Mutations type
+            .type("RedisClientMutations") { builder ->
+                builder.apply {
+                    redisClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createRedisClient())
+                        dataFetcher("update", resolver.updateRedisClient())
+                        dataFetcher("delete", resolver.deleteRedisClient())
+                        dataFetcher("start", resolver.startRedisClient())
+                        dataFetcher("stop", resolver.stopRedisClient())
+                        dataFetcher("toggle", resolver.toggleRedisClient())
+                        dataFetcher("reassign", resolver.reassignRedisClient())
+                        dataFetcher("addAddress", resolver.addRedisClientAddress())
+                        dataFetcher("updateAddress", resolver.updateRedisClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteRedisClientAddress())
                     }
                 }
             }
@@ -1164,6 +1203,13 @@ class GraphQLServer(
                 builder.apply {
                     natsClientQueries?.let { resolver ->
                         dataFetcher("metrics", resolver.natsClientMetrics())
+                    }
+                }
+            }
+            .type("RedisClient") { builder ->
+                builder.apply {
+                    redisClientQueries?.let { resolver ->
+                        dataFetcher("metrics", resolver.redisClientMetrics())
                     }
                 }
             }

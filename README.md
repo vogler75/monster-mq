@@ -9,7 +9,7 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 - WebSocket, TLS, retained messages, clustering, and MQTT-based system logging ([details](doc/mqtt-logging.md))
 - Storage backends for PostgreSQL, CrateDB, MongoDB, SQLite, and more via JDBC ([database docs](doc/databases.md))
 - Archive groups, last-value storage, retention policies, and schema-based JDBC logging ([archiving](doc/archiving.md), [Snowflake](doc/snowflake.md))
-- Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, Telegram, and others
+- Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, Redis, Telegram, and others
 - Flow engine for visual, JavaScript-based message processing ([details](doc/workflows.md))
 - AI agents with multi-provider LLM support (Gemini, Claude, OpenAI, Ollama), MQTT/cron triggers, and agent-to-agent orchestration
 - GraphQL API, MCP server, web dashboard, and CESMII I3X API support
@@ -188,6 +188,7 @@ Features:
   MqttClient: true
   Kafka: true
   Nats: true
+  Redis: true
   Telegram: true
   WinCCOa: true
   WinCCUa: true
@@ -253,6 +254,7 @@ BulkMessaging:
 - WinCC OA and WinCC Unified connectors ([WinCC OA](doc/winccoa.md), [WinCC Unified](doc/winccua.md))
 - Neo4j integration for topic hierarchy analysis ([details](doc/neo4j.md))
 - Kafka integration for event streaming ([details](doc/kafka.md))
+- Redis bridge for Pub/Sub channel bridging and key-value sync
 
 ### Processing and APIs
 

@@ -31,6 +31,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_TELEGRAM_CLIENT = "Telegram-Client"
         const val DEVICE_TYPE_JDBC_LOGGER = "JDBC-Logger"
         const val DEVICE_TYPE_SPARKPLUGB_DECODER = "SparkplugB-Decoder"
+        const val DEVICE_TYPE_REDIS_CLIENT = "Redis-Client"
         const val DEVICE_TYPE_FLOW_CLASS = "Flow-Class"
         const val DEVICE_TYPE_FLOW_OBJECT = "Flow-Object"
         const val DEVICE_TYPE_TOPIC_SCHEMA_POLICY = "TopicSchema-Policy"

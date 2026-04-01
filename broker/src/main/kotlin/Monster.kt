@@ -1144,7 +1144,7 @@ MORE INFO:
                         // Resolve feature flags from top-level Features config block
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
                         val allFeatures = listOf(
-                            "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Telegram",
+                            "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Redis", "Telegram",
                             "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger",
                             "SparkplugB", "FlowEngine", "Agents"
                         )
@@ -1197,6 +1197,17 @@ MORE INFO:
                             vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
                         } else {
                             logger.fine("Nats extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        // Redis Client Bridge Extension
+                        if (Monster.isFeatureEnabled("Redis")) {
+                            val redisClientExtension = at.rocworks.devices.redisclient.RedisClientExtension()
+                            val redisDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(redisClientExtension, redisDeploymentOptions)
+                        } else {
+                            logger.fine("Redis extension disabled by Features config")
                             Future.succeededFuture()
                         }
                     }

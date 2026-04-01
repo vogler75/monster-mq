@@ -1013,6 +1013,93 @@ extend type Query {
 }
 
 #############################################
+# Redis Client Configuration               #
+#############################################
+
+enum RedisClientMode {
+    # Bring messages IN from Redis to the local MQTT broker (Redis -> MQTT)
+    SUBSCRIBE
+    # Push messages OUT from the local MQTT broker to Redis (MQTT -> Redis)
+    PUBLISH
+    # Bidirectional key-value sync (MQTT writes -> SET key, polling GET -> MQTT)
+    KV_SYNC
+}
+
+type RedisClientAddress {
+    # Direction: SUBSCRIBE (Redis->MQTT), PUBLISH (MQTT->Redis), or KV_SYNC (bidirectional)
+    mode: RedisClientMode!
+    # Redis channel/pattern (Pub/Sub) or key pattern (KV_SYNC). Supports glob wildcards: * and ?
+    redisChannel: String!
+    # Local MQTT topic pattern (supports + and # wildcards)
+    mqttTopic: String!
+    # QoS level to use when publishing to the local MQTT broker (inbound only)
+    qos: Int!
+    # Use PSUBSCRIBE for glob pattern matching (Pub/Sub only)
+    usePatternSubscribe: Boolean!
+    # Use SCAN MATCH for wildcard key discovery (KV_SYNC only)
+    usePatternMatch: Boolean!
+    # Polling interval in ms for KV_SYNC reads (0 = disabled)
+    kvPollIntervalMs: Long
+    # Strip base path before wildcard and prepend target prefix
+    removePath: Boolean!
+}
+
+type RedisClientConfig {
+    # Redis server hostname
+    host: String!
+    # Redis server port
+    port: Int!
+    # Redis database index
+    database: Int!
+    # Enable SSL/TLS
+    useSsl: Boolean!
+    # Trust all certificates (dev only)
+    sslTrustAll: Boolean!
+    # Optional full connection string override (e.g. redis://host:6379/0)
+    connectionString: String
+    # Connection pool size
+    maxPoolSize: Int!
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelayMs: Long!
+    # Maximum reconnection attempts (-1 = unlimited)
+    maxReconnectAttempts: Int!
+    # Prevent re-publishing own messages
+    loopPrevention: Boolean!
+    # List of address mappings
+    addresses: [RedisClientAddress!]!
+}
+
+type RedisClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    errors: Float!
+    timestamp: String!
+}
+
+type RedisClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    config: RedisClientConfig!
+    enabled: Boolean!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    metrics: [RedisClientMetrics!]!
+}
+
+# Extend Queries for Redis clients
+extend type Query {
+    # Get Redis client bridge configurations across the entire cluster
+    redisClients(
+        # Filter by specific client name (optional)
+        name: String,
+        # Filter by cluster node ID (optional)
+        node: String
+    ): [RedisClient!]!
+}
+
+#############################################
 # WinCC OA Client Configuration            #
 #############################################
 

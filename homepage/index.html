@@ -49,6 +49,7 @@
                 <div class="feature-badge">✓ Multi-Database</div>
                 <div class="feature-badge">✓ OPC UA</div>
                 <div class="feature-badge">✓ NATS</div>
+                <div class="feature-badge">✓ Redis</div>
                 <div class="feature-badge">✓ Workflows</div>
                 <div class="feature-badge">✓ Dashboard</div>
                 <div class="feature-badge">✓ Last Value Store</div>
@@ -121,6 +122,11 @@
                     <div class="feature-icon">📨</div>
                     <h3>Kafka Integration</h3>
                     <p>Stream MQTT messages to Apache Kafka topics for event sourcing, stream processing, and long-term data retention. Bidirectional bridging enables consuming Kafka topics back into MQTT for seamless integration with data pipelines.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔴</div>
+                    <h3>Redis Bridge</h3>
+                    <p>Bidirectional MQTT-to-Redis bridging with three modes: Pub/Sub channel subscriptions with glob pattern matching via PSUBSCRIBE, outbound publishing from MQTT topics to Redis channels, and key-value sync that writes MQTT payloads to Redis keys and polls keys back to MQTT with wildcard SCAN support.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">🔧</div>

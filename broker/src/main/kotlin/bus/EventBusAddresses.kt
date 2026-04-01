@@ -106,6 +106,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // Redis Client Bridge (bidirectional MQTT <-> Redis)
+    object RedisBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.redis"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // Telegram Client Bridge (bidirectional MQTT <-> Telegram)
     object TelegramBridge {
         private const val BRIDGE_NS = "$BASE.bridge.telegram"

@@ -1595,6 +1595,98 @@ input NatsClientInput {
 }
 
 #############################################
+# Redis Client Mutations                    #
+#############################################
+
+type RedisClientMutations {
+    # Create a new Redis client bridge
+    create(input: RedisClientInput!): RedisClientResult!
+    # Update an existing Redis client bridge configuration
+    update(name: String!, input: RedisClientInput!): RedisClientResult!
+    # Delete a Redis client bridge permanently
+    delete(name: String!): Boolean!
+    # Start (enable) a Redis client bridge
+    start(name: String!): RedisClientResult!
+    # Stop (disable) a Redis client bridge
+    stop(name: String!): RedisClientResult!
+    # Toggle the enabled state of a Redis client bridge
+    toggle(name: String!, enabled: Boolean!): RedisClientResult!
+    # Reassign a Redis client bridge to a different cluster node
+    reassign(name: String!, nodeId: String!): RedisClientResult!
+    # Add an address entry (SUBSCRIBE, PUBLISH, or KV_SYNC mapping)
+    addAddress(deviceName: String!, input: RedisClientAddressInput!): RedisClientResult!
+    # Update an existing address entry by redisChannel
+    updateAddress(deviceName: String!, redisChannel: String!, input: RedisClientAddressInput!): RedisClientResult!
+    # Delete an address entry by redisChannel
+    deleteAddress(deviceName: String!, redisChannel: String!): RedisClientResult!
+}
+
+extend type Mutation {
+    # Access Redis client bridge management operations
+    redisClient: RedisClientMutations!
+}
+
+type RedisClientResult {
+    success: Boolean!
+    client: RedisClient
+    errors: [String!]!
+}
+
+input RedisClientAddressInput {
+    # SUBSCRIBE = Redis->MQTT, PUBLISH = MQTT->Redis, KV_SYNC = bidirectional
+    mode: RedisClientMode!
+    # Redis channel/pattern or key pattern (glob wildcards: * and ?)
+    redisChannel: String!
+    # Local MQTT topic
+    mqttTopic: String!
+    # QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Use PSUBSCRIBE for glob pattern matching (Pub/Sub only)
+    usePatternSubscribe: Boolean = false
+    # Use SCAN MATCH for wildcard key discovery (KV_SYNC only)
+    usePatternMatch: Boolean = false
+    # Polling interval in ms for KV_SYNC reads (0 = disabled)
+    kvPollIntervalMs: Long = 0
+    # Strip base path before wildcard and prepend target prefix (default true)
+    removePath: Boolean = true
+}
+
+input RedisClientConfigInput {
+    # Redis server hostname
+    host: String = "localhost"
+    # Redis server port
+    port: Int = 6379
+    # Redis AUTH password
+    password: String
+    # Redis database index
+    database: Int = 0
+    # Enable SSL/TLS
+    useSsl: Boolean = false
+    # Trust all certificates (dev only)
+    sslTrustAll: Boolean = false
+    # Full connection string override
+    connectionString: String
+    # Connection pool size
+    maxPoolSize: Int = 6
+    # Reconnect delay in ms
+    reconnectDelayMs: Long = 5000
+    # Max reconnect attempts (-1 = unlimited)
+    maxReconnectAttempts: Int = -1
+    # Prevent re-publishing own messages
+    loopPrevention: Boolean = true
+    # Address mappings (can be supplied at create time)
+    addresses: [RedisClientAddressInput!] = []
+}
+
+input RedisClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: RedisClientConfigInput!
+}
+
+#############################################
 # Telegram Client Mutations                 #
 #############################################
 

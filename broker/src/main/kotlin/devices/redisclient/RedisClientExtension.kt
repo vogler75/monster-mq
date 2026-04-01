@@ -1,0 +1,229 @@
+package at.rocworks.devices.redisclient
+
+import at.rocworks.Monster
+import at.rocworks.Utils
+import at.rocworks.bus.EventBusAddresses
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.stores.IDeviceConfigStore
+import io.vertx.core.AbstractVerticle
+import io.vertx.core.DeploymentOptions
+import io.vertx.core.Future
+import io.vertx.core.Promise
+import io.vertx.core.eventbus.Message
+import io.vertx.core.json.JsonObject
+import io.vertx.core.shareddata.LocalMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.logging.Logger
+
+/**
+ * RedisClientExtension
+ *
+ * Coordinator verticle that manages deployments of [RedisClientConnector] instances
+ * for all devices of type [DeviceConfig.DEVICE_TYPE_REDIS_CLIENT] assigned to the
+ * current cluster node.
+ */
+class RedisClientExtension : AbstractVerticle() {
+    private val logger: Logger = Utils.getLogger(this::class.java)
+
+    private lateinit var deviceStore: IDeviceConfigStore
+    private val deployedConnectors = ConcurrentHashMap<String, String>() // name -> deploymentId
+    private val activeDevices = ConcurrentHashMap<String, DeviceConfig>()
+    private lateinit var currentNodeId: String
+    private lateinit var deviceRegistry: LocalMap<String, String>   // namespace -> name
+
+    companion object {
+        const val ADDRESS_DEVICE_CONFIG_CHANGED = "redisclient.device.config.changed"
+    }
+
+    override fun start(startPromise: Promise<Void>) {
+        try {
+            currentNodeId = Monster.getClusterNodeId(vertx)
+            deviceRegistry = vertx.sharedData().getLocalMap("redisclient.device.registry")
+            initializeDeviceStore()
+                .compose { loadAndDeployDevices() }
+                .compose { setupEventBusHandlers() }
+                .onComplete { res ->
+                    if (res.succeeded()) startPromise.complete() else startPromise.fail(res.cause())
+                }
+        } catch (e: Exception) {
+            startPromise.fail(e)
+        }
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        val undeployFutures = deployedConnectors.values.map { vertx.undeploy(it) }
+        Future.all<Void>(undeployFutures)
+            .compose { deviceStore.close() }
+            .onComplete { stopPromise.complete() }
+    }
+
+    // -- Initialization --
+
+    private fun initializeDeviceStore(): Future<Void> {
+        val p = Promise.promise<Void>()
+        try {
+            val config = vertx.orCreateContext.config()
+            val storeType = Monster.getConfigStoreType(config)
+            val store = if (storeType != "NONE") DeviceConfigStoreFactory.create(storeType, config, vertx) else null
+            if (store != null) {
+                deviceStore = store
+                deviceStore.initialize().onComplete { initRes ->
+                    if (initRes.succeeded()) p.complete()
+                    else p.fail(RuntimeException("Failed to initialise device store: ${initRes.cause()?.message}"))
+                }
+            } else {
+                p.fail(RuntimeException("No DeviceConfigStore for store type $storeType"))
+            }
+        } catch (e: Exception) {
+            p.fail(e)
+        }
+        return p.future()
+    }
+
+    private fun loadAndDeployDevices(): Future<Void> {
+        val p = Promise.promise<Void>()
+        deviceStore.getEnabledDevicesByNode(currentNodeId).onComplete { res ->
+            if (res.succeeded()) {
+                val devices = res.result().filter { it.type == DeviceConfig.DEVICE_TYPE_REDIS_CLIENT }
+                if (devices.isEmpty()) { p.complete(); return@onComplete }
+                var processed = 0
+                devices.forEach { dev ->
+                    deployConnector(dev).onComplete { dRes ->
+                        processed++
+                        if (!dRes.succeeded())
+                            logger.warning("Failed to deploy RedisClientConnector for ${dev.name}: ${dRes.cause()?.message}")
+                        if (processed == devices.size) p.complete()
+                    }
+                }
+            } else p.fail(res.cause())
+        }
+        return p.future()
+    }
+
+    // -- Connector lifecycle --
+
+    private fun deployConnector(device: DeviceConfig): Future<String> {
+        val p = Promise.promise<String>()
+        if (!device.isAssignedToNode(currentNodeId)) {
+            p.fail(Exception("Device '${device.name}' is not assigned to this node ($currentNodeId)"))
+            return p.future()
+        }
+        val cfg = JsonObject().put("device", device.toJsonObject())
+        vertx.deployVerticle(RedisClientConnector(), DeploymentOptions().setConfig(cfg)).onComplete { res ->
+            if (res.succeeded()) {
+                deployedConnectors[device.name] = res.result()
+                activeDevices[device.name] = device
+                deviceRegistry[device.namespace] = device.name
+                p.complete(res.result())
+            } else {
+                p.fail(res.cause())
+            }
+        }
+        return p.future()
+    }
+
+    private fun undeployConnector(deviceName: String): Future<Void> {
+        val p = Promise.promise<Void>()
+        val deploymentId = deployedConnectors.remove(deviceName)
+        activeDevices.remove(deviceName)?.let { deviceRegistry.remove(it.namespace) }
+        if (deploymentId == null) { p.complete(); return p.future() }
+        vertx.undeploy(deploymentId).onComplete { p.complete() }
+        return p.future()
+    }
+
+    // -- EventBus handlers --
+
+    private fun setupEventBusHandlers(): Future<Void> {
+        val p = Promise.promise<Void>()
+        try {
+            vertx.eventBus().consumer<JsonObject>(ADDRESS_DEVICE_CONFIG_CHANGED) { msg ->
+                handleConfigChange(msg)
+            }
+
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.RedisBridge.connectorsList(currentNodeId)) { msg ->
+                try {
+                    msg.reply(JsonObject().put("devices", activeDevices.keys.toList()))
+                } catch (e: Exception) {
+                    msg.fail(500, e.message)
+                }
+            }
+            p.complete()
+        } catch (e: Exception) {
+            p.fail(e)
+        }
+        return p.future()
+    }
+
+    private fun handleConfigChange(message: Message<JsonObject>) {
+        try {
+            val body = message.body()
+            val op = body.getString("operation")
+            val name = body.getString("deviceName")
+
+            when (op) {
+                "add", "update", "addAddress", "updateAddress", "deleteAddress" -> {
+                    val deviceJson = body.getJsonObject("device")
+                    val device = DeviceConfig.fromJsonObject(deviceJson)
+                    if (device.type != DeviceConfig.DEVICE_TYPE_REDIS_CLIENT) {
+                        message.reply(JsonObject().put("success", true)); return
+                    }
+                    if (device.isAssignedToNode(currentNodeId) && device.enabled) {
+                        undeployConnector(name).compose { deployConnector(device) }.onComplete { r ->
+                            if (r.succeeded()) message.reply(JsonObject().put("success", true))
+                            else message.fail(500, r.cause()?.message)
+                        }
+                    } else {
+                        undeployConnector(name).onComplete { message.reply(JsonObject().put("success", true)) }
+                    }
+                }
+                "delete" -> {
+                    undeployConnector(name).onComplete { message.reply(JsonObject().put("success", true)) }
+                }
+                "toggle" -> {
+                    val enabled = body.getBoolean("enabled", false)
+                    deviceStore.getDevice(name).onComplete { dr ->
+                        if (dr.succeeded()) {
+                            val device = dr.result()
+                            if (device != null) {
+                                if (enabled && device.isAssignedToNode(currentNodeId)) {
+                                    undeployConnector(name)
+                                        .compose { deployConnector(device.copy(enabled = true)) }
+                                        .onComplete { r ->
+                                            if (r.succeeded()) message.reply(JsonObject().put("success", true))
+                                            else message.fail(500, r.cause()?.message)
+                                        }
+                                } else {
+                                    undeployConnector(name).onComplete { message.reply(JsonObject().put("success", true)) }
+                                }
+                            } else {
+                                message.fail(404, "Device '$name' not found")
+                            }
+                        } else {
+                            message.fail(500, dr.cause()?.message)
+                        }
+                    }
+                }
+                "reassign" -> {
+                    val newNodeId = body.getString("nodeId")
+                    val device = activeDevices[name]
+                    if (device != null) {
+                        if (newNodeId == currentNodeId && device.enabled) {
+                            deployConnector(device.copy(nodeId = newNodeId)).onComplete { r ->
+                                if (r.succeeded()) message.reply(JsonObject().put("success", true))
+                                else message.fail(500, r.cause()?.message)
+                            }
+                        } else {
+                            undeployConnector(name).onComplete { message.reply(JsonObject().put("success", true)) }
+                        }
+                    } else {
+                        message.reply(JsonObject().put("success", true))
+                    }
+                }
+                else -> message.fail(400, "Unknown operation: $op")
+            }
+        } catch (e: Exception) {
+            message.fail(500, e.message)
+        }
+    }
+}
