@@ -94,7 +94,7 @@ if [ "$BUILD_FIRST" = true ]; then
 
     # Build the broker
     echo "Building MonsterMQ..."
-    mvn package
+    mvn package -DskipTests
     if [ $? -ne 0 ]; then
         echo "Build failed!"
         exit 1

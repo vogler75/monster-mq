@@ -495,7 +495,7 @@ class AgentExecutor(
                 val store = archiveGroups[groupName]?.lastValStore ?: continue
                 for (filter in topicFilters) {
                     store.findMatchingMessages(filter) { msg ->
-                        val value = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                        val value = msg.getPayloadAsString()
                         lines.add("[Archive:$groupName] ${msg.topicName} = $value (${msg.time})")
                         lines.size < 500 // safety limit
                     }
@@ -509,7 +509,7 @@ class AgentExecutor(
             if (retainedStore != null) {
                 for (filter in agentConfig.contextRetainedTopics) {
                     retainedStore.findMatchingMessages(filter) { msg ->
-                        val value = msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                        val value = msg.getPayloadAsString()
                         lines.add("[Retained] ${msg.topicName} = $value")
                         lines.size < 500
                     }

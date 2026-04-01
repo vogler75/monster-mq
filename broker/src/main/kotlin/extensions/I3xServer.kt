@@ -242,12 +242,7 @@ class I3xServer(
     }
 
     private fun messageToVqt(message: BrokerMessage): JsonObject {
-        val payloadStr = String(message.payload, Charsets.UTF_8)
-        val value: Any = try { JsonObject(payloadStr) } catch (_: Exception) {
-            try { JsonArray(payloadStr) } catch (_: Exception) {
-                payloadStr.toDoubleOrNull() ?: payloadStr
-            }
-        }
+        val value: Any = message.getPayloadAsJsonValueOrString()
         return JsonObject()
             .put("value", value)
             .put("quality", "GOOD")

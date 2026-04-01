@@ -93,6 +93,12 @@ MCP:
   Enabled: true
   Port: 3000
 
+# REST API (hosted on the same port as GraphQL)
+# Endpoints: /api/v1/topics/... (publish, read), /api/v1/write (bulk), /api/v1/subscribe (SSE)
+# Swagger UI: /api/v1/docs
+RestApi:
+  Enabled: true
+
 GraphQL:
   Enabled: true
   Port: 4000

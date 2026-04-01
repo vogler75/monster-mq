@@ -1032,6 +1032,23 @@ MORE INFO:
                 // GraphQL Server
                 val graphQLConfig = configJson.getJsonObject("GraphQL", JsonObject())
                 val graphQLEnabled = graphQLConfig.getBoolean("Enabled", true)
+
+                // REST API Server (hosted on the same port as GraphQL)
+                val restApiConfig = configJson.getJsonObject("RestApi", JsonObject())
+                val restApiEnabled = restApiConfig.getBoolean("Enabled", true)
+                val restApiServer = if (graphQLEnabled && restApiEnabled && this.archiveHandler != null) {
+                    at.rocworks.extensions.RestApiServer(
+                        vertx,
+                        sessionHandler,
+                        this.archiveHandler!!,
+                        retainedStore,
+                        userManager
+                    )
+                } else {
+                    if (!restApiEnabled) logger.fine("REST API is disabled in configuration")
+                    null
+                }
+
                 val graphQLServer = if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
 
@@ -1050,7 +1067,8 @@ MORE INFO:
                         this.archiveHandler,
                         deviceConfigStore,
                         genAiProvider,
-                        dashboardPath
+                        dashboardPath,
+                        restApiServer
                     )
                 } else {
                     logger.fine("GraphQL server is disabled in configuration")

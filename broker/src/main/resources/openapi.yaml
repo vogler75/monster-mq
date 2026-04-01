@@ -1,0 +1,406 @@
+openapi: "3.0.3"
+info:
+  title: MonsterMQ REST API
+  description: >
+    REST API for MonsterMQ broker. Provides publish, read (last value, retained, history),
+    bulk write, and SSE-based subscribe functionality.
+  version: "1.0.0"
+  contact:
+    name: MonsterMQ
+    url: https://github.com/vogler75/monster-mq
+
+servers:
+  - url: /api/v1
+    description: MonsterMQ REST API (same port as GraphQL, default 4000)
+
+security:
+  - bearerAuth: []
+  - basicAuth: []
+
+paths:
+  /login:
+    post:
+      summary: Authenticate and get JWT token
+      description: >
+        Authenticate with username and password to receive a JWT bearer token.
+        The token can then be used in the `Authorization: Bearer <token>` header
+        for subsequent API calls. This endpoint does not require authentication.
+      operationId: login
+      tags: [Authentication]
+      security: []  # No auth required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: "admin"
+                password:
+                  type: string
+                  example: "secret"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  token:
+                    type: string
+                    description: JWT bearer token
+                  username:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /topics/{topic}:
+    post:
+      summary: Publish message (raw body)
+      description: >
+        Publish a message to the given MQTT topic. The request body IS the raw payload (binary-safe).
+        MQTT wildcards in the topic path must be URL-encoded: `+` → `%2B`, `#` → `%23`.
+      operationId: publishRawBody
+      tags: [Publish]
+      parameters:
+        - $ref: '#/components/parameters/topicPath'
+        - name: qos
+          in: query
+          description: QoS level (0, 1, or 2)
+          schema:
+            type: integer
+            enum: [0, 1, 2]
+            default: 0
+        - name: retain
+          in: query
+          description: Retain flag
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        description: Raw payload bytes
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+          text/plain:
+            schema:
+              type: string
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: Message published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      summary: Publish message (inline)
+      description: >
+        Publish a message with payload as query parameter. No request body needed.
+      operationId: publishInline
+      tags: [Publish]
+      parameters:
+        - $ref: '#/components/parameters/topicPath'
+        - name: payload
+          in: query
+          description: Message payload as string
+          required: true
+          schema:
+            type: string
+        - name: qos
+          in: query
+          description: QoS level (0, 1, or 2)
+          schema:
+            type: integer
+            enum: [0, 1, 2]
+            default: 0
+        - name: retain
+          in: query
+          description: Retain flag
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Message published successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    get:
+      summary: Read topic data
+      description: >
+        Read topic data. Behavior depends on query parameters:
+
+        - `?retained` → Read retained value from broker's retained store
+        - `?group=X` → Read last value from archive group
+        - `?group=X&start=...&end=...` → Read history from archive group
+
+        Supports MQTT wildcards (`+` and `#`) in the topic path (URL-encoded).
+      operationId: readTopics
+      tags: [Read]
+      parameters:
+        - $ref: '#/components/parameters/topicPath'
+        - name: retained
+          in: query
+          description: Read from broker's retained store (presence triggers retained mode)
+          schema:
+            type: boolean
+          allowEmptyValue: true
+        - name: group
+          in: query
+          description: Archive group name (e.g. "Default")
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: History start time (ISO 8601, e.g. 2024-01-01T00:00:00Z)
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          description: History end time (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Maximum number of history records to return
+          schema:
+            type: integer
+            default: 1000
+            minimum: 1
+            maximum: 100000
+      responses:
+        '200':
+          description: Topic data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopicDataResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Archive group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /write:
+    post:
+      summary: Bulk publish messages
+      description: Publish multiple messages in a single request.
+      operationId: bulkPublish
+      tags: [Publish]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkWriteRequest'
+      responses:
+        '200':
+          description: Messages published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkWriteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /subscribe:
+    get:
+      summary: Subscribe via Server-Sent Events
+      description: >
+        Long-lived HTTP connection streaming MQTT messages as Server-Sent Events.
+        Multiple topics supported via repeated `topic` query parameter.
+        Wildcards supported (`+` encoded as `%2B`, `#` as `%23`).
+      operationId: subscribe
+      tags: [Subscribe]
+      parameters:
+        - name: topic
+          in: query
+          description: MQTT topic filter(s) to subscribe to (repeat for multiple)
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: SSE event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >
+                  Each event is a JSON object: `{"topic":"...","value":"...","timestamp":"..."}`
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from MonsterMQ authentication
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Username and password
+
+  parameters:
+    topicPath:
+      name: topic
+      in: path
+      required: true
+      description: >
+        MQTT topic path. Use `/` as separator. Wildcards must be URL-encoded:
+        `+` → `%2B`, `#` → `%23`.
+      schema:
+        type: string
+      style: simple
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        topic:
+          type: string
+          example: "sensors/temperature"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Archive group 'X' not found"
+
+    TopicMessage:
+      type: object
+      properties:
+        topic:
+          type: string
+          example: "sensors/temperature"
+        value:
+          type: string
+          example: "23.5"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        qos:
+          type: integer
+          example: 0
+        retain:
+          type: boolean
+          example: false
+
+    TopicDataResponse:
+      type: object
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopicMessage'
+
+    BulkWriteRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            required: [topic, value]
+            properties:
+              topic:
+                type: string
+                example: "sensors/temperature"
+              value:
+                type: string
+                example: "23.5"
+              retain:
+                type: boolean
+                default: false
+              qos:
+                type: integer
+                enum: [0, 1, 2]
+                default: 0
+
+    BulkWriteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 3
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient permissions (ACL check failed)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

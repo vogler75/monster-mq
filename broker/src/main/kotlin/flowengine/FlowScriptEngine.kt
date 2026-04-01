@@ -479,12 +479,7 @@ class FlowScriptEngine {
                 .put("topic", msg.topicName)
                 .put("timestamp", msg.time.toEpochMilli())
                 .put("qos", msg.qosLevel)
-            val jsonValue = msg.getPayloadAsJson()
-            if (jsonValue != null) {
-                obj.put("value", jsonValue)
-            } else {
-                obj.put("value", msg.getPayloadAsBase64())
-            }
+            obj.put("value", msg.getPayloadAsJsonValueOrString())
             return obj
         }
 

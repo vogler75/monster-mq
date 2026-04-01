@@ -86,7 +86,8 @@ class GraphQLServer(
     private val archiveHandler: ArchiveHandler?,
     private val sharedDeviceConfigStore: IDeviceConfigStore? = null,
     private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null,
-    private val dashboardPath: String? = null
+    private val dashboardPath: String? = null,
+    private val restApiServer: at.rocworks.extensions.RestApiServer? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
@@ -205,6 +206,9 @@ class GraphQLServer(
                 .putHeader("content-type", "application/json")
                 .end(JsonObject().put("status", "healthy").encode())
         }
+
+        // REST API routes (must be registered BEFORE the catch-all static handler)
+        restApiServer?.registerRoutes(router)
 
         // Dashboard static file serving
         if (dashboardPath != null) {

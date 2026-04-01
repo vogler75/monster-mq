@@ -259,6 +259,7 @@ BulkMessaging:
 - Flow engine with reusable flow classes and deployed instances
 - JavaScript execution with GraalVM
 - GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
+- REST API for publish, read, and subscribe over HTTP ([details](doc/rest-api.md))
 - MCP server for AI-oriented access ([details](doc/mcp.md))
 
 ### AI Agents
@@ -306,7 +307,7 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 | WebSocket TLS | 9001 |
 | NATS | 4222 |
 | OPC UA Server | 4840 |
-| GraphQL API and Dashboard | 4000 |
+| GraphQL API, REST API, and Dashboard | 4000 |
 | MCP Server | 3000 |
 | I3X API | 3002 |
 
@@ -343,6 +344,7 @@ See `doc/` for full documentation:
 - [databases.md](doc/databases.md) - database backends and tuning
 - [archiving.md](doc/archiving.md) - archive groups and retention
 - [graphql.md](doc/graphql.md) - GraphQL API
+- [rest-api.md](doc/rest-api.md) - REST API
 - [workflows.md](doc/workflows.md) - flow engine
 - [nats.md](doc/nats.md) - native NATS and bridging
 - [opcua.md](doc/opcua.md) - OPC UA client integration
