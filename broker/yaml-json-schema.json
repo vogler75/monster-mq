@@ -301,6 +301,17 @@
         }
       }
     },
+    "RestApi": {
+      "type": "object",
+      "description": "REST API for publish, read, and subscribe. Hosted on the same HTTP server as GraphQL. Provides endpoints under /api/v1/ for publishing messages, reading last values/retained/history, bulk write, and SSE-based subscriptions. Swagger UI available at /api/v1/docs.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "description": "Enable REST API endpoints on the GraphQL HTTP server",
+          "default": true
+        }
+      }
+    },
     "MCP": {
       "type": "object",
       "description": "Model Context Protocol server configuration",
