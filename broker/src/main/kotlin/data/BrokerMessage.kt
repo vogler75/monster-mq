@@ -199,6 +199,14 @@ class BrokerMessage(
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 
+    fun getPayloadAsString(): String {
+        return try {
+            String(payload, Charsets.UTF_8)
+        } catch (e: Exception) {
+            getPayloadAsBase64()
+        }
+    }
+
     fun getPayloadAsJson(): String? {
         return try {
             val jsonString = String(payload, Charsets.UTF_8)
@@ -215,6 +223,19 @@ class BrokerMessage(
             Json.decodeValue(jsonString)
         } catch (e: Exception) {
             null
+        }
+    }
+
+    fun getPayloadAsJsonValueOrString(): Any {
+        val str = try {
+            String(payload, Charsets.UTF_8)
+        } catch (e: Exception) {
+            return getPayloadAsBase64()
+        }
+        return try {
+            Json.decodeValue(str)
+        } catch (e: Exception) {
+            str
         }
     }
 

@@ -4,19 +4,16 @@ import at.rocworks.Const
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
-import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.data.PurgeResult
 import io.vertx.core.AbstractVerticle
-import io.vertx.core.AsyncResult
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.*
 import java.time.Instant
-import java.util.concurrent.Callable
 
 class MessageArchivePostgres (
     private val name: String,

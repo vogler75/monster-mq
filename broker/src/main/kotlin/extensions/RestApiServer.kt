@@ -684,32 +684,18 @@ class RestApiServer(
     // ========== Helpers ==========
 
     private fun brokerMessageToJson(msg: BrokerMessage): JsonObject {
-        val json = JsonObject()
+        return JsonObject()
             .put("topic", msg.topicName)
+            .put("value", msg.getPayloadAsJsonValueOrString())
             .put("timestamp", msg.time.toString())
             .put("qos", msg.qosLevel)
             .put("retain", msg.isRetain)
-
-        // Try to include value as string, fall back to base64
-        val payloadStr = try {
-            String(msg.payload, Charsets.UTF_8)
-        } catch (e: Exception) {
-            null
-        }
-
-        if (payloadStr != null) {
-            json.put("value", payloadStr)
-        } else {
-            json.put("value_base64", java.util.Base64.getEncoder().encodeToString(msg.payload))
-        }
-
-        return json
     }
 
     private fun sseEventJson(msg: BrokerMessage): String {
         return JsonObject()
             .put("topic", msg.topicName)
-            .put("value", try { String(msg.payload, Charsets.UTF_8) } catch (e: Exception) { java.util.Base64.getEncoder().encodeToString(msg.payload) })
+            .put("value", msg.getPayloadAsJsonValueOrString())
             .put("timestamp", msg.time.toString())
             .encode()
     }

@@ -88,7 +88,7 @@ class AgentTools(
                 if (msg != null) {
                     results.add(JsonObject()
                         .put("topic", msg.topicName)
-                        .put("value", msg.getPayloadAsJson() ?: msg.getPayloadAsBase64())
+                        .put("value", msg.getPayloadAsJsonValueOrString())
                         .put("timestamp", msg.time.toEpochMilli())
                     )
                 }
@@ -186,7 +186,7 @@ class AgentTools(
             if (store == null) return logTool("recallNote", "key=$key", "No retained store available")
             val msg = store[topic]
             if (msg != null) {
-                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                msg.getPayloadAsString()
             } else {
                 "No note found for key '$key'"
             }
@@ -212,7 +212,7 @@ class AgentTools(
                     val key = msg.topicName.removePrefix("$notesPrefix/")
                     results.add(JsonObject()
                         .put("key", key)
-                        .put("content", msg.getPayloadAsJson() ?: msg.getPayloadAsBase64())
+                        .put("content", msg.getPayloadAsJsonValueOrString())
                         .put("timestamp", msg.time.toString())
                     )
                     count++
@@ -302,7 +302,7 @@ class AgentTools(
                 ?: return logTool("getAgentCard", "agent=$agentName", "No retained store available")
             val msg = store["a2a/v1/$a2aOrg/$a2aSite/discovery/$agentName"]
             if (msg != null) {
-                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                msg.getPayloadAsString()
             } else {
                 "No agent card found for '$agentName'"
             }
@@ -365,7 +365,7 @@ class AgentTools(
                 ?: return logTool("getAgentHealth", "agent=$agentName", "No retained store available")
             val msg = store["a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/health"]
             if (msg != null) {
-                msg.getPayloadAsJson() ?: msg.getPayloadAsBase64()
+                msg.getPayloadAsString()
             } else {
                 "No health data found for agent '$agentName'"
             }
