@@ -92,6 +92,35 @@
         .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
         @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } .full-width { grid-column: 1; } }
 
+        .section-nav {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+            padding: 0.6rem 0.75rem;
+            background: var(--dark-surface);
+            border: 1px solid var(--dark-border);
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+        }
+        .section-nav a {
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .section-nav a:hover {
+            color: var(--text-primary);
+            background: rgba(124, 58, 237, 0.12);
+        }
+        .main-content { scroll-behavior: smooth; }
+        .back-to-top { font-size: 0.75rem; color: var(--text-muted); cursor: pointer; text-decoration: none; opacity: 0.6; transition: opacity 0.15s; }
+        .back-to-top:hover { opacity: 1; color: var(--text-primary); }
+
         /* History Query Cards */
         .history-query-card { background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
         .history-query-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
@@ -129,6 +158,15 @@
                     </div>
                 </div>
             </div>
+
+            <nav class="section-nav" id="section-nav" style="display:none;">
+                <a data-section="agent-content">Configuration</a>
+                <a data-section="provider-section">AI Provider</a>
+                <a data-section="mcp-section">Tools &amp; MCP</a>
+                <a data-section="trigger-section">Trigger</a>
+                <a data-section="context-section">Context Data</a>
+                <a data-section="prompt-section">System Prompt</a>
+            </nav>
 
             <!-- Agent Configuration Section -->
             <div class="section-card" id="agent-content" style="display:none;">
@@ -184,6 +222,7 @@
             <div class="section-card" id="provider-section" style="display:none;">
                 <div class="section-header">
                     <div class="section-title"><h2>AI Provider</h2></div>
+                    <a class="back-to-top" data-section="section-nav">↑ Top</a>
                 </div>
                 <div class="section-content">
                     <div class="form-grid">
@@ -245,6 +284,10 @@
                             <input type="checkbox" id="agent-enable-thinking" style="accent-color: var(--monster-purple);">
                             <label for="agent-enable-thinking" style="margin: 0; cursor: pointer;">Enable Thinking</label>
                         </div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="checkbox" id="agent-conversation-log" style="accent-color: var(--monster-purple);">
+                            <label for="agent-conversation-log" style="margin: 0; cursor: pointer;">Enable Conversation Log</label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -253,6 +296,7 @@
             <div class="section-card" id="mcp-section" style="display:none;">
                 <div class="section-header">
                     <div class="section-title"><h2>Tools &amp; MCP Servers</h2></div>
+                    <a class="back-to-top" data-section="section-nav">↑ Top</a>
                 </div>
                 <div class="section-content">
                     <div class="form-group" style="margin-bottom: 1rem;">
@@ -331,6 +375,7 @@
             <div class="section-card" id="trigger-section" style="display:none;">
                 <div class="section-header">
                     <div class="section-title"><h2>Trigger Configuration</h2></div>
+                    <a class="back-to-top" data-section="section-nav">↑ Top</a>
                 </div>
                 <div class="section-content">
                     <div class="form-grid">
@@ -405,6 +450,7 @@
             <div class="section-card" id="context-section" style="display:none;">
                 <div class="section-header">
                     <div class="section-title"><h2>Context Data</h2></div>
+                    <a class="back-to-top" data-section="section-nav">↑ Top</a>
                 </div>
                 <div class="section-content">
                     <small style="color: var(--text-muted); margin-bottom: 1rem; display: block;">
@@ -443,6 +489,7 @@
             <div class="section-card" id="prompt-section" style="display:none;">
                 <div class="section-header">
                     <div class="section-title"><h2>System Prompt</h2></div>
+                    <a class="back-to-top" data-section="section-nav">↑ Top</a>
                 </div>
                 <div class="section-content">
                     <div class="form-group">

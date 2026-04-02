@@ -147,7 +147,31 @@ class AgentTools(
                 endTime = endTime?.let { Instant.parse(it) },
                 limit = limit ?: 100
             )
-            r.encodePrettily()
+            // Simplify result: use payload_json when available, decode payload_base64 as UTF-8 text,
+            // and present timestamp as ISO string instead of epoch millis
+            val simplified = JsonArray()
+            for (i in 0 until r.size()) {
+                val row = r.getJsonObject(i) ?: continue
+                val entry = JsonObject()
+                    .put("topic", row.getString("topic"))
+                val ts = row.getValue("timestamp")
+                if (ts is Number) {
+                    entry.put("time", Instant.ofEpochMilli(ts.toLong()).toString())
+                } else {
+                    entry.put("time", ts?.toString())
+                }
+                val payloadJson = row.getString("payload_json")
+                if (payloadJson != null) {
+                    entry.put("value", payloadJson)
+                } else {
+                    val b64 = row.getString("payload_base64")
+                    if (b64 != null) {
+                        entry.put("value", String(java.util.Base64.getDecoder().decode(b64), Charsets.UTF_8))
+                    }
+                }
+                simplified.add(entry)
+            }
+            simplified.encodePrettily()
         } catch (e: Exception) {
             logger.warning("queryHistory error: ${e.message}")
             "Error: ${e.message}"

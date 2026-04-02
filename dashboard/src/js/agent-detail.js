@@ -107,6 +107,7 @@ class AgentDetailManager {
         document.getElementById('timestamps-section').style.display = 'none';
 
         // Show all other sections
+        document.getElementById('section-nav').style.display = 'flex';
         document.getElementById('agent-content').style.display = 'block';
         document.getElementById('provider-section').style.display = 'block';
         document.getElementById('mcp-section').style.display = 'block';
@@ -325,7 +326,7 @@ class AgentDetailManager {
                 </div>
                 <div>
                     <label>Archive Group</label>
-                    <input type="text" class="hq-archive-group" value="${query?.archiveGroup || 'Agents'}" placeholder="Agents">
+                    <input type="text" class="hq-archive-group" value="${query?.archiveGroup || ''}" placeholder="Agents Default Archive Group">
                 </div>
                 <div>
                     <label>Last Seconds</label>
@@ -411,7 +412,7 @@ class AgentDetailManager {
             if (topics.length === 0) return;
             const fields = card.querySelector('.hq-fields').value.split(',').map(f => f.trim()).filter(f => f);
             queries.push({
-                archiveGroup: card.querySelector('.hq-archive-group').value.trim() || 'Agents',
+                archiveGroup: card.querySelector('.hq-archive-group').value.trim() || null,
                 topics: topics,
                 lastSeconds: parseInt(card.querySelector('.hq-last-seconds').value) || 3600,
                 interval: card.querySelector('.hq-interval').value,
@@ -458,6 +459,7 @@ class AgentDetailManager {
                         memoryWindowSize
                         stateEnabled
                         enableThinking
+                        conversationLogEnabled
                         mcpServers
                         useMonsterMqMcp
                         defaultArchiveGroup
@@ -549,6 +551,7 @@ class AgentDetailManager {
         document.getElementById('agent-memory-window-size').value = d.memoryWindowSize != null ? d.memoryWindowSize : 20;
         document.getElementById('agent-task-timeout-ms').value = d.taskTimeoutMs != null ? d.taskTimeoutMs : 60000;
         document.getElementById('agent-enable-thinking').checked = d.enableThinking || false;
+        document.getElementById('agent-conversation-log').checked = d.conversationLogEnabled || false;
 
         // Populate Trigger Configuration
         document.getElementById('agent-trigger-type').value = d.triggerType || 'MQTT';
@@ -620,6 +623,7 @@ class AgentDetailManager {
         }
 
         // Show all sections
+        document.getElementById('section-nav').style.display = 'flex';
         document.getElementById('agent-content').style.display = 'block';
         document.getElementById('provider-section').style.display = 'block';
         document.getElementById('mcp-section').style.display = 'block';
@@ -656,6 +660,7 @@ class AgentDetailManager {
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,
             taskTimeoutMs: parseInt(document.getElementById('agent-task-timeout-ms').value) || null,
             enableThinking: document.getElementById('agent-enable-thinking').checked,
+            conversationLogEnabled: document.getElementById('agent-conversation-log').checked,
             triggerType: document.getElementById('agent-trigger-type').value,
             cronExpression: null,
             cronIntervalMs: null,
@@ -1064,6 +1069,14 @@ function setupContextDropZones() {
 document.addEventListener('DOMContentLoaded', () => {
     agentDetailManager = new AgentDetailManager();
     setupContextDropZones();
+
+    // Section nav and back-to-top scroll links
+    document.querySelectorAll('a[data-section]').forEach(link => {
+        link.addEventListener('click', () => {
+            const target = document.getElementById(link.dataset.section);
+            if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
 
     // Add History Query button
     document.getElementById('add-history-query-btn').addEventListener('click', () => {

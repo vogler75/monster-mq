@@ -131,6 +131,7 @@ class AgentQueries(
                 "memoryWindowSize" to agentConfig.memoryWindowSize,
                 "stateEnabled" to agentConfig.stateEnabled,
                 "enableThinking" to agentConfig.enableThinking,
+                "conversationLogEnabled" to agentConfig.conversationLogEnabled,
                 "mcpServers" to agentConfig.mcpServers,
                 "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
                 "defaultArchiveGroup" to agentConfig.defaultArchiveGroup,

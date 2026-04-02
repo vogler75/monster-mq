@@ -29,6 +29,10 @@ import com.cronutils.model.CronType
 import com.cronutils.model.definition.CronDefinitionBuilder
 import com.cronutils.model.time.ExecutionTime
 import com.cronutils.parser.CronParser
+import java.io.BufferedWriter
+import java.io.FileWriter
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.concurrent.ConcurrentHashMap
@@ -52,6 +56,7 @@ class AgentExecutor(
     private var chatMemory: MessageWindowChatMemory? = null
     private var globalConfig: JsonObject? = null
     private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
+    private var conversationLogWriter: BufferedWriter? = null
 
     private val clientId = "agent-${deviceConfig.name}"
     private val forwardingClientId = "agent-${deviceConfig.name}-fwd"
@@ -99,6 +104,19 @@ class AgentExecutor(
             logger.fine("Starting agent ${deviceConfig.name} (provider: ${agentConfig.providerName ?: agentConfig.provider}, trigger: ${agentConfig.triggerType})")
 
             globalConfig = vertx.orCreateContext.config()
+
+            // Initialize conversation log file if enabled
+            if (agentConfig.conversationLogEnabled) {
+                try {
+                    val logDir = Paths.get("log", "agents")
+                    Files.createDirectories(logDir)
+                    val logFile = logDir.resolve("${deviceConfig.name}.log")
+                    conversationLogWriter = BufferedWriter(FileWriter(logFile.toFile(), true))
+                    logger.info("Conversation logging enabled for agent ${deviceConfig.name}: $logFile")
+                } catch (e: Exception) {
+                    logger.warning("Failed to open conversation log for agent ${deviceConfig.name}: ${e.message}")
+                }
+            }
 
             // Create LLM model with logging listener
             val llmListener = createLlmListener()
@@ -269,6 +287,10 @@ class AgentExecutor(
                 }
             }
             mcpClients.clear()
+
+            // Close conversation log
+            try { conversationLogWriter?.close() } catch (_: Exception) {}
+            conversationLogWriter = null
 
             // Publish offline status
             publishHealthStatus("stopped")
@@ -487,6 +509,7 @@ class AgentExecutor(
 
     private fun buildContextData(): String {
         val lines = mutableListOf<String>()
+        val contextLogLines = mutableListOf<String>()  // Summary for conversation log
 
         // Fetch from archive last-value stores
         if (agentConfig.contextLastvalTopics.isNotEmpty()) {
@@ -494,11 +517,14 @@ class AgentExecutor(
             for ((groupName, topicFilters) in agentConfig.contextLastvalTopics) {
                 val store = archiveGroups[groupName]?.lastValStore ?: continue
                 for (filter in topicFilters) {
+                    var count = 0
                     store.findMatchingMessages(filter) { msg ->
                         val value = msg.getPayloadAsString()
                         lines.add("[Archive:$groupName] ${msg.topicName} = $value (${msg.time})")
+                        count++
                         lines.size < 500 // safety limit
                     }
+                    if (count > 0) contextLogLines.add("  LastValue archive=$groupName filter=$filter -> $count values")
                 }
             }
         }
@@ -508,11 +534,14 @@ class AgentExecutor(
             val retainedStore = Monster.getRetainedStore()
             if (retainedStore != null) {
                 for (filter in agentConfig.contextRetainedTopics) {
+                    var count = 0
                     retainedStore.findMatchingMessages(filter) { msg ->
                         val value = msg.getPayloadAsString()
                         lines.add("[Retained] ${msg.topicName} = $value")
+                        count++
                         lines.size < 500
                     }
+                    if (count > 0) contextLogLines.add("  Retained filter=$filter -> $count values")
                 }
             }
         }
@@ -530,24 +559,18 @@ class AgentExecutor(
                 val startTime = endTime.minusSeconds(query.lastSeconds.toLong())
 
                 if (query.isRaw()) {
-                    // Raw history: fetch individual messages per topic
+                    // Raw history: pass result directly to the LLM
                     for (topic in query.topics) {
                         try {
                             val history = archiveStore.getHistory(topic, startTime, endTime, 500)
                             if (history.size() > 0) {
                                 lines.add("[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):")
-                                for (i in 0 until history.size()) {
-                                    val row = history.getJsonObject(i) ?: continue
-                                    val time = row.getString("time") ?: row.getValue("time")?.toString() ?: ""
-                                    val value = row.getValue("payload_json") ?: row.getValue("payload_b64") ?: ""
-                                    lines.add("  $time = $value")
-                                    if (lines.size >= 500) break
-                                }
+                                contextLogLines.add("  History archive=${query.archiveGroup} mode=RAW topic=$topic range=${startTime}..${endTime} -> ${history.size()} rows")
+                                lines.add(history.encode())
                             }
                         } catch (e: Exception) {
                             logger.warning("Failed to fetch raw history for $topic in ${query.archiveGroup}: ${e.message}")
                         }
-                        if (lines.size >= 500) break
                     }
                 } else {
                     // Aggregated history
@@ -560,15 +583,12 @@ class AgentExecutor(
                             functions = listOf(query.function.uppercase()),
                             fields = query.fields
                         )
-                        val columns = result.getJsonArray("columns")
                         val rows = result.getJsonArray("rows")
-                        if (columns != null && rows != null && rows.size() > 0) {
-                            lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, ${rows.size()} rows):")
-                            lines.add("  Columns: ${columns.encode()}")
-                            for (i in 0 until rows.size()) {
-                                lines.add("  ${rows.getValue(i)}")
-                                if (lines.size >= 500) break
-                            }
+                        val rowCount = rows?.size() ?: 0
+                        if (rowCount > 0) {
+                            lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, $rowCount rows):")
+                            contextLogLines.add("  History archive=${query.archiveGroup} mode=${query.interval}:${query.function} topics=${query.topics.joinToString(",")} range=${startTime}..${endTime} -> $rowCount rows")
+                            lines.add(result.encode())
                         }
                     } catch (e: Exception) {
                         logger.warning("Failed to fetch aggregated history for ${query.topics} in ${query.archiveGroup}: ${e.message}")
@@ -576,6 +596,17 @@ class AgentExecutor(
                 }
                 if (lines.size >= 500) break
             }
+        }
+
+        // Write context fetch summary to conversation log
+        writeToConversationLog { writer ->
+            writer.write("===== CONTEXT [${Instant.now()}] =====\n")
+            if (contextLogLines.isEmpty()) {
+                writer.write("  (no context data configured or returned)\n")
+            } else {
+                contextLogLines.forEach { writer.write("$it\n") }
+            }
+            writer.write("=====\n\n")
         }
 
         if (lines.isEmpty()) return ""
@@ -1000,6 +1031,17 @@ class AgentExecutor(
                     .put("lastMessage", lastMessage?.toString()?.take(500))
                     .put("toolCount", request.parameters()?.toolSpecifications()?.size ?: 0)
                 publishToAgentTopic("logs/llm", log)
+
+                // Write full conversation to log file
+                writeToConversationLog { writer ->
+                    writer.write("===== REQUEST [${Instant.now()}] model=${request.parameters()?.modelName()} =====\n")
+                    messages.forEach { msg ->
+                        val type = msg.type()?.name ?: "UNKNOWN"
+                        val text = msg.toString()
+                        writer.write("[$type] $text\n")
+                    }
+                    writer.write("=====\n\n")
+                }
             }
 
             override fun onResponse(responseContext: ChatModelResponseContext) {
@@ -1023,6 +1065,22 @@ class AgentExecutor(
                     } else null)
                     .put("text", aiMessage.text()?.take(500))
                 publishToAgentTopic("logs/llm", log)
+
+                // Write full response to log file
+                writeToConversationLog { writer ->
+                    val tokens = if (tokenUsage != null) "in=${tokenUsage.inputTokenCount()} out=${tokenUsage.outputTokenCount()} total=${tokenUsage.totalTokenCount()}" else ""
+                    writer.write("===== RESPONSE [${Instant.now()}] model=${metadata?.modelName()} tokens=$tokens finish=${metadata?.finishReason()?.name} =====\n")
+                    if (aiMessage.hasToolExecutionRequests()) {
+                        aiMessage.toolExecutionRequests().forEach { tc ->
+                            writer.write("[TOOL_CALL] ${tc.name()}(${tc.arguments()})\n")
+                        }
+                    }
+                    if (aiMessage.text() != null) {
+                        writer.write(aiMessage.text())
+                        writer.write("\n")
+                    }
+                    writer.write("=====\n\n")
+                }
             }
 
             override fun onError(errorContext: ChatModelErrorContext) {
@@ -1031,7 +1089,26 @@ class AgentExecutor(
                     .put("timestamp", Instant.now().toString())
                     .put("error", errorContext.error().message)
                 publishToAgentTopic("logs/llm", log)
+
+                // Write error to log file
+                writeToConversationLog { writer ->
+                    writer.write("===== ERROR [${Instant.now()}] =====\n")
+                    writer.write("${errorContext.error().message}\n")
+                    writer.write("=====\n\n")
+                }
             }
+        }
+    }
+
+    private fun writeToConversationLog(block: (BufferedWriter) -> Unit) {
+        val writer = conversationLogWriter ?: return
+        try {
+            synchronized(writer) {
+                block(writer)
+                writer.flush()
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to write conversation log for agent ${deviceConfig.name}: ${e.message}")
         }
     }
 

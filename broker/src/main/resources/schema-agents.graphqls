@@ -30,6 +30,7 @@ type Agent {
     memoryWindowSize: Int
     stateEnabled: Boolean!
     enableThinking: Boolean!
+    conversationLogEnabled: Boolean!
     mcpServers: [String!]!
     useMonsterMqMcp: Boolean!
     defaultArchiveGroup: String!
@@ -80,6 +81,7 @@ input AgentInput {
     memoryWindowSize: Int
     stateEnabled: Boolean
     enableThinking: Boolean
+    conversationLogEnabled: Boolean
     mcpServers: [String!]
     useMonsterMqMcp: Boolean
     defaultArchiveGroup: String

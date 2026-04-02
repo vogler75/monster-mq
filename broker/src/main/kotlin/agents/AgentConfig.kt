@@ -33,6 +33,7 @@ data class AgentConfig(
     val taskTimeoutMs: Long = 60000,  // timeout for sub-agent task invocations (default 60s)
     val subAgents: List<String> = emptyList(),  // restrict which agents this orchestrator can invoke
     val enableThinking: Boolean = false,
+    val conversationLogEnabled: Boolean = false,  // Log full LLM conversations to log/agents/<name>.log
     val endpoint: String? = null,  // For Azure OpenAI: resource endpoint URL
     val serviceVersion: String? = null,  // For Azure OpenAI: API version (e.g. "2024-02-01")
     val providerName: String? = null  // references a stored GenAiProvider by name
@@ -74,6 +75,7 @@ data class AgentConfig(
                 taskTimeoutMs = json.getLong("taskTimeoutMs", 60000),
                 subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList(),
                 enableThinking = json.getBoolean("enableThinking", false),
+                conversationLogEnabled = json.getBoolean("conversationLogEnabled", false),
                 endpoint = json.getString("endpoint"),
                 serviceVersion = json.getString("serviceVersion"),
                 providerName = json.getString("providerName")
@@ -114,6 +116,7 @@ data class AgentConfig(
             .put("taskTimeoutMs", taskTimeoutMs)
             .put("subAgents", JsonArray(subAgents))
             .put("enableThinking", enableThinking)
+            .put("conversationLogEnabled", conversationLogEnabled)
             .put("endpoint", endpoint)
             .put("serviceVersion", serviceVersion)
             .put("providerName", providerName)

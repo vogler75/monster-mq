@@ -63,20 +63,19 @@ class AgentDetailMonitorManager {
                     { topic: this.discoveryTopic }),
                 this.client.query(`query($topic: String!) { retainedMessage(topic: $topic, format: JSON) { topic payload } }`,
                     { topic: this.agentBaseTopic + '/health' }),
-                this.client.query(`query { agents { name cronPrompt } }`)
+                this.client.query(`query($name: String!) { agent(name: $name) { name cronPrompt } }`,
+                    { name: this.agentName })
             ]);
 
             // Check if internal
-            if (agentsResult && agentsResult.agents) {
-                const matchedAgent = agentsResult.agents.find(a => a.name === this.agentName);
-                this.isInternal = !!matchedAgent;
+            const matchedAgent = agentsResult?.agent;
+            this.isInternal = !!matchedAgent;
 
-                // Pre-fill test input with cron prompt if available
-                if (matchedAgent && matchedAgent.cronPrompt) {
-                    const inputEl = document.getElementById('test-message');
-                    if (inputEl && !inputEl.value.trim()) {
-                        inputEl.value = matchedAgent.cronPrompt;
-                    }
+            // Pre-fill test input with cron prompt if available
+            if (matchedAgent && matchedAgent.cronPrompt) {
+                const inputEl = document.getElementById('test-message');
+                if (inputEl && !inputEl.value.trim()) {
+                    inputEl.value = matchedAgent.cronPrompt;
                 }
             }
 
