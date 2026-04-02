@@ -88,6 +88,9 @@ class AgentExecutor(
     private val messagesProcessed = AtomicLong(0)
     private val llmCalls = AtomicLong(0)
     private val errors = AtomicLong(0)
+    private val totalInputTokens = AtomicLong(0)
+    private val totalOutputTokens = AtomicLong(0)
+    private val totalTokens = AtomicLong(0)
 
     /**
      * LangChain4j AI Service interface.
@@ -1057,6 +1060,14 @@ class AgentExecutor(
                 val aiMessage = response.aiMessage()
                 val metadata = response.metadata()
                 val tokenUsage = metadata?.tokenUsage()
+
+                // Accumulate token counters
+                tokenUsage?.let {
+                    it.inputTokenCount()?.let { n -> totalInputTokens.addAndGet(n.toLong()) }
+                    it.outputTokenCount()?.let { n -> totalOutputTokens.addAndGet(n.toLong()) }
+                    it.totalTokenCount()?.let { n -> totalTokens.addAndGet(n.toLong()) }
+                }
+
                 val log = JsonObject()
                     .put("type", "llm-response")
                     .put("timestamp", Instant.now().toString())
@@ -1184,6 +1195,9 @@ class AgentExecutor(
             .put("messagesProcessed", messagesProcessed.get())
             .put("llmCalls", llmCalls.get())
             .put("errors", errors.get())
+            .put("inputTokens", totalInputTokens.get())
+            .put("outputTokens", totalOutputTokens.get())
+            .put("totalTokens", totalTokens.get())
 
         val payload = health.encode().toByteArray()
         val msg = BrokerMessage(

@@ -259,7 +259,7 @@ class AgentMonitorManager {
         });
 
         if (agents.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="no-data">No agents discovered. Agents publish to a2a/v1/+/+/discovery/+ when started.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="no-data">No agents discovered. Agents publish to a2a/v1/+/+/discovery/+ when started.</td></tr>';
             return;
         }
 
@@ -290,6 +290,7 @@ class AgentMonitorManager {
                 <td class="numeric-cell">${this.formatNum(health.messagesProcessed)}</td>
                 <td class="numeric-cell">${this.formatNum(health.llmCalls)}</td>
                 <td class="numeric-cell">${this.formatNum(health.errors)}</td>
+                <td class="numeric-cell">${this.formatNum(health.totalTokens)}</td>
                 <td style="color:var(--text-muted); font-size:0.85rem">${lastSeen}</td>
             `;
 

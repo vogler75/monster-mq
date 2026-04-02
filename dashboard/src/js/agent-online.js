@@ -280,7 +280,8 @@ class AgentOnlineGraphManager {
                             `Type: ${a.isInternal ? 'Internal' : 'External'}<br/>` +
                             (a.provider ? `Provider: ${a.provider}${a.model ? ' / ' + a.model : ''}<br/>` : '') +
                             (health.messagesProcessed != null ? `Messages: ${health.messagesProcessed}<br/>` : '') +
-                            (health.llmCalls != null ? `LLM Calls: ${health.llmCalls}<br/>` : '');
+                            (health.llmCalls != null ? `LLM Calls: ${health.llmCalls}<br/>` : '') +
+                            (health.totalTokens != null ? `Total Tokens: ${Number(health.totalTokens).toLocaleString()}<br/>` : '');
                     }
                     if (params.dataType === 'edge') {
                         return `${params.data.source} → ${params.data.target}<br/>Calls: ${params.data.callCount || 0}`;

@@ -160,6 +160,9 @@ class AgentDetailMonitorManager {
         setEl('health-messages', health.messagesProcessed != null ? Number(health.messagesProcessed).toLocaleString() : '-');
         setEl('health-llm', health.llmCalls != null ? Number(health.llmCalls).toLocaleString() : '-');
         setEl('health-errors', health.errors != null ? Number(health.errors).toLocaleString() : '-');
+        setEl('health-input-tokens', health.inputTokens != null ? Number(health.inputTokens).toLocaleString() : '-');
+        setEl('health-output-tokens', health.outputTokens != null ? Number(health.outputTokens).toLocaleString() : '-');
+        setEl('health-total-tokens', health.totalTokens != null ? Number(health.totalTokens).toLocaleString() : '-');
         setEl('health-timestamp', this.formatTimestamp(health.timestamp));
 
         // Update status badge from health
