@@ -29,8 +29,6 @@ import com.cronutils.model.CronType
 import com.cronutils.model.definition.CronDefinitionBuilder
 import com.cronutils.model.time.ExecutionTime
 import com.cronutils.parser.CronParser
-import java.io.BufferedWriter
-import java.io.FileWriter
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Instant
@@ -56,7 +54,8 @@ class AgentExecutor(
     private var chatMemory: MessageWindowChatMemory? = null
     private var globalConfig: JsonObject? = null
     private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
-    private var conversationLogWriter: BufferedWriter? = null
+    private var conversationLog: Logger? = null
+    private var conversationLogHandler: java.util.logging.FileHandler? = null
 
     private val clientId = "agent-${deviceConfig.name}"
     private val forwardingClientId = "agent-${deviceConfig.name}-fwd"
@@ -110,9 +109,17 @@ class AgentExecutor(
                 try {
                     val logDir = Paths.get("log", "agents")
                     Files.createDirectories(logDir)
-                    val logFile = logDir.resolve("${deviceConfig.name}.log")
-                    conversationLogWriter = BufferedWriter(FileWriter(logFile.toFile(), true))
-                    logger.info("Conversation logging enabled for agent ${deviceConfig.name}: $logFile")
+                    val pattern = logDir.resolve("${deviceConfig.name}.log").toString()
+                    val handler = java.util.logging.FileHandler(pattern, 10 * 1024 * 1024, 10, true)
+                    handler.formatter = object : java.util.logging.Formatter() {
+                        override fun format(record: java.util.logging.LogRecord) = record.message
+                    }
+                    val log = Logger.getLogger("agent.conversation.${deviceConfig.name}")
+                    log.useParentHandlers = false
+                    log.addHandler(handler)
+                    conversationLog = log
+                    conversationLogHandler = handler
+                    logger.info("Conversation logging enabled for agent ${deviceConfig.name}: $pattern")
                 } catch (e: Exception) {
                     logger.warning("Failed to open conversation log for agent ${deviceConfig.name}: ${e.message}")
                 }
@@ -289,8 +296,9 @@ class AgentExecutor(
             mcpClients.clear()
 
             // Close conversation log
-            try { conversationLogWriter?.close() } catch (_: Exception) {}
-            conversationLogWriter = null
+            try { conversationLogHandler?.close() } catch (_: Exception) {}
+            conversationLogHandler = null
+            conversationLog = null
 
             // Publish offline status
             publishHealthStatus("stopped")
@@ -599,14 +607,14 @@ class AgentExecutor(
         }
 
         // Write context fetch summary to conversation log
-        writeToConversationLog { writer ->
-            writer.write("===== CONTEXT [${Instant.now()}] =====\n")
+        writeToConversationLog { sb ->
+            sb.append("===== CONTEXT [${Instant.now()}] =====\n")
             if (contextLogLines.isEmpty()) {
-                writer.write("  (no context data configured or returned)\n")
+                sb.append("  (no context data configured or returned)\n")
             } else {
-                contextLogLines.forEach { writer.write("$it\n") }
+                contextLogLines.forEach { sb.append("$it\n") }
             }
-            writer.write("=====\n\n")
+            sb.append("=====\n\n")
         }
 
         if (lines.isEmpty()) return ""
@@ -1033,14 +1041,14 @@ class AgentExecutor(
                 publishToAgentTopic("logs/llm", log)
 
                 // Write full conversation to log file
-                writeToConversationLog { writer ->
-                    writer.write("===== REQUEST [${Instant.now()}] model=${request.parameters()?.modelName()} =====\n")
+                writeToConversationLog { sb ->
+                    sb.append("===== REQUEST [${Instant.now()}] model=${request.parameters()?.modelName()} =====\n")
                     messages.forEach { msg ->
                         val type = msg.type()?.name ?: "UNKNOWN"
                         val text = msg.toString()
-                        writer.write("[$type] $text\n")
+                        sb.append("[$type] $text\n")
                     }
-                    writer.write("=====\n\n")
+                    sb.append("=====\n\n")
                 }
             }
 
@@ -1067,19 +1075,19 @@ class AgentExecutor(
                 publishToAgentTopic("logs/llm", log)
 
                 // Write full response to log file
-                writeToConversationLog { writer ->
+                writeToConversationLog { sb ->
                     val tokens = if (tokenUsage != null) "in=${tokenUsage.inputTokenCount()} out=${tokenUsage.outputTokenCount()} total=${tokenUsage.totalTokenCount()}" else ""
-                    writer.write("===== RESPONSE [${Instant.now()}] model=${metadata?.modelName()} tokens=$tokens finish=${metadata?.finishReason()?.name} =====\n")
+                    sb.append("===== RESPONSE [${Instant.now()}] model=${metadata?.modelName()} tokens=$tokens finish=${metadata?.finishReason()?.name} =====\n")
                     if (aiMessage.hasToolExecutionRequests()) {
                         aiMessage.toolExecutionRequests().forEach { tc ->
-                            writer.write("[TOOL_CALL] ${tc.name()}(${tc.arguments()})\n")
+                            sb.append("[TOOL_CALL] ${tc.name()}(${tc.arguments()})\n")
                         }
                     }
                     if (aiMessage.text() != null) {
-                        writer.write(aiMessage.text())
-                        writer.write("\n")
+                        sb.append(aiMessage.text())
+                        sb.append("\n")
                     }
-                    writer.write("=====\n\n")
+                    sb.append("=====\n\n")
                 }
             }
 
@@ -1091,22 +1099,21 @@ class AgentExecutor(
                 publishToAgentTopic("logs/llm", log)
 
                 // Write error to log file
-                writeToConversationLog { writer ->
-                    writer.write("===== ERROR [${Instant.now()}] =====\n")
-                    writer.write("${errorContext.error().message}\n")
-                    writer.write("=====\n\n")
+                writeToConversationLog { sb ->
+                    sb.append("===== ERROR [${Instant.now()}] =====\n")
+                    sb.append("${errorContext.error().message}\n")
+                    sb.append("=====\n\n")
                 }
             }
         }
     }
 
-    private fun writeToConversationLog(block: (BufferedWriter) -> Unit) {
-        val writer = conversationLogWriter ?: return
+    private fun writeToConversationLog(block: (StringBuilder) -> Unit) {
+        val log = conversationLog ?: return
         try {
-            synchronized(writer) {
-                block(writer)
-                writer.flush()
-            }
+            val sb = StringBuilder()
+            block(sb)
+            log.info(sb.toString())
         } catch (e: Exception) {
             logger.warning("Failed to write conversation log for agent ${deviceConfig.name}: ${e.message}")
         }
