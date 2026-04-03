@@ -128,16 +128,43 @@ class AgentManager {
                 <td>
                     <span class="status-badge ${statusClass}">${statusText}</span>
                 </td>
-                <td>
-                    <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="24" title="Edit Agent" onclick="event.stopPropagation(); window.spaLocation.href='/pages/agent-detail.html?agent=${encodeURIComponent(agent.name)}'"></ix-icon-button>
-                        <ix-icon-button icon="${agent.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${agent.enabled ? 'Stop Agent' : 'Start Agent'}" onclick="event.stopPropagation(); agentManager.toggleAgent('${this.escapeHtml(agent.name)}', ${!agent.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Agent" onclick="event.stopPropagation(); agentManager.deleteAgent('${this.escapeHtml(agent.name)}')"></ix-icon-button>
-                    </div>
-                </td>
+                <td><div class="action-buttons"></div></td>
             `;
 
-            row.addEventListener('click', () => window.spaLocation.href = `/pages/agent-detail.html?agent=${encodeURIComponent(agent.name)}`);
+            // Create action buttons programmatically so ix-icon-button web components
+            // properly initialize their shadow DOM on re-render
+            const actionsDiv = row.querySelector('.action-buttons');
+            const agentName = agent.name;
+
+            const editBtn = document.createElement('ix-icon-button');
+            editBtn.setAttribute('icon', 'pen');
+            editBtn.setAttribute('variant', 'primary');
+            editBtn.setAttribute('ghost', '');
+            editBtn.setAttribute('size', '24');
+            editBtn.setAttribute('title', 'Edit Agent');
+            editBtn.addEventListener('click', (e) => { e.stopPropagation(); window.spaLocation.href = '/pages/agent-detail.html?agent=' + encodeURIComponent(agentName); });
+            actionsDiv.appendChild(editBtn);
+
+            const toggleBtn = document.createElement('ix-icon-button');
+            toggleBtn.setAttribute('icon', agent.enabled ? 'pause' : 'play');
+            toggleBtn.setAttribute('variant', 'primary');
+            toggleBtn.setAttribute('ghost', '');
+            toggleBtn.setAttribute('size', '24');
+            toggleBtn.setAttribute('title', agent.enabled ? 'Stop Agent' : 'Start Agent');
+            toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); agentManager.toggleAgent(agentName, !agent.enabled); });
+            actionsDiv.appendChild(toggleBtn);
+
+            const deleteBtn = document.createElement('ix-icon-button');
+            deleteBtn.setAttribute('icon', 'trashcan');
+            deleteBtn.setAttribute('variant', 'primary');
+            deleteBtn.setAttribute('ghost', '');
+            deleteBtn.setAttribute('size', '24');
+            deleteBtn.className = 'btn-delete';
+            deleteBtn.setAttribute('title', 'Delete Agent');
+            deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); agentManager.deleteAgent(agentName); });
+            actionsDiv.appendChild(deleteBtn);
+
+            row.addEventListener('click', () => window.spaLocation.href = `/pages/agent-detail.html?agent=${encodeURIComponent(agentName)}`);
             tbody.appendChild(row);
         });
     }

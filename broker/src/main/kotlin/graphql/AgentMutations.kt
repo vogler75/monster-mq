@@ -192,6 +192,7 @@ class AgentMutations(
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: 40,
             stateEnabled = input["stateEnabled"] as? Boolean ?: true,
             enableThinking = input["enableThinking"] as? Boolean ?: false,
+            conversationLogEnabled = input["conversationLogEnabled"] as? Boolean ?: false,
             mcpServers = parseStringList(input["mcpServers"]),
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: false,
             defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: "Default",
@@ -199,6 +200,7 @@ class AgentMutations(
             contextRetainedTopics = parseStringList(input["contextRetainedTopics"]),
             contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"]),
             taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: 60000,
+            subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: false,
             subAgents = parseStringList(input["subAgents"])
         )
 
@@ -242,6 +244,7 @@ class AgentMutations(
             memoryWindowSize = (input["memoryWindowSize"] as? Number)?.toInt() ?: existingConfig.memoryWindowSize,
             stateEnabled = input["stateEnabled"] as? Boolean ?: existingConfig.stateEnabled,
             enableThinking = input["enableThinking"] as? Boolean ?: existingConfig.enableThinking,
+            conversationLogEnabled = input["conversationLogEnabled"] as? Boolean ?: existingConfig.conversationLogEnabled,
             mcpServers = if (input.containsKey("mcpServers")) parseStringList(input["mcpServers"]) else existingConfig.mcpServers,
             useMonsterMqMcp = input["useMonsterMqMcp"] as? Boolean ?: existingConfig.useMonsterMqMcp,
             defaultArchiveGroup = input["defaultArchiveGroup"] as? String ?: existingConfig.defaultArchiveGroup,
@@ -249,6 +252,7 @@ class AgentMutations(
             contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics,
             contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries,
             taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: existingConfig.taskTimeoutMs,
+            subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: existingConfig.subAgentsAllowAll,
             subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents
         )
 

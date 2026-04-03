@@ -77,6 +77,7 @@ class Monster(args: Array<String>) {
     private val archiveConfigsMergeFile: String?
     private val deviceConfigsFile: String?
     private val deviceConfigsMergeFile: String?
+    private val dashboardPathArg: String?
     var archiveHandler: ArchiveHandler? = null
 
     // Cluster manager reference for Vert.x 5 compatibility
@@ -426,6 +427,14 @@ class Monster(args: Array<String>) {
             }
         }
 
+        // Dashboard path (optional) - serve dashboard from filesystem
+        val dashboardPathIndex = Utils.getArgIndex(args, listOf("-dashboardPath", "--dashboardPath"))
+        dashboardPathArg = if (dashboardPathIndex != -1 && dashboardPathIndex + 1 < args.size) {
+            args[dashboardPathIndex + 1]
+        } else {
+            null
+        }
+
         logger.fine("Cluster: ${isClustered()}")
 
         val builder = Vertx.builder()
@@ -558,6 +567,10 @@ OPTIONS:
   -workerPoolSize <num> Vert.x worker thread pool size
                         Default: 2×CPU count (e.g., 16 on 8-core machine)
                         Increase for high-concurrency scenarios
+
+  -dashboardPath <path> Serve dashboard from a filesystem directory
+                        Overrides Dashboard.Path in config.yaml
+                        Useful for development with live dashboard builds
 
 EXAMPLES:
   # Start with default configuration
@@ -1041,7 +1054,7 @@ MORE INFO:
                 val dashboardConfig = configJson.getJsonObject("Dashboard", JsonObject())
                 val dashboardEnabled = dashboardConfig.getBoolean("Enabled", true)
                 val dashboardPath: String? = if (dashboardEnabled) {
-                    dashboardConfig.getString("Path", "")
+                    dashboardPathArg ?: dashboardConfig.getString("Path", "")
                 } else null
 
                 // GraphQL Server
