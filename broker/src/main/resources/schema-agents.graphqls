@@ -108,6 +108,7 @@ type ContextHistoryQuery {
     interval: String!
     function: String!
     fields: [String!]!
+    decimals: Int
 }
 
 input ContextHistoryQueryInput {
@@ -117,6 +118,7 @@ input ContextHistoryQueryInput {
     interval: String!
     function: String!
     fields: [String!]
+    decimals: Int
 }
 
 # =======================

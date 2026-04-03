@@ -148,31 +148,20 @@ class AgentTools(
                 endTime = endTime?.let { Instant.parse(it) },
                 limit = limit ?: 100
             )
-            // Simplify result: use payload_json when available, decode payload_base64 as UTF-8 text,
-            // and present timestamp as ISO string instead of epoch millis
-            val simplified = JsonArray()
+            // Convert to CSV: more token-efficient for LLMs than JSON
+            val sb = StringBuilder()
+            sb.appendLine("topic,time,value")
             for (i in 0 until r.size()) {
                 val row = r.getJsonObject(i) ?: continue
-                val entry = JsonObject()
-                    .put("topic", row.getString("topic"))
+                val topic_ = row.getString("topic") ?: ""
                 val ts = row.getValue("timestamp")
-                if (ts is Number) {
-                    entry.put("time", Instant.ofEpochMilli(ts.toLong()).toString())
-                } else {
-                    entry.put("time", ts?.toString())
-                }
-                val payloadJson = row.getString("payload_json")
-                if (payloadJson != null) {
-                    entry.put("value", payloadJson)
-                } else {
-                    val b64 = row.getString("payload_base64")
-                    if (b64 != null) {
-                        entry.put("value", String(java.util.Base64.getDecoder().decode(b64), Charsets.UTF_8))
-                    }
-                }
-                simplified.add(entry)
+                val time = if (ts is Number) Instant.ofEpochMilli(ts.toLong()).toString() else ts?.toString() ?: ""
+                val value = row.getString("payload_json")
+                    ?: row.getString("payload_base64")?.let { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
+                    ?: ""
+                sb.appendLine("$topic_,$time,$value")
             }
-            simplified.encodePrettily()
+            sb.toString().trimEnd()
         } catch (e: Exception) {
             logger.warning("queryHistory error: ${e.message}")
             "Error: ${e.message}"

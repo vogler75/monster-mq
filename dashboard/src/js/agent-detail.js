@@ -359,9 +359,13 @@ class AgentDetailManager {
                         <option value="MAX" ${query?.function === 'MAX' ? 'selected' : ''}>MAX</option>
                     </select>
                 </div>
-                <div class="full">
+                <div>
                     <label>JSON Fields (optional, comma-separated)</label>
                     <input type="text" class="hq-fields" value="${(query?.fields || []).join(', ')}" placeholder="e.g. temperature, pressure" ${isRaw ? 'disabled' : ''}>
+                </div>
+                <div>
+                    <label>Round Decimals (optional)</label>
+                    <input type="number" class="hq-decimals" value="${query?.decimals != null ? query.decimals : ''}" min="0" max="10" placeholder="e.g. 2">
                 </div>
             </div>
         `;
@@ -419,14 +423,19 @@ class AgentDetailManager {
             const topics = card.querySelector('.hq-topics').value.split('\n').map(t => t.trim()).filter(t => t);
             if (topics.length === 0) return;
             const fields = card.querySelector('.hq-fields').value.split(',').map(f => f.trim()).filter(f => f);
-            queries.push({
+            const decimalsVal = card.querySelector('.hq-decimals').value;
+            const query = {
                 archiveGroup: card.querySelector('.hq-archive-group').value.trim() || null,
                 topics: topics,
                 lastSeconds: parseInt(card.querySelector('.hq-last-seconds').value) || 3600,
                 interval: card.querySelector('.hq-interval').value,
                 function: card.querySelector('.hq-function').value,
                 fields: fields
-            });
+            };
+            if (decimalsVal !== '' && decimalsVal !== null) {
+                query.decimals = parseInt(decimalsVal);
+            }
+            queries.push(query);
         });
         return queries;
     }
@@ -473,7 +482,7 @@ class AgentDetailManager {
                         defaultArchiveGroup
                         contextLastvalTopics
                         contextRetainedTopics
-                        contextHistoryQueries { archiveGroup topics lastSeconds interval function fields }
+                        contextHistoryQueries { archiveGroup topics lastSeconds interval function fields decimals }
                         taskTimeoutMs
                         subAgentsAllowAll
                         subAgents

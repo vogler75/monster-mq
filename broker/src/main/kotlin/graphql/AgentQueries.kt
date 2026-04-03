@@ -144,7 +144,8 @@ class AgentQueries(
                         "lastSeconds" to q.lastSeconds,
                         "interval" to q.interval,
                         "function" to q.function,
-                        "fields" to q.fields
+                        "fields" to q.fields,
+                        "decimals" to q.decimals
                     )
                 },
                 "taskTimeoutMs" to agentConfig.taskTimeoutMs,

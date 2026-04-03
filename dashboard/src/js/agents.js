@@ -7,6 +7,7 @@ class AgentManager {
         this.deleteAgentName = null;
         this.editingAgentName = null; // null = create mode, string = edit mode
         this.showDescriptions = false;
+        this.loadGeneration = 0; // guards against concurrent loadAgents() calls
         this.init();
     }
 
@@ -17,6 +18,7 @@ class AgentManager {
     }
 
     async loadAgents() {
+        const generation = ++this.loadGeneration;
         this.showLoading(true);
         this.hideError();
 
@@ -48,6 +50,7 @@ class AgentManager {
             `;
 
             const result = await this.client.query(query);
+            if (generation !== this.loadGeneration) return; // superseded by a newer call
             console.log('Load agents result:', result);
 
             if (!result || !result.agents) {
@@ -59,10 +62,13 @@ class AgentManager {
             this.renderAgentsTable();
 
         } catch (error) {
+            if (generation !== this.loadGeneration) return;
             console.error('Error loading agents:', error);
             this.showError('Failed to load AI Agents: ' + error.message);
         } finally {
-            this.showLoading(false);
+            if (generation === this.loadGeneration) {
+                this.showLoading(false);
+            }
         }
     }
 
