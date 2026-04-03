@@ -37,7 +37,8 @@ data class AgentConfig(
     val conversationLogEnabled: Boolean = false,  // Log full LLM conversations to log/agents/<name>.log
     val endpoint: String? = null,  // For Azure OpenAI: resource endpoint URL
     val serviceVersion: String? = null,  // For Azure OpenAI: API version (e.g. "2024-02-01")
-    val providerName: String? = null  // references a stored GenAiProvider by name
+    val providerName: String? = null,  // references a stored GenAiProvider by name
+    val timezone: String? = null       // null = system default, e.g. "UTC", "Europe/Vienna"
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -80,7 +81,8 @@ data class AgentConfig(
                 conversationLogEnabled = json.getBoolean("conversationLogEnabled", false),
                 endpoint = json.getString("endpoint"),
                 serviceVersion = json.getString("serviceVersion"),
-                providerName = json.getString("providerName")
+                providerName = json.getString("providerName"),
+                timezone = json.getString("timezone")
             )
         }
     }
@@ -123,6 +125,7 @@ data class AgentConfig(
             .put("endpoint", endpoint)
             .put("serviceVersion", serviceVersion)
             .put("providerName", providerName)
+            .put("timezone", timezone)
     }
 }
 

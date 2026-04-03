@@ -123,24 +123,24 @@ class GraphQLAuthContext(
      */
     fun canPublishToTopic(authContext: AuthContext?, topic: String): Boolean {
         if (!userManager.isUserManagementEnabled()) {
-            logger.info("User management disabled, allowing publish to $topic")
+            logger.fine("User management disabled, allowing publish to $topic")
             return true // No user management, allow everything
         }
-        
+
         if (authContext == null) {
-            // No authentication - check Anonymous user permissions  
+            // No authentication - check Anonymous user permissions
             val result = userManager.canPublish("Anonymous", topic)
-            logger.info("Anonymous user publish check for topic $topic: $result")
+            logger.fine("Anonymous user publish check for topic $topic: $result")
             return result
         }
-        
+
         if (authContext.isAdmin) {
-            logger.info("Admin user ${authContext.username} allowed to publish to $topic")
+            logger.fine("Admin user ${authContext.username} allowed to publish to $topic")
             return true // Admin can access everything
         }
-        
+
         val result = userManager.canPublish(authContext.username, topic)
-        logger.info("User ${authContext.username} publish check for topic $topic: $result")
+        logger.fine("User ${authContext.username} publish check for topic $topic: $result")
         return result
     }
 

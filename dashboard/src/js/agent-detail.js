@@ -92,6 +92,7 @@ class AgentDetailManager {
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
         document.getElementById('agent-task-timeout-ms').value = '60000';
+        document.getElementById('agent-timezone').value = '';
         document.getElementById('agent-context-lastval-topics').value = '';
         document.getElementById('agent-context-retained').value = '';
 
@@ -483,6 +484,7 @@ class AgentDetailManager {
                         contextLastvalTopics
                         contextRetainedTopics
                         contextHistoryQueries { archiveGroup topics lastSeconds interval function fields decimals }
+                        timezone
                         taskTimeoutMs
                         subAgentsAllowAll
                         subAgents
@@ -621,6 +623,7 @@ class AgentDetailManager {
         this.onSubAgentsAllowAllChange(d.subAgentsAllowAll || false);
 
         // Populate Context Data
+        document.getElementById('agent-timezone').value = d.timezone || '';
         document.getElementById('agent-context-lastval-topics').value = this.lastvalTopicsToLines(d.contextLastvalTopics, d.defaultArchiveGroup || 'Agents');
         document.getElementById('agent-context-retained').value = (d.contextRetainedTopics || []).join('\n');
         this.renderHistoryQueries(d.contextHistoryQueries);
@@ -694,6 +697,7 @@ class AgentDetailManager {
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0),
             contextHistoryQueries: this.collectHistoryQueries(),
+            timezone: document.getElementById('agent-timezone').value.trim() || null,
             subAgentsAllowAll: document.getElementById('agent-sub-agents-allow-all').checked,
             subAgents: this.getSelectedSubAgents()
         };
@@ -1090,6 +1094,15 @@ function setupContextDropZones() {
 document.addEventListener('DOMContentLoaded', () => {
     agentDetailManager = new AgentDetailManager();
     setupContextDropZones();
+
+    // Populate timezone datalist with Intl API
+    try {
+        const datalist = document.getElementById('timezone-list');
+        const zones = Intl.supportedValuesOf('timeZone');
+        zones.forEach(tz => { const opt = document.createElement('option'); opt.value = tz; datalist.appendChild(opt); });
+        // Add UTC explicitly if not present
+        if (!zones.includes('UTC')) { const opt = document.createElement('option'); opt.value = 'UTC'; datalist.prepend(opt); }
+    } catch (_) { /* Intl.supportedValuesOf not available in older browsers */ }
 
     // Section nav and back-to-top scroll links
     document.querySelectorAll('a[data-section]').forEach(link => {

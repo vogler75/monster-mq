@@ -148,6 +148,7 @@ class AgentQueries(
                         "decimals" to q.decimals
                     )
                 },
+                "timezone" to agentConfig.timezone,
                 "taskTimeoutMs" to agentConfig.taskTimeoutMs,
                 "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,
                 "subAgents" to agentConfig.subAgents,

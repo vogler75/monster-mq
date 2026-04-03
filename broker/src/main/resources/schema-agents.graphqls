@@ -37,6 +37,7 @@ type Agent {
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]!
     contextHistoryQueries: [ContextHistoryQuery!]!
+    timezone: String
     taskTimeoutMs: Long
     subAgentsAllowAll: Boolean!
     subAgents: [String!]!
@@ -89,6 +90,7 @@ input AgentInput {
     contextLastvalTopics: JSON
     contextRetainedTopics: [String!]
     contextHistoryQueries: [ContextHistoryQueryInput!]
+    timezone: String
     taskTimeoutMs: Long
     subAgentsAllowAll: Boolean
     subAgents: [String!]
