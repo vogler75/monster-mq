@@ -21,6 +21,7 @@
 BUILD_FIRST=false
 NO_RUN=false
 NO_KILL=false
+DASHBOARD_DEV=false
 REMAINING_ARGS=()
 FOUND_SEPARATOR=false
 
@@ -40,6 +41,9 @@ for arg in "$@"; do
             -nokill|-nk)
                 NO_KILL=true
                 ;;
+            -dashboard|-d)
+                DASHBOARD_DEV=true
+                ;;
             -help|--help|-h)
                 echo "MonsterMQ Run Script"
                 echo ""
@@ -48,6 +52,7 @@ for arg in "$@"; do
                 echo "Script Options (before --):"
                 echo "  -build, -b          Build dashboard and broker with Maven before starting"
                 echo "  -norun, -n          Do not run the broker (useful with -b for build-only)"
+                echo "  -dashboard, -d      Serve dashboard from dashboard/dist/ (for live development)"
                 echo "  -nokill, -nk        Do not kill existing instances before starting"
                 echo "  -help, --help, -h   Show this help message"
                 echo ""
@@ -62,6 +67,7 @@ for arg in "$@"; do
                 echo "  ./run.sh -- -cluster -log FINE                  Start with broker options"
                 echo "  ./run.sh -b -- -cluster                         Build and start in cluster mode"
                 echo "  ./run.sh -b -- -archiveConfigs archives.json    Build and import configs"
+                echo "  ./run.sh -d                                       Serve dashboard from filesystem"
                 echo "  ./run.sh -- -help                               Show MonsterMQ help"
                 exit 0
                 ;;
@@ -170,6 +176,17 @@ else
 fi
 
 JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
+
+# Serve dashboard from filesystem for development
+if [ "$DASHBOARD_DEV" = true ]; then
+    DASHBOARD_DIST="$(cd "$(dirname "$0")/../dashboard/dist" 2>/dev/null && pwd)"
+    if [ -d "$DASHBOARD_DIST" ]; then
+        echo "Dashboard serving from filesystem: $DASHBOARD_DIST"
+        REMAINING_ARGS+=("-dashboardPath" "$DASHBOARD_DIST")
+    else
+        echo "Warning: dashboard/dist/ not found. Run 'cd dashboard && npm run build' first."
+    fi
+fi
 
 # Note: Protobuf version upgraded to 4.28.3 for Java 21+ compatibility
 

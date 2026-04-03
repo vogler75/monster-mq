@@ -131,6 +131,7 @@ class AgentQueries(
                 "memoryWindowSize" to agentConfig.memoryWindowSize,
                 "stateEnabled" to agentConfig.stateEnabled,
                 "enableThinking" to agentConfig.enableThinking,
+                "conversationLogEnabled" to agentConfig.conversationLogEnabled,
                 "mcpServers" to agentConfig.mcpServers,
                 "useMonsterMqMcp" to agentConfig.useMonsterMqMcp,
                 "defaultArchiveGroup" to agentConfig.defaultArchiveGroup,
@@ -147,6 +148,7 @@ class AgentQueries(
                     )
                 },
                 "taskTimeoutMs" to agentConfig.taskTimeoutMs,
+                "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,
                 "subAgents" to agentConfig.subAgents,
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()

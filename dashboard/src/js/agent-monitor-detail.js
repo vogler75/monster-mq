@@ -63,12 +63,20 @@ class AgentDetailMonitorManager {
                     { topic: this.discoveryTopic }),
                 this.client.query(`query($topic: String!) { retainedMessage(topic: $topic, format: JSON) { topic payload } }`,
                     { topic: this.agentBaseTopic + '/health' }),
-                this.client.query(`query { agents { name } }`)
+                this.client.query(`query($name: String!) { agent(name: $name) { name cronPrompt } }`,
+                    { name: this.agentName })
             ]);
 
             // Check if internal
-            if (agentsResult && agentsResult.agents) {
-                this.isInternal = agentsResult.agents.some(a => a.name === this.agentName);
+            const matchedAgent = agentsResult?.agent;
+            this.isInternal = !!matchedAgent;
+
+            // Pre-fill test input with cron prompt if available
+            if (matchedAgent && matchedAgent.cronPrompt) {
+                const inputEl = document.getElementById('test-message');
+                if (inputEl && !inputEl.value.trim()) {
+                    inputEl.value = matchedAgent.cronPrompt;
+                }
             }
 
             // Render agent card
@@ -152,6 +160,9 @@ class AgentDetailMonitorManager {
         setEl('health-messages', health.messagesProcessed != null ? Number(health.messagesProcessed).toLocaleString() : '-');
         setEl('health-llm', health.llmCalls != null ? Number(health.llmCalls).toLocaleString() : '-');
         setEl('health-errors', health.errors != null ? Number(health.errors).toLocaleString() : '-');
+        setEl('health-input-tokens', health.inputTokens != null ? Number(health.inputTokens).toLocaleString() : '-');
+        setEl('health-output-tokens', health.outputTokens != null ? Number(health.outputTokens).toLocaleString() : '-');
+        setEl('health-total-tokens', health.totalTokens != null ? Number(health.totalTokens).toLocaleString() : '-');
         setEl('health-timestamp', this.formatTimestamp(health.timestamp));
 
         // Update status badge from health
