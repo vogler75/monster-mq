@@ -1285,6 +1285,14 @@ open class SessionHandler(
     //----------------------------------------------------------------------------------------------------
 
     fun publishMessage(message: BrokerMessage) {
+        // Reject topics containing MQTT wildcard characters (invalid per MQTT spec [MQTT-3.3.2-2])
+        // Normal MQTT clients are validated by the protocol codec, but bridge connectors bypass it
+        val topic = message.topicName
+        if (topic.contains('+') || topic.contains('#')) {
+            logger.warning("Rejected publish to invalid topic containing wildcards: $topic [clientId=${message.clientId}]")
+            return
+        }
+
         // NEW: If publish bulk processing is enabled, buffer the message instead of processing immediately
         if (publishBulkProcessingEnabled) {
             try {
