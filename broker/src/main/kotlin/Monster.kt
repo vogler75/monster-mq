@@ -249,6 +249,11 @@ class Monster(args: Array<String>) {
         fun allowRootWildcardSubscription(): Boolean = allowRootWildcardSubscriptionFlag
 
         @Volatile
+        private var aclCheckOnSubscriptionFlag: Boolean = true
+        @JvmStatic
+        fun aclCheckOnSubscription(): Boolean = aclCheckOnSubscriptionFlag
+
+        @Volatile
         private var maxPublishRate: Int = 0
         @JvmStatic
         fun getMaxPublishRate(): Int = maxPublishRate
@@ -643,6 +648,16 @@ MORE INFO:
                     true
                 }
                 logger.fine("Config: AllowRootWildcardSubscription=$allowRootWildcardSubscriptionFlag")
+
+                // Read AclCheckOnSubscription from UserManagement (default true = check at subscribe time)
+                aclCheckOnSubscriptionFlag = try {
+                    configJson.getJsonObject("UserManagement", JsonObject())
+                        .getBoolean("AclCheckOnSubscription", true)
+                } catch (e: Exception) {
+                    logger.warning("Config: AclCheckOnSubscription read failed: ${e.message}")
+                    true
+                }
+                logger.fine("Config: AclCheckOnSubscription=$aclCheckOnSubscriptionFlag")
 
                 // Read rate limiting configuration (default 0 = unlimited)
                 maxPublishRate = try {

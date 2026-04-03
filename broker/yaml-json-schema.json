@@ -121,6 +121,42 @@
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
     },
+    "UserManagement": {
+      "type": "object",
+      "description": "User management and ACL configuration",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable user authentication and ACL. When false, all clients have unrestricted access."
+        },
+        "StoreType": {
+          "type": "string",
+          "enum": ["POSTGRES", "CRATEDB", "MONGODB", "SQLITE"],
+          "description": "Storage backend for user data. Defaults to the broker's DefaultStoreType."
+        },
+        "PasswordAlgorithm": {
+          "type": "string",
+          "default": "bcrypt",
+          "description": "Password hashing algorithm."
+        },
+        "CacheRefreshInterval": {
+          "type": "integer",
+          "default": 60,
+          "description": "How often (in seconds) to reload user and ACL data from the store."
+        },
+        "DisconnectOnUnauthorized": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disconnect clients when their authentication becomes invalid (e.g. user disabled or password changed)."
+        },
+        "AclCheckOnSubscription": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true (default), ACL is checked at subscribe time against the topic filter. Wildcard subscriptions are rejected unless an ACL rule explicitly covers the filter. When false (Mosquitto-compatible), wildcard subscriptions are accepted and ACL is checked at delivery time per message — clients only receive topics their ACL rules allow."
+        }
+      }
+    },
     "SSL": {
       "type": "object",
       "description": "SSL/TLS configuration for secure MQTT connections (TCPS and WSS)",
