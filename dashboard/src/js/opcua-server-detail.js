@@ -376,6 +376,14 @@ class OpcUaServerDetailManager {
         }
     }
 
+    validatePublishTopic(topic) {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (topic.includes('+') || topic.includes('#')) {
+            return 'Invalid MQTT Topic: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription filters, not in publish destinations.';
+        }
+        return null;
+    }
+    
     async deleteServer() {
         try {
             const mutation = `
@@ -424,9 +432,18 @@ class OpcUaServerDetailManager {
             form.reportValidity();
             return;
         }
+        
+        const mqttTopic = document.getElementById('address-mqtt-topic').value.trim();
+        
+        // Validate MQTT topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        const validationError = this.validatePublishTopic(mqttTopic);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
 
         const newAddress = {
-            mqttTopic: document.getElementById('address-mqtt-topic').value.trim(),
+            mqttTopic: mqttTopic,
             dataType: document.getElementById('address-data-type').value,
             accessLevel: document.getElementById('address-access-level').value,
             displayName: document.getElementById('address-display-name').value.trim() || null

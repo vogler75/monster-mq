@@ -127,6 +127,26 @@ data class OpcUaServerAddress(
             .put("dataType", dataType.name)
             .put("accessLevel", accessLevel.name)
     }
+    
+    /**
+     * Validate the address configuration
+     * @return List of validation error messages (empty if valid)
+     */
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+        
+        if (mqttTopic.isBlank()) {
+            errors.add("mqttTopic cannot be blank")
+        }
+        
+        // Validate mqttTopic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        // OPC UA Server publishes to MQTT topics, so they cannot contain wildcards
+        if (mqttTopic.contains('+') || mqttTopic.contains('#')) {
+            errors.add("mqttTopic cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters, not in publish destinations")
+        }
+        
+        return errors
+    }
 }
 
 /**

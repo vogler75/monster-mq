@@ -55,6 +55,13 @@ data class RedisClientAddress(
             errors.add("mode must be '$MODE_SUBSCRIBE', '$MODE_PUBLISH', or '$MODE_KV_SYNC'")
         if (redisChannel.isBlank()) errors.add("redisChannel cannot be blank")
         if (mqttTopic.isBlank()) errors.add("mqttTopic cannot be blank")
+        
+        // Validate mqttTopic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        // Wildcards are only allowed in subscription filters, not in publish destinations
+        if (mqttTopic.contains('+') || mqttTopic.contains('#')) {
+            errors.add("mqttTopic cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters, not in publish destinations")
+        }
+        
         if (qos !in 0..2) errors.add("qos must be 0, 1, or 2")
         if (kvPollIntervalMs < 0) errors.add("kvPollIntervalMs must be >= 0")
         return errors

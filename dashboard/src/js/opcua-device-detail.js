@@ -720,15 +720,31 @@ class OpcUaDeviceDetailManager {
                     validateServerCertificate: document.getElementById('cert-validate-server').checked,
                     autoAcceptServerCertificates: document.getElementById('cert-auto-accept').checked
                 },
-                writeConfig: {
-                    enabled: document.getElementById('write-enabled').checked,
-                    requestResponseEnabled: document.getElementById('write-rr-enabled').checked,
-                    topicPrefix: document.getElementById('write-topic-prefix').value.trim() || 'write',
-                    requestTopicPrefix: document.getElementById('write-request-topic-prefix').value.trim() || 'request',
-                    responseTopicPrefix: document.getElementById('write-response-topic-prefix').value.trim() || 'response',
-                    qos: parseInt(document.getElementById('write-qos').value),
-                    writeTimeout: parseInt(document.getElementById('write-timeout').value) || 5000
-                }
+                writeConfig: (() => {
+                    const topicPrefix = document.getElementById('write-topic-prefix').value.trim() || 'write';
+                    const requestTopicPrefix = document.getElementById('write-request-topic-prefix').value.trim() || 'request';
+                    const responseTopicPrefix = document.getElementById('write-response-topic-prefix').value.trim() || 'response';
+                    
+                    // Validate topic prefixes for wildcards (MQTT spec [MQTT-3.3.2-2])
+                    const topicPrefixError = this.validatePublishTopic(topicPrefix, 'Topic Prefix');
+                    if (topicPrefixError) throw new Error(topicPrefixError);
+                    
+                    const requestPrefixError = this.validatePublishTopic(requestTopicPrefix, 'Request Topic Prefix');
+                    if (requestPrefixError) throw new Error(requestPrefixError);
+                    
+                    const responsePrefixError = this.validatePublishTopic(responseTopicPrefix, 'Response Topic Prefix');
+                    if (responsePrefixError) throw new Error(responsePrefixError);
+                    
+                    return {
+                        enabled: document.getElementById('write-enabled').checked,
+                        requestResponseEnabled: document.getElementById('write-rr-enabled').checked,
+                        topicPrefix,
+                        requestTopicPrefix,
+                        responseTopicPrefix,
+                        qos: parseInt(document.getElementById('write-qos').value),
+                        writeTimeout: parseInt(document.getElementById('write-timeout').value) || 5000
+                    };
+                })()
             }
         };
 
@@ -930,6 +946,14 @@ class OpcUaDeviceDetailManager {
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
 
+    validatePublishTopic(topic, label = 'Topic') {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (topic.includes('+') || topic.includes('#')) {
+            return `Invalid ${label}: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription filters, not in publish destinations.`;
+        }
+        return null;
+    }
+    
     goBack() {
         window.spaLocation.href = '/pages/opcua-devices.html';
     }

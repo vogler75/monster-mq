@@ -208,6 +208,13 @@ class KafkaClientDetailManager {
                 return { error: 'Extra Consumer Config must be a JSON object' };
             }
         }
+        
+        // Validate destination topic prefix for wildcards
+        const destinationPrefix = document.getElementById('client-destination-prefix').value.trim();
+        if (destinationPrefix && (destinationPrefix.includes('+') || destinationPrefix.includes('#'))) {
+            return { error: 'Destination Topic Prefix cannot contain MQTT wildcard characters (+ or #)' };
+        }
+        
         return {
             name: document.getElementById('client-name').value.trim(),
             namespace: document.getElementById('client-namespace').value.trim(),
@@ -216,7 +223,7 @@ class KafkaClientDetailManager {
             config: {
                 bootstrapServers: document.getElementById('client-bootstrap').value.trim(),
                 groupId: document.getElementById('client-group-id').value.trim(),
-                destinationTopicPrefix: (function(){ const v=document.getElementById('client-destination-prefix').value.trim(); return v.length>0? v : null; })(),
+                destinationTopicPrefix: destinationPrefix.length > 0 ? destinationPrefix : null,
                 topicKeyRegex: (function(){ const v=document.getElementById('client-topic-key-regex').value.trim(); return v.length>0? v : null; })(),
                 topicKeyReplacement: (function(){ const v=document.getElementById('client-topic-key-replacement').value.trim(); return v.length>0? v : null; })(),
                 payloadFormat: document.getElementById('client-payload-format').value,

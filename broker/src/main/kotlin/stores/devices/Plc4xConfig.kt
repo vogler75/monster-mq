@@ -189,6 +189,10 @@ data class Plc4xAddress(
         }
 
         // topic is optional - auto-generated from namespace/name if empty
+        // but if provided, validate for wildcards (MQTT spec [MQTT-3.3.2-2])
+        if (topic.isNotBlank() && (topic.contains('+') || topic.contains('#'))) {
+            errors.add("Topic cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters, not in publish destinations")
+        }
 
         if (qos !in 0..2) {
             errors.add("QoS must be 0, 1, or 2")

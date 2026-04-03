@@ -322,9 +322,18 @@ class WinCCOaClientDetailManager {
             form.reportValidity();
             return;
         }
+        
+        const topic = document.getElementById('query-topic').value.trim();
+        
+        // Validate MQTT topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        const validationError = this.validatePublishTopic(topic);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
 
         const queryData = {
-            query: document.getElementById('query-query').value.trim(),
+            topic: topic,
             topic: document.getElementById('query-topic').value.trim(),
             description: document.getElementById('query-description').value.trim(),
             answer: document.getElementById('query-answer').checked,

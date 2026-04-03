@@ -220,6 +220,19 @@ data class OpcUaWriteConfig(
         if (topicPrefix.isBlank()) errors.add("writeConfig.topicPrefix cannot be blank")
         if (requestTopicPrefix.isBlank()) errors.add("writeConfig.requestTopicPrefix cannot be blank")
         if (responseTopicPrefix.isBlank()) errors.add("writeConfig.responseTopicPrefix cannot be blank")
+        
+        // Validate topic prefixes for wildcards (MQTT spec [MQTT-3.3.2-2])
+        // Write operations publish to MQTT topics, so they cannot contain wildcards
+        if (topicPrefix.contains('+') || topicPrefix.contains('#')) {
+            errors.add("writeConfig.topicPrefix cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters")
+        }
+        if (requestTopicPrefix.contains('+') || requestTopicPrefix.contains('#')) {
+            errors.add("writeConfig.requestTopicPrefix cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters")
+        }
+        if (responseTopicPrefix.contains('+') || responseTopicPrefix.contains('#')) {
+            errors.add("writeConfig.responseTopicPrefix cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters")
+        }
+        
         if (qos !in 0..2) errors.add("writeConfig.qos must be 0, 1, or 2")
         if (writeTimeout < 100) errors.add("writeConfig.writeTimeout should be at least 100ms")
         return errors

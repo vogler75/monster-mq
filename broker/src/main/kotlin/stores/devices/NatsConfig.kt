@@ -51,6 +51,14 @@ data class NatsClientAddress(
             errors.add("mode must be '$MODE_SUBSCRIBE' or '$MODE_PUBLISH'")
         if (natsSubject.isBlank()) errors.add("natsSubject cannot be blank")
         if (mqttTopic.isBlank()) errors.add("mqttTopic cannot be blank")
+        
+        // Validate mqttTopic for wildcards in PUBLISH mode (MQTT spec [MQTT-3.3.2-2])
+        // In PUBLISH mode, mqttTopic is the publish destination (no wildcards allowed)
+        // In SUBSCRIBE mode, mqttTopic is the subscription source (wildcards are okay)
+        if (mode == MODE_PUBLISH && (mqttTopic.contains('+') || mqttTopic.contains('#'))) {
+            errors.add("mqttTopic cannot contain wildcard characters (+ or #) in PUBLISH mode - wildcards are only allowed in subscription filters")
+        }
+        
         if (qos !in 0..2) errors.add("qos must be 0, 1, or 2")
         return errors
     }
