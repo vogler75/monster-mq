@@ -16,6 +16,11 @@ Prerequisites:
 - Broker running locally on 1883 with UserManagement enabled
 - AclCheckOnSubscription: false in config.yaml
 - GraphQL API available for user/ACL setup
+
+Testing Both Modes:
+To test the default subscribe-time mode (AclCheckOnSubscription: true),
+configure config.yaml accordingly and run the standard ACL tests. These tests
+specifically validate delivery-time filtering behavior with AclCheckOnSubscription: false.
 """
 
 import os
@@ -388,3 +393,4 @@ def test_v5_user_subscribe_flag_enforced(setup_test_user, broker_config):
             """, variables={"username": disabled_user}, token=token)
         except Exception:
             pass
+

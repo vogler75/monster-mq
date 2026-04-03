@@ -16,6 +16,11 @@ Prerequisites:
 
 The test suite creates its own test user and ACL rules via GraphQL,
 then verifies filtering behavior over MQTT.
+
+Testing Both Modes:
+To test the default subscribe-time mode (AclCheckOnSubscription: true),
+configure config.yaml accordingly and run the standard ACL tests. These tests
+specifically validate delivery-time filtering behavior with AclCheckOnSubscription: false.
 """
 
 import os
@@ -492,3 +497,4 @@ def test_user_subscribe_flag_still_enforced(setup_test_user, broker_config):
             """, variables={"username": disabled_user}, token=token)
         except Exception:
             pass
+
