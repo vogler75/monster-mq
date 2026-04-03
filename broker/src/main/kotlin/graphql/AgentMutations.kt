@@ -200,6 +200,7 @@ class AgentMutations(
             contextRetainedTopics = parseStringList(input["contextRetainedTopics"]),
             contextHistoryQueries = parseContextHistoryQueries(input["contextHistoryQueries"]),
             taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: 60000,
+            subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: false,
             subAgents = parseStringList(input["subAgents"])
         )
 
@@ -251,6 +252,7 @@ class AgentMutations(
             contextRetainedTopics = if (input.containsKey("contextRetainedTopics")) parseStringList(input["contextRetainedTopics"]) else existingConfig.contextRetainedTopics,
             contextHistoryQueries = if (input.containsKey("contextHistoryQueries")) parseContextHistoryQueries(input["contextHistoryQueries"]) else existingConfig.contextHistoryQueries,
             taskTimeoutMs = (input["taskTimeoutMs"] as? Number)?.toLong() ?: existingConfig.taskTimeoutMs,
+            subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: existingConfig.subAgentsAllowAll,
             subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents
         )
 

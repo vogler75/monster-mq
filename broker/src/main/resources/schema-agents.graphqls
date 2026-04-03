@@ -38,6 +38,7 @@ type Agent {
     contextRetainedTopics: [String!]!
     contextHistoryQueries: [ContextHistoryQuery!]!
     taskTimeoutMs: Long
+    subAgentsAllowAll: Boolean!
     subAgents: [String!]!
     createdAt: String!
     updatedAt: String!
@@ -89,6 +90,7 @@ input AgentInput {
     contextRetainedTopics: [String!]
     contextHistoryQueries: [ContextHistoryQueryInput!]
     taskTimeoutMs: Long
+    subAgentsAllowAll: Boolean
     subAgents: [String!]
     enabled: Boolean
 }

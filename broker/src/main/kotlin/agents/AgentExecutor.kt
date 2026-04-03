@@ -222,6 +222,7 @@ class AgentExecutor(
                 taskTimeoutMs = agentConfig.taskTimeoutMs,
                 getCurrentTaskId = { currentTaskId },
                 registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
+                subAgentsAllowAll = agentConfig.subAgentsAllowAll,
                 subAgents = agentConfig.subAgents
             )
 

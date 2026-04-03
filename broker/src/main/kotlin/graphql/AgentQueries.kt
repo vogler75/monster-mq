@@ -148,6 +148,7 @@ class AgentQueries(
                     )
                 },
                 "taskTimeoutMs" to agentConfig.taskTimeoutMs,
+                "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,
                 "subAgents" to agentConfig.subAgents,
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()

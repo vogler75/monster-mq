@@ -33,6 +33,7 @@ class AgentTools(
     private val taskTimeoutMs: Long = 60000,
     private val getCurrentTaskId: (() -> String?)? = null,
     private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
+    private val subAgentsAllowAll: Boolean = false,
     private val subAgents: List<String> = emptyList()
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java).apply { level = Const.DEBUG_LEVEL }
@@ -306,7 +307,7 @@ class AgentTools(
                 val agent = agents.getJsonObject(i)
                 val name = agent.getString("name")
                 if (name == agentName) continue
-                if (subAgents.isNotEmpty() && name !in subAgents) continue
+                if (!subAgentsAllowAll && (subAgents.isEmpty() || name !in subAgents)) continue
                 filtered.add(agent)
             }
             if (filtered.isEmpty) "No agents found" else filtered.encodePrettily()
@@ -344,8 +345,8 @@ class AgentTools(
         @P("Optional: specific skill to invoke on the target agent") skill: String?
     ): String {
         val result = try {
-            if (subAgents.isNotEmpty() && targetAgent !in subAgents) {
-                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: $subAgents")
+            if (!subAgentsAllowAll && (subAgents.isEmpty() || targetAgent !in subAgents)) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: ${if (subAgents.isEmpty()) "(none)" else subAgents}")
             }
 
             val sessionHandler = Monster.getSessionHandler()

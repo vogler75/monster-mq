@@ -269,6 +269,14 @@ class AgentDetailManager {
         return Array.from(document.querySelectorAll('.sub-agent-checkbox:checked')).map(cb => cb.value);
     }
 
+    onSubAgentsAllowAllChange(checked) {
+        const list = document.getElementById('sub-agent-list');
+        if (list) {
+            list.style.opacity = checked ? '0.4' : '1';
+            list.style.pointerEvents = checked ? 'none' : 'auto';
+        }
+    }
+
     parseContextLastvalTopics() {
         const raw = document.getElementById('agent-context-lastval-topics').value.trim();
         if (!raw) return null;
@@ -467,6 +475,7 @@ class AgentDetailManager {
                         contextRetainedTopics
                         contextHistoryQueries { archiveGroup topics lastSeconds interval function fields }
                         taskTimeoutMs
+                        subAgentsAllowAll
                         subAgents
                         createdAt
                         updatedAt
@@ -598,7 +607,9 @@ class AgentDetailManager {
         this.renderMcpServerCheckboxes(d.mcpServers || []);
 
         // Populate Sub-Agents
+        document.getElementById('agent-sub-agents-allow-all').checked = d.subAgentsAllowAll || false;
         this.renderSubAgentCheckboxes(d.subAgents || []);
+        this.onSubAgentsAllowAllChange(d.subAgentsAllowAll || false);
 
         // Populate Context Data
         document.getElementById('agent-context-lastval-topics').value = this.lastvalTopicsToLines(d.contextLastvalTopics, d.defaultArchiveGroup || 'Agents');
@@ -674,6 +685,7 @@ class AgentDetailManager {
             contextRetainedTopics: document.getElementById('agent-context-retained').value
                 .split('\n').map(t => t.trim()).filter(t => t.length > 0),
             contextHistoryQueries: this.collectHistoryQueries(),
+            subAgentsAllowAll: document.getElementById('agent-sub-agents-allow-all').checked,
             subAgents: this.getSelectedSubAgents()
         };
 

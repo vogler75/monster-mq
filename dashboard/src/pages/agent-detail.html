@@ -363,8 +363,12 @@
 
                     <hr style="border: none; border-top: 1px solid var(--dark-border); margin: 1.5rem 0;">
                     <small style="color: var(--text-muted); margin-bottom: 0.75rem; display: block;">
-                        Sub-Agents (restrict which agents this orchestrator can invoke; leave empty to allow all):
+                        Sub-Agents (select which agents this orchestrator can invoke):
                     </small>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; cursor: pointer;">
+                        <input type="checkbox" id="agent-sub-agents-allow-all" style="accent-color: var(--monster-purple);" onchange="agentDetailManager.onSubAgentsAllowAllChange(this.checked)">
+                        <span style="color: var(--text-primary); font-weight: 500;">Allow all agents</span>
+                    </label>
                     <div id="sub-agent-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
                         <div style="color: var(--text-muted);">Loading agents...</div>
                     </div>
