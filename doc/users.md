@@ -24,6 +24,7 @@ UserManagement:
   PasswordAlgorithm: bcrypt      # Industry-standard hashing
   CacheRefreshInterval: 60       # Seconds between cache updates
   DisconnectOnUnauthorized: true # Disconnect on ACL violations
+  AclCheckOnSubscription: true   # true=check at subscribe time, false=check at delivery time
 
 # Database configuration
 Postgres:
@@ -82,6 +83,14 @@ Has Global Permission? → Check ACL Rules
                             ↓ No
                       Anonymous Allowed? → Allow/Deny
 ```
+
+### ACL Check Timing
+
+By default (`AclCheckOnSubscription: true`), ACL rules are checked when a client subscribes. This means wildcard subscriptions like `#` are rejected unless an ACL rule explicitly covers the filter.
+
+Setting `AclCheckOnSubscription: false` enables Mosquitto-compatible behavior: wildcard subscriptions are accepted, and ACL is checked at **delivery time** per message. Clients only receive messages on topics their ACL rules allow. Exact (non-wildcard) subscriptions are still checked at subscribe time.
+
+See [Configuration > ACL Check Mode](configuration.md#acl-check-mode) for details and examples.
 
 ## ACL Rules
 

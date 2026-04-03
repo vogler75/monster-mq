@@ -578,7 +578,7 @@ class AgentExecutor(
                             if (history.size() > 0) {
                                 lines.add("[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):")
                                 contextLogLines.add("  History archive=${query.archiveGroup} mode=RAW topic=$topic range=${startTime}..${endTime} -> ${history.size()} rows")
-                                lines.add(history.encode())
+                                lines.add(jsonArrayToCsv(history, query.decimals))
                             }
                         } catch (e: Exception) {
                             logger.warning("Failed to fetch raw history for $topic in ${query.archiveGroup}: ${e.message}")
@@ -600,7 +600,7 @@ class AgentExecutor(
                         if (rowCount > 0) {
                             lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, $rowCount rows):")
                             contextLogLines.add("  History archive=${query.archiveGroup} mode=${query.interval}:${query.function} topics=${query.topics.joinToString(",")} range=${startTime}..${endTime} -> $rowCount rows")
-                            lines.add(result.encode())
+                            lines.add(columnarJsonToCsv(result, query.decimals))
                         }
                     } catch (e: Exception) {
                         logger.warning("Failed to fetch aggregated history for ${query.topics} in ${query.archiveGroup}: ${e.message}")
@@ -626,6 +626,45 @@ class AgentExecutor(
         return "--- Context Data (current values for your reference) ---\n" +
             lines.joinToString("\n") +
             "\n--- End Context Data ---"
+    }
+
+    private fun formatValue(value: Any?, decimals: Int?): String {
+        if (value == null) return ""
+        if (decimals != null && value is Number) {
+            return "%.${decimals}f".format(value.toDouble())
+        }
+        return value.toString()
+    }
+
+    /**
+     * Convert a columnar JSON result ({"columns":[...], "rows":[[...],...]}) to CSV.
+     */
+    private fun columnarJsonToCsv(result: io.vertx.core.json.JsonObject, decimals: Int? = null): String {
+        val columns = result.getJsonArray("columns") ?: return ""
+        val rows = result.getJsonArray("rows") ?: return ""
+        val sb = StringBuilder()
+        sb.appendLine(columns.joinToString(","))
+        for (i in 0 until rows.size()) {
+            val row = rows.getJsonArray(i) ?: continue
+            sb.appendLine((0 until row.size()).joinToString(",") { formatValue(row.getValue(it), decimals) })
+        }
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Convert a JsonArray of JsonObjects to CSV (using keys from the first object as headers).
+     */
+    private fun jsonArrayToCsv(array: io.vertx.core.json.JsonArray, decimals: Int? = null): String {
+        if (array.size() == 0) return ""
+        val first = array.getJsonObject(0) ?: return ""
+        val keys = first.fieldNames().toList()
+        val sb = StringBuilder()
+        sb.appendLine(keys.joinToString(","))
+        for (i in 0 until array.size()) {
+            val obj = array.getJsonObject(i) ?: continue
+            sb.appendLine(keys.joinToString(",") { formatValue(obj.getValue(it), decimals) })
+        }
+        return sb.toString().trimEnd()
     }
 
     private fun handleMqttMessage(msg: BrokerMessage) {

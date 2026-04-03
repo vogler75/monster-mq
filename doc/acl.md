@@ -31,6 +31,7 @@ UserManagement:
   PasswordAlgorithm: bcrypt       # Currently only bcrypt supported
   CacheRefreshInterval: 60        # Seconds between automatic cache refreshes
   DisconnectOnUnauthorized: true  # Disconnect clients on unauthorized actions
+  AclCheckOnSubscription: true    # true=subscribe-time, false=delivery-time (Mosquitto-compatible)
 ```
 
 ### Database Configuration Examples
@@ -212,6 +213,25 @@ fun hasPermission(user: User, topic: String, operation: Permission): Boolean {
     return false
 }
 ```
+
+### ACL Check Timing (`AclCheckOnSubscription`)
+
+The `AclCheckOnSubscription` setting controls **when** ACL rules are evaluated for subscribe operations:
+
+| Mode | Setting | Subscribe ACL Check | Delivery ACL Check | Wildcard `#` behavior |
+|------|---------|--------------------|--------------------|----------------------|
+| **Default** | `true` | Topic filter checked against ACL rules | None | Rejected unless ACL covers `#` |
+| **Mosquitto-compatible** | `false` | Only for exact (non-wildcard) topics | Every message checked | Accepted; messages filtered per-topic |
+
+When `AclCheckOnSubscription: false`:
+- Wildcard subscriptions (`+`, `#`) are accepted without ACL rule checks
+- Each message is checked against ACL rules before delivery to the client
+- Messages on topics not covered by ACL rules are silently dropped
+- Exact topic subscriptions are still checked at subscribe time
+- The user-level `canSubscribe` flag is always enforced
+- Admin users bypass all checks
+
+This is useful when users have ACL rules like `sensors/#` but need to subscribe to `#` and receive only the topics they're entitled to.
 
 ## GraphQL API
 
