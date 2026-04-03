@@ -690,7 +690,7 @@ class MqttClient(
                     allowed = false
                     reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
                     logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
-                } else if (allowed && userManager.isUserManagementEnabled()) {
+                } else if (userManager.isUserManagementEnabled()) {
                     val isWildcard = topic.contains('+') || topic.contains('#')
                     if (!Monster.aclCheckOnSubscription() && isWildcard) {
                         // Delivery-time ACL mode: skip ACL rule check for wildcard subscriptions,
@@ -1132,19 +1132,19 @@ class MqttClient(
     }
 
     private fun publishMessage(message: BrokerMessage) {
-        // Delivery-time ACL filtering: when AclCheckOnSubscription is false,
-        // check ACL against the concrete topic before delivering to the client
-        if (!Monster.aclCheckOnSubscription() && userManager.isUserManagementEnabled()) {
-            val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
-            if (!userManager.canSubscribe(username, message.topicName, clientId)) {
-                logger.finest { "Client [$clientId] Message for topic [${message.topicName}] dropped by delivery-time ACL filter for user [$username]" }
-                return
-            }
-        }
-
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
+            // Delivery-time ACL filtering: when AclCheckOnSubscription is false,
+            // check ACL against the concrete topic before delivering to the client
+            if (!Monster.aclCheckOnSubscription() && userManager.isUserManagementEnabled()) {
+                val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
+                if (!userManager.canSubscribe(username, message.topicName, clientId)) {
+                    logger.finest { "Client [$clientId] Message for topic [${message.topicName}] dropped by delivery-time ACL filter for user [$username]" }
+                    return
+                }
+            }
+
             // Increment messages sent to client ONLY when actually publishing to endpoint
             if (message.qosLevel == 0) {
                 sessionHandler.incrementMessagesOut(clientId)
