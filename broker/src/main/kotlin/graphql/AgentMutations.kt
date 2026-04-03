@@ -307,7 +307,8 @@ class AgentMutations(
                 lastSeconds = (map["lastSeconds"] as? Number)?.toInt() ?: 3600,
                 interval = map["interval"] as? String ?: "RAW",
                 function = map["function"] as? String ?: "AVG",
-                fields = (map["fields"] as? List<String>) ?: emptyList()
+                fields = (map["fields"] as? List<String>) ?: emptyList(),
+                decimals = (map["decimals"] as? Number)?.toInt()
             )
         }
     }
