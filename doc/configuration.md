@@ -155,9 +155,24 @@ UserManagement:
   PasswordAlgorithm: bcrypt
   CacheRefreshInterval: 60
   DisconnectOnUnauthorized: true
+  AclCheckOnSubscription: true
 ```
 
 When enabled, the broker provisions the default `Admin` account on first start and stores users in the configured backend (`broker/src/main/kotlin/auth/UserManager.kt:39-118`).
+
+### ACL Check Mode
+
+`AclCheckOnSubscription` controls when ACL rules are evaluated:
+
+- **`true` (default):** ACL is checked at subscribe time against the topic filter. Wildcard subscriptions (e.g. `#` or `sensor/+/temp`) are rejected unless an ACL rule explicitly covers the filter. This is the most restrictive mode with zero per-message overhead.
+- **`false` (Mosquitto-compatible):** Wildcard subscriptions are accepted without ACL checks. Instead, ACL is checked at delivery time against each concrete message topic. Clients only receive messages on topics their ACL rules allow. Exact (non-wildcard) subscriptions are still checked at subscribe time for fast feedback.
+
+Example: A user with ACL rule `dummy/#` (canSubscribe=true):
+
+| AclCheckOnSubscription | Subscribe to `#` | Message on `dummy/temp` | Message on `other/topic` |
+|------------------------|-------------------|-------------------------|--------------------------|
+| `true` (default) | **Denied** | N/A | N/A |
+| `false` | Accepted | **Delivered** | **Dropped** |
 
 ## MCP Server
 

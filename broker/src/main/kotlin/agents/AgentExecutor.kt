@@ -32,7 +32,9 @@ import com.cronutils.parser.CronParser
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
@@ -415,7 +417,7 @@ class AgentExecutor(
             if (intervalMs != null && intervalMs > 0) {
                 logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
                 cronTimerId = vertx.setPeriodic(intervalMs) {
-                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron")
                 }
             } else {
                 logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronExpression or cronIntervalMs")
@@ -430,7 +432,7 @@ class AgentExecutor(
             val delayMs = java.time.Duration.between(now, nextExecution.get()).toMillis()
             logger.fine("Agent ${deviceConfig.name} next cron execution at ${nextExecution.get()} (in ${delayMs}ms)")
             cronTimerId = vertx.setTimer(delayMs) {
-                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${Instant.now()}. Execute your scheduled task.", "cron")
+                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron")
                 scheduleNextCronExecution(executionTime)
             }
         } else {
@@ -532,7 +534,7 @@ class AgentExecutor(
                     var count = 0
                     store.findMatchingMessages(filter) { msg ->
                         val value = msg.getPayloadAsString()
-                        lines.add("[Archive:$groupName] ${msg.topicName} = $value (${msg.time})")
+                        lines.add("[Archive:$groupName] ${msg.topicName} = $value (${toLocalTime(msg.time)})")
                         count++
                         lines.size < 500 // safety limit
                     }
@@ -578,7 +580,7 @@ class AgentExecutor(
                             if (history.size() > 0) {
                                 lines.add("[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):")
                                 contextLogLines.add("  History archive=${query.archiveGroup} mode=RAW topic=$topic range=${startTime}..${endTime} -> ${history.size()} rows")
-                                lines.add(history.encode())
+                                lines.add(jsonArrayToCsv(history, query.decimals))
                             }
                         } catch (e: Exception) {
                             logger.warning("Failed to fetch raw history for $topic in ${query.archiveGroup}: ${e.message}")
@@ -600,7 +602,7 @@ class AgentExecutor(
                         if (rowCount > 0) {
                             lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, $rowCount rows):")
                             contextLogLines.add("  History archive=${query.archiveGroup} mode=${query.interval}:${query.function} topics=${query.topics.joinToString(",")} range=${startTime}..${endTime} -> $rowCount rows")
-                            lines.add(result.encode())
+                            lines.add(columnarJsonToCsv(result, query.decimals))
                         }
                     } catch (e: Exception) {
                         logger.warning("Failed to fetch aggregated history for ${query.topics} in ${query.archiveGroup}: ${e.message}")
@@ -623,9 +625,75 @@ class AgentExecutor(
 
         if (lines.isEmpty()) return ""
 
-        return "--- Context Data (current values for your reference) ---\n" +
+        val now = Instant.now().atZone(localZone)
+        val header = "--- Context Data (current time: ${now.format(localTimeFormatter)}, timezone: $localZone) ---"
+        return "$header\n" +
             lines.joinToString("\n") +
             "\n--- End Context Data ---"
+    }
+
+    private val localZone: ZoneId by lazy {
+        agentConfig.timezone?.let {
+            try { ZoneId.of(it) } catch (_: Exception) { ZoneId.systemDefault() }
+        } ?: ZoneId.systemDefault()
+    }
+    private val localTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")
+
+    private fun toLocalTime(utcString: String): String {
+        return try {
+            val instant = Instant.parse(utcString)
+            instant.atZone(localZone).format(localTimeFormatter)
+        } catch (_: Exception) {
+            utcString
+        }
+    }
+
+    private fun toLocalTime(instant: Instant): String {
+        return instant.atZone(localZone).format(localTimeFormatter)
+    }
+
+    private fun formatValue(value: Any?, decimals: Int?): String {
+        if (value == null) return ""
+        if (decimals != null && value is Number) {
+            return "%.${decimals}f".format(value.toDouble())
+        }
+        val str = value.toString()
+        // Convert UTC timestamps to local time
+        if (str.length > 18 && str[10] == 'T' && str.endsWith("Z")) {
+            return toLocalTime(str)
+        }
+        return str
+    }
+
+    /**
+     * Convert a columnar JSON result ({"columns":[...], "rows":[[...],...]}) to CSV.
+     */
+    private fun columnarJsonToCsv(result: io.vertx.core.json.JsonObject, decimals: Int? = null): String {
+        val columns = result.getJsonArray("columns") ?: return ""
+        val rows = result.getJsonArray("rows") ?: return ""
+        val sb = StringBuilder()
+        sb.appendLine(columns.joinToString(","))
+        for (i in 0 until rows.size()) {
+            val row = rows.getJsonArray(i) ?: continue
+            sb.appendLine((0 until row.size()).joinToString(",") { formatValue(row.getValue(it), decimals) })
+        }
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Convert a JsonArray of JsonObjects to CSV (using keys from the first object as headers).
+     */
+    private fun jsonArrayToCsv(array: io.vertx.core.json.JsonArray, decimals: Int? = null): String {
+        if (array.size() == 0) return ""
+        val first = array.getJsonObject(0) ?: return ""
+        val keys = first.fieldNames().toList()
+        val sb = StringBuilder()
+        sb.appendLine(keys.joinToString(","))
+        for (i in 0 until array.size()) {
+            val obj = array.getJsonObject(i) ?: continue
+            sb.appendLine(keys.joinToString(",") { formatValue(obj.getValue(it), decimals) })
+        }
+        return sb.toString().trimEnd()
     }
 
     private fun handleMqttMessage(msg: BrokerMessage) {

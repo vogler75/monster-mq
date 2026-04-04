@@ -461,6 +461,14 @@
                         Define topics whose current values are fetched and included in the agent's context on every invocation.
                     </small>
                     <div class="form-group">
+                        <label for="agent-timezone">Timezone</label>
+                        <input type="text" id="agent-timezone" placeholder="System default (leave empty)" list="timezone-list" style="max-width: 300px;">
+                        <datalist id="timezone-list"></datalist>
+                        <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">
+                            Timezone for all timestamps in context data. Empty = broker's local timezone. Examples: UTC, Europe/Vienna, US/Eastern
+                        </small>
+                    </div>
+                    <div class="form-group">
                         <label for="agent-context-lastval-topics">Lastval Message Topics</label>
                         <textarea id="agent-context-lastval-topics" rows="4" data-drop-zone-enabled="true" placeholder="sensors/#&#10;enterprise/+/value @SCADA" style="font-family: monospace; font-size: 0.85rem;"></textarea>
                         <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">

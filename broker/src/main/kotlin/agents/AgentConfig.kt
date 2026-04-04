@@ -37,7 +37,8 @@ data class AgentConfig(
     val conversationLogEnabled: Boolean = false,  // Log full LLM conversations to log/agents/<name>.log
     val endpoint: String? = null,  // For Azure OpenAI: resource endpoint URL
     val serviceVersion: String? = null,  // For Azure OpenAI: API version (e.g. "2024-02-01")
-    val providerName: String? = null  // references a stored GenAiProvider by name
+    val providerName: String? = null,  // references a stored GenAiProvider by name
+    val timezone: String? = null       // null = system default, e.g. "UTC", "Europe/Vienna"
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -80,7 +81,8 @@ data class AgentConfig(
                 conversationLogEnabled = json.getBoolean("conversationLogEnabled", false),
                 endpoint = json.getString("endpoint"),
                 serviceVersion = json.getString("serviceVersion"),
-                providerName = json.getString("providerName")
+                providerName = json.getString("providerName"),
+                timezone = json.getString("timezone")
             )
         }
     }
@@ -123,6 +125,7 @@ data class AgentConfig(
             .put("endpoint", endpoint)
             .put("serviceVersion", serviceVersion)
             .put("providerName", providerName)
+            .put("timezone", timezone)
     }
 }
 
@@ -155,7 +158,8 @@ data class ContextHistoryQuery(
     val lastSeconds: Int = 3600,          // how far back to look (default 1 hour)
     val interval: String = "RAW",         // RAW, ONE_MINUTE, FIVE_MINUTES, FIFTEEN_MINUTES, ONE_HOUR, ONE_DAY
     val function: String = "AVG",         // AVG, MIN, MAX (ignored for RAW)
-    val fields: List<String> = emptyList() // optional JSON field paths for aggregation (e.g. ["temperature", "pressure"])
+    val fields: List<String> = emptyList(), // optional JSON field paths for aggregation (e.g. ["temperature", "pressure"])
+    val decimals: Int? = null              // optional: round numeric values to N decimal places
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): ContextHistoryQuery {
@@ -165,19 +169,22 @@ data class ContextHistoryQuery(
                 lastSeconds = json.getInteger("lastSeconds", 3600),
                 interval = json.getString("interval", "RAW"),
                 function = json.getString("function", "AVG"),
-                fields = json.getJsonArray("fields", JsonArray()).filterIsInstance<String>().toList()
+                fields = json.getJsonArray("fields", JsonArray()).filterIsInstance<String>().toList(),
+                decimals = json.getInteger("decimals")
             )
         }
     }
 
     fun toJsonObject(): JsonObject {
-        return JsonObject()
+        val json = JsonObject()
             .put("archiveGroup", archiveGroup)
             .put("topics", JsonArray(topics))
             .put("lastSeconds", lastSeconds)
             .put("interval", interval)
             .put("function", function)
             .put("fields", JsonArray(fields))
+        if (decimals != null) json.put("decimals", decimals)
+        return json
     }
 
     fun intervalMinutes(): Int = when (interval.uppercase()) {

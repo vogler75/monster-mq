@@ -690,11 +690,27 @@ class MqttClient(
                     allowed = false
                     reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
                     logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
-                } else if (allowed && userManager.isUserManagementEnabled() && !userManager.canSubscribe(username, topic, clientId)) {
-                    // ACL check
-                    allowed = false
-                    reasonCode = MqttSubAckReasonCode.NOT_AUTHORIZED
-                    logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
+                } else if (userManager.isUserManagementEnabled()) {
+                    val isWildcard = topic.contains('+') || topic.contains('#')
+                    if (!Monster.aclCheckOnSubscription() && isWildcard) {
+                        // Delivery-time ACL mode: skip ACL rule check for wildcard subscriptions,
+                        // but still enforce the user-level canSubscribe flag
+                        val user = userManager.getUser(username)
+                        if (user != null && !user.canSubscribe) {
+                            allowed = false
+                            reasonCode = MqttSubAckReasonCode.NOT_AUTHORIZED
+                            logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] subscribe permission disabled")
+                        } else {
+                            reasonCode = MqttSubAckReasonCode.qosGranted(subscription.qualityOfService())
+                        }
+                    } else if (!userManager.canSubscribe(username, topic, clientId)) {
+                        // ACL check
+                        allowed = false
+                        reasonCode = MqttSubAckReasonCode.NOT_AUTHORIZED
+                        logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
+                    } else {
+                        reasonCode = MqttSubAckReasonCode.qosGranted(subscription.qualityOfService())
+                    }
                 } else {
                     // Subscription allowed - return granted QoS
                     reasonCode = MqttSubAckReasonCode.qosGranted(subscription.qualityOfService())
@@ -729,7 +745,16 @@ class MqttClient(
 
                 // ACL check (only if still allowed so far and user management enabled)
                 if (allowed && userManager.isUserManagementEnabled()) {
-                    if (!userManager.canSubscribe(username, topic, clientId)) {
+                    val isWildcard = topic.contains('+') || topic.contains('#')
+                    if (!Monster.aclCheckOnSubscription() && isWildcard) {
+                        // Delivery-time ACL mode: skip ACL rule check for wildcard subscriptions,
+                        // but still enforce the user-level canSubscribe flag
+                        val user = userManager.getUser(username)
+                        if (user != null && !user.canSubscribe) {
+                            allowed = false
+                            logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] subscribe permission disabled")
+                        }
+                    } else if (!userManager.canSubscribe(username, topic, clientId)) {
                         allowed = false
                         logger.warning("Client [$clientId] Subscription DENIED for [$topic] - user [$username] lacks permission")
                     }
@@ -1110,6 +1135,16 @@ class MqttClient(
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
+            // Delivery-time ACL filtering: when AclCheckOnSubscription is false,
+            // check ACL against the concrete topic before delivering to the client
+            if (!Monster.aclCheckOnSubscription() && userManager.isUserManagementEnabled()) {
+                val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
+                if (!userManager.canSubscribe(username, message.topicName, clientId)) {
+                    logger.finest { "Client [$clientId] Message for topic [${message.topicName}] dropped by delivery-time ACL filter for user [$username]" }
+                    return
+                }
+            }
+
             // Increment messages sent to client ONLY when actually publishing to endpoint
             if (message.qosLevel == 0) {
                 sessionHandler.incrementMessagesOut(clientId)
