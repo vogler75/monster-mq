@@ -52,7 +52,7 @@ for arg in "$@"; do
                 echo "Script Options (before --):"
                 echo "  -build, -b          Build dashboard and broker with Maven before starting"
                 echo "  -norun, -n          Do not run the broker (useful with -b for build-only)"
-                echo "  -dashboard, -d      Serve dashboard from dashboard/dist/ (for live development)"
+                echo "  -dashboard, -d      Build and serve dashboard from dashboard/dist/ (for live development)"
                 echo "  -nokill, -nk        Do not kill existing instances before starting"
                 echo "  -help, --help, -h   Show this help message"
                 echo ""
@@ -179,12 +179,28 @@ JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
 
 # Serve dashboard from filesystem for development
 if [ "$DASHBOARD_DEV" = true ]; then
-    DASHBOARD_DIST="$(cd "$(dirname "$0")/../dashboard/dist" 2>/dev/null && pwd)"
+    DASHBOARD_DIR="$(cd "$(dirname "$0")/../dashboard" && pwd)"
+    DASHBOARD_DIST="$DASHBOARD_DIR/dist"
+    
+    # If -build was NOT specified, build the dashboard now if requested by -d
+    if [ "$BUILD_FIRST" = false ]; then
+        if [ -f "$DASHBOARD_DIR/package.json" ]; then
+            echo "Always build requested by -d, building dashboard..."
+            (cd "$DASHBOARD_DIR" && npm install && npm run build)
+            if [ $? -ne 0 ]; then
+                echo "Dashboard build failed!"
+                exit 1
+            fi
+        else
+            echo "Warning: Dashboard directory or package.json not found, skipping build."
+        fi
+    fi
+
     if [ -d "$DASHBOARD_DIST" ]; then
         echo "Dashboard serving from filesystem: $DASHBOARD_DIST"
         REMAINING_ARGS+=("-dashboardPath" "$DASHBOARD_DIST")
     else
-        echo "Warning: dashboard/dist/ not found. Run 'cd dashboard && npm run build' first."
+        echo "Warning: dashboard/dist/ not found after build attempt."
     fi
 fi
 

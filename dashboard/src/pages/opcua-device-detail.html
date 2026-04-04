@@ -106,7 +106,7 @@
                         </div>
                         <div class="form-group">
                             <label for="device-namespace">Namespace *</label>
-                            <input type="text" id="device-namespace" required>
+                            <input type="text" id="device-namespace" required pattern="[^+#]*" title="Namespace must not contain + or #">
                         </div>
                         <div class="form-group">
                             <label for="device-endpoint">Endpoint URL *</label>
@@ -292,18 +292,18 @@
                                 </div>
                                 <div class="form-group">
                                     <label for="write-topic-prefix">Fire &amp; Forget Topic Prefix</label>
-                                    <input type="text" id="write-topic-prefix" value="write">
+                                    <input type="text" id="write-topic-prefix" value="write" pattern="[^+#]*" title="Topic prefix must not contain + or #">
                                     <span class="form-hint">{namespace}/{prefix}/{nodeId} &mdash; no response</span>
                                 </div>
                                 <div class="form-group" style="grid-column: span 2;"></div>
                                 <div class="form-group">
                                     <label for="write-request-topic-prefix">Request Topic Prefix</label>
-                                    <input type="text" id="write-request-topic-prefix" value="request">
+                                    <input type="text" id="write-request-topic-prefix" value="request" pattern="[^+#]*" title="Topic prefix must not contain + or #">
                                     <span class="form-hint">{namespace}/{prefix}/{nodeId} &mdash; publishes response</span>
                                 </div>
                                 <div class="form-group">
                                     <label for="write-response-topic-prefix">Response Topic Prefix</label>
-                                    <input type="text" id="write-response-topic-prefix" value="response">
+                                    <input type="text" id="write-response-topic-prefix" value="response" pattern="[^+#]*" title="Topic prefix must not contain + or #">
                                     <span class="form-hint">Response topic: {namespace}/{prefix}/{nodeId}</span>
                                 </div>
                             </div>
@@ -369,7 +369,7 @@
                 </div>
                 <div class="form-group">
                     <label for="address-topic">Topic *</label>
-                    <input type="text" id="address-topic" required placeholder="e.g., factory/values">
+                    <input type="text" id="address-topic" required placeholder="e.g., factory/values" pattern="[^+#]*" title="Topic name must not contain + or #">
                     <span class="form-hint">MQTT topic where values will be published</span>
                 </div>
                 <div class="form-group">
@@ -412,7 +412,7 @@
                 </div>
                 <div class="form-group">
                     <label for="edit-address-topic">Topic *</label>
-                    <input type="text" id="edit-address-topic" required placeholder="e.g., factory/values">
+                    <input type="text" id="edit-address-topic" required placeholder="e.g., factory/values" pattern="[^+#]*" title="Topic name must not contain + or #">
                     <span class="form-hint">MQTT topic where values will be published</span>
                 </div>
                 <div class="form-group">
