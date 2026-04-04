@@ -73,6 +73,10 @@ class MetricsResolver(
                                 kafkaClientOut = 0.0,
                                 winCCOaClientIn = 0.0,
                                 winCCUaClientIn = 0.0,
+                                natsClientIn = 0.0,
+                                natsClientOut = 0.0,
+                                redisClientIn = 0.0,
+                                redisClientOut = 0.0,
                                 neo4jClientIn = 0.0,
                                 timestamp = TimestampConverter.currentTimeIsoString()
                             )
@@ -135,6 +139,10 @@ class MetricsResolver(
                                     kafkaClientOut = 0.0,
                                     winCCOaClientIn = 0.0,
                                     winCCUaClientIn = 0.0,
+                                    natsClientIn = 0.0,
+                                    natsClientOut = 0.0,
+                                    redisClientIn = 0.0,
+                                    redisClientOut = 0.0,
                                     neo4jClientIn = 0.0,
                                     timestamp = TimestampConverter.currentTimeIsoString()
                                 )
@@ -592,6 +600,10 @@ class MetricsResolver(
                                 kafkaClientOut = round2(bm.kafkaClientOut),
                                 winCCOaClientIn = round2(bm.winCCOaClientIn),
                                 winCCUaClientIn = round2(bm.winCCUaClientIn),
+                                natsClientIn = round2(bm.natsClientIn),
+                                natsClientOut = round2(bm.natsClientOut),
+                                redisClientIn = round2(bm.redisClientIn),
+                                redisClientOut = round2(bm.redisClientOut),
                                 neo4jClientIn = round2(bm.neo4jClientIn),
                                 timestamp = bm.timestamp
                             )
@@ -722,6 +734,10 @@ class MetricsResolver(
                 kafkaClientOut = round2(bm.kafkaClientOut),
                 winCCOaClientIn = round2(bm.winCCOaClientIn),
                 winCCUaClientIn = round2(bm.winCCUaClientIn),
+                natsClientIn = round2(bm.natsClientIn),
+                natsClientOut = round2(bm.natsClientOut),
+                redisClientIn = round2(bm.redisClientIn),
+                redisClientOut = round2(bm.redisClientOut),
                 neo4jClientIn = round2(bm.neo4jClientIn),
                 timestamp = bm.timestamp
             )
@@ -776,6 +792,10 @@ class MetricsResolver(
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            natsClientIn = 0.0,
+                            natsClientOut = 0.0,
+                            redisClientIn = 0.0,
+                            redisClientOut = 0.0,
                             neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         )
@@ -807,6 +827,10 @@ class MetricsResolver(
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            natsClientIn = 0.0,
+                            natsClientOut = 0.0,
+                            redisClientIn = 0.0,
+                            redisClientOut = 0.0,
                             neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))
@@ -833,6 +857,10 @@ class MetricsResolver(
                             kafkaClientOut = 0.0,
                             winCCOaClientIn = 0.0,
                             winCCUaClientIn = 0.0,
+                            natsClientIn = 0.0,
+                            natsClientOut = 0.0,
+                            redisClientIn = 0.0,
+                            redisClientOut = 0.0,
                             neo4jClientIn = 0.0,
                             timestamp = TimestampConverter.currentTimeIsoString()
                         ))

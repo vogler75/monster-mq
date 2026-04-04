@@ -60,6 +60,7 @@ class Plc4xConnector : AbstractVerticle() {
     private var driverManager: PlcDriverManager? = null
 
     // Connection state
+    @Volatile private var isStopped = false
     private var isConnected = false
     private var isReconnecting = false
     private var reconnectTimerId: Long? = null
@@ -123,6 +124,7 @@ class Plc4xConnector : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         logger.info("Stopping Plc4xConnector for device: ${deviceConfig.name}")
+        isStopped = true
 
         // Cancel any pending timers
         reconnectTimerId?.let { timerId ->
@@ -281,6 +283,7 @@ class Plc4xConnector : AbstractVerticle() {
     }
 
     private fun scheduleReconnection() {
+        if (isStopped) return
         if (!isReconnecting) {
             // Cancel any existing reconnection timer
             reconnectTimerId?.let { timerId ->
@@ -337,6 +340,7 @@ class Plc4xConnector : AbstractVerticle() {
     }
 
     private fun pollAddresses() {
+        if (isStopped) return
         if (!isConnected || connection == null) {
             return
         }
@@ -350,6 +354,7 @@ class Plc4xConnector : AbstractVerticle() {
         }
 
         vertx.executeBlocking<Unit> {
+            if (isStopped) return@executeBlocking
             try {
                 // Create read request builder
                 val requestBuilder = connection!!.readRequestBuilder()
@@ -364,17 +369,29 @@ class Plc4xConnector : AbstractVerticle() {
                 val responseFuture = readRequest.execute()
 
                 // Wait for response
-                val response = responseFuture.get()
+                val response = try {
+                    responseFuture.get()
+                } catch (e: java.util.concurrent.ExecutionException) {
+                    // PLC4X internal error (e.g. NPE in tag response mapping) — not a connection loss
+                    val cause = e.cause
+                    if (cause is NullPointerException || cause is IllegalArgumentException || cause is IllegalStateException) {
+                        logger.warning("PLC4X internal error during read (${cause.javaClass.simpleName}): ${cause.message}")
+                        return@executeBlocking
+                    }
+                    throw e // other ExecutionExceptions may indicate connection loss
+                }
+
+                logger.fine { "PLC4X read response tagNames: ${response.tagNames}" }
 
                 // Process response for each address
                 enabledAddresses.forEach { address ->
                     try {
-                        if (!response.tagNames.contains(address.name)) {
-                            logger.warning("Failed to read address ${address.name}: Tag was not found in the read response")
+                        val responseCode = try {
+                            response.getResponseCode(address.name)
+                        } catch (e: Exception) {
+                            logger.warning("Failed to get response code for '${address.name}' (address: ${address.address}): ${e.message} — response tagNames: ${response.tagNames}")
                             return@forEach
                         }
-                        
-                        val responseCode = response.getResponseCode(address.name)
                         if (responseCode == PlcResponseCode.OK) {
                             val value = response.getObject(address.name)
                             if (value != null) {

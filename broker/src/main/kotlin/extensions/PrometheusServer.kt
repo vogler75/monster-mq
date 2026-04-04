@@ -58,6 +58,8 @@ class PrometheusServer(
             "kafka_client_in", "kafka_client_out",
             "opcua_client_in",
             "winccoa_client_in", "winccua_client_in",
+            "nats_client_in", "nats_client_out",
+            "redis_client_in", "redis_client_out",
             "neo4j_client_in"
         )
     }
@@ -856,6 +858,10 @@ class PrometheusServer(
         "opcua_client_in"  -> metrics.opcUaClientIn
         "winccoa_client_in"-> metrics.winCCOaClientIn
         "winccua_client_in"-> metrics.winCCUaClientIn
+        "nats_client_in"   -> metrics.natsClientIn
+        "nats_client_out"  -> metrics.natsClientOut
+        "redis_client_in"  -> metrics.redisClientIn
+        "redis_client_out" -> metrics.redisClientOut
         "neo4j_client_in"  -> metrics.neo4jClientIn
         else -> null
     }

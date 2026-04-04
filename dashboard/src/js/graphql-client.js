@@ -427,6 +427,11 @@ class GraphQLDashboardClient {
                         opcUaClientOut
                         winCCOaClientIn
                         winCCUaClientIn
+                        natsClientIn
+                        natsClientOut
+                        redisClientIn
+                        redisClientOut
+                        neo4jClientIn
                         timestamp
                     }
                 }
@@ -499,6 +504,11 @@ class GraphQLDashboardClient {
                         opcUaClientOut
                         winCCOaClientIn
                         winCCUaClientIn
+                        natsClientIn
+                        natsClientOut
+                        redisClientIn
+                        redisClientOut
+                        neo4jClientIn
                         timestamp
                     }
                     metricsHistory(lastMinutes: $lastMinutes, from: $from, to: $to) {
@@ -520,6 +530,11 @@ class GraphQLDashboardClient {
                         opcUaClientOut
                         winCCOaClientIn
                         winCCUaClientIn
+                        natsClientIn
+                        natsClientOut
+                        redisClientIn
+                        redisClientOut
+                        neo4jClientIn
                         timestamp
                     }
                 }

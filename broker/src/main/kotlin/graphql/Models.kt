@@ -197,6 +197,10 @@ data class BrokerMetrics(
     val kafkaClientOut: Double = 0.0,
     val winCCOaClientIn: Double = 0.0,
     val winCCUaClientIn: Double = 0.0,
+    val natsClientIn: Double = 0.0,
+    val natsClientOut: Double = 0.0,
+    val redisClientIn: Double = 0.0,
+    val redisClientOut: Double = 0.0,
     val neo4jClientIn: Double = 0.0,
     val timestamp: String
 )

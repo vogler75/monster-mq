@@ -132,6 +132,10 @@ class MetricsHandler(
             var winCCOaClientInTotal = 0.0
             var winCCUaClientInTotal = 0.0
             var neo4jClientInTotal = 0.0
+            var natsClientInTotal = 0.0
+            var natsClientOutTotal = 0.0
+            var redisClientInTotal = 0.0
+            var redisClientOutTotal = 0.0
             var brokerDone = false
             var bridgeDone = false
             var opcUaDone = false
@@ -139,10 +143,12 @@ class MetricsHandler(
             var winCCOaDone = false
             var winCCUaDone = false
             var neo4jDone = false
+            var natsDone = false
+            var redisDone = false
             var archiveDone = false
 
             fun tryAssembleAndStore() {
-                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && winCCUaDone && neo4jDone && archiveDone && nodeMetrics != null) {
+                if (brokerDone && bridgeDone && opcUaDone && kafkaDone && winCCOaDone && winCCUaDone && neo4jDone && natsDone && redisDone && archiveDone && nodeMetrics != null) {
                     try {
                         val nm = nodeMetrics!!
                         val brokerMetrics = BrokerMetrics(
@@ -164,13 +170,17 @@ class MetricsHandler(
                             kafkaClientOut = kafkaOutTotal,
                             winCCOaClientIn = winCCOaClientInTotal,
                             winCCUaClientIn = winCCUaClientInTotal,
+                            natsClientIn = natsClientInTotal,
+                            natsClientOut = natsClientOutTotal,
+                            redisClientIn = redisClientInTotal,
+                            redisClientOut = redisClientOutTotal,
                             neo4jClientIn = neo4jClientInTotal,
                             timestamp = TimestampConverter.instantToIsoString(timestamp)
                         )
 
                         metricsStore.storeBrokerMetrics(timestamp, nodeId, brokerMetrics).onComplete { result ->
                             if (result.succeeded()) {
-                                    logger.fine { "Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal neo4jIn=$neo4jClientInTotal) for nodeId: $nodeId" }
+                                    logger.fine { "Stored aggregated broker metrics (bridgeIn=$bridgeInTotal bridgeOut=$bridgeOutTotal kafkaIn=$kafkaInTotal winCCOaIn=$winCCOaClientInTotal winCCUaIn=$winCCUaClientInTotal natsIn=$natsClientInTotal redisIn=$redisClientInTotal neo4jIn=$neo4jClientInTotal) for nodeId: $nodeId" }
                             } else {
                                 logger.warning("Error storing broker metrics: ${result.cause()?.message}")
                             }
@@ -196,6 +206,10 @@ class MetricsHandler(
                             .put("kafkaClientOut", brokerMetrics.kafkaClientOut)
                             .put("winCCOaClientIn", brokerMetrics.winCCOaClientIn)
                             .put("winCCUaClientIn", brokerMetrics.winCCUaClientIn)
+                            .put("natsClientIn", brokerMetrics.natsClientIn)
+                            .put("natsClientOut", brokerMetrics.natsClientOut)
+                            .put("redisClientIn", brokerMetrics.redisClientIn)
+                            .put("redisClientOut", brokerMetrics.redisClientOut)
                             .put("neo4jClientIn", brokerMetrics.neo4jClientIn)
                             .put("timestamp", brokerMetrics.timestamp)
                         publishMetrics("${Const.SYS_TOPIC_NAME}/brokers/$nodeId/metrics", brokerMetricsJson)
@@ -595,6 +609,106 @@ class MetricsHandler(
                 } else {
                     logger.fine { "Could not retrieve Neo4j client connector list: ${listReply.cause()?.message}" }
                     neo4jDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
+            // NATS Client metrics aggregation - only query this node's devices
+            val natsListAddress = EventBusAddresses.NatsBridge.connectorsList(nodeId)
+            vertx.eventBus().request<JsonObject>(natsListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) {
+                        natsDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.NatsBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        val outRate = m.getDouble("messagesOutRate", 0.0)
+                                        natsClientInTotal += inRate
+                                        natsClientOutTotal += outRate
+
+                                        val natsMetricsJson = JsonObject()
+                                            .put("messagesIn", inRate)
+                                            .put("messagesOut", outRate)
+                                            .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
+                                        metricsStore.storeMetrics(at.rocworks.stores.MetricKind.NATSCLIENT, timestamp, deviceName, natsMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/nats/${deviceName}/metrics", natsMetricsJson)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing NATS client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine { "No metrics for NATS client $deviceName: ${mReply.cause()?.message}" }
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    natsDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine { "Could not retrieve NATS client connector list: ${listReply.cause()?.message}" }
+                    natsDone = true
+                    tryAssembleAndStore()
+                }
+            }
+
+            // Redis Client metrics aggregation - only query this node's devices
+            val redisListAddress = EventBusAddresses.RedisBridge.connectorsList(nodeId)
+            vertx.eventBus().request<JsonObject>(redisListAddress, JsonObject()).onComplete { listReply ->
+                if (listReply.succeeded()) {
+                    val body = listReply.result().body()
+                    val devices = body.getJsonArray("devices") ?: io.vertx.core.json.JsonArray()
+                    if (devices.isEmpty) {
+                        redisDone = true
+                        tryAssembleAndStore()
+                    } else {
+                        var remaining = devices.size()
+                        devices.forEach { d ->
+                            val deviceName = d as String
+                            val mAddr = EventBusAddresses.RedisBridge.connectorMetrics(deviceName)
+                            vertx.eventBus().request<JsonObject>(mAddr, JsonObject()).onComplete { mReply ->
+                                if (mReply.succeeded()) {
+                                    try {
+                                        val m = mReply.result().body()
+                                        val inRate = m.getDouble("messagesInRate", 0.0)
+                                        val outRate = m.getDouble("messagesOutRate", 0.0)
+                                        redisClientInTotal += inRate
+                                        redisClientOutTotal += outRate
+
+                                        val redisMetricsJson = JsonObject()
+                                            .put("messagesIn", inRate)
+                                            .put("messagesOut", outRate)
+                                            .put("timestamp", TimestampConverter.instantToIsoString(timestamp))
+                                        metricsStore.storeMetrics(at.rocworks.stores.MetricKind.REDISCLIENT, timestamp, deviceName, redisMetricsJson)
+                                        publishMetrics("${Const.SYS_TOPIC_NAME}/sessions/redis/${deviceName}/metrics", redisMetricsJson)
+                                    } catch (e: Exception) {
+                                        logger.warning("Error processing Redis client metrics for $deviceName: ${e.message}")
+                                    }
+                                } else {
+                                    logger.fine { "No metrics for Redis client $deviceName: ${mReply.cause()?.message}" }
+                                }
+                                remaining -= 1
+                                if (remaining == 0) {
+                                    redisDone = true
+                                    tryAssembleAndStore()
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    logger.fine { "Could not retrieve Redis client connector list: ${listReply.cause()?.message}" }
+                    redisDone = true
                     tryAssembleAndStore()
                 }
             }

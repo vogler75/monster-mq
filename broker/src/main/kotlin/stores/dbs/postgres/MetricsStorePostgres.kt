@@ -339,6 +339,11 @@ class MetricsStorePostgres(
         .put("kafkaClientOut", m.kafkaClientOut)
         .put("winCCOaClientIn", m.winCCOaClientIn)
         .put("winCCUaClientIn", m.winCCUaClientIn)
+        .put("natsClientIn", m.natsClientIn)
+        .put("natsClientOut", m.natsClientOut)
+        .put("redisClientIn", m.redisClientIn)
+        .put("redisClientOut", m.redisClientOut)
+        .put("neo4jClientIn", m.neo4jClientIn)
         .put("timestamp", m.timestamp)
 
     private fun sessionMetricsToJson(m: SessionMetrics) = JsonObject()
@@ -365,6 +370,11 @@ class MetricsStorePostgres(
         kafkaClientOut = 0.0,
         winCCOaClientIn = 0.0,
         winCCUaClientIn = 0.0,
+        natsClientIn = 0.0,
+        natsClientOut = 0.0,
+        redisClientIn = 0.0,
+        redisClientOut = 0.0,
+        neo4jClientIn = 0.0,
         timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     ) else BrokerMetrics(
         messagesIn = j.getDouble("messagesIn",0.0),
@@ -385,6 +395,11 @@ class MetricsStorePostgres(
         kafkaClientOut = j.getDouble("kafkaClientOut",0.0),
         winCCOaClientIn = j.getDouble("winCCOaClientIn",0.0),
         winCCUaClientIn = j.getDouble("winCCUaClientIn",0.0),
+        natsClientIn = j.getDouble("natsClientIn",0.0),
+        natsClientOut = j.getDouble("natsClientOut",0.0),
+        redisClientIn = j.getDouble("redisClientIn",0.0),
+        redisClientOut = j.getDouble("redisClientOut",0.0),
+        neo4jClientIn = j.getDouble("neo4jClientIn",0.0),
         timestamp = j.getString("timestamp")?: at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
     )
 

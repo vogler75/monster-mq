@@ -84,6 +84,16 @@ type BrokerMetrics {
     winCCOaClientIn: Float!
     # Messages per second received from WinCC Unified clients (tag values and alarms)
     winCCUaClientIn: Float!
+    # Messages per second received via NATS bridge clients (NATS -> MQTT)
+    natsClientIn: Float!
+    # Messages per second sent via NATS bridge clients (MQTT -> NATS)
+    natsClientOut: Float!
+    # Messages per second received via Redis bridge clients (Redis -> MQTT)
+    redisClientIn: Float!
+    # Messages per second sent via Redis bridge clients (MQTT -> Redis)
+    redisClientOut: Float!
+    # Messages per second received via Neo4j bridge clients
+    neo4jClientIn: Float!
     # ISO 8601 timestamp when these metrics were captured (e.g., "2024-01-15T10:30:00Z")
     timestamp: String!
 }
