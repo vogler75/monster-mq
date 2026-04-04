@@ -53,7 +53,7 @@
         .addresses-table th, .addresses-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--dark-border); text-align:left; }
         .addresses-table th { font-weight:600; color:var(--text-primary); background:var(--dark-surface-2); }
         .addresses-table tbody tr:hover { background:rgba(71,85,105,0.1); }
-        .mode-badge { display:inline-flex; padding:0.25rem 0.6rem; border-radius:12px; font-size:0.7rem; font-weight:700; text-transform:uppercase; }
+        .mode-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.25rem 0.6rem; border-radius:12px; font-size:0.7rem; font-weight:700; text-transform:uppercase; }
         .mode-subscribe { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
         .mode-publish { background:rgba(124,58,237,0.15); color:var(--monster-purple); border:1px solid rgba(124,58,237,0.3); }
         .action-buttons { display:flex; gap:0.5rem; }
@@ -269,7 +269,7 @@
             <form id="add-address-form">
                 <div class="form-group">
                     <label for="addr-mode">Mode *</label>
-                    <select id="addr-mode" required>
+                    <select id="addr-mode" required onchange="natsDetailManager.updateTopicDirection()">
                         <option value="SUBSCRIBE">SUBSCRIBE — NATS → MQTT (inbound)</option>
                         <option value="PUBLISH">PUBLISH — MQTT → NATS (outbound)</option>
                     </select>
@@ -279,6 +279,11 @@
                     <input type="text" id="addr-nats-subject" required placeholder="e.g. sensors.> or commands.*">
                     <span class="json-hint">NATS wildcards: * (single token), > (multi-token)</span>
                 </div>
+
+                <div id="addr-topic-direction" style="display: flex; justify-content: center; align-items: center; margin-bottom: 1.5rem; font-size: 1.5rem; color: var(--monster-teal);">
+                    <span class="direction-arrow">⬇️</span>
+                </div>
+
                 <div class="form-group">
                     <label for="addr-mqtt-topic">MQTT Topic *</label>
                     <input type="text" id="addr-mqtt-topic" required placeholder="e.g. sensors/# or commands/+">
