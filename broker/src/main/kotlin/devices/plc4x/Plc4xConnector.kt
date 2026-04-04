@@ -388,6 +388,9 @@ class Plc4xConnector : AbstractVerticle() {
                     throw e // other ExecutionExceptions may indicate connection loss
                 }
 
+                // Abort if stopped while waiting for response
+                if (isStopped) return@executeBlocking
+
                 logger.fine { "PLC4X read response tagNames: ${response.tagNames}" }
 
                 // Process response for each address
@@ -415,6 +418,7 @@ class Plc4xConnector : AbstractVerticle() {
                 Unit // Return Unit
 
             } catch (e: Exception) {
+                if (isStopped) return@executeBlocking
                 logger.log(java.util.logging.Level.SEVERE, "Error polling addresses", e)
                 // Connection might be lost - schedule reconnection
                 isConnected = false
@@ -600,6 +604,7 @@ class Plc4xConnector : AbstractVerticle() {
      * Handle incoming MQTT message and write value to PLC
      */
     private fun handleMqttMessage(address: Plc4xAddress, message: BrokerMessage) {
+        if (isStopped) return
         try {
             if (!isConnected || connection == null) {
                 logger.warning("Cannot write to PLC - not connected (address: ${address.name})")
@@ -655,19 +660,42 @@ class Plc4xConnector : AbstractVerticle() {
                 else -> value
             }
 
-            // Write to PLC using blocking call
-            vertx.executeBlocking<Unit> {
+            // Write to PLC — unordered so writes don't queue behind read polls
+            logger.fine { "Queuing PLC write for ${address.name} = $plcValue (${plcValue?.javaClass?.simpleName})" }
+            vertx.executeBlocking(java.util.concurrent.Callable {
+                if (isStopped) return@Callable
+                val conn = connection
+                if (conn == null || !isConnected) {
+                    logger.warning("Cannot write to PLC - connection lost before write executed (address: ${address.name})")
+                    return@Callable
+                }
                 try {
                     // Create write request
-                    val requestBuilder = connection!!.writeRequestBuilder()
+                    val requestBuilder = conn.writeRequestBuilder()
                     requestBuilder.addTagAddress(address.name, address.address, plcValue)
 
                     // Build and execute write request
                     val writeRequest = requestBuilder.build()
                     val responseFuture = writeRequest.execute()
 
-                    // Wait for response
-                    val response = responseFuture.get()
+                    // Wait for response with timeout
+                    val timeoutMs = maxOf(plc4xConfig.pollingInterval * 3, 30_000L)
+                    val response = try {
+                        responseFuture.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    } catch (e: java.util.concurrent.TimeoutException) {
+                        logger.warning("PLC4X write request timed out after ${timeoutMs}ms for ${address.name}")
+                        responseFuture.cancel(true)
+                        throw e
+                    } catch (e: java.util.concurrent.ExecutionException) {
+                        val cause = e.cause
+                        if (cause is NullPointerException || cause is IllegalArgumentException || cause is IllegalStateException) {
+                            logger.warning("PLC4X internal error during write for ${address.name} (${cause.javaClass.simpleName}): ${cause.message}")
+                            return@Callable
+                        }
+                        throw e
+                    }
+
+                    if (isStopped) return@Callable
 
                     // Check response safely
                     if (!response.tagNames.contains(address.name)) {
@@ -685,11 +713,12 @@ class Plc4xConnector : AbstractVerticle() {
                     Unit // Return Unit
 
                 } catch (e: Exception) {
+                    if (isStopped) return@Callable
                     logger.severe("Error writing to PLC address ${address.name}: ${e.message}")
                     throw e
                 }
-            }.onComplete { result ->
-                if (result.failed()) {
+            }, false).onComplete { result ->
+                if (result.failed() && !isStopped) {
                     // Connection might be lost - schedule reconnection
                     if (isConnected) {
                         isConnected = false
