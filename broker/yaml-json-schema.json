@@ -213,17 +213,6 @@
       "type": "object",
       "description": "System logging configuration",
       "properties": {
-        "Mqtt": {
-          "type": "object",
-          "description": "MQTT log handler configuration",
-          "properties": {
-            "Enabled": {
-              "type": "boolean",
-              "description": "Enable MQTT log handler to publish all Java logs to $SYS/syslogs/<node>/<level> topics (fixed at INFO level)",
-              "default": false
-            }
-          }
-        },
         "Memory": {
           "type": "object",
           "description": "In-memory log storage configuration",

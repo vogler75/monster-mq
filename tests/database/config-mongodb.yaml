@@ -10,8 +10,6 @@ MongoDB:
   Database: monstermq
 
 Logging:
-  Mqtt:
-    Enabled: true
   Memory:
     Enabled: true
     Entries: 1000

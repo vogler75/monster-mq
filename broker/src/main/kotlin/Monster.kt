@@ -1121,31 +1121,23 @@ MORE INFO:
                     .compose { vertx.deployVerticle(messageHandler) }
                     .compose { vertx.deployVerticle(sessionHandler) }
                     .compose {
-                        // Configure logging (MQTT and Memory are independent)
+                        // Configure logging (in-memory log capture)
                         val loggingConfig = configJson.getJsonObject("Logging", JsonObject())
-
-                        // Check if either MQTT or Memory logging is enabled
-                        val mqttConfig = loggingConfig.getJsonObject("Mqtt", JsonObject())
-                        val mqttLoggingEnabled = mqttConfig.getBoolean("Enabled", false)
                         val memoryConfig = loggingConfig.getJsonObject("Memory", JsonObject())
                         val memoryLoggingEnabled = memoryConfig.getBoolean("Enabled", false)
 
-                        // Install MqttLogHandler if EITHER MQTT or Memory logging is enabled
-                        // (Memory logging depends on MqttLogHandler to capture logs)
-                        if (mqttLoggingEnabled || memoryLoggingEnabled) {
+                        if (memoryLoggingEnabled) {
                             try {
                                 logger.fine("Installing log handler for system-wide log capture (level: ${Const.DEBUG_LEVEL})...")
                                 val sysLogHandler = SysLogHandler.install()
-
-                                // Set the log level to configured debug level
                                 sysLogHandler.level = Const.DEBUG_LEVEL
-                                logger.info("Log handler installed successfully at ${Const.DEBUG_LEVEL} level (MQTT: $mqttLoggingEnabled, Memory: $memoryLoggingEnabled)")
+                                logger.info("Log handler installed successfully at ${Const.DEBUG_LEVEL} level")
                             } catch (e: Exception) {
                                 logger.severe("Failed to install log handler: ${e.message}")
                                 throw e
                             }
                         } else {
-                            logger.fine("Both MQTT and Memory logging are disabled")
+                            logger.fine("Memory logging is disabled")
                         }
 
                         Future.succeededFuture<String>()
@@ -1159,7 +1151,7 @@ MORE INFO:
 
                         if (memoryEnabled) {
                             logger.fine("Deploying SyslogVerticle with memoryEntries=$memoryEntries")
-                            val syslogVerticle = SyslogVerticle(true, memoryEntries, messageHandler)
+                            val syslogVerticle = SyslogVerticle(true, memoryEntries)
                             vertx.deployVerticle(syslogVerticle)
                         } else {
                             logger.fine("In-memory syslog storage is disabled")
