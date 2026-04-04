@@ -39,8 +39,11 @@ object Utils {
         }
     }
 
-    fun getLogger(o: Class<*>, additionalName: String=""): Logger
-    = Logger.getLogger(o.name.substringAfterLast(".") + if (additionalName.isEmpty()) "" else "/$additionalName")
+    fun getLogger(o: Class<*>, additionalName: String=""): Logger =
+        Logger.getLogger(o.name.substringAfterLast(".") + if (additionalName.isEmpty()) "" else "/$additionalName")
+            .also { logger ->
+                Const.DEBUG_LEVEL?.let { logger.level = it }
+            }
     //= Logger.getLogger(o.name.removePrefix("at.rocworks.") + if (additionalName.isEmpty()) "" else "/$additionalName")
 
     fun getTopicLevels(topicName: String) = topicName.split("/")

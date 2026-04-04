@@ -58,6 +58,7 @@ import at.rocworks.logging.SysLogHandler
 import at.rocworks.logging.SyslogVerticle
 import handlers.MetricsHandler
 import java.io.File
+import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
@@ -339,10 +340,26 @@ class Monster(args: Array<String>) {
     }
 
     init {
+        Utils.getArgIndex(args, listOf("-log", "--log")).let {
+            if (it != -1) {
+                if (it + 1 >= args.size) {
+                    println("ERROR: -log argument requires a value (e.g. INFO, FINE, FINEST)")
+                    exitProcess(1)
+                }
+                try {
+                    Const.DEBUG_LEVEL = Level.parse(args[it + 1])
+                } catch (e: IllegalArgumentException) {
+                    println("ERROR: Invalid log level '${args[it + 1]}'")
+                    exitProcess(1)
+                }
+            }
+        }
+
         // Check if we're running under JManager (MonsterOA)
         if (MonsterOA.getInstance() == null) {
             Utils.initLogging()
         }
+        Const.DEBUG_LEVEL?.let { logger.level = it }
 
         logger.fine("Monster: Starting with ${args.size} arguments ["+args.joinToString("][")+"]")
 
@@ -552,6 +569,10 @@ OPTIONS:
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
 
+  -log <level>          Override logger levels from the command line
+                        Only applied when this argument is passed
+                        Example levels: INFO, FINE, FINER, FINEST, ALL
+
   -workerPoolSize <num> Vert.x worker thread pool size
                         Default: 2×CPU count (e.g., 16 on 8-core machine)
                         Increase for high-concurrency scenarios
@@ -569,6 +590,9 @@ EXAMPLES:
 
   # Start with custom worker thread pool size for high load
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -workerPoolSize 64
+
+  # Start with temporary debug logging from the command line
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -log FINEST
 
   # Start with SQLite configuration and a custom worker pool size
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -workerPoolSize 128
