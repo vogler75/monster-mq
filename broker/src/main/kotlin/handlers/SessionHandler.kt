@@ -136,9 +136,6 @@ open class SessionHandler(
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
     // REMOVED: messageAddress() - no longer using broadcast message bus
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     companion object {
         // Use global command key from Const to ensure interoperability with clients (e.g., MqttClient.consumeCommand)
@@ -1798,8 +1795,10 @@ open class SessionHandler(
                     }
                 }
                 1, 2 -> {
+                    // Treat internal clients (clientStatus == null) as online,
+                    // same as processTopic/forwardBulkToOnlineClients does
                     val (online, others) = localClients.partition { (clientId, _) ->
-                        clientStatus[clientId] == ClientStatus.ONLINE
+                        clientStatus[clientId] == ClientStatus.ONLINE || clientStatus[clientId] == null
                     }
                     logger.finest { "Online [${online.size}] Other [${others.size}] [${Utils.getCurrentFunctionName()}]" }
 
@@ -1817,7 +1816,7 @@ open class SessionHandler(
                         logger.finest { "Queue-first: enqueued message for ${persistentOnline.size} persistent online clients [${Utils.getCurrentFunctionName()}]" }
                     }
 
-                    // Clean session online clients: send directly (no persistence needed)
+                    // Clean session online clients (and internal clients): send directly (no persistence needed)
                     processClientBatchAsync(cleanOnline, m) { clientId, msg ->
                         sendMessageToClient(clientId, messageForClient(clientId, msg))
                     }

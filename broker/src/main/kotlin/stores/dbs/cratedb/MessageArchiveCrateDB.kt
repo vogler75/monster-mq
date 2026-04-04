@@ -26,9 +26,6 @@ class MessageArchiveCrateDB (
     private val tableName = name.lowercase()
     private var lastAddAllHistoryError: Int = 0
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): Future<Void> {

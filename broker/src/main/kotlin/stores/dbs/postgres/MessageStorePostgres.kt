@@ -39,9 +39,6 @@ class MessageStorePostgres(
         }
     }
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): Future<Void> {

@@ -19,9 +19,6 @@ class QueueStoreSQLiteV1(
     private val queuedMessagesTableName = "queuedmessages"
     private val queuedMessagesClientsTableName = "queuedmessagesclients"
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): QueueStoreType = QueueStoreType.SQLITE
 

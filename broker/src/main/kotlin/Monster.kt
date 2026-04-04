@@ -58,7 +58,6 @@ import at.rocworks.logging.SysLogHandler
 import at.rocworks.logging.SyslogVerticle
 import handlers.MetricsHandler
 import java.io.File
-import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.system.exitProcess
 
@@ -408,13 +407,6 @@ class Monster(args: Array<String>) {
             exitProcess(1)
         }
 
-        Utils.getArgIndex(args, listOf("-log", "--log")).let {
-            if (it != -1) {
-                val level = Level.parse(args[it + 1])
-                Const.DEBUG_LEVEL = level
-            }
-        }
-
         // Worker pool size (optional)
         Utils.getArgIndex(args, listOf("-workerPoolSize", "--workerPoolSize")).let {
             if (it != -1 && it + 1 < args.size) {
@@ -560,10 +552,6 @@ OPTIONS:
 
   -cluster              Enable Hazelcast clustering mode for multi-node deployment
 
-  -log <level>          Set logging level
-                        Levels: ALL, FINEST, FINER, FINE, INFO, WARNING, SEVERE
-                        Default: INFO
-
   -workerPoolSize <num> Vert.x worker thread pool size
                         Default: 2×CPU count (e.g., 16 on 8-core machine)
                         Increase for high-concurrency scenarios
@@ -579,14 +567,11 @@ EXAMPLES:
   # Start with custom config file
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config myconfig.yaml
 
-  # Start in cluster mode with debug logging
-  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -cluster -log FINE
-
   # Start with custom worker thread pool size for high load
   java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -workerPoolSize 64
 
-  # Start with SQLite configuration and detailed logging
-  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -log FINEST -workerPoolSize 128
+  # Start with SQLite configuration and a custom worker pool size
+  java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt -config config-sqlite.yaml -workerPoolSize 128
 
 FEATURES:
   • MQTT 3.1.1 Protocol Support with QoS 0, 1, 2
@@ -1128,10 +1113,9 @@ MORE INFO:
 
                         if (memoryLoggingEnabled) {
                             try {
-                                logger.fine("Installing log handler for system-wide log capture (level: ${Const.DEBUG_LEVEL})...")
-                                val sysLogHandler = SysLogHandler.install()
-                                sysLogHandler.level = Const.DEBUG_LEVEL
-                                logger.info("Log handler installed successfully at ${Const.DEBUG_LEVEL} level")
+                                logger.fine("Installing log handler for system-wide log capture...")
+                                SysLogHandler.install()
+                                logger.info("Log handler installed successfully")
                             } catch (e: Exception) {
                                 logger.severe("Failed to install log handler: ${e.message}")
                                 throw e

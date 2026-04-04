@@ -32,9 +32,6 @@ class QueueStorePostgresV2(
 
     private val tableName = "messagequeue"
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): QueueStoreType = QueueStoreType.POSTGRES_V2
 

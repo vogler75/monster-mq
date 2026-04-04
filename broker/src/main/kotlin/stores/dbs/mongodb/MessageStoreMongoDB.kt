@@ -67,9 +67,6 @@ class MessageStoreMongoDB(
         }
     }
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         logger.info("Starting MongoDB Message Store [$name]")

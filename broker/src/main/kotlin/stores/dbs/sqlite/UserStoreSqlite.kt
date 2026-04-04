@@ -24,9 +24,6 @@ class UserStoreSqlite(
 
     private lateinit var sqliteClient: SQLiteClient
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): StoreType = StoreType.SQLITE
 

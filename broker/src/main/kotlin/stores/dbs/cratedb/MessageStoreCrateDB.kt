@@ -28,9 +28,6 @@ class MessageStoreCrateDB(
     private var lastDelAllError: Int = 0
     private var lastFetchError: Int = 0
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     // 1. Update table schema
     private companion object {

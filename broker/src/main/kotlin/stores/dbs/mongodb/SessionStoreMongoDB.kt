@@ -30,9 +30,6 @@ class SessionStoreMongoDB(
     private lateinit var sessionsCollection: MongoCollection<Document>
     private lateinit var subscriptionsCollection: MongoCollection<Document>
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): SessionStoreType = SessionStoreType.MONGODB
 

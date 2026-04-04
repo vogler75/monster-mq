@@ -24,9 +24,6 @@ class SessionStorePostgres(
 
     private val sessionsTableName = "sessions"
     private val subscriptionsTableName = "subscriptions"
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): SessionStoreType = SessionStoreType.POSTGRES
 

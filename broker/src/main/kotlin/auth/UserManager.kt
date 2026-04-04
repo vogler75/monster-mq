@@ -35,7 +35,6 @@ class UserManager(
     private val disconnectOnUnauthorized: Boolean
     
     init {
-        logger.level = Const.DEBUG_LEVEL
         
         val userMgmtConfig = config.getJsonObject("UserManagement") ?: JsonObject()
         isEnabled = userMgmtConfig.getBoolean("Enabled", false)

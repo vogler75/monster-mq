@@ -39,9 +39,6 @@ class MessageHandler(
 
     private val maxWriteBlockSize = 4000 // TODO: configurable
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start() {
         logger.fine("Start message handler.")

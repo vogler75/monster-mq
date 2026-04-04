@@ -26,7 +26,7 @@ class McpServer(
     private val archiveHandler: ArchiveHandler,
     private val userManager: UserManager
 ) : AbstractVerticle() {
-    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger = Utils.getLogger(this::class.java)
 
     class Connection(
         val connectionId: String,

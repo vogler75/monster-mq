@@ -36,7 +36,7 @@ class AgentTools(
     private val subAgentsAllowAll: Boolean = false,
     private val subAgents: List<String> = emptyList()
 ) {
-    private val logger: Logger = Utils.getLogger(AgentTools::class.java).apply { level = Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(AgentTools::class.java)
 
     private val nativeToolNames: Set<String> by lazy {
         this::class.java.methods

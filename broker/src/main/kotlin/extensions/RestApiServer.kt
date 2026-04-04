@@ -43,7 +43,7 @@ class RestApiServer(
     private val retainedStore: IMessageStore?,
     private val userManager: UserManager
 ) {
-    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger = Utils.getLogger(this::class.java)
 
     companion object {
         private const val API_PREFIX = "/api/v1"

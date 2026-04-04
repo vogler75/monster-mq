@@ -47,7 +47,7 @@ class I3xServer(
     private val userManager: UserManager,
 ) : AbstractVerticle() {
 
-    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger = Utils.getLogger(this::class.java)
 
     private data class I3xSubscription(
         val id: String,

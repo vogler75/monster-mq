@@ -98,9 +98,6 @@ class MqttClient(
     val clientId: String
         get() = endpoint.clientIdentifier()
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     companion object {
         const val MAX_IN_FLIGHT_MESSAGES = 100_000 // TODO make this configurable

@@ -8,9 +8,6 @@ import java.util.logging.Logger
 class TopicTree<K, V> : ITopicTree<K, V> {
     private val logger = Utils.getLogger(this::class.java)
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     data class Node<K, V> (
         val children: ConcurrentHashMap<String, Node<K, V>> = ConcurrentHashMap(), // Level to Node

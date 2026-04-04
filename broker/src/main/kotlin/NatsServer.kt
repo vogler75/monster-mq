@@ -13,9 +13,6 @@ class NatsServer(
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         val options = NetServerOptions()

@@ -25,9 +25,6 @@ class ArchiveConfigStoreSQLite(
 
     private lateinit var sqliteClient: SQLiteClient
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         sqliteClient = SQLiteClient(vertx, dbPath)

@@ -36,7 +36,7 @@ import java.util.logging.Logger
  * from those Telegram usernames are accepted. Others receive a rejection reply.
  */
 class TelegramClientConnector : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private lateinit var device: DeviceConfig
     private lateinit var cfg: TelegramClientConfig

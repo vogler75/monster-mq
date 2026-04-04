@@ -32,9 +32,6 @@ class ArchiveConfigStoreMongoDB(
     private lateinit var database: MongoDatabase
     private lateinit var collection: MongoCollection<Document>
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         try {

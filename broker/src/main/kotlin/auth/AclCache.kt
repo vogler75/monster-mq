@@ -12,9 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
 class AclCache {
     private val logger = Utils.getLogger(this::class.java)
     
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     // User data cached in memory
     private val users = ConcurrentHashMap<String, User>()

@@ -28,9 +28,6 @@ class MessageArchiveSQLite(
     private lateinit var sqlClient: SQLiteClient
     private val tableName = name.lowercase()
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.SQLITE

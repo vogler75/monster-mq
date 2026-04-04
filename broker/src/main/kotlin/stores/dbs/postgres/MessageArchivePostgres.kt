@@ -26,9 +26,6 @@ class MessageArchivePostgres (
     private val logger = Utils.getLogger(this::class.java, name)
     private val tableName = name.lowercase()
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): Future<Void> {

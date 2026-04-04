@@ -37,9 +37,6 @@ class UserStoreMongoDB(
     private var usersCollection: MongoCollection<Document>? = null
     private var usersAclCollection: MongoCollection<Document>? = null
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): StoreType = StoreType.MONGODB
 

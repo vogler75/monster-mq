@@ -40,9 +40,6 @@ class QueueStoreMongoDBV2(
 
     private val collectionName = "messagequeue"
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): QueueStoreType = QueueStoreType.MONGODB_V2
 

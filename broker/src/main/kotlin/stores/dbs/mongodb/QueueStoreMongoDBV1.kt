@@ -27,9 +27,6 @@ class QueueStoreMongoDBV1(
     private lateinit var queuedMessagesCollection: MongoCollection<Document>
     private lateinit var queuedMessagesClientsCollection: MongoCollection<Document>
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): QueueStoreType = QueueStoreType.MONGODB
 

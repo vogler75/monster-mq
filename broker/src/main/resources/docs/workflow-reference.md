@@ -663,7 +663,7 @@ if (typeof data === 'object' && data.temp !== undefined) {
 
 ### Getting Help
 
-Check the server logs for detailed error messages. Enable detailed logging with the `-log FINE` command line option.
+Check the server logs for detailed error messages. Enable detailed logging via `logging.properties`.
 
 ---
 

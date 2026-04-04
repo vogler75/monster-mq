@@ -38,9 +38,6 @@ class MessageStoreSQLite(
         }
     }
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.SQLITE

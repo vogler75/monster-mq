@@ -47,7 +47,7 @@ class AgentExecutor(
     private val deviceConfig: DeviceConfig
 ) : AbstractVerticle() {
 
-    private val logger: Logger = Utils.getLogger(this::class.java).apply { level = Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private lateinit var agentConfig: AgentConfig
     private lateinit var chatModel: ChatModel

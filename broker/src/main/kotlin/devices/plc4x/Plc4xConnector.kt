@@ -544,7 +544,7 @@ class Plc4xConnector : AbstractVerticle() {
         }
 
         if (writeAddresses.isEmpty()) {
-            logger.info("No addresses configured for WRITE mode for device ${deviceConfig.name}")
+            logger.fine("No addresses configured for WRITE mode for device ${deviceConfig.name}")
             return
         }
 
@@ -554,7 +554,9 @@ class Plc4xConnector : AbstractVerticle() {
             val clientId = "plc4x-connector-${deviceConfig.name}"
 
             // Register eventBus consumer for this PLC4X connector (handles both individual and bulk messages)
-            vertx.eventBus().consumer<Any>(at.rocworks.bus.EventBusAddresses.Client.messages(clientId)) { busMessage ->
+            val consumerAddress = at.rocworks.bus.EventBusAddresses.Client.messages(clientId)
+            logger.info("Registering eventBus consumer for PLC4X writes at address: $consumerAddress")
+            vertx.eventBus().consumer<Any>(consumerAddress) { busMessage ->
                 try {
                     val messages = when (val body = busMessage.body()) {
                         is BrokerMessage -> listOf(body)
@@ -564,6 +566,7 @@ class Plc4xConnector : AbstractVerticle() {
                             emptyList()
                         }
                     }
+                    logger.fine { "PLC4X write consumer received ${messages.size} message(s) for device ${deviceConfig.name}" }
                     messages.forEach { message ->
                         // Find the address config for this topic
                         val address = subscribedTopics.values.find { addr ->
@@ -572,6 +575,8 @@ class Plc4xConnector : AbstractVerticle() {
                         }
                         if (address != null) {
                             handleMqttMessage(address, message)
+                        } else {
+                            logger.fine("Received MQTT write message for topic '${message.topicName}', but no PLC4X address matched on device ${deviceConfig.name}")
                         }
                     }
                 } catch (e: Exception) {
@@ -589,7 +594,7 @@ class Plc4xConnector : AbstractVerticle() {
 
                 val qos = address.qos
 
-                logger.info("Internal subscription for PLC4X client '$clientId' to MQTT topic '$mqttTopic' with QoS $qos (mode: ${address.mode})")
+                logger.fine("Internal subscription for PLC4X client '$clientId' to MQTT topic '$mqttTopic' with QoS $qos (mode: ${address.mode})")
 
                 sessionHandler.subscribeInternalClient(clientId, mqttTopic, qos)
 
@@ -612,7 +617,8 @@ class Plc4xConnector : AbstractVerticle() {
             }
 
             // Parse the MQTT payload to extract the value
-            val payloadString = String(message.payload)
+            val payloadString = String(message.payload).trim()
+            logger.fine("Received PLC write message for ${address.name} on topic ${message.topicName}: $payloadString")
             val value = if (!address.jsonPath.isNullOrBlank()) {
                 // Extract value from JSON using configured path (supports dot notation, e.g. "data.value")
                 try {
@@ -629,10 +635,14 @@ class Plc4xConnector : AbstractVerticle() {
             } else {
                 try {
                     val json = JsonObject(payloadString)
-                    json.getValue("value")
+                    if (json.containsKey("value")) {
+                        json.getValue("value")
+                    } else {
+                        payloadString
+                    }
                 } catch (e: Exception) {
                     // If not JSON, try to parse as plain value
-                    payloadString.toDoubleOrNull() ?: payloadString
+                    payloadString
                 }
             }
 
@@ -658,18 +668,7 @@ class Plc4xConnector : AbstractVerticle() {
             }
 
             // Convert value to appropriate type for PLC
-            val plcValue = when (value) {
-                is Number -> {
-                    // Apply reverse transformation (undo scaling and offset)
-                    if (address.scalingFactor != null || address.offset != null) {
-                        address.reverseTransformValue(value)
-                    } else {
-                        value
-                    }
-                }
-                is String -> value.toDoubleOrNull() ?: value
-                else -> value
-            }
+            val plcValue = coerceWriteValue(address, value)
 
             // Write to PLC — unordered so writes don't queue behind read polls
             // (PLC4X handles request serialization internally)
@@ -683,6 +682,7 @@ class Plc4xConnector : AbstractVerticle() {
                 }
                 try {
                     // Create write request
+                    logger.fine("Writing to PLC address ${address.name} (${address.address}) from MQTT topic ${message.topicName}: $plcValue")
                     val requestBuilder = conn.writeRequestBuilder()
                     requestBuilder.addTagAddress(address.name, address.address, plcValue)
 
@@ -763,5 +763,105 @@ class Plc4xConnector : AbstractVerticle() {
             }
         }
         return current
+    }
+
+    private fun coerceWriteValue(address: Plc4xAddress, value: Any?): Any? {
+        val parsedValue = when (value) {
+            is String -> parseScalarValue(value)
+            else -> value
+        }
+
+        val transformedValue = when (parsedValue) {
+            is Number -> if (address.scalingFactor != null || address.offset != null) {
+                address.reverseTransformValue(parsedValue)
+            } else {
+                parsedValue
+            }
+            else -> parsedValue
+        }
+
+        if (transformedValue !is Number) {
+            return transformedValue
+        }
+
+        val explicitType = normalizePlcTypeToken(address.address.substringAfterLast(':', ""))
+        val fallbackType = inferTypeFromLastRead(address.name) ?: inferTypeFromParsedValue(parsedValue)
+        return coerceNumericValue(transformedValue.toDouble(), explicitType ?: fallbackType, parsedValue)
+    }
+
+    private fun parseScalarValue(rawValue: String): Any {
+        val trimmed = rawValue.trim()
+        if (trimmed.equals("true", ignoreCase = true)) return true
+        if (trimmed.equals("false", ignoreCase = true)) return false
+        trimmed.toIntOrNull()?.let { return it }
+        trimmed.toLongOrNull()?.let { return it }
+        trimmed.toDoubleOrNull()?.let { return it }
+        return trimmed
+    }
+
+    private fun normalizePlcTypeToken(token: String): String? {
+        return when (token.trim().uppercase()) {
+            "BOOL", "BOOLEAN" -> "BOOLEAN"
+            "BYTE", "SINT", "INT8" -> "BYTE"
+            "USINT", "UINT8" -> "USHORT"
+            "INT", "INT16", "SHORT" -> "SHORT"
+            "UINT", "UINT16", "WORD" -> "INTEGER"
+            "DINT", "INT32", "INTEGER" -> "INTEGER"
+            "UDINT", "UINT32", "DWORD" -> "LONG"
+            "LINT", "INT64", "LONG" -> "LONG"
+            "REAL", "FLOAT", "FLOAT32" -> "FLOAT"
+            "LREAL", "DOUBLE", "FLOAT64" -> "DOUBLE"
+            else -> null
+        }
+    }
+
+    private fun inferTypeFromLastRead(addressName: String): String? {
+        return when (lastReadValues[addressName]) {
+            is Boolean -> "BOOLEAN"
+            is Byte -> "BYTE"
+            is Short -> "SHORT"
+            is Int -> "INTEGER"
+            is Long -> "LONG"
+            is Float -> "FLOAT"
+            is Double -> "DOUBLE"
+            else -> null
+        }
+    }
+
+    private fun inferTypeFromParsedValue(value: Any?): String? {
+        return when (value) {
+            is Boolean -> "BOOLEAN"
+            is Byte -> "BYTE"
+            is Short -> "SHORT"
+            is Int -> "INTEGER"
+            is Long -> "LONG"
+            is Float -> "FLOAT"
+            is Double -> if (value % 1.0 == 0.0) "INTEGER" else "DOUBLE"
+            else -> null
+        }
+    }
+
+    private fun coerceNumericValue(number: Double, targetType: String?, originalValue: Any?): Any {
+        return when (targetType) {
+            "BOOLEAN" -> number != 0.0
+            "BYTE" -> number.toInt().toByte()
+            "USHORT" -> number.toInt().coerceIn(0, 255)
+            "SHORT" -> number.toInt().toShort()
+            "INTEGER" -> number.toInt()
+            "LONG" -> number.toLong()
+            "FLOAT" -> number.toFloat()
+            "DOUBLE" -> number
+            else -> when (originalValue) {
+                is Int -> number.toInt()
+                is Long -> number.toLong()
+                is Float -> number.toFloat()
+                is Double -> number
+                else -> if (number % 1.0 == 0.0 && number >= Int.MIN_VALUE && number <= Int.MAX_VALUE) {
+                    number.toInt()
+                } else {
+                    number
+                }
+            }
+        }
     }
 }

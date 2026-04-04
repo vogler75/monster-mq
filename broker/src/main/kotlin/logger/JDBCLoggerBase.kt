@@ -31,9 +31,6 @@ abstract class JDBCLoggerBase : AbstractVerticle() {
 
     protected val logger: Logger = Utils.getLogger(this::class.java)
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     protected lateinit var device: DeviceConfig
     protected lateinit var cfg: JDBCLoggerConfig

@@ -24,9 +24,6 @@ class GenAiResolver(
 ) {
     private val logger: Logger = Utils.getLogger(GenAiResolver::class.java)
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     /**
      * Root genai query resolver

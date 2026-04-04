@@ -22,7 +22,7 @@ import java.util.logging.Logger
  */
 class AgentExtension : AbstractVerticle() {
 
-    private val logger: Logger = Utils.getLogger(this::class.java).apply { level = Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private lateinit var deviceStore: IDeviceConfigStore
     private val agentVerticles = ConcurrentHashMap<String, String>() // agentName -> deploymentId

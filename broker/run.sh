@@ -13,7 +13,7 @@
 # Examples:
 #   ./run.sh                                              # Start with default config
 #   ./run.sh -build                                       # Build first, then start
-#   ./run.sh -- -cluster -log FINE                        # Start with monster options
+#   ./run.sh -- -cluster                                  # Start with monster options
 #   ./run.sh -build -- -cluster                           # Build and start in cluster mode
 #   ./run.sh -build -- -archiveConfigs archives.json       # Build and import archive configs
 
@@ -64,7 +64,7 @@ for arg in "$@"; do
                 echo "  ./run.sh                                        Start with default config"
                 echo "  ./run.sh -b                                     Build first, then start"
                 echo "  ./run.sh -b -n                                  Build only, do not start"
-                echo "  ./run.sh -- -cluster -log FINE                  Start with broker options"
+                echo "  ./run.sh -- -cluster                           Start with broker options"
                 echo "  ./run.sh -b -- -cluster                         Build and start in cluster mode"
                 echo "  ./run.sh -b -- -archiveConfigs archives.json    Build and import configs"
                 echo "  ./run.sh -d                                       Serve dashboard from filesystem"

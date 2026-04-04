@@ -42,7 +42,6 @@ log/*
 monstermq.db*
 config.yaml
 hazelcast.xml
-logging.properties
 /sqlite/
 /security/
 /buffer/

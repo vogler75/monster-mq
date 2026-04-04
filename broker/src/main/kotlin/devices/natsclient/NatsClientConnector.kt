@@ -36,7 +36,7 @@ import java.util.logging.Logger
  *   each SUBSCRIBE address and republishes arriving messages to the local MQTT broker.
  */
 class NatsClientConnector : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private lateinit var device: DeviceConfig
     private lateinit var cfg: NatsClientConfig

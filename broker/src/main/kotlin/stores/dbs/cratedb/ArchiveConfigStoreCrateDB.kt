@@ -37,9 +37,6 @@ class ArchiveConfigStoreCrateDB(
         }
     }
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)

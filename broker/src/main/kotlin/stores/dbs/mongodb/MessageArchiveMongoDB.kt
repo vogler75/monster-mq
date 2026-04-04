@@ -56,9 +56,6 @@ class MessageArchiveMongoDB(
     private val connectionRetryInterval = 30_000L // 30 seconds
     private val healthCheckInterval = 10_000L // 10 seconds for more responsive detection
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun start(startPromise: Promise<Void>) {
         logger.info("Starting MongoDB Message Archive [$name]")

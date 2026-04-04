@@ -44,7 +44,7 @@ class PrometheusServer(
     private val rawQueryLimit: Int = 10000
 ) : AbstractVerticle() {
 
-    private val logger = Utils.getLogger(this::class.java).also { it.level = Const.DEBUG_LEVEL }
+    private val logger = Utils.getLogger(this::class.java)
 
     companion object {
         private val METRIC_NAMES = listOf("topics", "metrics")

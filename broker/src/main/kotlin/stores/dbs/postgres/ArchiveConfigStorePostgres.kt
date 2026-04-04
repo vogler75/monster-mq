@@ -26,9 +26,6 @@ class ArchiveConfigStorePostgres(
 
     private val configTableName = "archiveconfigs"
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): String = "POSTGRES"
 

@@ -28,7 +28,7 @@ import java.util.logging.Logger
  * - TEXT: UTF-8 value text -> MQTT payload bytes, MQTT topic = record key (drop if key null)
  */
 class KafkaClientConnector : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = at.rocworks.Const.DEBUG_LEVEL }
+    private val logger: Logger = Utils.getLogger(this::class.java)
 
     private lateinit var device: DeviceConfig
     private lateinit var cfg: KafkaClientConfig

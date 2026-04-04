@@ -25,9 +25,6 @@ class UserStoreCrateDb(
     private val usersTableName = "users"
     private val usersAclTableName = "usersacl"
 
-    init {
-        logger.level = Const.DEBUG_LEVEL
-    }
 
     override fun getType(): StoreType = StoreType.CRATEDB
 
