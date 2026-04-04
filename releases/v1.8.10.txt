@@ -1,0 +1,49 @@
+Release v1.8.10
+Built from commit: 042f607
+Date: 2026-04-05 00:01:52
+
+Changes since v1.8.9:
+---
+042f607 Add Overall Messages metric card
+e970a48 fix(redis): batch outbound writes to prevent connection pool overflow
+8ba5125 Add CLI -log option to override log level
+7f40ac7 Rework of logging and PLC4X fixes
+1c5959a fix(plc4x): fix loop prevention type mismatch and restore unordered writes
+78ec537 fix(plc4x): fix writes blocked by reads and incomplete stop cleanup
+16d82cc fix(plc4x): add timeout to PLC4X read request to prevent worker thread blocking
+8dc327c Add NATS/Redis metrics, refactor dashboard traffic chart, fix PLC4X polling
+24cca43 fix(redis): forward MQTT messages to all matching outbound addresses
+36a59e7 Update device-configs-examples.json
+395a343 Skip missing tags and log exceptions with stacktrace
+3668076 fix(plc4x): prevent NPE during write and improve jsonPath checking
+b9d8d6c Add plc4x jsonPath support and update docs
+573dcf6 Fix Plc4x address editing and schema definition, add jsonPath support, and fix modal buttons across detail pages
+4dea969 Update Redis client UI with direction indicators and topic validation
+1ba410a Update NATS and MQTT bridge UI with direction indicators and topic validation
+093ea84 Update device-configs-examples.json
+36c91cd Validate topic wildcards and add direction UI
+caeabe3 Consolidate CLAUDE.md into AGENTS.md as tool-agnostic project guidance
+26db171 Update edit icons to 'pen' and finish PLC4X address edit implementation
+bb535f8 Add edit functionality for WinCC OA, WinCC Unified, and PLC4X addresses
+284677e Show updated timestamp on all dashboard detail pages
+dbbd42f Add OPC UA topic validation and build dashboard on -d flag
+03fb7f9 Reject PUBLISH with wildcard characters in topic name (MQTT spec §3.3.2.1)
+ab5cd83 Add edit functionality for OPC UA server address mappings
+0b8ffcd Update kafka-client-detail.html
+f496e88 Remove MQTT log publishing feature (Logging.Mqtt) to prevent infinite loop at fine-level logging
+799578b Improve Kafka client logging and safety
+a95b748 Moved device config examples file
+2d1dd24 Add configurable timezone per agent, convert all context timestamps to local time, reduce publish auth log verbosity to fine level
+0f22aac Adjust ACL checks timing and subscription guard
+10abdee Merge branch 'main' into pr/143
+09824d7 Output agent context history and queryHistory tool results as CSV instead of JSON for better LLM token efficiency, add configurable decimal rounding per history query, fix agents page race condition on concurrent refresh
+3c1e83f Merge branch 'vogler75:main' into 10-configurable-acl-check-subscribe-time-vs-delivery-time
+e5815b6 docs: add testing mode documentation to ACL delivery-time filtering tests
+3a4921d Merge branch 'develop'
+a0d213a Add subAgentsAllowAll toggle for agent access
+834a7c5 feat: configurable ACL check - subscribe-time vs delivery-time filtering
+113c4bc Update agent-monitor-detail.html
+6a7f73d feat: track and display cumulative token usage for AI agents (#135)
+f10b939 refactor: use java.util.logging.FileHandler for agent conversation logs
+c1c24c2 Enable agent conversation logs; UI & dashboard dev
+1a08a81 Prefill cron prompt and dynamic action buttons
