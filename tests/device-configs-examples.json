@@ -170,14 +170,36 @@
           "publishOnChange": true,
           "mode": "READ",
           "enabled": true
+        },
+        {
+          "name": "holding-register:3",
+          "address": "holding-register:3",
+          "topic": "opcua/plc03/Int16/Int16_00",
+          "qos": 0,
+          "retained": false,
+          "publishOnChange": true,
+          "mode": "WRITE",
+          "enabled": true,
+          "jsonPath": "value"
+        },
+        {
+          "name": "holding-register:2",
+          "address": "holding-register:2",
+          "topic": "opcua/plc03/Int16/Int16_01",
+          "qos": 0,
+          "retained": false,
+          "publishOnChange": true,
+          "mode": "WRITE",
+          "enabled": true,
+          "jsonPath": "value"
         }
       ],
       "enabled": true
     },
-    "enabled": true,
+    "enabled": false,
     "type": "PLC4X-Client",
     "createdAt": "2026-04-04 07:53:15",
-    "updatedAt": "2026-04-04 07:53:50"
+    "updatedAt": "2026-04-04 10:48:50"
   },
   {
     "name": "nats1",
@@ -213,7 +235,7 @@
     "enabled": false,
     "type": "NATS-Client",
     "createdAt": "2026-04-04 06:29:55",
-    "updatedAt": "2026-04-04 06:36:48"
+    "updatedAt": "2026-04-04 09:37:54"
   },
   {
     "name": "neo4j",
@@ -221,7 +243,7 @@
     "nodeId": "local",
     "config": {
       "url": "bolt://linux5:7687",
-      "password": "manager123$",
+      "password": "",
       "username": "neo4j",
       "batchSize": 1000,
       "queueSize": 1000,
@@ -288,7 +310,7 @@
       "updateEndpointUrl": true,
       "securityPolicy": "Basic256Sha256",
       "username": "username1",
-      "password": "password1",
+      "password": "",
       "subscriptionSamplingInterval": 0,
       "keepAliveFailuresAllowed": 3,
       "reconnectDelay": 5000,
@@ -334,7 +356,7 @@
     "enabled": false,
     "type": "OPCUA-Client",
     "createdAt": "2026-04-04 05:35:16",
-    "updatedAt": "2026-04-04 07:09:06"
+    "updatedAt": "2026-04-04 09:20:34"
   },
   {
     "name": "plc02",
@@ -381,64 +403,70 @@
     "enabled": false,
     "type": "OPCUA-Client",
     "createdAt": "2026-04-04 05:35:16",
-    "updatedAt": "2026-04-04 05:35:16"
+    "updatedAt": "2026-04-04 10:11:39"
   },
   {
     "name": "plc03",
     "namespace": "opcua/plc03",
     "nodeId": "local",
     "config": {
-      "password": null,
-      "username": null,
-      "addresses": [
-        {
-          "topic": "float",
-          "address": "BrowsePath://ns=2;s=SimulationMass_Float/#",
-          "removePath": true,
-          "publishMode": "SEPARATE"
-        }
-      ],
       "endpointUrl": "opc.tcp://192.168.1.4:62541/server",
-      "writeConfig": {
-        "qos": 1,
-        "enabled": false,
-        "topicPrefix": "write",
-        "writeTimeout": 5000,
-        "requestTopicPrefix": "request",
-        "responseTopicPrefix": "response",
-        "requestResponseEnabled": false
-      },
-      "reconnectDelay": 5000,
-      "requestTimeout": 5000,
+      "updateEndpointUrl": true,
       "securityPolicy": "None",
+      "username": null,
+      "password": null,
+      "subscriptionSamplingInterval": 0,
+      "keepAliveFailuresAllowed": 3,
+      "reconnectDelay": 5000,
+      "connectionTimeout": 5000,
+      "requestTimeout": 5000,
+      "monitoringParameters": {
+        "bufferSize": 10,
+        "samplingInterval": 0,
+        "discardOldest": true,
+        "monitoredItemsBatchSize": 1000
+      },
       "certificateConfig": {
-        "countryCode": "",
         "securityDir": "security",
-        "localityName": "",
-        "organization": "",
-        "applicationUri": "",
         "applicationName": "MonsterMQ OPC UA Client",
+        "applicationUri": "",
+        "organization": "",
+        "organizationalUnit": "",
+        "localityName": "",
+        "countryCode": "",
         "createSelfSigned": true,
         "keystorePassword": "password",
-        "organizationalUnit": "",
         "validateServerCertificate": false,
         "autoAcceptServerCertificates": true
       },
-      "connectionTimeout": 5000,
-      "updateEndpointUrl": true,
-      "monitoringParameters": {
-        "bufferSize": 10,
-        "discardOldest": true,
-        "samplingInterval": 0,
-        "monitoredItemsBatchSize": 1000
+      "writeConfig": {
+        "enabled": false,
+        "requestResponseEnabled": false,
+        "topicPrefix": "write",
+        "requestTopicPrefix": "request",
+        "responseTopicPrefix": "response",
+        "qos": 1,
+        "writeTimeout": 5000
       },
-      "keepAliveFailuresAllowed": 3,
-      "subscriptionSamplingInterval": 0
+      "addresses": [
+        {
+          "address": "BrowsePath://ns=2;s=SimulationMass_Float/#",
+          "topic": "float",
+          "publishMode": "SEPARATE",
+          "removePath": true
+        },
+        {
+          "address": "BrowsePath://ns=2;s=SimulationMass_Int16/#",
+          "topic": "Int16",
+          "publishMode": "SEPARATE",
+          "removePath": true
+        }
+      ]
     },
-    "enabled": false,
+    "enabled": true,
     "type": "OPCUA-Client",
     "createdAt": "2026-04-04 05:34:08",
-    "updatedAt": "2026-04-04 05:34:08"
+    "updatedAt": "2026-04-04 10:13:05"
   },
   {
     "name": "pool-temperature",
@@ -547,7 +575,7 @@
     "enabled": false,
     "type": "Redis-Client",
     "createdAt": "2026-04-01 17:36:30",
-    "updatedAt": "2026-04-04 06:33:30"
+    "updatedAt": "2026-04-04 09:38:11"
   },
   {
     "name": "scada1",
@@ -586,24 +614,7 @@
     "enabled": false,
     "type": "MQTT-Client",
     "createdAt": "2026-03-31 21:20:33",
-    "updatedAt": "2026-04-04 07:21:50"
-  },
-  {
-    "name": "telegram1",
-    "namespace": "telegram",
-    "nodeId": "local",
-    "config": {
-      "botToken": "",
-      "addresses": [],
-      "proxyHost": null,
-      "proxyPort": null,
-      "reconnectDelayMs": 5000,
-      "pollingTimeoutSeconds": 30
-    },
-    "enabled": false,
-    "type": "Telegram-Client",
-    "createdAt": "2026-04-04 07:13:10",
-    "updatedAt": "2026-04-04 07:13:10"
+    "updatedAt": "2026-04-04 09:37:36"
   },
   {
     "name": "winccoa-plant1",
@@ -659,7 +670,7 @@
     "namespace": "winccua",
     "nodeId": "local",
     "config": {
-      "password": "password1",
+      "password": "",
       "username": "username1",
       "addresses": [
         {
