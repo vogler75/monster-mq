@@ -182,12 +182,13 @@ class RedisClientDetailManager {
         }
         tbody.innerHTML = this.addresses.map((addr, idx) => {
             const modeClass = addr.mode === 'SUBSCRIBE' ? 'mode-subscribe' : addr.mode === 'PUBLISH' ? 'mode-publish' : 'mode-kv_sync';
+            const modeIcon = addr.mode === 'SUBSCRIBE' ? '⬇️' : addr.mode === 'PUBLISH' ? '⬆️' : '🔄';
             const patternInfo = addr.mode === 'KV_SYNC'
                 ? (addr.usePatternMatch ? 'SCAN' : '\u2014')
                 : (addr.usePatternSubscribe ? 'PSUB' : '\u2014');
             return `
             <tr>
-                <td><span class="mode-badge ${modeClass}">${addr.mode}</span></td>
+                <td><span class="mode-badge ${modeClass}">${modeIcon} ${addr.mode}</span></td>
                 <td><code style="font-size:0.85rem;">${this.escapeHtml(addr.redisChannel || '')}</code></td>
                 <td><code style="font-size:0.85rem;">${this.escapeHtml(addr.mqttTopic || '')}</code></td>
                 <td>${addr.qos}</td>
@@ -215,6 +216,7 @@ class RedisClientDetailManager {
         document.getElementById('addr-publish-on-change').checked = false;
         document.getElementById('addr-remove-path').checked = true;
         onAddrModeChange('SUBSCRIBE');
+        this.updateTopicDirection();
         document.getElementById('add-address-modal').style.display = 'flex';
     }
 
@@ -234,7 +236,25 @@ class RedisClientDetailManager {
         document.getElementById('addr-publish-on-change').checked = addr.publishOnChangeOnly || false;
         document.getElementById('addr-remove-path').checked = addr.removePath !== false;
         onAddrModeChange(addr.mode || 'SUBSCRIBE');
+        this.updateTopicDirection();
         document.getElementById('add-address-modal').style.display = 'flex';
+    }
+
+    updateTopicDirection() {
+        const mode = document.getElementById('addr-mode')?.value;
+        const arrow = document.querySelector('#addr-topic-direction .direction-arrow');
+        if (arrow) {
+            if (mode === 'SUBSCRIBE') {
+                arrow.textContent = '⬇️';
+                arrow.title = 'Redis → MQTT';
+            } else if (mode === 'PUBLISH') {
+                arrow.textContent = '⬆️';
+                arrow.title = 'MQTT → Redis';
+            } else {
+                arrow.textContent = '🔄';
+                arrow.title = 'Bidirectional Sync';
+            }
+        }
     }
 
     hideAddAddressModal() {
@@ -244,15 +264,32 @@ class RedisClientDetailManager {
     }
 
     async saveAddressMapping() {
+        const mode = document.getElementById('addr-mode').value;
         const redisChannel = document.getElementById('addr-redis-channel').value.trim();
         const mqttTopic = document.getElementById('addr-mqtt-topic').value.trim();
+        
         if (!redisChannel || !mqttTopic) {
             this.showError('Redis Channel and MQTT Topic are required');
             return;
         }
 
+        // Wildcard validation
+        if (mode === 'SUBSCRIBE') {
+            // Redis -> MQTT: MQTT Topic (Local) must not have MQTT wildcards (+ or #)
+            if (mqttTopic.includes('+') || mqttTopic.includes('#')) {
+                this.showError('MQTT Topic must not contain wildcards (+ or #) in SUBSCRIBE mode.');
+                return;
+            }
+        } else if (mode === 'PUBLISH') {
+            // MQTT -> Redis: Redis Channel (Remote) must not have Redis wildcards (* or ?)
+            if (redisChannel.includes('*') || redisChannel.includes('?')) {
+                this.showError('Redis Channel must not contain wildcards (* or ?) in PUBLISH mode.');
+                return;
+            }
+        }
+
         const newAddr = {
-            mode: document.getElementById('addr-mode').value,
+            mode: mode,
             redisChannel,
             mqttTopic,
             qos: parseInt(document.getElementById('addr-qos').value),
@@ -555,6 +592,9 @@ function onAddrModeChange(mode) {
     } else {
         kvFields.forEach(el => el.style.display = 'none');
         if (psubGroup) psubGroup.style.display = 'block';
+    }
+    if (redisDetailManager) {
+        redisDetailManager.updateTopicDirection();
     }
 }
 
