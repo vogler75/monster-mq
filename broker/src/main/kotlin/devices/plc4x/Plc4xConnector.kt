@@ -369,6 +369,11 @@ class Plc4xConnector : AbstractVerticle() {
                 // Process response for each address
                 enabledAddresses.forEach { address ->
                     try {
+                        if (!response.tagNames.contains(address.name)) {
+                            logger.warning("Failed to read address ${address.name}: Tag was not found in the read response")
+                            return@forEach
+                        }
+                        
                         val responseCode = response.getResponseCode(address.name)
                         if (responseCode == PlcResponseCode.OK) {
                             val value = response.getObject(address.name)
@@ -386,7 +391,7 @@ class Plc4xConnector : AbstractVerticle() {
                 Unit // Return Unit
 
             } catch (e: Exception) {
-                logger.severe("Error polling addresses: ${e.message}")
+                logger.log(java.util.logging.Level.SEVERE, "Error polling addresses", e)
                 // Connection might be lost - schedule reconnection
                 isConnected = false
                 scheduleReconnection()
