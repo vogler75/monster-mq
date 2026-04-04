@@ -6,6 +6,7 @@ class OpcUaServerDetailManager {
         this.serverName = null; // URL param (original name for updates)
         this.serverData = null; // Loaded opcUaServer object
         this.clusterNodes = [];
+        this.editAddressIndex = -1; // -1 = add mode, >= 0 = edit mode (index into addresses array)
         this.init();
     }
 
@@ -202,15 +203,18 @@ class OpcUaServerDetailManager {
 
         addresses.forEach((addr, index) => {
             const row = document.createElement('tr');
+            row.style.cursor = 'pointer';
             row.innerHTML = `
                 <td>${this.escapeHtml(addr.mqttTopic || '')}</td>
                 <td>${this.escapeHtml(addr.displayName || '-')}</td>
                 <td>${this.escapeHtml(addr.dataType || '')}</td>
                 <td>${this.escapeHtml(addr.accessLevel || '')}</td>
                 <td>
-                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="deleteAddress(${index})"></ix-icon-button>
+                    <ix-icon-button icon="pen" variant="primary" ghost size="16" class="btn-edit" title="Edit Address" onclick="event.stopPropagation(); showEditAddressModal(${index})"></ix-icon-button>
+                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="event.stopPropagation(); deleteAddress(${index})"></ix-icon-button>
                 </td>
             `;
+            row.addEventListener('click', () => showEditAddressModal(index));
             tbody.appendChild(row);
         });
 
@@ -405,17 +409,71 @@ class OpcUaServerDetailManager {
     }
 
     // Address management
-    showAddAddressModal() {
-        // Clear form
+    _getAddressFromForm() {
+        return {
+            mqttTopic: document.getElementById('address-mqtt-topic').value.trim(),
+            dataType: document.getElementById('address-data-type').value,
+            accessLevel: document.getElementById('address-access-level').value,
+            displayName: document.getElementById('address-display-name').value.trim() || null,
+            browseName: document.getElementById('address-browse-name').value.trim() || null,
+            description: document.getElementById('address-description').value.trim() || null,
+            unit: document.getElementById('address-unit').value.trim() || null
+        };
+    }
+
+    _clearAddressForm() {
         document.getElementById('address-mqtt-topic').value = '';
+        document.getElementById('address-mqtt-topic').disabled = false;
+        document.getElementById('address-mqtt-topic-hint').textContent = '';
         document.getElementById('address-data-type').value = 'TEXT';
         document.getElementById('address-access-level').value = 'READ_ONLY';
         document.getElementById('address-display-name').value = '';
+        document.getElementById('address-browse-name').value = '';
+        document.getElementById('address-description').value = '';
+        document.getElementById('address-unit').value = '';
+    }
+
+    showAddAddressModal() {
+        this.editAddressIndex = -1;
+        this._clearAddressForm();
+        document.getElementById('address-modal-title').textContent = 'Add Address Mapping';
+        document.getElementById('address-modal-submit').textContent = 'Add Address';
+        document.getElementById('add-address-modal').style.display = 'flex';
+    }
+
+    showEditAddressModal(index) {
+        if (!this.serverData || !this.serverData.addresses) return;
+        const addresses = this.serverData.addresses;
+        if (index < 0 || index >= addresses.length) return;
+
+        this.editAddressIndex = index;
+        const addr = addresses[index];
+
+        this._clearAddressForm();
+        document.getElementById('address-mqtt-topic').value = addr.mqttTopic || '';
+        document.getElementById('address-data-type').value = addr.dataType || 'TEXT';
+        document.getElementById('address-access-level').value = addr.accessLevel || 'READ_ONLY';
+        document.getElementById('address-display-name').value = addr.displayName || '';
+        document.getElementById('address-browse-name').value = addr.browseName || '';
+        document.getElementById('address-description').value = addr.description || '';
+        document.getElementById('address-unit').value = addr.unit || '';
+
+        document.getElementById('address-modal-title').textContent = 'Edit Address Mapping';
+        document.getElementById('address-modal-submit').textContent = 'Save Changes';
         document.getElementById('add-address-modal').style.display = 'flex';
     }
 
     hideAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'none';
+        this.editAddressIndex = -1;
+    }
+
+    async submitAddress() {
+        if (this.editAddressIndex >= 0) {
+            await this.updateAddress();
+        } else {
+            await this.addAddress();
+        }
     }
 
     async addAddress() {
@@ -425,12 +483,7 @@ class OpcUaServerDetailManager {
             return;
         }
 
-        const newAddress = {
-            mqttTopic: document.getElementById('address-mqtt-topic').value.trim(),
-            dataType: document.getElementById('address-data-type').value,
-            accessLevel: document.getElementById('address-access-level').value,
-            displayName: document.getElementById('address-display-name').value.trim() || null
-        };
+        const newAddress = this._getAddressFromForm();
 
         try {
             const mutation = `
@@ -455,6 +508,77 @@ class OpcUaServerDetailManager {
         } catch (e) {
             console.error('Error adding address', e);
             this.showError('Failed to add address: ' + e.message);
+        }
+    }
+
+    async updateAddress() {
+        const form = document.getElementById('add-address-form');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        if (!this.serverData || !this.serverData.addresses) return;
+        const oldAddress = this.serverData.addresses[this.editAddressIndex];
+        if (!oldAddress) return;
+
+        const updatedAddress = this._getAddressFromForm();
+        const oldMqttTopic = oldAddress.mqttTopic;
+
+        try {
+            // Remove old address first
+            const removeMutation = `
+                mutation RemoveOpcUaServerAddress($serverName: String!, $mqttTopic: String!) {
+                    opcUaServer {
+                        removeAddress(serverName: $serverName, mqttTopic: $mqttTopic) {
+                            success
+                            message
+                        }
+                    }
+                }
+            `;
+            const removeResult = await this.client.query(removeMutation, { serverName: this.serverName, mqttTopic: oldMqttTopic });
+            if (!removeResult.opcUaServer.removeAddress.success) {
+                const message = removeResult.opcUaServer.removeAddress.message || 'Unknown error';
+                this.showError('Failed to update address (remove step): ' + message);
+                return;
+            }
+
+            // Add updated address
+            const addMutation = `
+                mutation AddOpcUaServerAddress($serverName: String!, $address: OpcUaServerAddressInput!) {
+                    opcUaServer {
+                        addAddress(serverName: $serverName, address: $address) {
+                            success
+                            message
+                        }
+                    }
+                }
+            `;
+            const addResult = await this.client.query(addMutation, { serverName: this.serverName, address: updatedAddress });
+            if (addResult.opcUaServer.addAddress.success) {
+                this.hideAddAddressModal();
+                await this.loadServerData();
+                this.showSuccess('Address mapping updated successfully');
+            } else {
+                // Rollback: try to re-add the old address
+                const oldAddr = {
+                    mqttTopic: oldAddress.mqttTopic,
+                    dataType: oldAddress.dataType,
+                    accessLevel: oldAddress.accessLevel,
+                    displayName: oldAddress.displayName || null,
+                    browseName: oldAddress.browseName || null,
+                    description: oldAddress.description || null,
+                    unit: oldAddress.unit || null
+                };
+                await this.client.query(addMutation, { serverName: this.serverName, address: oldAddr });
+                await this.loadServerData();
+                const message = addResult.opcUaServer.addAddress.message || 'Unknown error';
+                this.showError('Failed to update address (add step): ' + message + '. Old address restored.');
+            }
+        } catch (e) {
+            console.error('Error updating address', e);
+            this.showError('Failed to update address: ' + e.message);
         }
     }
 
@@ -585,7 +709,9 @@ function showDeleteModal() { opcUaServerDetailManager.showDeleteModal(); }
 function hideDeleteModal() { opcUaServerDetailManager.hideDeleteModal(); }
 function confirmDeleteServer() { opcUaServerDetailManager.confirmDeleteServer(); }
 function showAddAddressModal() { opcUaServerDetailManager.showAddAddressModal(); }
+function showEditAddressModal(index) { opcUaServerDetailManager.showEditAddressModal(index); }
 function hideAddAddressModal() { opcUaServerDetailManager.hideAddAddressModal(); }
+function submitAddress() { opcUaServerDetailManager.submitAddress(); }
 function addAddress() { opcUaServerDetailManager.addAddress(); }
 function deleteAddress(index) { opcUaServerDetailManager.deleteAddress(index); }
 

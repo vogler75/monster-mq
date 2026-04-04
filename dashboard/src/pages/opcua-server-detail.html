@@ -438,11 +438,11 @@
     </div>
 </div>
 
-<!-- Add Address Modal -->
+<!-- Add/Edit Address Modal -->
 <div id="add-address-modal" class="modal" style="display:none;">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>Add Address Mapping</h3>
+            <h3 id="address-modal-title">Add Address Mapping</h3>
             <button class="modal-close" onclick="hideAddAddressModal()">×</button>
         </div>
         <div class="modal-body">
@@ -450,33 +450,48 @@
                 <div class="form-group">
                     <label for="address-mqtt-topic">MQTT Topic *</label>
                     <input type="text" id="address-mqtt-topic" required>
+                    <span class="form-hint" id="address-mqtt-topic-hint"></span>
                 </div>
                 <div class="form-group">
                     <label for="address-display-name">Display Name</label>
                     <input type="text" id="address-display-name">
                 </div>
                 <div class="form-group">
-                    <label for="address-data-type">Data Type</label>
-                    <select id="address-data-type">
-                        <option value="BINARY">BINARY - ByteString (raw payload bytes)</option>
-                        <option value="TEXT">TEXT - String (payload as UTF-8 text)</option>
-                        <option value="NUMERIC">NUMERIC - Double (parse payload as number)</option>
-                        <option value="BOOLEAN">BOOLEAN - Boolean (parse payload as true/false)</option>
-                        <option value="JSON">JSON - Custom JSON format ({"value": x, "timestamp": "iso", "status": int})</option>
-                    </select>
+                    <label for="address-browse-name">Browse Name</label>
+                    <input type="text" id="address-browse-name" placeholder="Defaults to last topic segment">
                 </div>
                 <div class="form-group">
-                    <label for="address-access-level">Access Level</label>
-                    <select id="address-access-level">
-                        <option value="READ_ONLY">READ_ONLY</option>
-                        <option value="READ_WRITE">READ_WRITE</option>
-                    </select>
+                    <label for="address-description">Description</label>
+                    <input type="text" id="address-description">
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="address-data-type">Data Type</label>
+                        <select id="address-data-type">
+                            <option value="BINARY">BINARY - ByteString (raw payload bytes)</option>
+                            <option value="TEXT">TEXT - String (payload as UTF-8 text)</option>
+                            <option value="NUMERIC">NUMERIC - Double (parse payload as number)</option>
+                            <option value="BOOLEAN">BOOLEAN - Boolean (parse payload as true/false)</option>
+                            <option value="JSON">JSON - Custom JSON format</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="address-access-level">Access Level</label>
+                        <select id="address-access-level">
+                            <option value="READ_ONLY">READ_ONLY</option>
+                            <option value="READ_WRITE">READ_WRITE</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="address-unit">Unit</label>
+                    <input type="text" id="address-unit" placeholder="e.g. °C, bar, kg">
                 </div>
             </form>
         </div>
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
-            <button type="button" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+            <button type="button" class="btn btn-primary" id="address-modal-submit" onclick="submitAddress()">Add Address</button>
         </div>
     </div>
 </div>
