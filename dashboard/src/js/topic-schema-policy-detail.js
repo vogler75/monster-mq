@@ -119,6 +119,20 @@ class TopicSchemaPolicyDetailManager {
         const schema = policy.jsonSchema;
         document.getElementById('policy-json-schema').value =
             typeof schema === 'string' ? schema : JSON.stringify(schema, null, 2);
+
+        // Timestamps
+        document.getElementById('timestamps-section').style.display = 'block';
+        document.getElementById('policy-created-at').textContent = this.formatDateTime(policy.createdAt);
+        document.getElementById('policy-updated-at').textContent = this.formatDateTime(policy.updatedAt);
+    }
+
+    formatDateTime(isoString) {
+        if (!isoString) return '-';
+        try {
+            return new Date(isoString).toLocaleString();
+        } catch (e) {
+            return isoString;
+        }
     }
 
     validateForm() {

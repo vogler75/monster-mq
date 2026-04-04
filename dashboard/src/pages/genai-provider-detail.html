@@ -158,6 +158,25 @@
                     </div>
                 </div>
 
+                <!-- Timestamps Section -->
+                <div class="section-card" id="timestamps-section" style="display: none;">
+                    <div class="section-header">
+                        <div class="section-title"><h2>Timestamps</h2></div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label>Created At</label>
+                                <div id="created-at" style="color: var(--text-primary); font-weight: 500; padding: 0.5rem 0.75rem; background: var(--dark-bg); border-radius: 6px; border: 1px solid var(--dark-border);">-</div>
+                            </div>
+                            <div class="form-group">
+                                <label>Updated At</label>
+                                <div id="updated-at" style="color: var(--text-primary); font-weight: 500; padding: 0.5rem 0.75rem; background: var(--dark-bg); border-radius: 6px; border: 1px solid var(--dark-border);">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="action-bar">
                     <button class="btn btn-primary" id="save-btn" onclick="providerDetailManager.save()">Save Provider</button>
                     <button class="btn btn-secondary" onclick="window.navigateTo('/pages/genai-providers.html')">Cancel</button>

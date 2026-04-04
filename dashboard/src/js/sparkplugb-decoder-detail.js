@@ -101,9 +101,25 @@ async function loadDecoder() {
 
         const decoder = decoders[0];
         populateForm(decoder);
+
+        // Timestamps
+        if (isEditMode) {
+            document.getElementById('timestamps-section').style.display = 'block';
+            document.getElementById('created-at').textContent = formatDateTime(decoder.createdAt);
+            document.getElementById('updated-at').textContent = formatDateTime(decoder.updatedAt);
+        }
     } catch (error) {
         console.error('Error loading decoder:', error);
         showError('Failed to load decoder: ' + error.message);
+    }
+}
+
+function formatDateTime(isoString) {
+    if (!isoString) return '-';
+    try {
+        return new Date(isoString).toLocaleString();
+    } catch (e) {
+        return isoString;
     }
 }
 

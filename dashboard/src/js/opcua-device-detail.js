@@ -196,6 +196,7 @@ class OpcUaDeviceDetailManager {
         document.getElementById('device-username').value = this.device.config.username || '';
         document.getElementById('device-enabled').checked = this.device.enabled;
         document.getElementById('device-created').textContent = this.formatDateTime(this.device.createdAt);
+        document.getElementById('device-updated').textContent = this.formatDateTime(this.device.updatedAt);
 
         // Connection configuration
         document.getElementById('config-sampling').value = this.device.config.subscriptionSamplingInterval;

@@ -39,7 +39,7 @@ class GenAiProviderDetailManager {
             const result = await this.client.query(`
                 query GetProvider($name: String!) {
                     genAiProvider(name: $name) {
-                        name type model apiKey endpoint serviceVersion baseUrl temperature maxTokens enabled source
+                        name type model apiKey endpoint serviceVersion baseUrl temperature maxTokens enabled source createdAt updatedAt
                     }
                 }
             `, { name: this.providerName });
@@ -51,8 +51,24 @@ class GenAiProviderDetailManager {
 
             this.providerData = result.genAiProvider;
             this.populateForm(result.genAiProvider);
+
+            // Timestamps
+            if (!this.isNew) {
+                document.getElementById('timestamps-section').style.display = 'block';
+                document.getElementById('created-at').textContent = this.formatDateTime(result.genAiProvider.createdAt);
+                document.getElementById('updated-at').textContent = this.formatDateTime(result.genAiProvider.updatedAt);
+            }
         } catch (e) {
             this.showAlert('Failed to load provider: ' + e.message, 'error');
+        }
+    }
+
+    formatDateTime(isoString) {
+        if (!isoString) return '-';
+        try {
+            return new Date(isoString).toLocaleString();
+        } catch (e) {
+            return isoString;
         }
     }
 

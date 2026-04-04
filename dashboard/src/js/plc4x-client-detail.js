@@ -184,6 +184,14 @@ class Plc4xClientDetailManager {
         // Render addresses
         this.renderAddresses();
 
+        // Timestamps
+        const timestampsSection = document.getElementById('timestamps-section');
+        if (timestampsSection) {
+            timestampsSection.style.display = 'block';
+            document.getElementById('client-created-at').textContent = this.formatDateTime(this.clientData.createdAt);
+            document.getElementById('client-updated-at').textContent = this.formatDateTime(this.clientData.updatedAt);
+        }
+
         // Show content
         document.getElementById('client-content').style.display = 'block';
     }

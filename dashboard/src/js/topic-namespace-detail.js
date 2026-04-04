@@ -132,6 +132,20 @@ class TopicNamespaceDetailManager {
         document.getElementById('namespace-schema-policy').value = ns.schemaPolicyName || '';
         document.getElementById('namespace-enforcement-mode').value = ns.enforcementMode || 'REJECT';
         document.getElementById('namespace-enabled').checked = ns.enabled;
+
+        // Timestamps
+        document.getElementById('timestamps-section').style.display = 'block';
+        document.getElementById('namespace-created-at').textContent = this.formatDateTime(ns.createdAt);
+        document.getElementById('namespace-updated-at').textContent = this.formatDateTime(ns.updatedAt);
+    }
+
+    formatDateTime(isoString) {
+        if (!isoString) return '-';
+        try {
+            return new Date(isoString).toLocaleString();
+        } catch (e) {
+            return isoString;
+        }
     }
 
     validateForm() {

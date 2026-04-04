@@ -221,8 +221,22 @@ class WinCCOaClientDetailManager {
         this.queries = this.clientData.config.addresses || [];
         this.renderQueries();
 
+        // Timestamps
+        document.getElementById('timestamps-section').style.display = 'block';
+        document.getElementById('client-created-at').textContent = this.formatDateTime(this.clientData.createdAt);
+        document.getElementById('client-updated-at').textContent = this.formatDateTime(this.clientData.updatedAt);
+
         // Show content
         document.getElementById('client-content').style.display = 'block';
+    }
+
+    formatDateTime(isoString) {
+        if (!isoString) return '-';
+        try {
+            return new Date(isoString).toLocaleString();
+        } catch (e) {
+            return isoString;
+        }
     }
 
     renderQueries() {
