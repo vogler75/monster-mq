@@ -578,31 +578,33 @@ class RedisClientConnector : AbstractVerticle() {
             return
         }
 
-        // Find the best matching outbound address
-        val matchingAddr = cfg.addresses
+        // Forward to all matching outbound addresses (not just the first)
+        val matchingAddrs = cfg.addresses
             .filter { it.isPublish() || it.isKvSync() }
-            .firstOrNull { addr -> mqttTopicMatchesFilter(msg.topicName, addr.mqttTopic) }
-            ?: return
+            .filter { addr -> mqttTopicMatchesFilter(msg.topicName, addr.mqttTopic) }
+        if (matchingAddrs.isEmpty()) return
 
-        try {
-            val redisTarget = matchingAddr.mqttToRedisChannel(msg.topicName)
+        matchingAddrs.forEach { matchingAddr ->
+            try {
+                val redisTarget = matchingAddr.mqttToRedisChannel(msg.topicName)
 
-            if (matchingAddr.isKvSync()) {
-                // KV_SYNC: detect payload type and use appropriate write command
-                writeKeyByPayload(client, redisTarget, msg.payload)
-            } else {
-                // PUBLISH: Pub/Sub publish
-                client.send(Request.cmd(Command.PUBLISH).arg(redisTarget).arg(msg.payload)).onSuccess { _: Response? ->
-                    messagesOut.incrementAndGet()
-                    logger.fine { "MQTT->Redis PUBLISH '$redisTarget'" }
-                }.onFailure { e ->
-                    errors.incrementAndGet()
-                    logger.warning("Failed to publish to Redis channel '$redisTarget' for '${device.name}': ${e.message}")
+                if (matchingAddr.isKvSync()) {
+                    // KV_SYNC: detect payload type and use appropriate write command
+                    writeKeyByPayload(client, redisTarget, msg.payload)
+                } else {
+                    // PUBLISH: Pub/Sub publish
+                    client.send(Request.cmd(Command.PUBLISH).arg(redisTarget).arg(msg.payload)).onSuccess { _: Response? ->
+                        messagesOut.incrementAndGet()
+                        logger.fine { "MQTT->Redis PUBLISH '$redisTarget'" }
+                    }.onFailure { e ->
+                        errors.incrementAndGet()
+                        logger.warning("Failed to publish to Redis channel '$redisTarget' for '${device.name}': ${e.message}")
+                    }
                 }
+            } catch (e: Exception) {
+                errors.incrementAndGet()
+                logger.warning("Failed to forward to Redis for '${device.name}': ${e.message}")
             }
-        } catch (e: Exception) {
-            errors.incrementAndGet()
-            logger.warning("Failed to forward to Redis for '${device.name}': ${e.message}")
         }
     }
 
