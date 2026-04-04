@@ -579,8 +579,9 @@ class OpcUaServerMutations(
 
         // Validate addresses if present
         config.addresses.forEach { addr ->
-            if (addr.mqttTopic.isBlank()) {
-                throw IllegalArgumentException("MQTT topic cannot be empty")
+            val validationErrors = addr.validate()
+            if (validationErrors.isNotEmpty()) {
+                throw IllegalArgumentException("Address validation failed: ${validationErrors.joinToString(", ")}")
             }
         }
     }

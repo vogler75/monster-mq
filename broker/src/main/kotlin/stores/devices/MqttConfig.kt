@@ -110,6 +110,20 @@ data class MqttClientAddress(
         if (localTopic.isBlank()) {
             errors.add("localTopic cannot be blank")
         }
+        
+        // Validate topic for wildcards based on mode (MQTT spec [MQTT-3.3.2-2])
+        // Wildcards are only allowed in subscription filters, not in publish destinations
+        if (mode == MODE_PUBLISH) {
+            // In PUBLISH mode, remote topic is the destination (no wildcards allowed)
+            if (remoteTopic.contains('+') || remoteTopic.contains('#')) {
+                errors.add("remoteTopic cannot contain wildcard characters (+ or #) in PUBLISH mode - wildcards are only allowed in subscription filters")
+            }
+        } else if (mode == MODE_SUBSCRIBE) {
+            // In SUBSCRIBE mode, local topic is the destination (no wildcards allowed)
+            if (localTopic.contains('+') || localTopic.contains('#')) {
+                errors.add("localTopic cannot contain wildcard characters (+ or #) in SUBSCRIBE mode - wildcards are only allowed in subscription filters")
+            }
+        }
 
         if (qos !in 0..2) {
             errors.add("qos must be 0, 1, or 2")

@@ -267,13 +267,22 @@ class Plc4xClientDetailManager {
             form.reportValidity();
             return;
         }
+        
+        const topic = document.getElementById('address-topic').value.trim();
+        
+        // Validate MQTT topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        const validationError = this.validatePublishTopic(topic);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
 
         const plcAddress = document.getElementById('address-address').value.trim();
 
         const addressData = {
             name: plcAddress,  // Use PLC address as the name
             address: plcAddress,
-            topic: document.getElementById('address-topic').value.trim(),
+            topic: topic,
             qos: parseInt(document.getElementById('address-qos').value),
             retained: document.getElementById('address-retained').checked,
             scalingFactor: parseFloat(document.getElementById('address-scaling').value) || null,
@@ -611,6 +620,14 @@ class Plc4xClientDetailManager {
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
 
+    validatePublishTopic(topic) {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (topic.includes('+') || topic.includes('#')) {
+            return 'Invalid MQTT Topic: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription filters, not in publish destinations.';
+        }
+        return null;
+    }
+    
     goBack() {
         window.spaLocation.href = '/pages/plc4x-clients.html';
     }

@@ -328,8 +328,8 @@
                     </div>
                     <div class="form-group">
                         <label for="address-remote-topic">Remote Topic *</label>
-                        <input type="text" id="address-remote-topic" required placeholder="e.g., sensor/+/temperature">
-                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                        <input type="text" id="address-remote-topic" required placeholder="e.g., sensor/+/temperature or data/#">
+                        <small style="color: var(--text-muted);">SUBSCRIBE mode: wildcards allowed (+ for single level, # for multi-level). PUBLISH mode: wildcards not allowed.</small>
                     </div>
                     <div class="form-group">
                         <label for="address-local-topic">Local Topic *</label>
@@ -454,8 +454,8 @@
                     </div>
                     <div class="form-group">
                         <label for="edit-address-remote-topic">Remote Topic *</label>
-                        <input type="text" id="edit-address-remote-topic" required placeholder="e.g., sensor/+/temperature">
-                        <small style="color: var(--text-muted);">Supports MQTT wildcards: + (single level), # (multi-level)</small>
+                        <input type="text" id="edit-address-remote-topic" required placeholder="e.g., sensor/+/temperature or data/#">
+                        <small style="color: var(--text-muted);">SUBSCRIBE mode: wildcards allowed (+ for single level, # for multi-level). PUBLISH mode: wildcards not allowed.</small>
                     </div>
                     <div class="form-group">
                         <label for="edit-address-local-topic">Local Topic *</label>

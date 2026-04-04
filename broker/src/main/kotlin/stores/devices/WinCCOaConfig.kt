@@ -44,6 +44,12 @@ data class WinCCOaAddress(
         if (topic.isBlank()) {
             errors.add("topic cannot be blank")
         }
+        
+        // Validate topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        // WinCC OA publishes to MQTT topics, so they cannot contain wildcards
+        if (topic.contains('+') || topic.contains('#')) {
+            errors.add("topic cannot contain wildcard characters (+ or #) - wildcards are only allowed in subscription filters, not in publish destinations")
+        }
 
         return errors
     }

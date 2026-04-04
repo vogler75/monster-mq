@@ -262,13 +262,22 @@ class NatsClientDetailManager {
         const form = document.getElementById('add-address-form');
         const natsSubject = document.getElementById('addr-nats-subject').value.trim();
         const mqttTopic = document.getElementById('addr-mqtt-topic').value.trim();
+        const mode = document.getElementById('addr-mode').value;
+        
         if (!natsSubject || !mqttTopic) {
             this.showError('NATS Subject and MQTT Topic are required');
             return;
         }
+        
+        // Validate MQTT topic for wildcards in PUBLISH mode
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (mode === 'PUBLISH' && (mqttTopic.includes('+') || mqttTopic.includes('#'))) {
+            this.showError('Invalid MQTT topic for PUBLISH mode: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in SUBSCRIBE mode.');
+            return;
+        }
 
         const newAddr = {
-            mode: document.getElementById('addr-mode').value,
+            mode: mode,
             natsSubject,
             mqttTopic,
             qos: parseInt(document.getElementById('addr-qos').value),
@@ -602,6 +611,17 @@ class NatsClientDetailManager {
     }
     escapeHtml(t) { const div = document.createElement('div'); div.textContent = t; return div.innerHTML; }
     setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
+    
+    updateMqttTopicPlaceholder(inputId, mode) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        
+        if (mode === 'SUBSCRIBE') {
+            input.placeholder = 'e.g., sensor/+/temperature or data/#';
+        } else {
+            input.placeholder = 'e.g., sensor/room1/temperature';
+        }
+    }
 }
 
 // Global wrappers
@@ -619,6 +639,16 @@ function saveAddressMapping() { natsDetailManager.saveAddressMapping(); }
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     natsDetailManager = new NatsClientDetailManager();
+    
+    // Add event listener for mode selection to update placeholder text
+    const modeSelect = document.getElementById('addr-mode');
+    if (modeSelect) {
+        modeSelect.addEventListener('change', () => {
+            natsDetailManager.updateMqttTopicPlaceholder('addr-mqtt-topic', modeSelect.value);
+        });
+        // Set initial placeholder
+        natsDetailManager.updateMqttTopicPlaceholder('addr-mqtt-topic', modeSelect.value);
+    }
 });
 
 document.addEventListener('click', e => {

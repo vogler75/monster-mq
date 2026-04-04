@@ -384,11 +384,20 @@ class WinCCUaClientDetailManager {
             form.reportValidity();
             return;
         }
+        
+        const topic = document.getElementById('address-topic').value.trim();
+        
+        // Validate MQTT topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        const validationError = this.validatePublishTopic(topic);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
 
         const type = document.getElementById('address-type').value.trim();
         const addressData = {
             type: type,
-            topic: document.getElementById('address-topic').value.trim(),
+            topic: topic,
             description: document.getElementById('address-description').value.trim(),
             retained: document.getElementById('address-retained').checked
         };
@@ -792,6 +801,14 @@ class WinCCUaClientDetailManager {
         document.getElementById('delete-client-modal').style.display = 'flex';
     }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
+    validatePublishTopic(topic) {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (topic.includes('+') || topic.includes('#')) {
+            return 'Invalid MQTT Topic: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription filters, not in publish destinations.';
+        }
+        return null;
+    }
+    
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
 
     goBack() {

@@ -417,11 +417,24 @@ class MqttClientDetailManager {
 
         const mode = document.getElementById('address-mode').value;
         const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        const remoteTopic = document.getElementById('address-remote-topic').value.trim();
+        const localTopic = document.getElementById('address-local-topic').value.trim();
+        
+        // Validate topics for wildcards based on mode
+        // PUBLISH: remote topic is destination (no wildcards), local is source (wildcards ok)
+        // SUBSCRIBE: remote topic is source (wildcards ok), local is destination (no wildcards)
+        const topicToValidate = mode === 'PUBLISH' ? remoteTopic : localTopic;
+        const topicLabel = mode === 'PUBLISH' ? 'Remote Topic' : 'Local Topic';
+        const validationError = this.validatePublishTopic(topicToValidate, topicLabel);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
         
         const addressData = {
             mode: mode,
-            remoteTopic: document.getElementById('address-remote-topic').value.trim(),
-            localTopic: document.getElementById('address-local-topic').value.trim(),
+            remoteTopic: remoteTopic,
+            localTopic: localTopic,
             removePath: document.getElementById('address-remove-path').checked,
             qos: parseInt(document.getElementById('address-qos').value)
         };
@@ -548,11 +561,24 @@ class MqttClientDetailManager {
 
         const mode = document.getElementById('edit-address-mode').value;
         const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
+        const remoteTopic = document.getElementById('edit-address-remote-topic').value.trim();
+        const localTopic = document.getElementById('edit-address-local-topic').value.trim();
+        
+        // Validate topics for wildcards based on mode
+        // PUBLISH: remote topic is destination (no wildcards), local is source (wildcards ok)
+        // SUBSCRIBE: remote topic is source (wildcards ok), local is destination (no wildcards)
+        const topicToValidate = mode === 'PUBLISH' ? remoteTopic : localTopic;
+        const topicLabel = mode === 'PUBLISH' ? 'Remote Topic' : 'Local Topic';
+        const validationError = this.validatePublishTopic(topicToValidate, topicLabel);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
         
         const updatedAddress = {
             mode: mode,
-            remoteTopic: document.getElementById('edit-address-remote-topic').value.trim(),
-            localTopic: document.getElementById('edit-address-local-topic').value.trim(),
+            remoteTopic: remoteTopic,
+            localTopic: localTopic,
             removePath: document.getElementById('edit-address-remove-path').checked,
             qos: parseInt(document.getElementById('edit-address-qos').value)
         };
@@ -765,6 +791,33 @@ class MqttClientDetailManager {
         if (el) el.textContent = value;
     }
 
+    validatePublishTopic(topic, topicLabel) {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        // This applies to:
+        //  - Remote Topic in PUBLISH mode (publishing to remote broker)
+        //  - Local Topic in SUBSCRIBE mode (publishing to local broker)
+        if (topic.includes('+') || topic.includes('#')) {
+            return `Invalid ${topicLabel}: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription topic filters, not in publish destinations.`;
+        }
+        return null;
+    }
+
+    updateAddressPlaceholder(remoteTopicInputId, localTopicInputId, mode) {
+        const remoteInput = document.getElementById(remoteTopicInputId);
+        const localInput = document.getElementById(localTopicInputId);
+        if (!remoteInput || !localInput) return;
+        
+        if (mode === 'SUBSCRIBE') {
+            // SUBSCRIBE: remote can have wildcards (subscribing), local cannot (publishing locally)
+            remoteInput.placeholder = 'e.g., sensor/+/temperature or data/#';
+            localInput.placeholder = 'e.g., remote/sensor/room1/temperature';
+        } else {
+            // PUBLISH: remote cannot have wildcards (publishing remotely), local can (subscribing locally)
+            remoteInput.placeholder = 'e.g., sensor/room1/temperature';
+            localInput.placeholder = 'e.g., local/sensor/+/temperature';
+        }
+    }
+
     async deleteClient() {
         try {
             const mutation = `mutation DeleteMqttClient($name: String!) { mqttClient { delete(name: $name) } }`;
@@ -924,6 +977,27 @@ function confirmDeleteClient() { mqttClientDetailManager.confirmDeleteClient(); 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     mqttClientDetailManager = new MqttClientDetailManager();
+    
+    // Add event listeners for mode selection to update placeholder text
+    const addModeSelect = document.getElementById('address-mode');
+    if (addModeSelect) {
+        addModeSelect.addEventListener('change', () => {
+            mqttClientDetailManager.updateAddressPlaceholder('address-remote-topic', 'address-local-topic', addModeSelect.value);
+            toggleMqtt5SubscriptionOptions();
+            toggleMqtt5MessageProperties();
+        });
+        // Set initial placeholders
+        mqttClientDetailManager.updateAddressPlaceholder('address-remote-topic', 'address-local-topic', addModeSelect.value);
+    }
+    
+    const editModeSelect = document.getElementById('edit-address-mode');
+    if (editModeSelect) {
+        editModeSelect.addEventListener('change', () => {
+            mqttClientDetailManager.updateAddressPlaceholder('edit-address-remote-topic', 'edit-address-local-topic', editModeSelect.value);
+            toggleMqtt5SubscriptionOptions();
+            toggleMqtt5MessageProperties();
+        });
+    }
 });
 
 // Handle modal clicks

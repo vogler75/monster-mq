@@ -250,6 +250,13 @@ class RedisClientDetailManager {
             this.showError('Redis Channel and MQTT Topic are required');
             return;
         }
+        
+        // Validate MQTT topic for wildcards (MQTT spec [MQTT-3.3.2-2])
+        const validationError = this.validatePublishTopic(mqttTopic);
+        if (validationError) {
+            this.showError(validationError);
+            return;
+        }
 
         const newAddr = {
             mode: document.getElementById('addr-mode').value,
@@ -497,6 +504,14 @@ class RedisClientDetailManager {
     }
     hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
     confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
+    validatePublishTopic(topic) {
+        // MQTT spec [MQTT-3.3.2-2]: Topic names in PUBLISH packets must NOT contain wildcards
+        if (topic.includes('+') || topic.includes('#')) {
+            return 'Invalid MQTT Topic: Topic names cannot contain wildcard characters (+ or #). Wildcards are only allowed in subscription filters, not in publish destinations.';
+        }
+        return null;
+    }
+    
     goBack() { this.cleanup(); window.spaLocation.href = '/pages/redis-clients.html'; }
 
     showLoading(show) {
