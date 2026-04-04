@@ -282,7 +282,7 @@ class WinCCOaClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="edit" variant="primary" ghost size="16" title="Edit Query" onclick="clientDetailManager.editQuery(${index})"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Query" onclick="clientDetailManager.editQuery(${index})"></ix-icon-button>
                         <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Query" onclick="clientDetailManager.deleteQuery(${index})"></ix-icon-button>
                     </div>
                 </td>

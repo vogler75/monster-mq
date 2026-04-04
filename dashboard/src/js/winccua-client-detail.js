@@ -313,7 +313,7 @@ class WinCCUaClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="edit" variant="primary" ghost size="16" title="Edit Subscription" onclick="clientDetailManager.editAddress(${index})"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Subscription" onclick="clientDetailManager.editAddress(${index})"></ix-icon-button>
                         <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Subscription" onclick="clientDetailManager.deleteAddress(${index})"></ix-icon-button>
                     </div>
                 </td>

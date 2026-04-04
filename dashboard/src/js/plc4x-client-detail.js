@@ -8,6 +8,7 @@ class Plc4xClientDetailManager {
         this.clientName = null;
         this.isNewMode = false;
         this.deleteAddressName = null;
+        this.editingAddressName = null;
         this.init();
     }
 
@@ -260,6 +261,7 @@ class Plc4xClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
+                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="clientDetailManager.editAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                         <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="clientDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                     </div>
                 </td>
@@ -292,38 +294,61 @@ class Plc4xClientDetailManager {
             enabled: document.getElementById('address-enabled').checked
         };
 
+        const isEditing = this.editingAddressName !== null;
+        const originalAddress = this.editingAddressName;
+
         try {
-            const mutation = `
-                mutation AddPlc4xAddress($deviceName: String!, $input: Plc4xAddressInput!) {
-                    plc4xDevice {
-                        addAddress(deviceName: $deviceName, input: $input) {
-                            success
-                            errors
-                            client {
-                                name
+            let mutation;
+            let variables;
+
+            if (isEditing) {
+                mutation = `
+                    mutation UpdatePlc4xAddress($deviceName: String!, $address: String!, $input: Plc4xAddressInput!) {
+                        plc4xDevice {
+                            updateAddress(deviceName: $deviceName, address: $address, input: $input) {
+                                success
+                                errors
                             }
                         }
                     }
-                }
-            `;
+                `;
+                variables = {
+                    deviceName: this.clientName,
+                    address: originalAddress,
+                    input: addressData
+                };
+            } else {
+                mutation = `
+                    mutation AddPlc4xAddress($deviceName: String!, $input: Plc4xAddressInput!) {
+                        plc4xDevice {
+                            addAddress(deviceName: $deviceName, input: $input) {
+                                success
+                                errors
+                            }
+                        }
+                    }
+                `;
+                variables = {
+                    deviceName: this.clientName,
+                    input: addressData
+                };
+            }
 
-            const result = await this.client.query(mutation, {
-                deviceName: this.clientName,
-                input: addressData
-            });
+            const result = await this.client.query(mutation, variables);
+            const response = isEditing ? result.plc4xDevice.updateAddress : result.plc4xDevice.addAddress;
 
-            if (result.plc4xDevice.addAddress.success) {
+            if (response.success) {
                 this.hideAddAddressModal();
                 await this.loadClient();
-                this.showSuccess(`Address "${plcAddress}" added successfully`);
+                this.showSuccess(`Address "${plcAddress}" ${isEditing ? 'updated' : 'added'} successfully`);
             } else {
-                const errors = result.plc4xDevice.addAddress.errors || ['Unknown error'];
-                this.showError('Failed to add address: ' + errors.join(', '));
+                const errors = response.errors || ['Unknown error'];
+                this.showError(`Failed to ${isEditing ? 'update' : 'add'} address: ` + errors.join(', '));
             }
 
         } catch (error) {
-            console.error('Error adding address:', error);
-            this.showError('Failed to add address: ' + error.message);
+            console.error(`Error ${isEditing ? 'updating' : 'adding'} address:`, error);
+            this.showError(`Failed to ${isEditing ? 'update' : 'add'} address: ` + error.message);
         }
     }
 
@@ -503,16 +528,52 @@ class Plc4xClientDetailManager {
 
     // UI Helper Methods
     showAddAddressModal() {
+        this.editingAddressName = null;
         document.getElementById('add-address-modal').style.display = 'flex';
         // Reset form
         document.getElementById('add-address-form').reset();
         document.getElementById('address-enabled').checked = true;
         document.getElementById('address-publish-on-change').checked = true;
         document.getElementById('address-qos').value = '0';
+
+        // Update modal title and button
+        const title = document.querySelector('#add-address-modal .modal-header h3');
+        if (title) title.textContent = 'Add Address';
+        const btn = document.getElementById('add-address-btn');
+        if (btn) btn.textContent = 'Add Address';
     }
 
     hideAddAddressModal() {
         document.getElementById('add-address-modal').style.display = 'none';
+        this.editingAddressName = null;
+    }
+
+    editAddress(addressName) {
+        const address = this.clientData.config.addresses.find(a => a.address === addressName);
+        if (!address) return;
+
+        this.editingAddressName = addressName;
+
+        // Populate form with existing values
+        document.getElementById('address-address').value = address.address || '';
+        document.getElementById('address-topic').value = address.topic || '';
+        document.getElementById('address-qos').value = address.qos || 0;
+        document.getElementById('address-retained').checked = address.retained || false;
+        document.getElementById('address-scaling').value = address.scalingFactor || '';
+        document.getElementById('address-offset').value = address.offset || '';
+        document.getElementById('address-deadband').value = address.deadband || '';
+        document.getElementById('address-publish-on-change').checked = address.publishOnChange !== false;
+        document.getElementById('address-mode').value = address.mode || 'READ';
+        document.getElementById('address-enabled').checked = address.enabled !== false;
+
+        // Update modal title and button
+        const title = document.querySelector('#add-address-modal .modal-header h3');
+        if (title) title.textContent = 'Edit Address';
+        const btn = document.getElementById('add-address-btn');
+        if (btn) btn.textContent = 'Update Address';
+
+        // Show modal
+        document.getElementById('add-address-modal').style.display = 'flex';
     }
 
     showConfirmDeleteAddressModal() {
