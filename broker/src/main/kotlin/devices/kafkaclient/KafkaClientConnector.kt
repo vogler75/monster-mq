@@ -28,7 +28,7 @@ import java.util.logging.Logger
  * - TEXT: UTF-8 value text -> MQTT payload bytes, MQTT topic = record key (drop if key null)
  */
 class KafkaClientConnector : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java)
+    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = at.rocworks.Const.DEBUG_LEVEL }
 
     private lateinit var device: DeviceConfig
     private lateinit var cfg: KafkaClientConfig
@@ -102,11 +102,13 @@ class KafkaClientConnector : AbstractVerticle() {
             try {
                 val key = record.key()
                 val value = record.value()
+                logger.fine { "Kafka record received: key=${key?.take(200)}, valueType=${value?.javaClass?.simpleName}, partition=${record.partition()}, offset=${record.offset()}" }
 
                 when (cfg.payloadFormat) {
                     PayloadFormat.BINARY, PayloadFormat.TEXT -> {
                         // topic = key, drop if key null
                         if (key == null) {
+                            logger.fine { "Dropping record with null key (format=${cfg.payloadFormat})" }
                             messagesDropped.incrementAndGet(); return@handler
                         }
                         val payloadBytes: ByteArray = when (cfg.payloadFormat) {
@@ -222,7 +224,10 @@ class KafkaClientConnector : AbstractVerticle() {
 
     private fun publishPlain(topic: String, payload: ByteArray) {
         try {
-            val sessionHandler = Monster.getSessionHandler() ?: return
+            val sessionHandler = Monster.getSessionHandler() ?: run {
+                logger.warning("SessionHandler not available, cannot publish to $topic")
+                return
+            }
             val msg = BrokerMessage(
                 messageUuid = Utils.getUuid(),
                 messageId = 0,
@@ -236,6 +241,7 @@ class KafkaClientConnector : AbstractVerticle() {
                 time = Instant.now(),
                 senderId = Monster.getClusterNodeId(vertx)
             )
+            logger.fine { "Publishing to MQTT topic=$topic payloadSize=${payload.size}" }
             sessionHandler.publishMessage(msg)
         } catch (e: Exception) {
             errors.incrementAndGet()
@@ -256,7 +262,10 @@ class KafkaClientConnector : AbstractVerticle() {
 
     private fun publishDecoded(msg: BrokerMessage) {
         try {
-            val sessionHandler = Monster.getSessionHandler() ?: return
+            val sessionHandler = Monster.getSessionHandler() ?: run {
+                logger.warning("SessionHandler not available, cannot publish decoded message to ${msg.topicName}")
+                return
+            }
             // Overwrite sender to current node to reflect re-publication origin
             val republished = BrokerMessage(
                 messageUuid = msg.messageUuid,
@@ -271,6 +280,7 @@ class KafkaClientConnector : AbstractVerticle() {
                 time = msg.time,
                 senderId = Monster.getClusterNodeId(vertx)
             )
+            logger.fine { "Publishing decoded message to MQTT topic=${republished.topicName} payloadSize=${republished.payload.size}" }
             sessionHandler.publishMessage(republished)
         } catch (e: Exception) {
             errors.incrementAndGet()

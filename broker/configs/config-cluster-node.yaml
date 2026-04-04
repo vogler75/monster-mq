@@ -13,8 +13,6 @@ Postgres:
   Pass: manager
 
 Logging:
-  Mqtt:
-    Enabled: true
   Memory:
     Enabled: false
     Entries: 1000

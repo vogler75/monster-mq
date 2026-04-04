@@ -37,10 +37,12 @@ build/
 ### Mac OS ###
 .DS_Store
 
+### Logs and databases #
 log/*
 monstermq.db*
 config.yaml
 hazelcast.xml
+logging.properties
 /sqlite/
 /security/
 /buffer/
