@@ -526,9 +526,17 @@ class DashboardManager {
         const cIn = '#22C55E';  // green for In
         const cOut = '#6366F1'; // indigo for Out
 
+        const overallIn = clusterTotals.messagesIn + clusterTotals.mqttClientIn + clusterTotals.kafkaClientIn + clusterTotals.opcUaClientIn + (clusterTotals.winCCOaClientIn || 0) + (clusterTotals.winCCUaClientIn || 0) + clusterTotals.natsClientIn + clusterTotals.redisClientIn;
+        const overallOut = clusterTotals.messagesOut + clusterTotals.mqttClientOut + clusterTotals.kafkaClientOut + clusterTotals.opcUaClientOut + clusterTotals.natsClientOut + clusterTotals.redisClientOut;
+
         const cards = [
             `<div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>`,
             `<div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>`,
+            `<div class="metric-card">
+                <div class="metric-header"><span class="metric-title">Overall Messages</span><div class="metric-icon">📊</div></div>
+                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(overallIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(overallOut)}</span></div>
+                <div class="metric-label">In / Out (all sources)</div>
+            </div>`,
             `<div class="metric-card">
                 <div class="metric-header"><span class="metric-title">MQTT Messages</span><div class="metric-icon">📨</div></div>
                 <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.messagesIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.messagesOut)}</span></div>
