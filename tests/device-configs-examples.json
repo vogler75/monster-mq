@@ -593,7 +593,7 @@
     "namespace": "telegram",
     "nodeId": "local",
     "config": {
-      "botToken": "5761369201:AAG1YipvfrJC6TAjRhJeo7B5XRa2Hk2jwYk",
+      "botToken": "",
       "addresses": [],
       "proxyHost": null,
       "proxyPort": null,
