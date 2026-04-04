@@ -580,6 +580,144 @@ class WinCCOaClientConfigMutations(
         }
     }
 
+    fun updateWinCCOaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+
+            try {
+                val deviceName = env.getArgument<String>("deviceName")
+                val queryToUpdate = env.getArgument<String>("query")
+                val inputMap = env.getArgument<Map<String, Any>>("input")
+
+                if (deviceName == null || queryToUpdate == null || inputMap == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name, query to update, and input are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                val query = inputMap["query"] as? String
+                val topic = inputMap["topic"] as? String
+                val description = inputMap["description"] as? String ?: ""
+                val answer = inputMap["answer"] as? Boolean ?: false
+                val retained = inputMap["retained"] as? Boolean ?: false
+
+                if (query == null || topic == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Query and topic are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Create the address object
+                val address = WinCCOaAddress(
+                    query = query,
+                    topic = topic,
+                    description = description,
+                    answer = answer,
+                    retained = retained
+                )
+
+                val validationErrors = address.validate()
+                if (validationErrors.isNotEmpty()) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to validationErrors
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Get the existing device
+                deviceStore.getDevice(deviceName).onComplete { existingResult ->
+                    if (existingResult.failed()) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    val existingDevice = existingResult.result()
+                    if (existingDevice == null) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Parse existing config from JsonObject
+                    val existingConfig = WinCCOaConnectionConfig.fromJsonObject(existingDevice.config)
+
+                    // Check if address exists
+                    if (!existingConfig.addresses.any { it.query == queryToUpdate }) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address with query '$queryToUpdate' not found for device '$deviceName'")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Update the address
+                    val updatedAddresses = existingConfig.addresses.map { 
+                        if (it.query == queryToUpdate) address else it 
+                    }
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
+
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("updateAddress", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to update address: ${saveResult.cause()?.message}")
+                                )
+                            )
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.severe("Error updating WinCC OA client address: ${e.message}")
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to update address: ${e.message}")
+                    )
+                )
+            }
+
+            future
+        }
+    }
+
     fun deleteWinCCOaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()

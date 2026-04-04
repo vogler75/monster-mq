@@ -590,6 +590,146 @@ class Plc4xClientConfigMutations(
         }
     }
 
+    fun updateAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+
+            try {
+                val deviceName = env.getArgument<String>("deviceName")
+                val addressToUpdate = env.getArgument<String>("address") // Old address string used as key
+                val inputMap = env.getArgument<Map<String, Any>>("input")
+
+                if (deviceName == null || addressToUpdate == null || inputMap == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name, address to update, and input are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                val addressName = inputMap["name"] as? String
+                val addressStr = inputMap["address"] as? String
+                val topic = inputMap["topic"] as? String
+                val qos = (inputMap["qos"] as? Number)?.toInt() ?: 0
+                val retained = inputMap["retained"] as? Boolean ?: false
+                val scalingFactor = (inputMap["scalingFactor"] as? Number)?.toDouble()
+                val offset = (inputMap["offset"] as? Number)?.toDouble()
+                val deadband = (inputMap["deadband"] as? Number)?.toDouble()
+                val publishOnChange = inputMap["publishOnChange"] as? Boolean ?: true
+                val modeStr = inputMap["mode"] as? String
+                val mode = Plc4xAddressMode.fromString(modeStr)
+                val enabled = inputMap["enabled"] as? Boolean ?: true
+
+                if (addressName == null || addressStr == null || topic == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Name, address, and topic are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Create the address object
+                val address = Plc4xAddress(
+                    name = addressName,
+                    address = addressStr,
+                    topic = topic,
+                    qos = qos,
+                    retained = retained,
+                    scalingFactor = scalingFactor,
+                    offset = offset,
+                    deadband = deadband,
+                    publishOnChange = publishOnChange,
+                    mode = mode,
+                    enabled = enabled
+                )
+
+                // Get the existing device
+                deviceStore.getDevice(deviceName).onComplete { existingResult ->
+                    if (existingResult.failed()) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    val existingDevice = existingResult.result()
+                    if (existingDevice == null) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Parse existing config from JsonObject
+                    val existingConfig = Plc4xConnectionConfig.fromJsonObject(existingDevice.config)
+
+                    // Check if address exists
+                    if (!existingConfig.addresses.any { it.address == addressToUpdate }) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address '$addressToUpdate' not found for device '$deviceName'")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Update the address
+                    val updatedAddresses = existingConfig.addresses.map { 
+                        if (it.address == addressToUpdate) address else it 
+                    }
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
+
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("updateAddress", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to update address: ${saveResult.cause()?.message}")
+                                )
+                            )
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.severe("Error updating PLC4X address: ${e.message}")
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to update address: ${e.message}")
+                    )
+                )
+            }
+
+            future
+        }
+    }
+
     fun deleteAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()

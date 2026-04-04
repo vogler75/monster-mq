@@ -929,6 +929,7 @@ class GraphQLServer(
                         dataFetcher("toggle", resolver.toggleWinCCOaClient())
                         dataFetcher("reassign", resolver.reassignWinCCOaClient())
                         dataFetcher("addAddress", resolver.addWinCCOaClientAddress())
+                        dataFetcher("updateAddress", resolver.updateWinCCOaClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteWinCCOaClientAddress())
                     }
                 }
@@ -945,6 +946,7 @@ class GraphQLServer(
                         dataFetcher("toggle", resolver.toggleWinCCUaClient())
                         dataFetcher("reassign", resolver.reassignWinCCUaClient())
                         dataFetcher("addAddress", resolver.addWinCCUaClientAddress())
+                        dataFetcher("updateAddress", resolver.updateWinCCUaClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteWinCCUaClientAddress())
                     }
                 }
@@ -991,6 +993,7 @@ class GraphQLServer(
                         dataFetcher("toggle", resolver.toggle())
                         dataFetcher("reassign", resolver.reassign())
                         dataFetcher("addAddress", resolver.addAddress())
+                        dataFetcher("updateAddress", resolver.updateAddress())
                         dataFetcher("deleteAddress", resolver.deleteAddress())
                     }
                 }

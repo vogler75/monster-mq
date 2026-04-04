@@ -282,6 +282,7 @@ class WinCCOaClientDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons">
+                        <ix-icon-button icon="edit" variant="primary" ghost size="16" title="Edit Query" onclick="clientDetailManager.editQuery(${index})"></ix-icon-button>
                         <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Query" onclick="clientDetailManager.deleteQuery(${index})"></ix-icon-button>
                     </div>
                 </td>
@@ -314,6 +315,7 @@ class WinCCOaClientDetailManager {
         if (!query) return;
 
         this.editingQueryIndex = index;
+        this.originalQueryValue = query.query;
 
         // Populate form with existing values
         document.getElementById('query-query').value = query.query || '';
@@ -345,46 +347,68 @@ class WinCCOaClientDetailManager {
             retained: document.getElementById('query-retained').checked
         };
 
+        const isEditing = this.editingQueryIndex !== null;
+        const originalQuery = this.originalQueryValue;
+
         this.hideAddQueryModal();
 
-        // Save immediately to server using addWinCCOaClientAddress mutation
+        // Save immediately to server
         if (this.isNewMode) {
-            this.showError('Please save the client first before adding queries');
+            this.showError('Please save the client first before managing queries');
             return;
         }
 
         try {
-            const mutation = `
-                mutation AddWinCCOaClientAddress($deviceName: String!, $input: WinCCOaAddressInput!) {
-                    winCCOaDevice {
-                        addAddress(deviceName: $deviceName, input: $input) {
-                            success
-                            errors
-                            client {
-                                name
-                                enabled
+            let mutation;
+            let variables;
+
+            if (isEditing) {
+                mutation = `
+                    mutation UpdateWinCCOaClientAddress($deviceName: String!, $query: String!, $input: WinCCOaAddressInput!) {
+                        winCCOaDevice {
+                            updateAddress(deviceName: $deviceName, query: $query, input: $input) {
+                                success
+                                errors
                             }
                         }
                     }
-                }
-            `;
+                `;
+                variables = {
+                    deviceName: this.clientName,
+                    query: originalQuery,
+                    input: queryData
+                };
+            } else {
+                mutation = `
+                    mutation AddWinCCOaClientAddress($deviceName: String!, $input: WinCCOaAddressInput!) {
+                        winCCOaDevice {
+                            addAddress(deviceName: $deviceName, input: $input) {
+                                success
+                                errors
+                            }
+                        }
+                    }
+                `;
+                variables = {
+                    deviceName: this.clientName,
+                    input: queryData
+                };
+            }
 
-            const result = await this.client.query(mutation, {
-                deviceName: this.clientName,
-                input: queryData
-            });
+            const result = await this.client.query(mutation, variables);
+            const response = isEditing ? result.winCCOaDevice.updateAddress : result.winCCOaDevice.addAddress;
 
-            if (result.winCCOaDevice.addAddress.success) {
+            if (response.success) {
                 // Reload client data to get updated addresses
                 await this.loadClient();
-                this.showSuccess('Query added successfully');
+                this.showSuccess(isEditing ? 'Query updated successfully' : 'Query added successfully');
             } else {
-                const errors = result.winCCOaDevice.addAddress.errors || ['Unknown error'];
-                this.showError('Failed to add query: ' + errors.join(', '));
+                const errors = response.errors || ['Unknown error'];
+                this.showError(`Failed to ${isEditing ? 'update' : 'add'} query: ` + errors.join(', '));
             }
         } catch (error) {
-            console.error('Error adding query:', error);
-            this.showError('Failed to add query: ' + error.message);
+            console.error(`Error ${isEditing ? 'updating' : 'adding'} query:`, error);
+            this.showError(`Failed to ${isEditing ? 'update' : 'add'} query: ` + error.message);
         }
     }
 

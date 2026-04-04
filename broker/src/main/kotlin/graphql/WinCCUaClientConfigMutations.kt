@@ -594,6 +594,157 @@ class WinCCUaClientConfigMutations(
         }
     }
 
+    fun updateWinCCUaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+
+            try {
+                val deviceName = env.getArgument<String>("deviceName")
+                val topicToUpdate = env.getArgument<String>("topic")
+                val inputMap = env.getArgument<Map<String, Any>>("input")
+
+                if (deviceName == null || topicToUpdate == null || inputMap == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Device name, topic to update, and input are required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                val typeStr = inputMap["type"] as? String ?: "TAG_VALUES"
+                val type = try {
+                    WinCCUaAddressType.valueOf(typeStr)
+                } catch (e: Exception) {
+                    WinCCUaAddressType.TAG_VALUES
+                }
+                val topic = inputMap["topic"] as? String
+                val description = inputMap["description"] as? String ?: ""
+                val retained = inputMap["retained"] as? Boolean ?: false
+
+                if (topic == null) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to listOf("Topic is required")
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Parse type-specific fields
+                val nameFilters = (inputMap["nameFilters"] as? List<*>)?.mapNotNull { it as? String }
+                val includeQuality = inputMap["includeQuality"] as? Boolean ?: false
+                val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
+                val filterString = inputMap["filterString"] as? String
+
+                // Create the address object
+                val address = WinCCUaAddress(
+                    type = type,
+                    topic = topic,
+                    description = description,
+                    retained = retained,
+                    nameFilters = nameFilters,
+                    includeQuality = includeQuality,
+                    systemNames = systemNames,
+                    filterString = filterString
+                )
+
+                val validationErrors = address.validate()
+                if (validationErrors.isNotEmpty()) {
+                    future.complete(
+                        mapOf(
+                            "success" to false,
+                            "errors" to validationErrors
+                        )
+                    )
+                    return@DataFetcher future
+                }
+
+                // Get the existing device
+                deviceStore.getDevice(deviceName).onComplete { existingResult ->
+                    if (existingResult.failed()) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Database error: ${existingResult.cause()?.message}")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    val existingDevice = existingResult.result()
+                    if (existingDevice == null) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Device '$deviceName' not found")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Parse existing config from JsonObject
+                    val existingConfig = WinCCUaConnectionConfig.fromJsonObject(existingDevice.config)
+
+                    // Check if address exists
+                    if (!existingConfig.addresses.any { it.topic == topicToUpdate }) {
+                        future.complete(
+                            mapOf(
+                                "success" to false,
+                                "errors" to listOf("Address with topic '$topicToUpdate' not found for device '$deviceName'")
+                            )
+                        )
+                        return@onComplete
+                    }
+
+                    // Update the address
+                    val updatedAddresses = existingConfig.addresses.map { 
+                        if (it.topic == topicToUpdate) address else it 
+                    }
+                    val updatedConfig = existingConfig.copy(addresses = updatedAddresses)
+                    val updatedDevice = existingDevice.copy(config = updatedConfig.toJsonObject(), updatedAt = Instant.now())
+
+                    deviceStore.saveDevice(updatedDevice).onComplete { saveResult ->
+                        if (saveResult.succeeded()) {
+                            val savedDevice = saveResult.result()
+
+                            // Notify extension about the change
+                            notifyDeviceConfigChange("updateAddress", savedDevice)
+
+                            future.complete(
+                                mapOf(
+                                    "success" to true,
+                                    "client" to deviceToMap(savedDevice),
+                                    "errors" to emptyList<String>()
+                                )
+                            )
+                        } else {
+                            future.complete(
+                                mapOf(
+                                    "success" to false,
+                                    "errors" to listOf("Failed to update address: ${saveResult.cause()?.message}")
+                                )
+                            )
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                logger.severe("Error updating WinCC Unified client address: ${e.message}")
+                future.complete(
+                    mapOf(
+                        "success" to false,
+                        "errors" to listOf("Failed to update address: ${e.message}")
+                    )
+                )
+            }
+
+            future
+        }
+    }
+
     fun deleteWinCCUaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
