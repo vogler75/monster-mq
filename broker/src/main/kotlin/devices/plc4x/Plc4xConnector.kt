@@ -579,7 +579,7 @@ class Plc4xConnector : AbstractVerticle() {
 
             // Parse the MQTT payload to extract the value
             val payloadString = String(message.payload)
-            val value = if (address.jsonPath != null) {
+            val value = if (!address.jsonPath.isNullOrBlank()) {
                 // Extract value from JSON using configured path (supports dot notation, e.g. "data.value")
                 try {
                     val json = JsonObject(payloadString)
@@ -640,13 +640,17 @@ class Plc4xConnector : AbstractVerticle() {
                     // Wait for response
                     val response = responseFuture.get()
 
-                    // Check response
-                    val responseCode = response.getResponseCode(address.name)
-                    if (responseCode == PlcResponseCode.OK) {
-                        messagesOutCounter.incrementAndGet()
-                        logger.fine { "Successfully wrote value to PLC: ${address.address} = $plcValue (from MQTT topic ${message.topicName})" }
+                    // Check response safely
+                    if (!response.tagNames.contains(address.name)) {
+                        logger.warning("Failed to write to PLC address ${address.name}: Tag was not found in the write response (possibly rejected by driver due to value type mismatch: ${plcValue?.javaClass?.simpleName})")
                     } else {
-                        logger.warning("Failed to write to PLC address ${address.name}: $responseCode")
+                        val responseCode = response.getResponseCode(address.name)
+                        if (responseCode == PlcResponseCode.OK) {
+                            messagesOutCounter.incrementAndGet()
+                            logger.fine { "Successfully wrote value to PLC: ${address.address} = $plcValue (from MQTT topic ${message.topicName})" }
+                        } else {
+                            logger.warning("Failed to write to PLC address ${address.name}: $responseCode")
+                        }
                     }
 
                     Unit // Return Unit
