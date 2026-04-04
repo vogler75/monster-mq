@@ -636,13 +636,24 @@ class Plc4xConnector : AbstractVerticle() {
                 }
             }
 
-            // Loop prevention for READ_WRITE mode
+            // Loop prevention for READ_WRITE mode — compare as doubles to handle type
+            // differences (PLC4X returns Short/Integer/Float, JSON parsing returns Integer/Double).
+            // Use epsilon for float tolerance (Float→JSON→Double loses precision).
             if (address.mode == Plc4xAddressMode.READ_WRITE) {
                 val lastReadValue = lastReadValues[address.name]
-                if (lastReadValue != null && lastReadValue == value) {
-                    // This value came from our own read - don't write it back to avoid loop
-                    logger.finest("Skipping PLC write for ${address.name} - value matches last read (loop prevention): $value")
-                    return
+                if (lastReadValue != null) {
+                    val lastNum = (lastReadValue as? Number)?.toDouble()
+                    val valueNum = (value as? Number)?.toDouble()
+                    if (lastNum != null && valueNum != null) {
+                        val epsilon = if (lastReadValue is Float || value is Float) 1e-5 else 0.0
+                        if (kotlin.math.abs(lastNum - valueNum) <= epsilon) {
+                            logger.finest("Skipping PLC write for ${address.name} - value matches last read (loop prevention): $value")
+                            return
+                        }
+                    } else if (lastNum == null && valueNum == null && lastReadValue.toString() == value.toString()) {
+                        logger.finest("Skipping PLC write for ${address.name} - value matches last read (loop prevention): $value")
+                        return
+                    }
                 }
             }
 
@@ -661,8 +672,9 @@ class Plc4xConnector : AbstractVerticle() {
             }
 
             // Write to PLC — unordered so writes don't queue behind read polls
+            // (PLC4X handles request serialization internally)
             logger.fine { "Queuing PLC write for ${address.name} = $plcValue (${plcValue?.javaClass?.simpleName})" }
-            vertx.executeBlocking(java.util.concurrent.Callable {
+            vertx.executeBlocking(java.util.concurrent.Callable<Unit> {
                 if (isStopped) return@Callable
                 val conn = connection
                 if (conn == null || !isConnected) {
