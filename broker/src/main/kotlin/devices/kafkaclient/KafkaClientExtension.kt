@@ -21,7 +21,7 @@ import java.util.logging.Logger
  * Coordinates deployment of KafkaClientConnector instances for devices of type DEVICE_TYPE_KAFKA_CLIENT.
  */
 class KafkaClientExtension : AbstractVerticle() {
-    private val logger: Logger = Utils.getLogger(this::class.java)
+    private val logger: Logger = Utils.getLogger(this::class.java).also { it.level = at.rocworks.Const.DEBUG_LEVEL }
 
     private lateinit var deviceStore: IDeviceConfigStore
     private val deployedConnectors = ConcurrentHashMap<String, String>()
