@@ -368,9 +368,16 @@ class Plc4xConnector : AbstractVerticle() {
                 val readRequest = requestBuilder.build()
                 val responseFuture = readRequest.execute()
 
-                // Wait for response
+                // Wait for response with timeout to prevent blocking the worker thread indefinitely
+                val timeoutMs = maxOf(plc4xConfig.pollingInterval * 3, 30_000L)
                 val response = try {
-                    responseFuture.get()
+                    responseFuture.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } catch (e: java.util.concurrent.TimeoutException) {
+                    logger.warning("PLC4X read request timed out after ${timeoutMs}ms for device ${deviceConfig.name}, scheduling reconnection")
+                    responseFuture.cancel(true)
+                    isConnected = false
+                    scheduleReconnection()
+                    return@executeBlocking
                 } catch (e: java.util.concurrent.ExecutionException) {
                     // PLC4X internal error (e.g. NPE in tag response mapping) — not a connection loss
                     val cause = e.cause
