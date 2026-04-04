@@ -33,6 +33,19 @@ class MutationResolver(
             
             val input = env.getArgument<Map<String, Any>>("input") ?: throw IllegalArgumentException("Input is required")
             val topic = input["topic"] as? String ?: throw IllegalArgumentException("Topic is required")
+
+            // MQTT spec §3.3.2.1: Topic Name in PUBLISH MUST NOT contain wildcard characters
+            if (topic.contains('+') || topic.contains('#')) {
+                future.complete(
+                    PublishResult(
+                        success = false,
+                        topic = topic,
+                        timestamp = System.currentTimeMillis(),
+                        error = "Topic must not contain wildcard characters '+' or '#'"
+                    )
+                )
+                return@DataFetcher future
+            }
             
             // Get auth context from thread-local service (may be null for anonymous users)
             val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
@@ -116,6 +129,19 @@ class MutationResolver(
 
                 val itemFuture = CompletableFuture<PublishResult>()
                 futures.add(itemFuture)
+
+                // MQTT spec §3.3.2.1: Topic Name in PUBLISH MUST NOT contain wildcard characters
+                if (topic.contains('+') || topic.contains('#')) {
+                    itemFuture.complete(
+                        PublishResult(
+                            success = false,
+                            topic = topic,
+                            timestamp = System.currentTimeMillis(),
+                            error = "Topic must not contain wildcard characters '+' or '#'"
+                        )
+                    )
+                    return@forEach
+                }
 
                 // Check publish permission for this specific topic
                 if (!authContext.canPublishToTopic(userAuthContext, topic)) {

@@ -928,6 +928,13 @@ class MqttClient(
             logger.warning { "Client [$clientId] Publish: message for system topic [$topicName] not allowed! [${Utils.getCurrentFunctionName()}]" }
             return
         }
+
+        // MQTT spec §3.3.2.1: Topic Name in PUBLISH MUST NOT contain wildcard characters '+' or '#'
+        if (topicName.contains('+') || topicName.contains('#')) {
+            logger.warning { "Client [$clientId] Publish: topic [$topicName] contains wildcard characters - protocol violation [${Utils.getCurrentFunctionName()}]" }
+            sessionHandler.disconnectClient(clientId, "Publish topic contains wildcard characters")
+            return
+        }
         
         // Check ACL permissions
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
