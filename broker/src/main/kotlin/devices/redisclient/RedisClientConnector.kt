@@ -12,7 +12,6 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import io.vertx.redis.client.*
-import io.vertx.redis.client.impl.types.BulkType
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
@@ -58,6 +57,15 @@ class RedisClientConnector : AbstractVerticle() {
     // KV_SYNC change detection: stores last-seen payload per key (keyed by Redis key name)
     private val kvLastValues = ConcurrentHashMap<String, ByteArray>()
 
+    // -- Outbound write batching --
+    // Buffers outbound Redis writes and flushes them as MSET (for KV) or pipelined PUBLISH commands.
+    // This avoids overwhelming the Redis connection pool with individual requests.
+    private data class PendingWrite(val redisKey: String, val payload: ByteArray, val isKvSync: Boolean)
+    private val writeBatch = mutableListOf<PendingWrite>()
+    private var batchTimerId: Long? = null
+    private val batchFlushIntervalMs = 100L  // flush every 100ms
+    private val batchMaxSize = 200           // or when batch reaches this size
+
     // -- Lifecycle --
 
     override fun start(startPromise: Promise<Void>) {
@@ -97,6 +105,10 @@ class RedisClientConnector : AbstractVerticle() {
         // Cancel any pending reconnect timer
         reconnectTimerId?.let { vertx.cancelTimer(it); reconnectTimerId = null }
 
+        // Cancel batch flush timer and flush remaining
+        batchTimerId?.let { vertx.cancelTimer(it); batchTimerId = null }
+        flushWriteBatch()
+
         // Cancel KV poll timers
         kvPollTimerIds.forEach { vertx.cancelTimer(it) }
         kvPollTimerIds.clear()
@@ -126,6 +138,7 @@ class RedisClientConnector : AbstractVerticle() {
             val options = RedisOptions()
                 .setConnectionString(connString)
                 .setMaxPoolSize(cfg.maxPoolSize)
+                .setMaxWaitingHandlers(cfg.maxPoolSize * 128)
 
             if (cfg.useSsl && cfg.sslTrustAll) {
                 options.netClientOptions.isTrustAll = true
@@ -139,6 +152,11 @@ class RedisClientConnector : AbstractVerticle() {
             mainClient.send(Request.cmd(Command.PING)).onSuccess { _: Response? ->
                 logger.info("Connected to Redis for device '${device.name}'")
                 isConnected = true
+
+                // Start batch flush timer
+                if (batchTimerId == null) {
+                    batchTimerId = vertx.setPeriodic(batchFlushIntervalMs) { flushWriteBatch() }
+                }
 
                 // Set up Pub/Sub subscriber on a dedicated connection
                 setupSubscriberConnection(connString, options)
@@ -484,41 +502,6 @@ class RedisClientConnector : AbstractVerticle() {
         messagesIn.incrementAndGet()
     }
 
-    /**
-     * Write a key to Redis using the appropriate command based on the payload:
-     *   - JSON object payload -> try JSON.SET, fall back to SET
-     *   - Any other payload   -> SET (string)
-     */
-    private fun writeKeyByPayload(client: Redis, key: String, payload: ByteArray) {
-        val payloadStr = String(payload).trim()
-        val isJson = (payloadStr.startsWith("{") && payloadStr.endsWith("}")) ||
-                     (payloadStr.startsWith("[") && payloadStr.endsWith("]"))
-
-        if (isJson) {
-            // Try JSON.SET first (requires RedisJSON module)
-            client.send(Request.cmd(Command.create("JSON.SET")).arg(key).arg("$").arg(payloadStr))
-                .onSuccess { _: Response? ->
-                    messagesOut.incrementAndGet()
-                    logger.fine { "MQTT->Redis JSON.SET '$key'" }
-                }.onFailure {
-                    // RedisJSON not available — fall back to plain SET
-                    writeStringKey(client, key, payload)
-                }
-        } else {
-            writeStringKey(client, key, payload)
-        }
-    }
-
-    private fun writeStringKey(client: Redis, key: String, payload: ByteArray) {
-        client.send(Request.cmd(Command.SET).arg(key).arg(payload)).onSuccess { _: Response? ->
-            messagesOut.incrementAndGet()
-            logger.fine { "MQTT->Redis SET '$key'" }
-        }.onFailure { e ->
-            errors.incrementAndGet()
-            logger.warning("Failed to SET Redis key '$key' for '${device.name}': ${e.message}")
-        }
-    }
-
     private fun publishToMqtt(topic: String, payload: ByteArray, qos: Int) {
         val brokerMsg = BrokerMessage(
             messageId = 0,
@@ -572,8 +555,7 @@ class RedisClientConnector : AbstractVerticle() {
         // Loop prevention: skip messages we published ourselves
         if (cfg.loopPrevention && (msg.senderId == internalClientId || msg.clientId == internalClientId)) return
 
-        val client = redisClient
-        if (client == null || !isConnected) {
+        if (!isConnected) {
             logger.fine { "Redis not connected, dropping outbound message on '${msg.topicName}'" }
             return
         }
@@ -587,23 +569,68 @@ class RedisClientConnector : AbstractVerticle() {
         matchingAddrs.forEach { matchingAddr ->
             try {
                 val redisTarget = matchingAddr.mqttToRedisChannel(msg.topicName)
+                writeBatch.add(PendingWrite(redisTarget, msg.payload, matchingAddr.isKvSync()))
 
-                if (matchingAddr.isKvSync()) {
-                    // KV_SYNC: detect payload type and use appropriate write command
-                    writeKeyByPayload(client, redisTarget, msg.payload)
-                } else {
-                    // PUBLISH: Pub/Sub publish
-                    client.send(Request.cmd(Command.PUBLISH).arg(redisTarget).arg(msg.payload)).onSuccess { _: Response? ->
-                        messagesOut.incrementAndGet()
-                        logger.fine { "MQTT->Redis PUBLISH '$redisTarget'" }
-                    }.onFailure { e ->
-                        errors.incrementAndGet()
-                        logger.warning("Failed to publish to Redis channel '$redisTarget' for '${device.name}': ${e.message}")
-                    }
+                // Flush immediately if batch is full
+                if (writeBatch.size >= batchMaxSize) {
+                    flushWriteBatch()
                 }
             } catch (e: Exception) {
                 errors.incrementAndGet()
-                logger.warning("Failed to forward to Redis for '${device.name}': ${e.message}")
+                logger.warning("Failed to buffer outbound message for '${device.name}': ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Flush pending outbound writes to Redis.
+     * KV_SYNC SET writes are batched into a single MSET command.
+     * PUBLISH writes are sent as pipelined commands via RedisAPI.batch().
+     */
+    private fun flushWriteBatch() {
+        if (writeBatch.isEmpty()) return
+
+        val client = redisClient
+        if (client == null || !isConnected) {
+            writeBatch.clear()
+            return
+        }
+
+        // Drain the buffer
+        val pending = ArrayList(writeBatch)
+        writeBatch.clear()
+
+        // Split into KV (SET) and Pub/Sub (PUBLISH) writes
+        val kvWrites = pending.filter { it.isKvSync }
+        val pubWrites = pending.filter { !it.isKvSync }
+
+        // Batch KV writes as MSET (one round-trip for all key-value pairs)
+        if (kvWrites.isNotEmpty()) {
+            val msetRequest = Request.cmd(Command.MSET)
+            kvWrites.forEach { write ->
+                msetRequest.arg(write.redisKey).arg(write.payload)
+            }
+            client.send(msetRequest).onSuccess {
+                messagesOut.addAndGet(kvWrites.size.toLong())
+                logger.fine { "MQTT->Redis MSET ${kvWrites.size} keys for '${device.name}'" }
+            }.onFailure { e ->
+                errors.incrementAndGet()
+                logger.warning("Failed to MSET ${kvWrites.size} keys for '${device.name}': ${e.message}")
+            }
+        }
+
+        // Pipeline PUBLISH writes using batch()
+        if (pubWrites.isNotEmpty()) {
+            val requests = pubWrites.map { write ->
+                Request.cmd(Command.PUBLISH).arg(write.redisKey).arg(write.payload)
+            }
+            client.batch(requests).onSuccess { responses ->
+                val successCount = responses.count { it != null }
+                messagesOut.addAndGet(successCount.toLong())
+                logger.fine { "MQTT->Redis PUBLISH batch ${pubWrites.size} messages for '${device.name}'" }
+            }.onFailure { e ->
+                errors.incrementAndGet()
+                logger.warning("Failed to PUBLISH batch ${pubWrites.size} messages for '${device.name}': ${e.message}")
             }
         }
     }
