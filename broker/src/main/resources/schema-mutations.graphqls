@@ -934,6 +934,10 @@ type WinCCOaDeviceMutations {
     # New subscriptions will immediately start receiving updates
     addAddress(deviceName: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
 
+    # Update an existing subscription address for a WinCC OA client
+    # Modifies an existing datapoint monitoring configuration
+    updateAddress(deviceName: String!, query: String!, input: WinCCOaAddressInput!): WinCCOaClientResult!
+
     # Remove a subscription address from a WinCC OA client
     # Stops monitoring the specified GraphQL query while keeping other subscriptions active
     deleteAddress(deviceName: String!, query: String!): WinCCOaClientResult!
@@ -1060,6 +1064,10 @@ type WinCCUaDeviceMutations {
     # New subscriptions will immediately start receiving updates
     addAddress(deviceName: String!, input: WinCCUaAddressInput!): WinCCUaClientResult!
 
+    # Update an existing subscription address for a WinCC Unified client
+    # Modifies an existing tag monitoring or alarm subscription
+    updateAddress(deviceName: String!, topic: String!, input: WinCCUaAddressInput!): WinCCUaClientResult!
+
     # Remove a subscription address from a WinCC Unified client
     # Stops monitoring the specified topic while keeping other subscriptions active
     deleteAddress(deviceName: String!, topic: String!): WinCCUaClientResult!
@@ -1184,6 +1192,10 @@ type Plc4xDeviceMutations {
     # New addresses will immediately start being polled
     addAddress(deviceName: String!, input: Plc4xAddressInput!): Plc4xClientResult!
 
+    # Update an existing address configuration for a PLC4X client
+    # Modifies the polling configuration for an existing PLC tag
+    updateAddress(deviceName: String!, address: String!, input: Plc4xAddressInput!): Plc4xClientResult!
+
     # Remove an address from a PLC4X client
     # Stops polling the specified address while keeping other addresses active
     deleteAddress(deviceName: String!, addressName: String!): Plc4xClientResult!
@@ -1246,6 +1258,9 @@ input Plc4xAddressInput {
     mode: Plc4xAddressMode = READ
     # Whether this address should be polled
     enabled: Boolean = true
+    # Optional JSON path for extracting a value from a JSON MQTT payload (dot notation, e.g. "data.value")
+    # When set, the MQTT payload is parsed as JSON and the value at this path is used for PLC writes
+    jsonPath: String
 }
 
 # Input for creating or updating a PLC4X client

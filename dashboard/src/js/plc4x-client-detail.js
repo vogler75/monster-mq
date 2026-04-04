@@ -127,6 +127,7 @@ class Plc4xClientDetailManager {
                                 publishOnChange
                                 mode
                                 enabled
+                                jsonPath
                             }
                         }
                         metrics {
@@ -291,7 +292,8 @@ class Plc4xClientDetailManager {
             deadband: parseFloat(document.getElementById('address-deadband').value) || null,
             publishOnChange: document.getElementById('address-publish-on-change').checked,
             mode: document.getElementById('address-mode').value,
-            enabled: document.getElementById('address-enabled').checked
+            enabled: document.getElementById('address-enabled').checked,
+            jsonPath: document.getElementById('address-json-path').value.trim() || null
         };
 
         const isEditing = this.editingAddressName !== null;
@@ -539,7 +541,7 @@ class Plc4xClientDetailManager {
         // Update modal title and button
         const title = document.querySelector('#add-address-modal .modal-header h3');
         if (title) title.textContent = 'Add Address';
-        const btn = document.getElementById('add-address-btn');
+        const btn = document.getElementById('add-address-btn') || document.querySelector('#add-address-modal button[onclick="addAddress()"]');
         if (btn) btn.textContent = 'Add Address';
     }
 
@@ -565,11 +567,12 @@ class Plc4xClientDetailManager {
         document.getElementById('address-publish-on-change').checked = address.publishOnChange !== false;
         document.getElementById('address-mode').value = address.mode || 'READ';
         document.getElementById('address-enabled').checked = address.enabled !== false;
+        document.getElementById('address-json-path').value = address.jsonPath || '';
 
         // Update modal title and button
         const title = document.querySelector('#add-address-modal .modal-header h3');
         if (title) title.textContent = 'Edit Address';
-        const btn = document.getElementById('add-address-btn');
+        const btn = document.getElementById('add-address-btn') || document.querySelector('#add-address-modal button[onclick="addAddress()"]');
         if (btn) btn.textContent = 'Update Address';
 
         // Show modal

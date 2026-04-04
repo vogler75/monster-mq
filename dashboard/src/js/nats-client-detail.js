@@ -231,6 +231,8 @@ class NatsClientDetailManager {
         this.editingAddressIndex = null;
         this.editingOriginalSubject = null;
         document.getElementById('address-modal-title').textContent = 'Add Address Mapping';
+        const saveBtn = document.getElementById('save-address-btn');
+        if (saveBtn) saveBtn.textContent = 'Add Mapping';
         document.getElementById('addr-mode').value = 'SUBSCRIBE';
         document.getElementById('addr-nats-subject').value = '';
         document.getElementById('addr-mqtt-topic').value = '';
@@ -248,6 +250,8 @@ class NatsClientDetailManager {
         this.editingAddressIndex = idx;
         this.editingOriginalSubject = addr.natsSubject;
         document.getElementById('address-modal-title').textContent = 'Edit Address Mapping';
+        const saveBtn = document.getElementById('save-address-btn');
+        if (saveBtn) saveBtn.textContent = 'Update Mapping';
         document.getElementById('addr-mode').value = addr.mode || 'SUBSCRIBE';
         document.getElementById('addr-nats-subject').value = addr.natsSubject || '';
         document.getElementById('addr-mqtt-topic').value = addr.mqttTopic || '';

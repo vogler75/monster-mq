@@ -135,7 +135,8 @@ data class Plc4xAddress(
     val deadband: Double? = null,
     val publishOnChange: Boolean = true,
     val mode: Plc4xAddressMode = Plc4xAddressMode.READ,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
+    val jsonPath: String? = null
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): Plc4xAddress {
@@ -150,7 +151,8 @@ data class Plc4xAddress(
                 deadband = json.getDouble("deadband"),
                 publishOnChange = json.getBoolean("publishOnChange", true),
                 mode = Plc4xAddressMode.fromString(json.getString("mode")),
-                enabled = json.getBoolean("enabled", true)
+                enabled = json.getBoolean("enabled", true),
+                jsonPath = json.getString("jsonPath")
             )
         }
     }
@@ -169,6 +171,7 @@ data class Plc4xAddress(
         scalingFactor?.let { json.put("scalingFactor", it) }
         offset?.let { json.put("offset", it) }
         deadband?.let { json.put("deadband", it) }
+        jsonPath?.let { json.put("jsonPath", it) }
 
         return json
     }

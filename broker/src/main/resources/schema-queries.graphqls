@@ -1469,6 +1469,9 @@ type Plc4xAddress {
     mode: Plc4xAddressMode!
     # Whether this address should be polled
     enabled: Boolean!
+    # Optional JSON path for extracting a value from a JSON MQTT payload (dot notation, e.g. "data.value")
+    # When set, the MQTT payload is parsed as JSON and the value at this path is used for PLC writes
+    jsonPath: String
 }
 
 # PLC4X connection configuration

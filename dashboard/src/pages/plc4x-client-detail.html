@@ -830,6 +830,11 @@
                         <div class="helper-text">READ: Read from PLC and publish to MQTT | WRITE: Subscribe to MQTT and write to PLC | READ_WRITE: Bidirectional with loop prevention</div>
                     </div>
                     <div class="form-group">
+                        <label for="address-json-path">JSON Path</label>
+                        <input type="text" id="address-json-path" placeholder="e.g., value or data.temperature">
+                        <div class="helper-text">Extract a value from JSON MQTT payloads using dot notation (for WRITE/READ_WRITE mode)</div>
+                    </div>
+                    <div class="form-group">
                         <div class="checkbox-group">
                             <input type="checkbox" id="address-enabled" checked>
                             <label for="address-enabled">Enabled</label>
@@ -839,7 +844,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary" onclick="addAddress()">Add Address</button>
+                <button type="button" id="add-address-btn" class="btn btn-primary" onclick="addAddress()">Add Address</button>
             </div>
         </div>
     </div>

@@ -472,6 +472,7 @@ class Plc4xClientConfigMutations(
                 val modeStr = inputMap["mode"] as? String
                 val mode = Plc4xAddressMode.fromString(modeStr)
                 val enabled = inputMap["enabled"] as? Boolean ?: true
+                val jsonPath = inputMap["jsonPath"] as? String
 
                 if (addressName == null || addressStr == null || topic == null) {
                     future.complete(
@@ -495,7 +496,8 @@ class Plc4xClientConfigMutations(
                     deadband = deadband,
                     publishOnChange = publishOnChange,
                     mode = mode,
-                    enabled = enabled
+                    enabled = enabled,
+                    jsonPath = jsonPath
                 )
 
                 val validationErrors = address.validate()
@@ -621,6 +623,7 @@ class Plc4xClientConfigMutations(
                 val modeStr = inputMap["mode"] as? String
                 val mode = Plc4xAddressMode.fromString(modeStr)
                 val enabled = inputMap["enabled"] as? Boolean ?: true
+                val jsonPath = inputMap["jsonPath"] as? String
 
                 if (addressName == null || addressStr == null || topic == null) {
                     future.complete(
@@ -644,7 +647,8 @@ class Plc4xClientConfigMutations(
                     deadband = deadband,
                     publishOnChange = publishOnChange,
                     mode = mode,
-                    enabled = enabled
+                    enabled = enabled,
+                    jsonPath = jsonPath
                 )
 
                 // Get the existing device

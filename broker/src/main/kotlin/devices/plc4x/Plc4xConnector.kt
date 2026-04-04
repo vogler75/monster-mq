@@ -579,12 +579,27 @@ class Plc4xConnector : AbstractVerticle() {
 
             // Parse the MQTT payload to extract the value
             val payloadString = String(message.payload)
-            val value = try {
-                val json = JsonObject(payloadString)
-                json.getValue("value")
-            } catch (e: Exception) {
-                // If not JSON, try to parse as plain value
-                payloadString.toDoubleOrNull() ?: payloadString
+            val value = if (address.jsonPath != null) {
+                // Extract value from JSON using configured path (supports dot notation, e.g. "data.value")
+                try {
+                    val json = JsonObject(payloadString)
+                    extractJsonValue(json, address.jsonPath)
+                        ?: run {
+                            logger.warning("JSON path '${address.jsonPath}' not found in payload for address ${address.name}")
+                            return
+                        }
+                } catch (e: Exception) {
+                    logger.warning("Failed to parse JSON payload for address ${address.name} with jsonPath '${address.jsonPath}': ${e.message}")
+                    return
+                }
+            } else {
+                try {
+                    val json = JsonObject(payloadString)
+                    json.getValue("value")
+                } catch (e: Exception) {
+                    // If not JSON, try to parse as plain value
+                    payloadString.toDoubleOrNull() ?: payloadString
+                }
             }
 
             // Loop prevention for READ_WRITE mode
@@ -653,5 +668,26 @@ class Plc4xConnector : AbstractVerticle() {
         } catch (e: Exception) {
             logger.severe("Error handling MQTT message for address ${address.name}: ${e.message}")
         }
+    }
+
+    /**
+     * Extract a value from a JsonObject using a dot-separated path.
+     * Supports nested navigation, e.g. "data.temperature.value" will navigate
+     * json["data"]["temperature"]["value"].
+     *
+     * @param json The root JSON object
+     * @param path Dot-separated path to the value (e.g. "value", "data.value", "sensor.reading.value")
+     * @return The extracted value, or null if the path doesn't exist
+     */
+    private fun extractJsonValue(json: JsonObject, path: String): Any? {
+        val parts = path.split(".")
+        var current: Any? = json
+        for (part in parts) {
+            when (current) {
+                is JsonObject -> current = current.getValue(part)
+                else -> return null
+            }
+        }
+        return current
     }
 }
