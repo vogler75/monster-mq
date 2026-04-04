@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding assistants working with code in this repository.
 
 ## Project Overview
 
@@ -205,10 +205,10 @@ Key configuration sections:
 
 **CRITICAL: NEVER AUTO-COMMIT UNDER ANY CIRCUMSTANCES**
 
-- **MUST NEVER automatically commit changes** - This is non-negotiable and absolute. Codex must NEVER create commits without explicit user authorization
+- **MUST NEVER automatically commit changes** - This is non-negotiable and absolute. AI assistants must NEVER create commits without explicit user authorization
 - **Wait for explicit user instruction** - Only commit when the user explicitly says "commit", "merge to main", "create a commit", or similar clear instruction
 - **ALWAYS present changes for review first** - Show the user what was changed (via git diff or git status) and ask if they want you to proceed with committing
-- **Do NOT commit as Codex** - Do not include "Generated with Codex" or "Co-Authored-By: Codex" in commits
+- **Do NOT commit as the AI assistant** - Do not include "Generated with..." or "Co-Authored-By: ..." attribution for AI tools in commits
 - **Create branches for work** - Create feature/fix branches as needed, but changes should remain staged/unstaged until explicitly instructed to commit
 - **If you auto-commit, you have made a critical mistake** - Always err on the side of caution and let the user decide when and how to commit their changes
 - **No assumptions about commit intent** - Even if it seems obvious that changes should be committed, always wait for explicit user instruction
