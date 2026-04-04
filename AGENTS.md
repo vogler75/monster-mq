@@ -4,7 +4,7 @@ This file provides guidance to AI coding assistants working with code in this re
 
 ## Project Overview
 
-MonsterMQ is a MQTT broker built with Kotlin on Vert.X and Hazelcast with data persistence through PostgreSQL, CrateDB, MongoDB, or SQLite. It features a web dashboard, GraphQL API, MCP (Model Context Protocol) Server for AI integration, I3X API for manufacturing data, a flow engine for automation workflows, and device bridging for OPC UA, PLC4X, Kafka, NATS, WinCC OA/Unified, Neo4j, and SparkplugB.
+MonsterMQ is a MQTT broker built with Kotlin on Vert.X and Hazelcast with data persistence through PostgreSQL, CrateDB, MongoDB, or SQLite. It features a web dashboard, GraphQL API, MCP (Model Context Protocol) Server for AI integration, REST API, Prometheus metrics, I3X API for manufacturing data, AI agents with GenAI providers, a flow engine for automation workflows, and device bridging for OPC UA, PLC4X, Kafka, NATS, Redis, Telegram, WinCC OA/Unified, Neo4j, JDBC loggers, and SparkplugB.
 
 ## Build and Run Commands
 
@@ -108,9 +108,11 @@ Devices follow a pattern of Extension (cluster-aware coordinator) + Connector (p
 - `devices/mqttclient/` - MQTT client bridge
 - `devices/kafkaclient/` - Kafka client bridge
 - `devices/natsclient/` - NATS client bridge
+- `devices/redisclient/` - Redis client bridge
+- `devices/telegramclient/` - Telegram bot client bridge
 - `devices/opcua/` - OPC UA client
 - `devices/opcuaserver/` - OPC UA server
-- `devices/plc4x/` - PLC4X protocol (industrial PLCs)
+- `devices/plc4x/` - PLC4X protocol (industrial PLCs, supports JSON payload extraction via `jsonPath`)
 - `devices/winccoa/` - WinCC OA integration
 - `devices/winccua/` - WinCC Unified integration
 - `devices/neo4j/` - Neo4j graph database bridge
@@ -187,7 +189,10 @@ Key configuration sections:
 
 1. **MCP Server** (`extensions/McpServer.kt`, `extensions/McpHandler.kt`): Model Context Protocol integration for AI models
 2. **I3X API** (`extensions/I3xServer.kt`): CESMII I3X standard API for manufacturing data
-4. **Sparkplug Extension** (`extensions/SparkplugExtension.kt`): Expands SparkplugB messages
+3. **REST API** (`extensions/RestApiServer.kt`): REST API endpoints for external integrations
+4. **Prometheus** (`extensions/PrometheusServer.kt`): Prometheus metrics exporter
+5. **OA4J Bridge** (`extensions/Oa4jBridge.kt`): WinCC OA Java API bridge for datapoint subscriptions
+6. **SparkplugB Decoder**: Handled by `devices/sparkplugb/` device connectors (configured via dashboard)
 
 ### Technology Stack
 
@@ -224,3 +229,6 @@ Key configuration sections:
 - The iX dashboard uses vanilla JS with `GraphQLDashboardClient` and Vite for bundling
 - GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files
 - Developer and AI coding documentation is in `dev/` — see `dev/INDEX.md` for a full index. Implementation plans are in `dev/plans/`
+- MQTT publish topics are validated to reject wildcard characters (`+`, `#`) per MQTT spec §3.3.2.1 — enforced in `MqttClient.publishHandler()` and GraphQL `MutationResolver.publish()`/`publishBatch()`
+- GraphQL resolvers for device types have paired Query and Mutation files (e.g. `Plc4xClientConfigQueries.kt` + `Plc4xClientConfigMutations.kt`) — when adding new fields to a device config, both the `deviceToMap()` methods must be updated to include the new field
+- PLC4X addresses support a `jsonPath` field for extracting values from JSON MQTT payloads when writing to PLC registers (dot-notation path, e.g. `data.temperature.value`)

@@ -124,7 +124,8 @@ class Plc4xClientConfigQueries(
                         "deadband" to address.deadband,
                         "publishOnChange" to address.publishOnChange,
                         "mode" to address.mode.name,
-                        "enabled" to address.enabled
+                        "enabled" to address.enabled,
+                        "jsonPath" to address.jsonPath
                     )
                 }
             ),
