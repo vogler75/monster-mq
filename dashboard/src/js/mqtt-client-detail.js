@@ -416,12 +416,28 @@ class MqttClientDetailManager {
         }
 
         const mode = document.getElementById('address-mode').value;
+        const remoteTopic = document.getElementById('address-remote-topic').value.trim();
+        const localTopic = document.getElementById('address-local-topic').value.trim();
+
+        // Validation: No wildcards in specific fields depending on mode
+        if (mode === 'SUBSCRIBE') {
+            if (localTopic.includes('+') || localTopic.includes('#')) {
+                this.showError('Local topic must not contain wildcards (+ or #) in SUBSCRIBE mode.');
+                return;
+            }
+        } else if (mode === 'PUBLISH') {
+            if (remoteTopic.includes('+') || remoteTopic.includes('#')) {
+                this.showError('Remote topic must not contain wildcards (+ or #) in PUBLISH mode.');
+                return;
+            }
+        }
+
         const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
         
         const addressData = {
             mode: mode,
-            remoteTopic: document.getElementById('address-remote-topic').value.trim(),
-            localTopic: document.getElementById('address-local-topic').value.trim(),
+            remoteTopic: remoteTopic,
+            localTopic: localTopic,
             removePath: document.getElementById('address-remove-path').checked,
             qos: parseInt(document.getElementById('address-qos').value)
         };
@@ -547,12 +563,28 @@ class MqttClientDetailManager {
         }
 
         const mode = document.getElementById('edit-address-mode').value;
+        const remoteTopic = document.getElementById('edit-address-remote-topic').value.trim();
+        const localTopic = document.getElementById('edit-address-local-topic').value.trim();
+
+        // Validation: No wildcards in specific fields depending on mode
+        if (mode === 'SUBSCRIBE') {
+            if (localTopic.includes('+') || localTopic.includes('#')) {
+                this.showError('Local topic must not contain wildcards (+ or #) in SUBSCRIBE mode.');
+                return;
+            }
+        } else if (mode === 'PUBLISH') {
+            if (remoteTopic.includes('+') || remoteTopic.includes('#')) {
+                this.showError('Remote topic must not contain wildcards (+ or #) in PUBLISH mode.');
+                return;
+            }
+        }
+
         const protocolVersion = parseInt(document.getElementById('client-protocol-version').value);
         
         const updatedAddress = {
             mode: mode,
-            remoteTopic: document.getElementById('edit-address-remote-topic').value.trim(),
-            localTopic: document.getElementById('edit-address-local-topic').value.trim(),
+            remoteTopic: remoteTopic,
+            localTopic: localTopic,
             removePath: document.getElementById('edit-address-remove-path').checked,
             qos: parseInt(document.getElementById('edit-address-qos').value)
         };
@@ -672,6 +704,7 @@ class MqttClientDetailManager {
         document.getElementById('add-address-modal').style.display = 'flex';
         document.getElementById('add-address-form').reset();
         document.getElementById('address-remove-path').checked = true;
+        updateTopicDirection();
     }
 
     hideAddAddressModal() {
@@ -863,6 +896,9 @@ function toggleMqtt5SubscriptionOptions() {
     if (editSubOptions) {
         editSubOptions.style.display = (protocolVersion === 5 && editMode === 'SUBSCRIBE') ? 'block' : 'none';
     }
+
+    // Also update topic direction arrows
+    updateTopicDirection();
 }
 
 function toggleMqtt5MessageProperties() {
@@ -879,6 +915,27 @@ function toggleMqtt5MessageProperties() {
     const editMsgProps = document.getElementById('mqtt5-edit-message-properties');
     if (editMsgProps) {
         editMsgProps.style.display = (protocolVersion === 5 && editMode === 'PUBLISH') ? 'block' : 'none';
+    }
+
+    // Also update topic direction arrows
+    updateTopicDirection();
+}
+
+function updateTopicDirection() {
+    // Add modal arrow
+    const addMode = document.getElementById('address-mode')?.value;
+    const addArrow = document.querySelector('#add-topic-direction .direction-arrow');
+    if (addArrow) {
+        addArrow.textContent = addMode === 'SUBSCRIBE' ? '⬇️' : '⬆️';
+        addArrow.title = addMode === 'SUBSCRIBE' ? 'Remote → Local' : 'Local → Remote';
+    }
+
+    // Edit modal arrow
+    const editMode = document.getElementById('edit-address-mode')?.value;
+    const editArrow = document.querySelector('#edit-topic-direction .direction-arrow');
+    if (editArrow) {
+        editArrow.textContent = editMode === 'SUBSCRIBE' ? '⬇️' : '⬆️';
+        editArrow.title = editMode === 'SUBSCRIBE' ? 'Remote → Local' : 'Local → Remote';
     }
 }
 
