@@ -1,0 +1,11 @@
+Release v1.8.11
+Built from commit: ea5faa4
+Date: 2026-04-05 18:10:57
+
+Changes since v1.8.10:
+---
+ea5faa4 Add TimeBase Logger, shared schema help, and dashboard fixes
+4666626 Rename HTTP Logger to InfluxDB Logger, add AI schema generator, fix QuestDB inserts
+4ef20c0 Add InfluxDB Line Protocol REST ingestion
+5849cbf feat: add compressed array-based `records` support to bulk write REST API and update Redis client type annotations
+734789b fix(dashboard): round message counts to 1 decimal place in dashboard tiles
