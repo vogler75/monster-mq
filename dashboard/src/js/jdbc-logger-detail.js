@@ -732,8 +732,14 @@ function confirmDeleteLogger() {
     window.loggerDetailManager.confirmDeleteLogger();
 }
 
-function showSchemaHelp() {
-    document.getElementById('schema-help-modal').style.display = 'flex';
+async function showSchemaHelp() {
+    const modal = document.getElementById('schema-help-modal');
+    if (!modal.dataset.loaded) {
+        const resp = await fetch('/pages/schema-help.html');
+        modal.innerHTML = await resp.text();
+        modal.dataset.loaded = 'true';
+    }
+    modal.style.display = 'flex';
 }
 
 function hideSchemaHelp() {

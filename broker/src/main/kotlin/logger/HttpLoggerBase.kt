@@ -67,13 +67,19 @@ abstract class HttpLoggerBase<T : ILoggerConfig> : LoggerBase<T>() {
     protected abstract fun applyHeaders(request: HttpRequest<Buffer>)
 
     /**
-     * Sends an HTTP POST with the given payload string.
-     * Subclasses call this from writeBulk after formatting their payload.
+     * Sends an HTTP POST with the given payload string to the default endpoint URL.
      */
     protected fun sendPost(payload: String, configureRequest: (HttpRequest<Buffer>) -> Unit = {}) {
+        sendPostTo(getEndpointUrl(), payload, configureRequest)
+    }
+
+    /**
+     * Sends an HTTP POST with the given payload string to an explicit URL.
+     */
+    protected fun sendPostTo(url: String, payload: String, configureRequest: (HttpRequest<Buffer>) -> Unit = {}) {
         val client = this.client ?: throw IllegalStateException("WebClient not initialized")
 
-        var request = client.postAbs(getEndpointUrl())
+        var request = client.postAbs(url)
 
         applyAuth(request)
         applyHeaders(request)

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - InfluxDB Logger Detail</title>
+    <title>MonsterMQ - TimeBase Logger Detail</title>
     <script type="module" src="/js/ix-init.js"></script>
     <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
@@ -83,18 +83,18 @@
             <div class="page-header">
                 <div class="page-header-content">
                     <div>
-                        <h1 class="page-title" id="logger-title">InfluxDB Logger</h1>
-                        <p class="page-subtitle">Configure InfluxDB Line Protocol ingestion destination</p>
+                        <h1 class="page-title">TimeBase Logger</h1>
+                        <p class="page-subtitle">Configure TimeBase Historian data ingestion</p>
                     </div>
                     <div style="display: flex; gap: 0.75rem;">
-                        <button class="btn btn-secondary" onclick="window.spaLocation.href='/pages/influxdb-loggers.html'">Back to Loggers</button>
-                        <button class="btn btn-primary" onclick="influxdbLoggerDetail.save()" id="save-logger-btn">Save Logger</button>
+                        <button class="btn btn-secondary" onclick="window.spaLocation.href='/pages/timebase-loggers.html'">Back to Loggers</button>
+                        <button class="btn btn-primary" onclick="timebaseLoggerDetail.save()">Save Logger</button>
                     </div>
                 </div>
             </div>
 
             <div class="logger-info-grid">
-                <!-- Basic Information Section -->
+                <!-- Basic Information -->
                 <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
@@ -103,29 +103,14 @@
                         </div>
                     </div>
                     <div class="section-content">
-                        <div class="form-group">
-                            <label>Logger Name *</label>
-                            <input type="text" id="name" required placeholder="e.g., influx-logger-1">
-                        </div>
-                        <div class="form-group">
-                            <label>Namespace *</label>
-                            <input type="text" id="namespace" required placeholder="e.g., sensors/data">
-                            <small class="form-hint">MQTT topic namespace prefix for this logger</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Cluster Node *</label>
-                            <select id="nodeId" required></select>
-                        </div>
-                        <div class="form-group">
-                            <div class="checkbox-group">
-                                <input type="checkbox" id="enabled" checked>
-                                <label for="enabled">Enabled</label>
-                            </div>
-                        </div>
+                        <div class="form-group"><label>Logger Name *</label><input type="text" id="name" required placeholder="e.g., timebase-logger-1"></div>
+                        <div class="form-group"><label>Namespace *</label><input type="text" id="namespace" required placeholder="e.g., sensors/data"><small class="form-hint">MQTT topic namespace prefix</small></div>
+                        <div class="form-group"><label>Cluster Node *</label><select id="nodeId" required></select></div>
+                        <div class="form-group"><div class="checkbox-group"><input type="checkbox" id="enabled" checked><label for="enabled">Enabled</label></div></div>
                     </div>
                 </div>
 
-                <!-- Connection Configuration Section -->
+                <!-- Connection -->
                 <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
@@ -135,75 +120,56 @@
                     </div>
                     <div class="section-content">
                         <div class="form-group">
-                            <label>Endpoint URL *</label>
-                            <input type="text" id="endpointUrl" required placeholder="v2: http://influxdb:8086/api/v2/write  |  v1: http://influxdb:8086/write">
-                            <small class="form-hint">InfluxDB v2: /api/v2/write  |  InfluxDB v1: /write</small>
+                            <label>API Base URL *</label>
+                            <input type="text" id="endpointUrl" required placeholder="http://timebase:4511/api">
+                            <small class="form-hint">TimeBase Historian REST API base URL</small>
                         </div>
                         <div class="form-group">
                             <label>Auth Type</label>
-                            <select id="authType" onchange="influxdbLoggerDetail.updateAuthUI()">
+                            <select id="authType" onchange="timebaseLoggerDetail.updateAuthUI()">
                                 <option value="NONE">None</option>
                                 <option value="BASIC">Basic Auth</option>
-                                <option value="TOKEN">Token (InfluxDB v2)</option>
+                                <option value="TOKEN">Bearer Token</option>
                             </select>
                         </div>
                         <div id="auth-basic" style="display: none;">
-                            <div class="form-group">
-                                <label>Username</label>
-                                <input type="text" id="username">
-                            </div>
-                            <div class="form-group">
-                                <label>Password</label>
-                                <input type="password" id="password">
-                            </div>
+                            <div class="form-group"><label>Username</label><input type="text" id="username"></div>
+                            <div class="form-group"><label>Password</label><input type="password" id="password"></div>
                         </div>
                         <div id="auth-token" style="display: none;">
-                            <div class="form-group">
-                                <label>Token</label>
-                                <input type="password" id="token">
-                            </div>
+                            <div class="form-group"><label>Token</label><input type="password" id="token"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- InfluxDB Settings Section -->
+                <!-- TimeBase Settings -->
                 <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
                             <div class="section-icon"><ix-icon name="database" size="20"></ix-icon></div>
-                            <h2>InfluxDB Settings</h2>
+                            <h2>TimeBase Settings</h2>
                         </div>
                     </div>
                     <div class="section-content">
                         <div class="form-group">
-                            <label>Database (v1)</label>
-                            <input type="text" id="db" placeholder="e.g., mydb">
-                            <small class="form-hint">InfluxDB 1.x: database name (sent as ?db= query param)</small>
+                            <label>Dataset Name *</label>
+                            <input type="text" id="tableName" placeholder="e.g., factory1">
+                            <small class="form-hint">TimeBase dataset to write into. Each MQTT topic becomes a tag within this dataset.</small>
                         </div>
                         <div class="form-group">
-                            <label>Organization (v2)</label>
-                            <input type="text" id="org">
-                            <small class="form-hint">InfluxDB 2.x: organization name</small>
+                            <label>Dataset Name JSONPath</label>
+                            <input type="text" id="tableNameJsonPath" placeholder="e.g., $.dataset">
+                            <small class="form-hint">Extract dataset name from payload (alternative to fixed name)</small>
                         </div>
                         <div class="form-group">
-                            <label>Bucket (v2)</label>
-                            <input type="text" id="bucket">
-                            <small class="form-hint">InfluxDB 2.x: bucket name</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Tag Fields (comma separated)</label>
-                            <input type="text" id="influxTags" placeholder="device_id, location">
-                            <small class="form-hint">Schema fields listed here become indexed InfluxDB tags instead of fields. Values are extracted from the JSON payload via the schema.</small>
-                        </div>
-                        <div class="form-group">
-                            <label>Topic Tag Name</label>
-                            <input type="text" id="topicNameColumn" placeholder="e.g., topic">
-                            <small class="form-hint">If set, the MQTT topic is added as a tag with this name</small>
+                            <label>Value Field</label>
+                            <input type="text" id="valueField" value="value" placeholder="value">
+                            <small class="form-hint">Name of the JSON schema field to use as the TVQ value. Each MQTT topic maps to one TimeBase tag; this field provides the data point value.</small>
                         </div>
                     </div>
                 </div>
 
-                <!-- Ingestion Configuration Section -->
+                <!-- Ingestion & Queuing -->
                 <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
@@ -216,33 +182,19 @@
                             <label>Topic Filters (comma separated) *</label>
                             <input type="text" id="topicFilters" required placeholder="sensors/#, production/line1/#">
                         </div>
-                        <div class="form-group">
-                            <label>Measurement Name</label>
-                            <input type="text" id="tableName" placeholder="e.g., sensor_data">
-                        </div>
-                        <div class="form-group">
-                            <label>Table Name JSONPath</label>
-                            <input type="text" id="tableNameJsonPath" placeholder="$.metadata.type">
-                        </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                            <div class="form-group">
-                                <label>Bulk Size</label>
-                                <input type="number" id="bulkSize" value="1000">
-                            </div>
-                            <div class="form-group">
-                                <label>Bulk Timeout (ms)</label>
-                                <input type="number" id="bulkTimeoutMs" value="5000">
-                            </div>
+                            <div class="form-group"><label>Bulk Size</label><input type="number" id="bulkSize" value="1000"></div>
+                            <div class="form-group"><label>Bulk Timeout (ms)</label><input type="number" id="bulkTimeoutMs" value="5000"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- JSON Schema Section -->
+                <!-- JSON Schema & Headers -->
                 <div class="section-card json-schema-section">
                     <div class="section-header">
                         <div class="section-title">
                             <div class="section-icon"><ix-icon name="document" size="20"></ix-icon></div>
-                            <h2>JSON Schema & Mapping</h2>
+                            <h2>JSON Schema & Headers</h2>
                             <button type="button" class="help-btn" onclick="showSchemaHelp()" title="Show JSON Schema Help">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
@@ -257,8 +209,7 @@
                                 <textarea id="jsonSchema" style="min-height: 300px;">{
   "type": "object",
   "properties": {
-    "value": { "type": "number" },
-    "unit": { "type": "string" }
+    "value": { "type": "number" }
   },
   "required": ["value"]
 }</textarea>
@@ -266,24 +217,18 @@
                                 <div class="ai-schema-generator">
                                     <div class="ai-generator-header">
                                         <div class="ai-generator-title">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
-                                            </svg>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                                             <span>AI Schema Generator</span>
                                         </div>
                                     </div>
                                     <textarea id="ai-example-json" placeholder='Paste an example JSON payload and optionally add notes, e.g.:
 
-This payload arrives every 5 seconds per device.
-The sensors array can have 1-10 entries.
-We only need temperature and humidity, ignore the rest.
+Each topic publishes a single numeric value.
 
-{"timestamp":"2024-01-15T10:30:00Z","device_id":"sensor-01","sensors":[{"name":"temp","value":23.5},{"name":"humidity","value":65.2}]}'></textarea>
+{"value": 23.5}'></textarea>
                                     <div class="ai-generator-actions">
                                         <button type="button" class="btn btn-ai" id="ai-generate-schema-btn" onclick="generateSchemaFromExample()">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
-                                            </svg>
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
                                             Generate Schema
                                         </button>
                                         <div id="ai-schema-status" class="ai-schema-status" style="display: none;"></div>
@@ -293,7 +238,7 @@ We only need temperature and humidity, ignore the rest.
                             <div class="form-group">
                                 <label>Additional HTTP Headers (JSON)</label>
                                 <textarea id="headers" style="min-height: 300px;">{}</textarea>
-                                <small class="form-hint">JSON object with custom headers to send with every request</small>
+                                <small class="form-hint">Custom headers sent with every request</small>
                             </div>
                         </div>
                     </div>
@@ -302,7 +247,7 @@ We only need temperature and humidity, ignore the rest.
         </div>
     </div>
     <div id="schema-help-modal" class="modal help-modal" style="display: none;"></div>
-    <script src="/js/influxdb-logger-detail.js"></script>
+    <script src="/js/timebase-logger-detail.js"></script>
     </ix-application>
 </body>
 </html>

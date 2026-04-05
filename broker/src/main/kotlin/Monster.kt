@@ -1173,7 +1173,7 @@ MORE INFO:
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
                         val allFeatures = listOf(
                             "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Redis", "Telegram",
-                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger", "InfluxDBLogger",
+                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger", "InfluxDBLogger", "TimeBaseLogger",
                             "SparkplugB", "FlowEngine", "Agents"
                         )
                         val enabled = allFeatures.filter { featuresConfig.getBoolean(it, true) }.toSet()
@@ -1339,6 +1339,17 @@ MORE INFO:
                             vertx.deployVerticle(influxDBLoggerExtension, influxDBLoggerDeploymentOptions)
                         } else {
                             logger.fine("InfluxDBLogger extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        // TimeBase Logger Extension
+                        if (Monster.isFeatureEnabled("TimeBaseLogger")) {
+                            val timeBaseLoggerExtension = at.rocworks.logger.TimeBaseLoggerExtension()
+                            val timeBaseLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(timeBaseLoggerExtension, timeBaseLoggerDeploymentOptions)
+                        } else {
+                            logger.fine("TimeBaseLogger extension disabled by Features config")
                             Future.succeededFuture()
                         }
                     }

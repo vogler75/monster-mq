@@ -1,4 +1,4 @@
-class InfluxDBLoggerDetail {
+class TimeBaseLoggerDetail {
     constructor() {
         const params = new URLSearchParams(window.location.search);
         this.loggerName = params.get('name');
@@ -7,14 +7,9 @@ class InfluxDBLoggerDetail {
     }
 
     async init() {
-        if (!window.isLoggedIn()) {
-            window.location.href = '/pages/login.html';
-            return;
-        }
+        if (!window.isLoggedIn()) { window.location.href = '/pages/login.html'; return; }
         await this.loadNodes();
-        if (!this.isNew && this.loggerName) {
-            await this.loadLogger();
-        }
+        if (!this.isNew && this.loggerName) await this.loadLogger();
         this.updateAuthUI();
     }
 
@@ -24,8 +19,7 @@ class InfluxDBLoggerDetail {
             const select = document.getElementById('nodeId');
             result.brokers.forEach(b => {
                 const opt = document.createElement('option');
-                opt.value = b.nodeId;
-                opt.textContent = b.nodeId;
+                opt.value = b.nodeId; opt.textContent = b.nodeId;
                 select.appendChild(opt);
             });
         } catch (e) { console.error(e); }
@@ -34,19 +28,19 @@ class InfluxDBLoggerDetail {
     async loadLogger() {
         try {
             const result = await window.graphqlClient.query(`
-                query GetInfluxDBLogger($name: String!) {
-                    influxdbLoggers(name: $name) {
+                query GetTimeBaseLogger($name: String!) {
+                    timebaseLoggers(name: $name) {
                         name namespace nodeId enabled
                         config {
-                            endpointUrl authType username org bucket db influxTags topicNameColumn
+                            endpointUrl authType username valueField
                             topicFilters tableName tableNameJsonPath bulkSize bulkTimeoutMs jsonSchema headers
                         }
                     }
                 }
             `, { name: this.loggerName });
 
-            if (result.influxdbLoggers?.length > 0) {
-                const l = result.influxdbLoggers[0];
+            if (result.timebaseLoggers?.length > 0) {
+                const l = result.timebaseLoggers[0];
                 const c = l.config;
                 document.getElementById('name').value = l.name;
                 document.getElementById('name').disabled = true;
@@ -56,11 +50,7 @@ class InfluxDBLoggerDetail {
                 document.getElementById('endpointUrl').value = c.endpointUrl;
                 document.getElementById('authType').value = c.authType;
                 document.getElementById('username').value = c.username || '';
-                document.getElementById('org').value = c.org || '';
-                document.getElementById('bucket').value = c.bucket || '';
-                document.getElementById('db').value = c.db || '';
-                document.getElementById('influxTags').value = (c.influxTags || []).join(', ');
-                document.getElementById('topicNameColumn').value = c.topicNameColumn || '';
+                document.getElementById('valueField').value = c.valueField || 'value';
                 document.getElementById('topicFilters').value = (c.topicFilters || []).join(', ');
                 document.getElementById('tableName').value = c.tableName || '';
                 document.getElementById('tableNameJsonPath').value = c.tableNameJsonPath || '';
@@ -92,11 +82,7 @@ class InfluxDBLoggerDetail {
                     username: document.getElementById('username').value || null,
                     password: document.getElementById('password').value || null,
                     token: document.getElementById('token').value || null,
-                    org: document.getElementById('org').value || null,
-                    bucket: document.getElementById('bucket').value || null,
-                    db: document.getElementById('db').value || null,
-                    influxTags: document.getElementById('influxTags').value.split(',').map(s => s.trim()).filter(s => s),
-                    topicNameColumn: document.getElementById('topicNameColumn').value || null,
+                    valueField: document.getElementById('valueField').value || 'value',
                     topicFilters: document.getElementById('topicFilters').value.split(',').map(s => s.trim()).filter(s => s),
                     tableName: document.getElementById('tableName').value || null,
                     tableNameJsonPath: document.getElementById('tableNameJsonPath').value || null,
@@ -108,21 +94,21 @@ class InfluxDBLoggerDetail {
             };
 
             const mutation = this.isNew ? `
-                mutation Create($input: InfluxDBLoggerInput!) {
-                    influxdbLogger { create(input: $input) { success errors } }
+                mutation Create($input: TimeBaseLoggerInput!) {
+                    timebaseLogger { create(input: $input) { success errors } }
                 }
             ` : `
-                mutation Update($name: String!, $input: InfluxDBLoggerInput!) {
-                    influxdbLogger { update(name: $name, input: $input) { success errors } }
+                mutation Update($name: String!, $input: TimeBaseLoggerInput!) {
+                    timebaseLogger { update(name: $name, input: $input) { success errors } }
                 }
             `;
 
             const vars = this.isNew ? { input } : { name: this.loggerName, input };
             const result = await window.graphqlClient.query(mutation, vars);
-            const res = this.isNew ? result.influxdbLogger.create : result.influxdbLogger.update;
+            const res = this.isNew ? result.timebaseLogger.create : result.timebaseLogger.update;
 
             if (res.success) {
-                window.spaLocation.href = '/pages/influxdb-loggers.html';
+                window.spaLocation.href = '/pages/timebase-loggers.html';
             } else {
                 alert('Error: ' + res.errors.join(', '));
             }
@@ -132,7 +118,7 @@ class InfluxDBLoggerDetail {
     }
 }
 
-window.influxdbLoggerDetail = new InfluxDBLoggerDetail();
+window.timebaseLoggerDetail = new TimeBaseLoggerDetail();
 
 async function showSchemaHelp() {
     const modal = document.getElementById('schema-help-modal');
@@ -175,50 +161,25 @@ async function generateSchemaFromExample() {
             body: JSON.stringify({
                 query: `
                     query GenerateSchema($prompt: String!, $docs: [String!]) {
-                        genai {
-                            generate(prompt: $prompt, docs: $docs) {
-                                response
-                                model
-                                error
-                            }
-                        }
+                        genai { generate(prompt: $prompt, docs: $docs) { response model error } }
                     }
                 `,
-                variables: {
-                    prompt: prompt,
-                    docs: ['json-schema-assistant.md']
-                }
+                variables: { prompt, docs: ['json-schema-assistant.md'] }
             })
         });
 
         const result = await response.json();
-
-        if (result.errors) {
-            throw new Error(result.errors[0].message);
-        }
-
+        if (result.errors) throw new Error(result.errors[0].message);
         const aiResponse = result.data?.genai?.generate;
-        if (!aiResponse) {
-            throw new Error('AI is not configured. Please set up a GenAI provider first.');
-        }
-
-        if (aiResponse.error) {
-            throw new Error(aiResponse.error);
-        }
+        if (!aiResponse) throw new Error('AI is not configured. Please set up a GenAI provider first.');
+        if (aiResponse.error) throw new Error(aiResponse.error);
 
         let responseText = aiResponse.response.trim();
+        const codeMatch = responseText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+        if (codeMatch) responseText = codeMatch[1].trim();
 
-        // Strip markdown code fences if present
-        const codeBlockRegex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/;
-        const codeMatch = responseText.match(codeBlockRegex);
-        if (codeMatch) {
-            responseText = codeMatch[1].trim();
-        }
-
-        // Parse and re-format the generated schema
         const schema = JSON.parse(responseText);
         document.getElementById('jsonSchema').value = JSON.stringify(schema, null, 2);
-
         statusEl.className = 'ai-schema-status success';
         statusEl.textContent = `Schema generated successfully (${aiResponse.model})`;
     } catch (error) {

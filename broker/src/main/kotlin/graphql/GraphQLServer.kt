@@ -35,6 +35,8 @@ import at.rocworks.graphql.JDBCLoggerQueries
 import at.rocworks.graphql.JDBCLoggerMutations
 import at.rocworks.graphql.InfluxDBLoggerQueries
 import at.rocworks.graphql.InfluxDBLoggerMutations
+import at.rocworks.graphql.TimeBaseLoggerQueries
+import at.rocworks.graphql.TimeBaseLoggerMutations
 import at.rocworks.graphql.NatsClientConfigQueries
 import at.rocworks.graphql.NatsClientConfigMutations
 import at.rocworks.graphql.RedisClientConfigQueries
@@ -276,6 +278,7 @@ class GraphQLServer(
             "schema-subscriptions.graphqls", // Subscription type definitions
             "schema-flows.graphqls",       // Flow Engine types and operations
             "schema-influxdb-logger.graphqls", // InfluxDB Logger types and operations
+            "schema-timebase-logger.graphqls", // TimeBase Logger types and operations
             "schema-sparkplugb-decoder.graphqls", // SparkplugB Decoder device types and operations
             "schema-genai.graphqls",       // GenAI integration
             "schema-topic-schema.graphqls", // Topic Schema Governance
@@ -390,6 +393,10 @@ class GraphQLServer(
         // Initialize InfluxDB Logger resolvers
         val influxdbLoggerQueries = deviceStore?.let { InfluxDBLoggerQueries(vertx, it) }
         val influxdbLoggerMutations = deviceStore?.let { InfluxDBLoggerMutations(vertx, it) }
+
+        // Initialize TimeBase Logger resolvers
+        val timebaseLoggerQueries = deviceStore?.let { TimeBaseLoggerQueries(vertx, it) }
+        val timebaseLoggerMutations = deviceStore?.let { TimeBaseLoggerMutations(vertx, it) }
 
         // Initialize SparkplugB Decoder resolvers
         val sparkplugBDecoderQueries = deviceStore?.let { SparkplugBDecoderQueries(vertx, it) }
@@ -561,6 +568,12 @@ class GraphQLServer(
                     .apply {
                         influxdbLoggerQueries?.let { resolver ->
                             dataFetcher("influxdbLoggers", resolver.influxdbLoggers())
+                        }
+                    }
+                    // TimeBase Logger queries
+                    .apply {
+                        timebaseLoggerQueries?.let { resolver ->
+                            dataFetcher("timebaseLoggers", resolver.timebaseLoggers())
                         }
                     }
                     // SparkplugB Decoder queries
@@ -784,6 +797,16 @@ class GraphQLServer(
                     .apply {
                         influxdbLoggerMutations?.let { _ ->
                             dataFetcher("influxdbLogger") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // TimeBase Logger mutations - grouped under timebaseLogger
+                    .apply {
+                        timebaseLoggerMutations?.let { _ ->
+                            dataFetcher("timebaseLogger") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -1053,6 +1076,18 @@ class GraphQLServer(
             .type("InfluxDBLoggerMutations") { builder ->
                 builder.apply {
                     influxdbLoggerMutations?.let { resolver ->
+                        dataFetcher("create", resolver.create())
+                        dataFetcher("update", resolver.update())
+                        dataFetcher("delete", resolver.delete())
+                        dataFetcher("toggle", resolver.toggle())
+                        dataFetcher("reassign", resolver.reassign())
+                    }
+                }
+            }
+            // Register TimeBase Logger Mutations type
+            .type("TimeBaseLoggerMutations") { builder ->
+                builder.apply {
+                    timebaseLoggerMutations?.let { resolver ->
                         dataFetcher("create", resolver.create())
                         dataFetcher("update", resolver.update())
                         dataFetcher("delete", resolver.delete())

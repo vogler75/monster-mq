@@ -179,6 +179,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // TimeBase Logger (MQTT -> TimeBase Historian via REST API)
+    object TimeBaseLoggerBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.timebaselogger"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // SparkplugB Decoder (SparkplugB -> MQTT with transformations)
     object SparkplugBDecoder {
         private const val DECODER_NS = "$BASE.decoder.sparkplugb"

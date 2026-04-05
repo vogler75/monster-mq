@@ -1,0 +1,96 @@
+# TimeBase Logger types and operations
+
+type TimeBaseLogger {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: TimeBaseLoggerConfig!
+  metrics: TimeBaseLoggerMetrics
+  isLocal: Boolean!
+}
+
+type TimeBaseLoggerConfig {
+  endpointUrl: String!
+  authType: String!
+  username: String
+  valueField: String!
+  topicFilters: [String!]!
+  tableName: String
+  tableNameJsonPath: String
+  topicNameColumn: String
+  payloadFormat: String!
+  jsonSchema: JSON!
+  queueType: String!
+  queueSize: Int!
+  diskPath: String!
+  bulkSize: Int!
+  bulkTimeoutMs: Long!
+  reconnectDelayMs: Long!
+  headers: JSON!
+}
+
+type TimeBaseLoggerMetrics {
+  messagesIn: Float
+  messagesValidated: Float
+  messagesWritten: Float
+  messagesSkipped: Float
+  validationErrors: Float
+  writeErrors: Float
+  queueSize: Int
+  queueCapacity: Int
+  queueFull: Boolean
+  connected: Boolean
+}
+
+type TimeBaseLoggerMutationResponse {
+  success: Boolean!
+  logger: TimeBaseLogger
+  errors: [String!]!
+}
+
+extend type Query {
+  timebaseLoggers(name: String, node: String): [TimeBaseLogger!]!
+}
+
+extend type Mutation {
+  timebaseLogger: TimeBaseLoggerMutations!
+}
+
+type TimeBaseLoggerMutations {
+  create(input: TimeBaseLoggerInput!): TimeBaseLoggerMutationResponse!
+  update(name: String!, input: TimeBaseLoggerInput!): TimeBaseLoggerMutationResponse!
+  delete(name: String!): Boolean!
+  toggle(name: String!, enabled: Boolean!): Boolean!
+  reassign(name: String!, nodeId: String!): Boolean!
+}
+
+input TimeBaseLoggerInput {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: TimeBaseLoggerConfigInput!
+}
+
+input TimeBaseLoggerConfigInput {
+  endpointUrl: String!
+  authType: String!
+  username: String
+  password: String
+  token: String
+  valueField: String = "value"
+  topicFilters: [String!]!
+  tableName: String
+  tableNameJsonPath: String
+  topicNameColumn: String
+  payloadFormat: String = "JSON"
+  jsonSchema: JSON!
+  queueType: String = "MEMORY"
+  queueSize: Int = 10000
+  diskPath: String = "./buffer/timebase"
+  bulkSize: Int = 1000
+  bulkTimeoutMs: Long = 5000
+  reconnectDelayMs: Long = 5000
+  headers: JSON = "{}"
+}

@@ -31,6 +31,7 @@ class InfluxDBLoggersManager {
                             endpointUrl
                             authType
                             topicFilters
+                            tableName
                         }
                         metrics {
                             messagesIn
@@ -80,13 +81,15 @@ class InfluxDBLoggersManager {
                     </span>
                 </td>
                 <td>${Math.round(logger.metrics?.messagesIn || 0)}</td>
-                <td class="action-buttons">
-                    <ix-icon-button icon="info" variant="primary" ghost onclick="location.href='/pages/influxdb-logger-detail.html?name=${logger.name}'"></ix-icon-button>
-                    ${logger.enabled ?
-                        `<ix-icon-button icon="pause" variant="warning" ghost onclick="influxdbLoggersManager.toggleLogger('${logger.name}', false)"></ix-icon-button>` :
-                        `<ix-icon-button icon="play" variant="success" ghost onclick="influxdbLoggersManager.toggleLogger('${logger.name}', true)"></ix-icon-button>`
-                    }
-                    <ix-icon-button icon="trashcan" variant="danger" ghost onclick="influxdbLoggersManager.showConfirmDeleteModal('${logger.name}')"></ix-icon-button>
+                <td>
+                    <div class="action-buttons">
+                        <a href="/pages/influxdb-logger-detail.html?name=${encodeURIComponent(logger.name)}"><ix-icon-button icon="pen" variant="primary" ghost size="24" title="Edit logger"></ix-icon-button></a>
+                        ${logger.enabled ?
+                            `<ix-icon-button icon="pause" variant="primary" ghost size="24" title="Stop logger" onclick="influxdbLoggersManager.toggleLogger('${logger.name}', false)"></ix-icon-button>` :
+                            `<ix-icon-button icon="play" variant="primary" ghost size="24" title="Start logger" onclick="influxdbLoggersManager.toggleLogger('${logger.name}', true)"></ix-icon-button>`
+                        }
+                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete logger" onclick="influxdbLoggersManager.showConfirmDeleteModal('${logger.name}')"></ix-icon-button>
+                    </div>
                 </td>
             `;
             tbody.appendChild(tr);
