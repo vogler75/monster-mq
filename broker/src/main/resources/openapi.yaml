@@ -241,6 +241,63 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
+  /write/influx:
+    post:
+      summary: InfluxDB Line Protocol ingestion
+      description: >
+        Ingest payload formatted as InfluxDB Line Protocol. Unrolls to MQTT topics.
+        Supports `simple` (flat topics per field) or `json` (single topic, JSON payload).
+      operationId: influxWrite
+      tags: [Publish]
+      parameters:
+        - name: format
+          in: query
+          description: Format to use (`simple` or `json`)
+          schema:
+            type: string
+            enum: [simple, json]
+            default: simple
+        - name: base
+          in: query
+          description: Base topic prefix
+          schema:
+            type: string
+        - name: qos
+          in: query
+          description: QoS level (0, 1, or 2)
+          schema:
+            type: integer
+            enum: [0, 1, 2]
+            default: 0
+        - name: retain
+          in: query
+          description: Retain flag
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        description: Text payload in InfluxDB Line Protocol format.
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+      responses:
+        '204':
+          description: Messages published (InfluxDB compatible success)
+        '200':
+          description: Partially published with errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkWriteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /subscribe:
     get:
       summary: Subscribe via Server-Sent Events

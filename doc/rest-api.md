@@ -164,6 +164,27 @@ If some messages are invalid (missing `topic` or `value`), valid messages are st
 {"success": true, "count": 1, "errors": ["Message at index 0: missing 'topic'", "Message at index 1: missing 'value'"]}
 ```
 
+### InfluxDB Line Protocol
+
+Ingest raw InfluxDB Line Protocol metrics. Telegraf and other Influx-compatible clients can POST directly to this endpoint.
+
+```bash
+curl -u Admin:Admin -X POST \
+  "http://localhost:4000/api/v1/write/influx?base=enterpriseA/siteA/" \
+  -H "Content-Type: text/plain" \
+  -d 'sensor,room=living temp=22.5,hum=50i 123456789'
+```
+
+Query parameters:
+- `base` (optional): Prefix added to the generated MQTT topics.
+- `format` (optional):
+  - `simple` (default): Unrolls fields into multiple basic MQTT topics. From the example: 
+    - Topic: `enterpriseA/siteA/sensor/living/temp` → Payload: `22.5`
+    - Topic: `enterpriseA/siteA/sensor/living/hum` → Payload: `50`
+  - `json`: Creates a single comprehensive JSON payload per line. From the example: 
+    - Topic: `enterpriseA/siteA/sensor/living` 
+    - Payload: `{"temp": 22.5, "hum": 50, "timestamp_ns": 123456789, "timestamp": "1970-01-02T10:17:36.789Z"}`
+
 ## Reading Data
 
 ### Retained messages

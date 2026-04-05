@@ -12,7 +12,7 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 - Device integrations for OPC UA, PLC4X, WinCC OA, WinCC Unified, Neo4j, Kafka, Redis, Telegram, and others
 - Flow engine for visual, JavaScript-based message processing ([details](doc/workflows.md))
 - AI agents with multi-provider LLM support (Gemini, Claude, OpenAI, Ollama), MQTT/cron triggers, and agent-to-agent orchestration
-- GraphQL API, MCP server, web dashboard, and CESMII I3X API support
+- GraphQL API, REST API (with InfluxDB Line Protocol ingestion), MCP server, web dashboard, and CESMII I3X API support
 - **Config-based feature flags** to enable or disable individual extensions per node
 
 ## Quick Start
@@ -261,7 +261,7 @@ BulkMessaging:
 - Flow engine with reusable flow classes and deployed instances
 - JavaScript execution with GraalVM
 - GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
-- REST API for publish, read, and subscribe over HTTP ([details](doc/rest-api.md))
+- REST API for publish, read, subscribe over HTTP, and high-throughput InfluxDB Line Protocol ingestion ([details](doc/rest-api.md))
 - MCP server for AI-oriented access ([details](doc/mcp.md))
 
 ### AI Agents
@@ -335,6 +335,15 @@ nats pub "sensors.temp1" "23.5" --server nats://localhost:4222
 curl -X POST http://localhost:4000/graphql \
   -H "Content-Type: application/json" \
   -d '{"query": "query { currentValue(topic: \"sensors/temp1\") { payload timestamp } }"}'
+```
+
+### HTTP REST (InfluxDB Line Protocol)
+
+```bash
+curl -u Admin:Admin -X POST \
+  "http://localhost:4000/api/v1/write/influx?base=factory" \
+  -H "Content-Type: text/plain" \
+  -d 'motor,location=basement,unit=pump1 temp=45.2,vibration=0.8,running=true 1640995200000000000'
 ```
 
 ## Documentation
