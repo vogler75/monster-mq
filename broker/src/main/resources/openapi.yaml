@@ -349,10 +349,11 @@ components:
 
     BulkWriteRequest:
       type: object
-      required: [messages]
+      description: Provide EITHER `messages` (array of objects) OR `records` (highly compressed array of arrays).
       properties:
         messages:
           type: array
+          description: Standard format with array of JSON objects.
           items:
             type: object
             required: [topic, value]
@@ -370,6 +371,13 @@ components:
                 type: integer
                 enum: [0, 1, 2]
                 default: 0
+        records:
+          type: array
+          description: Highly compressed format for high throughput string values. Array of positional arrays [topic, value, qos (optional), retain (optional)].
+          example: [ ["sensors/temperature", "23.5", 0, false], ["sensors/humidity", "65"] ]
+          items:
+            type: array
+            items: {}
 
     BulkWriteResponse:
       type: object

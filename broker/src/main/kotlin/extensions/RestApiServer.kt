@@ -349,10 +349,12 @@ class RestApiServer(
         }
 
         val messages = body.getJsonArray("messages")
-        if (messages == null || messages.isEmpty) {
+        val records = body.getJsonArray("records")
+
+        if ((messages == null || messages.isEmpty) && (records == null || records.isEmpty)) {
             ctx.response().setStatusCode(400)
                 .putHeader("Content-Type", "application/json")
-                .end(errorJson("'messages' array is required and must not be empty"))
+                .end(errorJson("'messages' or 'records' array is required and must not be empty"))
             return
         }
 
@@ -360,39 +362,85 @@ class RestApiServer(
         var publishedCount = 0
         val errors = JsonArray()
 
-        for (i in 0 until messages.size()) {
-            val msg = messages.getJsonObject(i) ?: continue
-            val topic = msg.getString("topic")
-            val value = msg.getString("value")
-
-            if (topic == null || value == null) {
-                errors.add(JsonObject().put("index", i).put("error", "Missing topic or value"))
-                continue
+        // Process object-based messages
+        if (messages != null && !messages.isEmpty) {
+            for (i in 0 until messages.size()) {
+                val msg = messages.getJsonObject(i) ?: continue
+                val topic = msg.getString("topic")
+                val value = msg.getValue("value")?.toString()
+    
+                if (topic == null || value == null) {
+                    errors.add(JsonObject().put("index", i).put("error", "Missing topic or value"))
+                    continue
+                }
+    
+                // ACL check per message
+                if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
+                    errors.add(JsonObject().put("index", i).put("error", "Publish not allowed on topic: $topic"))
+                    continue
+                }
+    
+                val qos = msg.getInteger("qos", 0)
+                val retain = msg.getBoolean("retain", false)
+    
+                val brokerMessage = BrokerMessage(
+                    messageUuid = Utils.getUuid(),
+                    messageId = 0,
+                    topicName = topic,
+                    payload = value.toByteArray(),
+                    qosLevel = qos.coerceIn(0, 2),
+                    isRetain = retain,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = "$REST_CLIENT_PREFIX$username"
+                )
+    
+                sessionHandler.publishMessage(brokerMessage)
+                publishedCount++
             }
+        }
 
-            // ACL check per message
-            if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
-                errors.add(JsonObject().put("index", i).put("error", "Publish not allowed on topic: $topic"))
-                continue
+        // Process compressed array-based records
+        if (records != null && !records.isEmpty) {
+            for (i in 0 until records.size()) {
+                val record = try { records.getJsonArray(i) } catch(e: Exception) { null }
+                if (record == null) {
+                    errors.add(JsonObject().put("index", i).put("error", "Record must be an array"))
+                    continue
+                }
+
+                val topic = try { if (record.size() > 0) record.getString(0) else null } catch(e: Exception) { null }
+                val value = try { if (record.size() > 1) record.getValue(1)?.toString() else null } catch(e: Exception) { null }
+
+                if (topic == null || value == null) {
+                    errors.add(JsonObject().put("index", i).put("error", "Missing topic or value in record"))
+                    continue
+                }
+
+                // ACL check per message
+                if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
+                    errors.add(JsonObject().put("index", i).put("error", "Publish not allowed on topic: $topic"))
+                    continue
+                }
+
+                val qos = try { if (record.size() > 2) record.getInteger(2) ?: 0 else 0 } catch(e: Exception) { 0 }
+                val retain = try { if (record.size() > 3) record.getBoolean(3) ?: false else false } catch(e: Exception) { false }
+
+                val brokerMessage = BrokerMessage(
+                    messageUuid = Utils.getUuid(),
+                    messageId = 0,
+                    topicName = topic,
+                    payload = value.toByteArray(),
+                    qosLevel = qos.coerceIn(0, 2),
+                    isRetain = retain,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = "$REST_CLIENT_PREFIX$username"
+                )
+
+                sessionHandler.publishMessage(brokerMessage)
+                publishedCount++
             }
-
-            val qos = msg.getInteger("qos", 0)
-            val retain = msg.getBoolean("retain", false)
-
-            val brokerMessage = BrokerMessage(
-                messageUuid = Utils.getUuid(),
-                messageId = 0,
-                topicName = topic,
-                payload = value.toByteArray(),
-                qosLevel = qos.coerceIn(0, 2),
-                isRetain = retain,
-                isDup = false,
-                isQueued = false,
-                clientId = "$REST_CLIENT_PREFIX$username"
-            )
-
-            sessionHandler.publishMessage(brokerMessage)
-            publishedCount++
         }
 
         val response = JsonObject()

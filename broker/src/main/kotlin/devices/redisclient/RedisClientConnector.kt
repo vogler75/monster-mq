@@ -610,7 +610,7 @@ class RedisClientConnector : AbstractVerticle() {
             kvWrites.forEach { write ->
                 msetRequest.arg(write.redisKey).arg(write.payload)
             }
-            client.send(msetRequest).onSuccess {
+            client.send(msetRequest).onSuccess { _: Response? ->
                 messagesOut.addAndGet(kvWrites.size.toLong())
                 logger.fine { "MQTT->Redis MSET ${kvWrites.size} keys for '${device.name}'" }
             }.onFailure { e ->
@@ -624,7 +624,7 @@ class RedisClientConnector : AbstractVerticle() {
             val requests = pubWrites.map { write ->
                 Request.cmd(Command.PUBLISH).arg(write.redisKey).arg(write.payload)
             }
-            client.batch(requests).onSuccess { responses ->
+            client.batch(requests).onSuccess { responses: List<Response?> ->
                 val successCount = responses.count { it != null }
                 messagesOut.addAndGet(successCount.toLong())
                 logger.fine { "MQTT->Redis PUBLISH batch ${pubWrites.size} messages for '${device.name}'" }

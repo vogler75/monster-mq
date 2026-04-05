@@ -122,8 +122,9 @@ Response:
 
 ### Bulk write
 
-Publish multiple messages in a single request.
+Publish multiple messages in a single request. The endpoint supports two payload formats:
 
+1. **Standard `messages` format** (array of JSON objects):
 ```bash
 curl -u Admin:Admin -X POST \
   "http://localhost:4000/api/v1/write" \
@@ -133,6 +134,21 @@ curl -u Admin:Admin -X POST \
       {"topic": "sensor/temp", "value": "23.5", "retain": true},
       {"topic": "sensor/humidity", "value": "65", "qos": 1},
       {"topic": "actuator/valve", "value": "open"}
+    ]
+  }'
+```
+
+2. **Compressed `records` format** (array of positional arrays `[topic, value, qos, retain]`):
+This format is highly optimized for performance and high-throughput data ingestion, avoiding the overhead of JSON object keys. The `qos` and `retain` fields are optional and default to `0` and `false`.
+```bash
+curl -u Admin:Admin -X POST \
+  "http://localhost:4000/api/v1/write" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      ["sensor/temp", "23.5", 0, true],
+      ["sensor/humidity", "65", 1],
+      ["actuator/valve", "open"]
     ]
   }'
 ```
