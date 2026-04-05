@@ -101,7 +101,8 @@ class SidebarManager {
                 section: 'Configuration', sectionIcon: 'cogwheel',
                 items: [
                     { href: '/pages/archive-groups.html', icon: 'health', text: 'Archives' },
-                    { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'Loggers', feature: 'JdbcLogger' },
+                    { href: '/pages/jdbc-loggers.html', icon: 'database', text: 'JDBC Loggers', feature: 'JdbcLogger' },
+                    { href: '/pages/influxdb-loggers.html', icon: 'database', text: 'InfluxDB Loggers', feature: 'InfluxDBLogger' },
                     { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows', feature: 'FlowEngine' },
                     { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export' }
                 ]

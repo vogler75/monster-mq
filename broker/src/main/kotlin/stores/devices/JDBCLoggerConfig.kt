@@ -9,34 +9,34 @@ import io.vertx.core.json.JsonObject
  */
 data class JDBCLoggerConfig(
     // Database connection
-    val databaseType: String,                       // "QuestDB", "PostgreSQL", "TimescaleDB"
+    val databaseType: String,                       // "QuestDB", "PostgreSQL", "MySQL", "Snowflake"
     val jdbcUrl: String,                            // JDBC connection URL
     val username: String,
     val password: String,
 
     // Topic subscription
-    val topicFilters: List<String> = emptyList(),   // MQTT wildcard patterns (e.g., "sensors/#")
+    override val topicFilters: List<String> = emptyList(),   // MQTT wildcard patterns (e.g., "sensors/#")
 
     // Table configuration
-    val tableName: String? = null,                  // Fixed table name (mutually exclusive with tableNameJsonPath)
-    val tableNameJsonPath: String? = null,          // JSONPath to extract table name from payload (e.g., "$.metadata.table")
-    val topicNameColumn: String? = null,            // Column name for MQTT topic (optional - if set, topic name is included in inserts)
+    override val tableName: String? = null,                  // Fixed table name (mutually exclusive with tableNameJsonPath)
+    override val tableNameJsonPath: String? = null,          // JSONPath to extract table name from payload (e.g., "$.metadata.table")
+    override val topicNameColumn: String? = null,            // Column name for MQTT topic (optional - if set, topic name is included in inserts)
 
     // Schema and validation
-    val payloadFormat: String = "JSON",             // "JSON", "XML" (future support)
-    val jsonSchema: JsonObject,                     // JSON Schema for validation and field extraction
+    override val payloadFormat: String = "JSON",             // "JSON", "XML" (future support)
+    override val jsonSchema: JsonObject,                     // JSON Schema for validation and field extraction
 
     // Queue configuration (memory or disk buffering)
-    val queueType: String = "MEMORY",               // "MEMORY" or "DISK"
-    val queueSize: Int = 10000,                     // Max buffered messages
-    val diskPath: String = "./buffer",              // Path for disk queue files
+    override val queueType: String = "MEMORY",               // "MEMORY" or "DISK"
+    override val queueSize: Int = 10000,                     // Max buffered messages
+    override val diskPath: String = "./buffer",              // Path for disk queue files
 
     // Bulk write configuration
-    val bulkSize: Int = 1000,                       // JDBC batch size (trigger write when reached)
-    val bulkTimeoutMs: Long = 5000,                 // Max time to collect bulk (trigger write when reached)
+    override val bulkSize: Int = 1000,                       // JDBC batch size (trigger write when reached)
+    override val bulkTimeoutMs: Long = 5000,                 // Max time to collect bulk (trigger write when reached)
 
     // Connection settings
-    val reconnectDelayMs: Long = 5000,              // Delay before reconnecting on failure
+    override val reconnectDelayMs: Long = 5000,              // Delay before reconnecting on failure
 
     // Auto table creation
     val autoCreateTable: Boolean = true,            // Automatically create table if not exists
@@ -47,18 +47,18 @@ data class JDBCLoggerConfig(
     // - Snowflake: {privateKeyFile, account, url, role, scheme, port, database, schema}
     // - Future databases can add their own specific settings here
     val dbSpecificConfig: JsonObject = JsonObject()
-) {
+) : ILoggerConfig {
     /**
      * Get the JDBC driver class name inferred from the URL
      * This ensures the correct driver is loaded even when multiple JDBC drivers are on the classpath
      * Note: Neo4j is NOT supported in JDBC Logger (only in Flow Engine)
-     * Note: QuestDB and TimescaleDB both use jdbc:postgresql:// URLs
+     * Note: QuestDB uses jdbc:postgresql:// URLs (PostgreSQL wire protocol)
      */
     fun getDriverClassName(): String {
         return when {
             jdbcUrl.contains("postgresql") -> "org.postgresql.Driver"
             jdbcUrl.contains("mysql") -> "com.mysql.cj.jdbc.Driver"
-            else -> "org.postgresql.Driver"  // Default fallback for PostgreSQL-compatible databases (QuestDB, TimescaleDB, etc.)
+            else -> "org.postgresql.Driver"  // Default fallback for PostgreSQL-compatible databases (QuestDB, etc.)
         }
     }
 
@@ -102,7 +102,7 @@ data class JDBCLoggerConfig(
         }
     }
 
-    fun toJson(): JsonObject {
+    override fun toJson(): JsonObject {
         return JsonObject()
             .put("databaseType", databaseType)
             .put("jdbcUrl", jdbcUrl)
@@ -125,7 +125,7 @@ data class JDBCLoggerConfig(
             .put("dbSpecificConfig", dbSpecificConfig)
     }
 
-    fun validate(): List<String> {
+    override fun validate(): List<String> {
         val errors = mutableListOf<String>()
 
         // Database connection validation

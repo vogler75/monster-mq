@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - InfluxDB Logger Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .logger-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .json-schema-section { grid-column: 1 / -1; }
+        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
+        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
+        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
+        .section-title { display: flex; align-items: center; gap: 0.75rem; }
+        .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
+        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .section-content { padding: 1.5rem; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
+        input[type="text"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem; transition: all 0.2s ease; box-sizing: border-box; font-family: inherit; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1); }
+        textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
+        .btn-primary { background: var(--gradient-primary); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3); }
+        .btn-secondary { background: var(--dark-surface-2); color: var(--text-primary); border: 1px solid var(--dark-border); }
+        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
+        small.form-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
+        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+        @media (max-width: 1024px) { .logger-info-grid { grid-template-columns: 1fr; } }
+
+        /* AI Schema Generator */
+        .ai-schema-generator { margin-top: 1.5rem; padding: 1.25rem; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 10px; }
+        .ai-generator-header { margin-bottom: 0.75rem; }
+        .ai-generator-title { display: flex; align-items: center; gap: 0.5rem; color: var(--monster-purple); font-weight: 600; font-size: 0.875rem; }
+        .ai-schema-generator textarea { min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; margin-bottom: 0.75rem; }
+        .ai-generator-actions { display: flex; align-items: center; gap: 1rem; }
+        .btn-ai { background: var(--gradient-primary); color: white; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; border-radius: 8px; font-weight: 500; border: none; cursor: pointer; transition: all 0.2s ease; font-size: 0.8rem; }
+        .btn-ai:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3); }
+        .btn-ai:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+        .ai-schema-status { font-size: 0.8rem; color: var(--text-muted); }
+        .ai-schema-status.success { color: var(--monster-green); }
+        .ai-schema-status.error { color: var(--monster-red); }
+        .ai-schema-status .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
+        @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title" id="logger-title">InfluxDB Logger</h1>
+                        <p class="page-subtitle">Configure InfluxDB Line Protocol ingestion destination</p>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button class="btn btn-secondary" onclick="location.href='/pages/influxdb-loggers.html'">Back to Loggers</button>
+                        <button class="btn btn-primary" onclick="influxdbLoggerDetail.save()" id="save-logger-btn">Save Logger</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="logger-info-grid">
+                <!-- Basic Information Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon"><ix-icon name="info" size="20"></ix-icon></div>
+                            <h2>Basic Information</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label>Logger Name *</label>
+                            <input type="text" id="name" required placeholder="e.g., influx-logger-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Namespace *</label>
+                            <input type="text" id="namespace" required placeholder="e.g., sensors/data">
+                            <small class="form-hint">MQTT topic namespace prefix for this logger</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Cluster Node *</label>
+                            <select id="nodeId" required></select>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="enabled" checked>
+                                <label for="enabled">Enabled</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connection Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon"><ix-icon name="link" size="20"></ix-icon></div>
+                            <h2>Connection</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label>Endpoint URL *</label>
+                            <input type="text" id="endpointUrl" required placeholder="v2: http://influxdb:8086/api/v2/write  |  v1: http://influxdb:8086/write">
+                            <small class="form-hint">InfluxDB v2: /api/v2/write  |  InfluxDB v1: /write</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Auth Type</label>
+                            <select id="authType" onchange="influxdbLoggerDetail.updateAuthUI()">
+                                <option value="NONE">None</option>
+                                <option value="BASIC">Basic Auth</option>
+                                <option value="TOKEN">Token (InfluxDB v2)</option>
+                            </select>
+                        </div>
+                        <div id="auth-basic" style="display: none;">
+                            <div class="form-group">
+                                <label>Username</label>
+                                <input type="text" id="username">
+                            </div>
+                            <div class="form-group">
+                                <label>Password</label>
+                                <input type="password" id="password">
+                            </div>
+                        </div>
+                        <div id="auth-token" style="display: none;">
+                            <div class="form-group">
+                                <label>Token</label>
+                                <input type="password" id="token">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- InfluxDB Settings Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon"><ix-icon name="database" size="20"></ix-icon></div>
+                            <h2>InfluxDB Settings</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label>Database (v1)</label>
+                            <input type="text" id="db" placeholder="e.g., mydb">
+                            <small class="form-hint">InfluxDB 1.x: database name (sent as ?db= query param)</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Organization (v2)</label>
+                            <input type="text" id="org">
+                            <small class="form-hint">InfluxDB 2.x: organization name</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Bucket (v2)</label>
+                            <input type="text" id="bucket">
+                            <small class="form-hint">InfluxDB 2.x: bucket name</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Tag Fields (comma separated)</label>
+                            <input type="text" id="influxTags" placeholder="device_id, location">
+                            <small class="form-hint">Schema fields listed here become indexed InfluxDB tags instead of fields. Values are extracted from the JSON payload via the schema.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Topic Tag Name</label>
+                            <input type="text" id="topicNameColumn" placeholder="e.g., topic">
+                            <small class="form-hint">If set, the MQTT topic is added as a tag with this name</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ingestion Configuration Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon"><ix-icon name="settings" size="20"></ix-icon></div>
+                            <h2>Ingestion & Queuing</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div class="form-group">
+                            <label>Topic Filters (comma separated) *</label>
+                            <input type="text" id="topicFilters" required placeholder="sensors/#, production/line1/#">
+                        </div>
+                        <div class="form-group">
+                            <label>Measurement Name</label>
+                            <input type="text" id="tableName" placeholder="e.g., sensor_data">
+                        </div>
+                        <div class="form-group">
+                            <label>Table Name JSONPath</label>
+                            <input type="text" id="tableNameJsonPath" placeholder="$.metadata.type">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label>Bulk Size</label>
+                                <input type="number" id="bulkSize" value="1000">
+                            </div>
+                            <div class="form-group">
+                                <label>Bulk Timeout (ms)</label>
+                                <input type="number" id="bulkTimeoutMs" value="5000">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- JSON Schema Section -->
+                <div class="section-card json-schema-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <div class="section-icon"><ix-icon name="document" size="20"></ix-icon></div>
+                            <h2>JSON Schema & Mapping</h2>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                            <div class="form-group">
+                                <label>Schema Definition (JSON)</label>
+                                <textarea id="jsonSchema" style="min-height: 300px;">{
+  "type": "object",
+  "properties": {
+    "value": { "type": "number" },
+    "unit": { "type": "string" }
+  },
+  "required": ["value"]
+}</textarea>
+                                <!-- AI Schema Generator -->
+                                <div class="ai-schema-generator">
+                                    <div class="ai-generator-header">
+                                        <div class="ai-generator-title">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+                                            </svg>
+                                            <span>AI Schema Generator</span>
+                                        </div>
+                                    </div>
+                                    <textarea id="ai-example-json" placeholder='Paste an example JSON payload and optionally add notes, e.g.:
+
+This payload arrives every 5 seconds per device.
+The sensors array can have 1-10 entries.
+We only need temperature and humidity, ignore the rest.
+
+{"timestamp":"2024-01-15T10:30:00Z","device_id":"sensor-01","sensors":[{"name":"temp","value":23.5},{"name":"humidity","value":65.2}]}'></textarea>
+                                    <div class="ai-generator-actions">
+                                        <button type="button" class="btn btn-ai" id="ai-generate-schema-btn" onclick="generateSchemaFromExample()">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+                                            </svg>
+                                            Generate Schema
+                                        </button>
+                                        <div id="ai-schema-status" class="ai-schema-status" style="display: none;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Additional HTTP Headers (JSON)</label>
+                                <textarea id="headers" style="min-height: 300px;">{}</textarea>
+                                <small class="form-hint">JSON object with custom headers to send with every request</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/js/influxdb-logger-detail.js"></script>
+    </ix-application>
+</body>
+</html>

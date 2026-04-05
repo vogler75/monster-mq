@@ -171,6 +171,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // InfluxDB Logger (MQTT -> InfluxDB via Line Protocol)
+    object InfluxDBLoggerBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.influxdblogger"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // SparkplugB Decoder (SparkplugB -> MQTT with transformations)
     object SparkplugBDecoder {
         private const val DECODER_NS = "$BASE.decoder.sparkplugb"

@@ -1654,12 +1654,11 @@ Features:
 - Memory or disk-based buffering for resilience
 - JDBC bulk/batch writing for performance
 - Connection failure handling with automatic retry
-- Support for multiple database types (QuestDB, PostgreSQL, TimescaleDB)
+- Support for multiple database types (QuestDB, PostgreSQL, MySQL, Snowflake)
 
 Use Cases:
 - Time-series data logging to QuestDB for fast ingestion
 - IoT sensor data archival to PostgreSQL
-- Industrial data collection to TimescaleDB
 """
 
 # Database type enum for JDBC Logger
@@ -1668,7 +1667,7 @@ enum JDBCLoggerDatabaseType {
     QUESTDB
     # PostgreSQL - general-purpose relational database
     POSTGRESQL
-    # TimescaleDB - PostgreSQL extension for time-series data
+    # TimescaleDB - PostgreSQL extension for time-series data (uses PostgreSQL logger)
     TIMESCALEDB
     # MySQL - popular open-source relational database
     MYSQL

@@ -8,7 +8,7 @@ import java.sql.SQLException
 
 /**
  * PostgreSQL implementation of JDBC Logger
- * Supports PostgreSQL and compatible databases (TimescaleDB, QuestDB via PostgreSQL wire protocol)
+ * Supports PostgreSQL and compatible databases (also works with TimescaleDB)
  */
 open class PostgreSQLLogger : JDBCLoggerBase() {
 
@@ -75,6 +75,10 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         return promise.future()
     }
 
+    protected open fun buildInsertSQL(tableName: String, fieldNames: String, placeholders: String): String {
+        return "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders) ON CONFLICT DO NOTHING;"
+    }
+
     override fun writeBulk(tableName: String, rows: List<BufferedRow>) {
         val conn = connection ?: throw SQLException("Not connected to PostgreSQL")
 
@@ -90,7 +94,7 @@ open class PostgreSQLLogger : JDBCLoggerBase() {
         }
         val placeholders = allFields.joinToString(", ") { "?" }
         val fieldNames = allFields.joinToString(", ")
-        val sql = "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders) ON CONFLICT DO NOTHING;"
+        val sql = buildInsertSQL(tableName, fieldNames, placeholders)
 
         // Try batch insert first (fast path)
         try {

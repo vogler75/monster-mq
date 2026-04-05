@@ -1464,7 +1464,7 @@ type JDBCLoggerResult {
 
 # Input for JDBC Logger configuration
 input JDBCLoggerConfigInput {
-    # Database type (QuestDB, PostgreSQL, TimescaleDB)
+    # Database type (QuestDB, PostgreSQL, MySQL, Snowflake)
     databaseType: JDBCLoggerDatabaseType!
     # JDBC connection URL (e.g., "jdbc:questdb:http://localhost:9000")
     jdbcUrl: String!

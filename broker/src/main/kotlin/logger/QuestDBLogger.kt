@@ -8,11 +8,18 @@ import java.sql.SQLException
  * Optimized for time-series data with fast ingestion and out-of-order inserts
  *
  * Duplicate Key Handling:
- * - QuestDB supports PostgreSQL's ON CONFLICT DO NOTHING syntax (inherited from PostgreSQLLogger)
- * - When ignoreDuplicates=true and uniqueKeyColumns are configured, duplicate rows are silently skipped
- * - QuestDB uses same SQL State codes as PostgreSQL (23505 for unique_violation)
+ * - QuestDB does NOT support PostgreSQL's ON CONFLICT syntax
+ * - Duplicates are handled natively by QuestDB's built-in deduplication
  */
 class QuestDBLogger : PostgreSQLLogger() {
+
+    /**
+     * QuestDB does not support ON CONFLICT DO NOTHING.
+     * Duplicates are handled natively by QuestDB's deduplication.
+     */
+    override fun buildInsertSQL(tableName: String, fieldNames: String, placeholders: String): String {
+        return "INSERT INTO $tableName ($fieldNames) VALUES ($placeholders);"
+    }
 
     /**
      * Creates a QuestDB table with proper partitioning for time-series data.

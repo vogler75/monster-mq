@@ -740,6 +740,88 @@ function hideSchemaHelp() {
     document.getElementById('schema-help-modal').style.display = 'none';
 }
 
+async function generateSchemaFromExample() {
+    const exampleJsonEl = document.getElementById('ai-example-json');
+    const statusEl = document.getElementById('ai-schema-status');
+    const btn = document.getElementById('ai-generate-schema-btn');
+    const exampleJson = exampleJsonEl.value.trim();
+
+    if (!exampleJson) {
+        statusEl.style.display = 'inline';
+        statusEl.className = 'ai-schema-status error';
+        statusEl.textContent = 'Please paste an example JSON payload first.';
+        return;
+    }
+
+    btn.disabled = true;
+    statusEl.style.display = 'inline';
+    statusEl.className = 'ai-schema-status';
+    statusEl.innerHTML = 'Generating schema<span class="loading-dots"></span>';
+
+    try {
+        const prompt = `Generate a MonsterMQ JSON Schema for the following. The user may provide an example JSON payload, notes, or both. Use the notes to guide your schema decisions. Return ONLY the raw JSON schema object, no explanation, no markdown, no code fences.\n\nUser input:\n${exampleJson}`;
+
+        const response = await fetch(window.graphqlClient.endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: `
+                    query GenerateSchema($prompt: String!, $docs: [String!]) {
+                        genai {
+                            generate(prompt: $prompt, docs: $docs) {
+                                response
+                                model
+                                error
+                            }
+                        }
+                    }
+                `,
+                variables: {
+                    prompt: prompt,
+                    docs: ['json-schema-assistant.md']
+                }
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.errors) {
+            throw new Error(result.errors[0].message);
+        }
+
+        const aiResponse = result.data?.genai?.generate;
+        if (!aiResponse) {
+            throw new Error('AI is not configured. Please set up a GenAI provider first.');
+        }
+
+        if (aiResponse.error) {
+            throw new Error(aiResponse.error);
+        }
+
+        let responseText = aiResponse.response.trim();
+
+        // Strip markdown code fences if present
+        const codeBlockRegex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/;
+        const codeMatch = responseText.match(codeBlockRegex);
+        if (codeMatch) {
+            responseText = codeMatch[1].trim();
+        }
+
+        // Parse and re-format the generated schema
+        const schema = JSON.parse(responseText);
+        document.getElementById('logger-json-schema').value = JSON.stringify(schema, null, 2);
+
+        statusEl.className = 'ai-schema-status success';
+        statusEl.textContent = `Schema generated successfully (${aiResponse.model})`;
+    } catch (error) {
+        console.error('AI schema generation failed:', error);
+        statusEl.className = 'ai-schema-status error';
+        statusEl.textContent = 'Error: ' + error.message;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     window.loggerDetailManager = new JDBCLoggerDetailManager();

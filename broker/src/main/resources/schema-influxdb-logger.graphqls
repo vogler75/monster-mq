@@ -1,0 +1,102 @@
+# InfluxDB Logger types and operations
+
+type InfluxDBLogger {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: InfluxDBLoggerConfig!
+  metrics: InfluxDBLoggerMetrics
+  isLocal: Boolean!
+}
+
+type InfluxDBLoggerConfig {
+  endpointUrl: String!
+  authType: String!
+  username: String
+  org: String
+  bucket: String
+  db: String
+  influxTags: [String!]!
+  topicFilters: [String!]!
+  tableName: String
+  tableNameJsonPath: String
+  topicNameColumn: String
+  payloadFormat: String!
+  jsonSchema: JSON!
+  queueType: String!
+  queueSize: Int!
+  diskPath: String!
+  bulkSize: Int!
+  bulkTimeoutMs: Long!
+  reconnectDelayMs: Long!
+  headers: JSON!
+}
+
+type InfluxDBLoggerMetrics {
+  messagesIn: Float
+  messagesValidated: Float
+  messagesWritten: Float
+  messagesSkipped: Float
+  validationErrors: Float
+  writeErrors: Float
+  queueSize: Int
+  queueCapacity: Int
+  queueFull: Boolean
+  connected: Boolean
+}
+
+type InfluxDBLoggerMutationResponse {
+  success: Boolean!
+  logger: InfluxDBLogger
+  errors: [String!]!
+}
+
+extend type Query {
+  influxdbLoggers(name: String, node: String): [InfluxDBLogger!]!
+}
+
+extend type Mutation {
+  influxdbLogger: InfluxDBLoggerMutations!
+}
+
+type InfluxDBLoggerMutations {
+  create(input: InfluxDBLoggerInput!): InfluxDBLoggerMutationResponse!
+  update(name: String!, input: InfluxDBLoggerInput!): InfluxDBLoggerMutationResponse!
+  delete(name: String!): Boolean!
+  toggle(name: String!, enabled: Boolean!): Boolean!
+  reassign(name: String!, nodeId: String!): Boolean!
+}
+
+input InfluxDBLoggerInput {
+  name: String!
+  namespace: String!
+  nodeId: String!
+  enabled: Boolean!
+  config: InfluxDBLoggerConfigInput!
+}
+
+input InfluxDBLoggerConfigInput {
+  endpointUrl: String!
+  authType: String!
+  username: String
+  password: String
+  token: String
+  org: String
+  bucket: String
+  db: String
+  influxTags: [String!]!
+  topicFilters: [String!]!
+  tableName: String
+  tableNameJsonPath: String
+  topicNameColumn: String
+  payloadFormat: String = "JSON"
+  jsonSchema: JSON!
+  queueType: String = "MEMORY"
+  queueSize: Int = 10000
+  diskPath: String = "./buffer/influxdb"
+  bulkSize: Int = 1000
+  bulkTimeoutMs: Long = 5000
+  reconnectDelayMs: Long = 5000
+  headers: JSON = "{}"
+}

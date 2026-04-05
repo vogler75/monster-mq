@@ -1173,7 +1173,7 @@ MORE INFO:
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
                         val allFeatures = listOf(
                             "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Redis", "Telegram",
-                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger",
+                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger", "InfluxDBLogger",
                             "SparkplugB", "FlowEngine", "Agents"
                         )
                         val enabled = allFeatures.filter { featuresConfig.getBoolean(it, true) }.toSet()
@@ -1328,6 +1328,17 @@ MORE INFO:
                             vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
                         } else {
                             logger.fine("JdbcLogger extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        // InfluxDB Logger Extension
+                        if (Monster.isFeatureEnabled("InfluxDBLogger")) {
+                            val influxDBLoggerExtension = at.rocworks.logger.InfluxDBLoggerExtension()
+                            val influxDBLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(influxDBLoggerExtension, influxDBLoggerDeploymentOptions)
+                        } else {
+                            logger.fine("InfluxDBLogger extension disabled by Features config")
                             Future.succeededFuture()
                         }
                     }

@@ -151,7 +151,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
                     PostgreSQLLogger()
                 }
                 "TIMESCALEDB" -> {
-                    logger.fine("Using PostgreSQL logger for TimescaleDB (PostgreSQL compatible)")
+                    logger.fine("Using PostgreSQL logger for TimescaleDB")
                     PostgreSQLLogger()
                 }
                 "MYSQL" -> {
