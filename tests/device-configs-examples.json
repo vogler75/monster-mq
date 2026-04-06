@@ -127,10 +127,214 @@
       "providerName": null,
       "timezone": "UTC"
     },
-    "enabled": true,
+    "enabled": false,
     "type": "Agent",
     "createdAt": "2026-03-31 20:53:29",
-    "updatedAt": "2026-04-03 17:59:38"
+    "updatedAt": "2026-04-04 10:53:39"
+  },
+  {
+    "name": "influx-logger-1",
+    "namespace": "influx",
+    "nodeId": "local",
+    "config": {
+      "endpointUrl": "http://linux5:8086/write",
+      "authType": "NONE",
+      "username": null,
+      "password": null,
+      "token": null,
+      "org": null,
+      "bucket": null,
+      "db": "mydb",
+      "influxTags": [],
+      "topicFilters": [
+        "Original/#"
+      ],
+      "tableName": "test",
+      "tableNameJsonPath": null,
+      "topicNameColumn": "topic",
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number",
+            "format": "timestampms"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ts",
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.TimeMS",
+          "value": "$.Value"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer/influxdb",
+      "bulkSize": 1000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "headers": {}
+    },
+    "enabled": true,
+    "type": "InfluxDB-Logger",
+    "createdAt": "2026-04-05 13:50:28",
+    "updatedAt": "2026-04-05 13:50:28"
+  },
+  {
+    "name": "jdbc-logger-mysql1",
+    "namespace": "mysql",
+    "nodeId": "local",
+    "config": {
+      "databaseType": "MYSQL",
+      "jdbcUrl": "jdbc:mysql://linux5:3306/monster",
+      "username": "system",
+      "password": "manager",
+      "topicFilters": [
+        "Original/#"
+      ],
+      "tableName": "monstermq1",
+      "tableNameJsonPath": null,
+      "topicNameColumn": "topic",
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number",
+            "format": "timestampms"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.TimeMS",
+          "value": "$.Value"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer",
+      "bulkSize": 1000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "autoCreateTable": true,
+      "partitionBy": "DAY",
+      "dbSpecificConfig": {}
+    },
+    "enabled": false,
+    "type": "JDBC-Logger",
+    "createdAt": "2026-04-05 12:44:52",
+    "updatedAt": "2026-04-06 06:16:31"
+  },
+  {
+    "name": "jdbc-logger-pg1",
+    "namespace": "postgres",
+    "nodeId": "local",
+    "config": {
+      "databaseType": "POSTGRESQL",
+      "jdbcUrl": "jdbc:postgresql://192.168.1.35:5432/monster",
+      "username": "system",
+      "password": "manager",
+      "topicFilters": [
+        "Original/#"
+      ],
+      "tableName": "monstermq1",
+      "tableNameJsonPath": null,
+      "topicNameColumn": "topic",
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number",
+            "format": "timestampms"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.TimeMS",
+          "value": "$.Value"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer",
+      "bulkSize": 1000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "autoCreateTable": true,
+      "partitionBy": "DAY",
+      "dbSpecificConfig": {}
+    },
+    "enabled": false,
+    "type": "JDBC-Logger",
+    "createdAt": "2026-04-05 12:27:03",
+    "updatedAt": "2026-04-05 12:31:12"
+  },
+  {
+    "name": "jdbc-logger-questdb1",
+    "namespace": "questdb",
+    "nodeId": "local",
+    "config": {
+      "databaseType": "QUESTDB",
+      "jdbcUrl": "jdbc:postgresql://192.168.1.35:8812/qdb",
+      "username": "admin",
+      "password": "quest",
+      "topicFilters": [
+        "Original/#"
+      ],
+      "tableName": "monstermq1",
+      "tableNameJsonPath": null,
+      "topicNameColumn": "topic",
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number",
+            "format": "timestampms"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.TimeMS",
+          "value": "$.Value"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer",
+      "bulkSize": 1000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "autoCreateTable": true,
+      "partitionBy": "DAY",
+      "dbSpecificConfig": {}
+    },
+    "enabled": false,
+    "type": "JDBC-Logger",
+    "createdAt": "2026-04-05 10:47:44",
+    "updatedAt": "2026-04-05 12:36:05"
   },
   {
     "name": "kafka1",
@@ -156,50 +360,128 @@
     "namespace": "modbus",
     "nodeId": "local",
     "config": {
+      "enabled": true,
       "protocol": "MODBUS_TCP",
-      "connectionString": "modbus-tcp://localhost:502",
-      "pollingInterval": 1000,
-      "reconnectDelay": 5000,
       "addresses": [
         {
+          "qos": 0,
+          "mode": "WRITE",
           "name": "holding-register:1",
-          "address": "holding-register:1",
           "topic": "modbus/1",
-          "qos": 0,
-          "retained": false,
-          "publishOnChange": true,
-          "mode": "READ",
-          "enabled": true
-        },
-        {
-          "name": "holding-register:3",
-          "address": "holding-register:3",
-          "topic": "opcua/plc03/Int16/Int16_00",
-          "qos": 0,
-          "retained": false,
-          "publishOnChange": true,
-          "mode": "WRITE",
+          "address": "holding-register:1",
           "enabled": true,
-          "jsonPath": "value"
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
         },
         {
+          "qos": 0,
+          "mode": "WRITE",
           "name": "holding-register:2",
+          "topic": "opcua/plc03/int16/Int16_01",
           "address": "holding-register:2",
-          "topic": "opcua/plc03/Int16/Int16_01",
-          "qos": 0,
-          "retained": false,
-          "publishOnChange": true,
-          "mode": "WRITE",
           "enabled": true,
-          "jsonPath": "value"
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:3",
+          "topic": "opcua/plc03/int16/Int16_02",
+          "address": "holding-register:3",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:4",
+          "topic": "opcua/plc03/int16/Int16_03",
+          "address": "holding-register:4",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:5",
+          "topic": "opcua/plc03/int16/Int16_04",
+          "address": "holding-register:5",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:6",
+          "topic": "opcua/plc03/int16/Int16_05",
+          "address": "holding-register:6",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:7",
+          "topic": "opcua/plc03/int16/Int16_06",
+          "address": "holding-register:7",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:8",
+          "topic": "opcua/plc03/int16/Int16_07",
+          "address": "holding-register:8",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:9",
+          "topic": "opcua/plc03/int16/Int16_08",
+          "address": "holding-register:9",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
+        },
+        {
+          "qos": 0,
+          "mode": "WRITE",
+          "name": "holding-register:10",
+          "topic": "opcua/plc03/int16/Int16_09",
+          "address": "holding-register:10",
+          "enabled": true,
+          "jsonPath": "value",
+          "retained": false,
+          "publishOnChange": true
         }
       ],
-      "enabled": true
+      "reconnectDelay": 5000,
+      "pollingInterval": 500,
+      "connectionString": "modbus-tcp://DESKTOP-KHLB071:502"
     },
     "enabled": false,
     "type": "PLC4X-Client",
-    "createdAt": "2026-04-04 07:53:15",
-    "updatedAt": "2026-04-04 10:48:50"
+    "createdAt": "2026-04-04 17:32:11",
+    "updatedAt": "2026-04-04 20:32:58"
   },
   {
     "name": "nats1",
@@ -243,7 +525,7 @@
     "nodeId": "local",
     "config": {
       "url": "bolt://linux5:7687",
-      "password": "",
+      "password": "manager123$",
       "username": "neo4j",
       "batchSize": 1000,
       "queueSize": 1000,
@@ -310,7 +592,7 @@
       "updateEndpointUrl": true,
       "securityPolicy": "Basic256Sha256",
       "username": "username1",
-      "password": "",
+      "password": "password1",
       "subscriptionSamplingInterval": 0,
       "keepAliveFailuresAllowed": 3,
       "reconnectDelay": 5000,
@@ -403,7 +685,7 @@
     "enabled": false,
     "type": "OPCUA-Client",
     "createdAt": "2026-04-04 05:35:16",
-    "updatedAt": "2026-04-04 10:11:39"
+    "updatedAt": "2026-04-04 15:31:15"
   },
   {
     "name": "plc03",
@@ -457,7 +739,7 @@
         },
         {
           "address": "BrowsePath://ns=2;s=SimulationMass_Int16/#",
-          "topic": "Int16",
+          "topic": "int16",
           "publishMode": "SEPARATE",
           "removePath": true
         }
@@ -466,7 +748,7 @@
     "enabled": true,
     "type": "OPCUA-Client",
     "createdAt": "2026-04-04 05:34:08",
-    "updatedAt": "2026-04-04 10:13:05"
+    "updatedAt": "2026-04-05 18:42:22"
   },
   {
     "name": "pool-temperature",
@@ -526,10 +808,10 @@
       "providerName": null,
       "timezone": "Europe/Vienna"
     },
-    "enabled": true,
+    "enabled": false,
     "type": "Agent",
     "createdAt": "2026-04-02 04:28:11",
-    "updatedAt": "2026-04-03 17:59:17"
+    "updatedAt": "2026-04-04 10:53:38"
   },
   {
     "name": "redis1",
@@ -550,32 +832,32 @@
       "addresses": [
         {
           "mode": "KV_SYNC",
-          "redisChannel": "mykey",
-          "mqttTopic": "Original/#",
+          "redisChannel": "mykey:*",
+          "mqttTopic": "opcua/#",
+          "qos": 0,
+          "usePatternSubscribe": false,
+          "usePatternMatch": true,
+          "kvPollIntervalMs": 1000,
+          "publishOnChangeOnly": true,
+          "removePath": true
+        },
+        {
+          "mode": "KV_SYNC",
+          "redisChannel": "oa:*",
+          "mqttTopic": "winccoa/#",
           "qos": 0,
           "usePatternSubscribe": false,
           "usePatternMatch": false,
           "kvPollIntervalMs": 0,
           "publishOnChangeOnly": false,
           "removePath": true
-        },
-        {
-          "mode": "KV_SYNC",
-          "redisChannel": "test:*",
-          "mqttTopic": "redis/#",
-          "qos": 0,
-          "usePatternSubscribe": false,
-          "usePatternMatch": true,
-          "kvPollIntervalMs": 1000,
-          "publishOnChangeOnly": true,
-          "removePath": false
         }
       ]
     },
     "enabled": false,
     "type": "Redis-Client",
     "createdAt": "2026-04-01 17:36:30",
-    "updatedAt": "2026-04-04 09:38:11"
+    "updatedAt": "2026-04-04 21:27:01"
   },
   {
     "name": "scada1",
@@ -611,10 +893,126 @@
         }
       ]
     },
-    "enabled": false,
+    "enabled": true,
     "type": "MQTT-Client",
     "createdAt": "2026-03-31 21:20:33",
-    "updatedAt": "2026-04-04 09:37:36"
+    "updatedAt": "2026-04-04 11:43:27"
+  },
+  {
+    "name": "telegram1",
+    "namespace": "telegram",
+    "nodeId": "local",
+    "config": {
+      "botToken": "5761369201:AAG1YipvfrJC6TAjRhJeo7B5XRa2Hk2jwYk",
+      "addresses": [],
+      "proxyHost": null,
+      "proxyPort": null,
+      "reconnectDelayMs": 5000,
+      "pollingTimeoutSeconds": 30
+    },
+    "enabled": false,
+    "type": "Telegram-Client",
+    "createdAt": "2026-04-04 07:13:10",
+    "updatedAt": "2026-04-04 07:13:10"
+  },
+  {
+    "name": "timebase-logger-1",
+    "namespace": "timebase",
+    "nodeId": "local",
+    "config": {
+      "endpointUrl": "http://linux5:4511/api",
+      "authType": "NONE",
+      "username": null,
+      "password": null,
+      "token": null,
+      "topicFilters": [
+        "Original/#"
+      ],
+      "tableName": "monstermq",
+      "tableNameJsonPath": null,
+      "topicNameColumn": null,
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "number",
+            "format": "timestampms"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ts",
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.TimeMS",
+          "value": "$.Value"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer/timebase",
+      "bulkSize": 20000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "headers": {}
+    },
+    "enabled": false,
+    "type": "TimeBase-Logger",
+    "createdAt": "2026-04-05 14:15:05",
+    "updatedAt": "2026-04-06 06:57:28"
+  },
+  {
+    "name": "timebase-logger-2",
+    "namespace": "timebase",
+    "nodeId": "local",
+    "config": {
+      "endpointUrl": "http://linux5:4511/api",
+      "authType": "NONE",
+      "username": null,
+      "password": null,
+      "token": null,
+      "topicFilters": [
+        "winccoa/#"
+      ],
+      "tableName": "monstermq2",
+      "tableNameJsonPath": null,
+      "topicNameColumn": null,
+      "payloadFormat": "JSON",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "ts": {
+            "type": "string",
+            "format": "timestamp"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "mapping": {
+          "ts": "$.['_original.._stime']",
+          "value": "$.['_original.._value']"
+        }
+      },
+      "queueType": "MEMORY",
+      "queueSize": 10000,
+      "diskPath": "./buffer/timebase",
+      "bulkSize": 20000,
+      "bulkTimeoutMs": 5000,
+      "reconnectDelayMs": 5000,
+      "headers": {}
+    },
+    "enabled": true,
+    "type": "TimeBase-Logger",
+    "createdAt": "2026-04-05 18:52:01",
+    "updatedAt": "2026-04-06 06:57:50"
   },
   {
     "name": "winccoa-plant1",
@@ -652,7 +1050,7 @@
           "retained": false
         },
         {
-          "query": "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM '*.**' WHERE _DPT = \"Test\"",
+          "query": "SELECT '_original.._value', '_original.._stime', '_original.._status' FROM 'Test_001*.**' WHERE _DPT = \"Test\"",
           "topic": "test",
           "description": "",
           "answer": false,
@@ -660,17 +1058,17 @@
         }
       ]
     },
-    "enabled": false,
+    "enabled": true,
     "type": "WinCCOA-Client",
     "createdAt": "2026-04-04 05:35:16",
-    "updatedAt": "2026-04-04 07:23:21"
+    "updatedAt": "2026-04-05 18:41:31"
   },
   {
     "name": "winccua-plant1",
     "namespace": "winccua",
     "nodeId": "local",
     "config": {
-      "password": "",
+      "password": "password1",
       "username": "username1",
       "addresses": [
         {
