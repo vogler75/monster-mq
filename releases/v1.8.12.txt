@@ -1,0 +1,9 @@
+Release v1.8.12
+Built from commit: ec8c874
+Date: 2026-04-06 08:59:20
+
+Changes since v1.8.11:
+---
+ec8c874 Add queue options and multiline topic filters
+a104277 Remove valueField and add metrics fetchers
+1eb7367 Separate logger tiles into own Logging section and make dashboard tiles smaller
