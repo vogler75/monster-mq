@@ -260,6 +260,39 @@ body {
     margin-bottom: 2rem;
 }
 
+.metrics-grid-compact {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.metrics-grid-compact .metric-card {
+    padding: 1rem;
+}
+
+.metrics-grid-compact .metric-header {
+    margin-bottom: 0.5rem;
+}
+
+.metrics-grid-compact .metric-value {
+    font-size: 1.4rem;
+    margin-bottom: 0.25rem;
+}
+
+.metrics-grid-compact .metric-title {
+    font-size: 0.75rem;
+}
+
+.logger-section {
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
 .metric-card {
     background: var(--dark-surface);
     border: 1px solid var(--dark-border);

@@ -273,6 +273,7 @@ class DashboardManager {
             if (!document.getElementById('cluster-overview')) return; // page navigated away
             const brokers = await window.graphqlClient.getBrokers();
             this.updateMetrics(brokers);
+            this.updateLoggerMetrics();
             const archiveGroups = await this.loadArchiveGroups();
             if (this.historicalDataLoaded) {
                 this.addRealtimeDataPoint(brokers);
@@ -292,6 +293,7 @@ class DashboardManager {
             const brokers = await window.graphqlClient.getBrokersWithHistory(minutes);
             const archiveGroups = await this.loadArchiveGroupsWithHistory(minutes);
             this.updateMetrics(brokers);
+            this.updateLoggerMetrics();
             this.initializeChartsWithHistory(brokers);
             this.initializeArchiveGroupsChart(archiveGroups);
             const currentBrokers = await window.graphqlClient.getBrokers();
@@ -580,6 +582,66 @@ class DashboardManager {
         ];
 
         overviewContainer.innerHTML = cards.join('');
+    }
+
+    async updateLoggerMetrics() {
+        try {
+            const cIn = '#22C55E';
+            const container = document.getElementById('logger-overview');
+            const section = document.getElementById('logger-section');
+            if (!container || !section) return;
+
+            // Collect all enabled features
+            const brokers = await window.graphqlClient.getBrokers();
+            const allEnabledFeatures = new Set(brokers.flatMap(b => b.enabledFeatures || []));
+            const anyNodeHasExplicitConfig = brokers.some(b => Array.isArray(b.enabledFeatures));
+            const isEnabled = (feature) => !anyNodeHasExplicitConfig || allEnabledFeatures.has(feature);
+
+            const loggerCards = [];
+
+            // JDBC Loggers
+            if (isEnabled('JdbcLogger')) {
+                try {
+                    const result = await window.graphqlClient.query(`query { jdbcLoggers { metrics { messagesIn messagesWritten } } }`);
+                    const loggers = result.jdbcLoggers || [];
+                    const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.[0]?.messagesIn || 0), 0);
+                    const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.[0]?.messagesWritten || 0), 0);
+                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">JDBC Loggers</span><div class="metric-icon">🗃️</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                } catch (e) { /* ignore */ }
+            }
+
+            // InfluxDB Loggers
+            if (isEnabled('InfluxDBLogger')) {
+                try {
+                    const result = await window.graphqlClient.query(`query { influxdbLoggers { metrics { messagesIn messagesWritten } } }`);
+                    const loggers = result.influxdbLoggers || [];
+                    const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.messagesIn || 0), 0);
+                    const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.messagesWritten || 0), 0);
+                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">InfluxDB Loggers</span><div class="metric-icon">📈</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                } catch (e) { /* ignore */ }
+            }
+
+            // TimeBase Loggers
+            if (isEnabled('TimeBaseLogger')) {
+                try {
+                    const result = await window.graphqlClient.query(`query { timebaseLoggers { metrics { messagesIn messagesWritten } } }`);
+                    const loggers = result.timebaseLoggers || [];
+                    const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.messagesIn || 0), 0);
+                    const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.messagesWritten || 0), 0);
+                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">TimeBase Loggers</span><div class="metric-icon">⏱️</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                } catch (e) { /* ignore */ }
+            }
+
+            if (loggerCards.length > 0) {
+                container.innerHTML = loggerCards.join('');
+                section.style.display = '';
+            } else {
+                container.innerHTML = '';
+                section.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('Failed to update logger metrics:', e);
+        }
     }
 
     updateBrokerTable(brokers) {
