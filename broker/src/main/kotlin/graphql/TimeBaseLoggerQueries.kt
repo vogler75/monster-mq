@@ -42,18 +42,21 @@ class TimeBaseLoggerQueries(private val vertx: Vertx, private val deviceStore: I
             "nodeId" to device.nodeId,
             "enabled" to device.enabled,
             "config" to config.toJson().map,
-            "isLocal" to (device.nodeId == currentNodeId),
-            "metrics" to DataFetcher { getMetrics(device) }
+            "isLocal" to (device.nodeId == currentNodeId)
         )
     }
 
-    private fun getMetrics(device: DeviceConfig): CompletableFuture<Map<String, Any?>> {
-        val future = CompletableFuture<Map<String, Any?>>()
-        val address = EventBusAddresses.TimeBaseLoggerBridge.connectorMetrics(device.name)
-        vertx.eventBus().request<JsonObject>(address, JsonObject()).onComplete { res ->
-            if (res.succeeded()) future.complete(res.result().body().map)
-            else future.complete(null)
+    fun timebaseLoggerMetrics(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val source = env.getSource<Map<String, Any?>>() ?: return@DataFetcher CompletableFuture.completedFuture(null)
+            val deviceName = source["name"] as String
+            val future = CompletableFuture<Map<String, Any?>>()
+            val address = EventBusAddresses.TimeBaseLoggerBridge.connectorMetrics(deviceName)
+            vertx.eventBus().request<JsonObject>(address, JsonObject()).onComplete { res ->
+                if (res.succeeded()) future.complete(res.result().body().map)
+                else future.complete(null)
+            }
+            future
         }
-        return future
     }
 }

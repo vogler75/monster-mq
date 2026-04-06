@@ -14,9 +14,6 @@ data class TimeBaseLoggerConfig(
     val password: String? = null,
     val token: String? = null,
 
-    // TimeBase specific
-    val valueField: String = "value",               // Schema field name to use as TVQ value
-
     // Topic subscription
     override val topicFilters: List<String> = emptyList(),
 
@@ -56,7 +53,6 @@ data class TimeBaseLoggerConfig(
                 username = obj.getString("username"),
                 password = obj.getString("password"),
                 token = obj.getString("token"),
-                valueField = obj.getString("valueField", "value"),
                 topicFilters = topicFilters,
                 tableName = obj.getString("tableName"),
                 tableNameJsonPath = obj.getString("tableNameJsonPath"),
@@ -81,7 +77,6 @@ data class TimeBaseLoggerConfig(
             .put("username", username)
             .put("password", password)
             .put("token", token)
-            .put("valueField", valueField)
             .put("topicFilters", JsonArray(topicFilters))
             .put("tableName", tableName)
             .put("tableNameJsonPath", tableNameJsonPath)
@@ -100,7 +95,6 @@ data class TimeBaseLoggerConfig(
     override fun validate(): List<String> {
         val errors = mutableListOf<String>()
         if (endpointUrl.isBlank()) errors.add("endpointUrl cannot be blank")
-        if (valueField.isBlank()) errors.add("valueField cannot be blank")
         return errors
     }
 }

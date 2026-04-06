@@ -14,7 +14,6 @@ type TimeBaseLoggerConfig {
   endpointUrl: String!
   authType: String!
   username: String
-  valueField: String!
   topicFilters: [String!]!
   tableName: String
   tableNameJsonPath: String
@@ -79,7 +78,6 @@ input TimeBaseLoggerConfigInput {
   username: String
   password: String
   token: String
-  valueField: String = "value"
   topicFilters: [String!]!
   tableName: String
   tableNameJsonPath: String

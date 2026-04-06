@@ -1272,6 +1272,20 @@ class GraphQLServer(
                     .dataFetcher("metrics", metricsResolver.jdbcLoggerMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.jdbcLoggerMetricsHistory())
             }
+            .type("InfluxDBLogger") { builder ->
+                builder.apply {
+                    influxdbLoggerQueries?.let { resolver ->
+                        dataFetcher("metrics", resolver.influxdbLoggerMetrics())
+                    }
+                }
+            }
+            .type("TimeBaseLogger") { builder ->
+                builder.apply {
+                    timebaseLoggerQueries?.let { resolver ->
+                        dataFetcher("metrics", resolver.timebaseLoggerMetrics())
+                    }
+                }
+            }
             .type("NatsClient") { builder ->
                 builder.apply {
                     natsClientQueries?.let { resolver ->

@@ -32,7 +32,7 @@ class TimeBaseLoggerDetail {
                     timebaseLoggers(name: $name) {
                         name namespace nodeId enabled
                         config {
-                            endpointUrl authType username valueField
+                            endpointUrl authType username
                             topicFilters tableName tableNameJsonPath bulkSize bulkTimeoutMs jsonSchema headers
                         }
                     }
@@ -50,7 +50,6 @@ class TimeBaseLoggerDetail {
                 document.getElementById('endpointUrl').value = c.endpointUrl;
                 document.getElementById('authType').value = c.authType;
                 document.getElementById('username').value = c.username || '';
-                document.getElementById('valueField').value = c.valueField || 'value';
                 document.getElementById('topicFilters').value = (c.topicFilters || []).join(', ');
                 document.getElementById('tableName').value = c.tableName || '';
                 document.getElementById('tableNameJsonPath').value = c.tableNameJsonPath || '';
@@ -82,7 +81,6 @@ class TimeBaseLoggerDetail {
                     username: document.getElementById('username').value || null,
                     password: document.getElementById('password').value || null,
                     token: document.getElementById('token').value || null,
-                    valueField: document.getElementById('valueField').value || 'value',
                     topicFilters: document.getElementById('topicFilters').value.split(',').map(s => s.trim()).filter(s => s),
                     tableName: document.getElementById('tableName').value || null,
                     tableNameJsonPath: document.getElementById('tableNameJsonPath').value || null,

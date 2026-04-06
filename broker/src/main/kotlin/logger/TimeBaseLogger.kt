@@ -150,11 +150,7 @@ class TimeBaseLogger : HttpLoggerBase<TimeBaseLoggerConfig>() {
             // Filter out timestamp fields (java.sql.Timestamp) — they are metadata, not values
             val valueFields = row.fields.filter { (_, v) -> v != null && v !is java.sql.Timestamp }
 
-            if (cfg.valueField.isNotBlank() && valueFields.containsKey(cfg.valueField)) {
-                // Single value mode: topic = tag name
-                val tvq = JsonObject().put("t", ts).put("v", valueFields[cfg.valueField]).put("q", 0)
-                tagData.getOrPut(row.topic) { mutableListOf() }.add(tvq)
-            } else if (valueFields.size == 1) {
+            if (valueFields.size == 1) {
                 // Only one field — use topic as tag name
                 val tvq = JsonObject().put("t", ts).put("v", valueFields.values.first()).put("q", 0)
                 tagData.getOrPut(row.topic) { mutableListOf() }.add(tvq)
