@@ -39,7 +39,7 @@ class InfluxDBLoggerDetail {
                         name namespace nodeId enabled
                         config {
                             endpointUrl authType username org bucket db influxTags topicNameColumn
-                            topicFilters tableName tableNameJsonPath bulkSize bulkTimeoutMs jsonSchema headers
+                            topicFilters tableName tableNameJsonPath queueType queueSize diskPath bulkSize bulkTimeoutMs jsonSchema headers
                         }
                     }
                 }
@@ -61,9 +61,12 @@ class InfluxDBLoggerDetail {
                 document.getElementById('db').value = c.db || '';
                 document.getElementById('influxTags').value = (c.influxTags || []).join(', ');
                 document.getElementById('topicNameColumn').value = c.topicNameColumn || '';
-                document.getElementById('topicFilters').value = (c.topicFilters || []).join(', ');
+                document.getElementById('topicFilters').value = (c.topicFilters || []).join('\n');
                 document.getElementById('tableName').value = c.tableName || '';
                 document.getElementById('tableNameJsonPath').value = c.tableNameJsonPath || '';
+                document.getElementById('logger-queue-type').value = c.queueType || 'MEMORY';
+                document.getElementById('logger-queue-size').value = c.queueSize || 10000;
+                document.getElementById('logger-disk-path').value = c.diskPath || './buffer';
                 document.getElementById('bulkSize').value = c.bulkSize;
                 document.getElementById('bulkTimeoutMs').value = c.bulkTimeoutMs;
                 document.getElementById('jsonSchema').value = JSON.stringify(c.jsonSchema, null, 2);
@@ -97,9 +100,12 @@ class InfluxDBLoggerDetail {
                     db: document.getElementById('db').value || null,
                     influxTags: document.getElementById('influxTags').value.split(',').map(s => s.trim()).filter(s => s),
                     topicNameColumn: document.getElementById('topicNameColumn').value || null,
-                    topicFilters: document.getElementById('topicFilters').value.split(',').map(s => s.trim()).filter(s => s),
+                    topicFilters: document.getElementById('topicFilters').value.split('\n').map(s => s.trim()).filter(s => s),
                     tableName: document.getElementById('tableName').value || null,
                     tableNameJsonPath: document.getElementById('tableNameJsonPath').value || null,
+                    queueType: document.getElementById('logger-queue-type').value,
+                    queueSize: parseInt(document.getElementById('logger-queue-size').value),
+                    diskPath: document.getElementById('logger-disk-path').value.trim(),
                     bulkSize: parseInt(document.getElementById('bulkSize').value),
                     bulkTimeoutMs: parseInt(document.getElementById('bulkTimeoutMs').value),
                     jsonSchema: JSON.parse(document.getElementById('jsonSchema').value),

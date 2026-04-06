@@ -161,6 +161,11 @@
                             <input type="text" id="tableNameJsonPath" placeholder="e.g., $.dataset">
                             <small class="form-hint">Extract dataset name from payload (alternative to fixed name)</small>
                         </div>
+                        <div class="form-group">
+                            <label>Topic Filters *</label>
+                            <textarea id="topicFilters" required placeholder="Enter topic filters, one per line (e.g., sensors/+/temperature)"></textarea>
+                            <small class="form-hint">MQTT topic filters to subscribe to. Enter one filter per line.</small>
+                        </div>
                     </div>
                 </div>
 
@@ -173,13 +178,27 @@
                         </div>
                     </div>
                     <div class="section-content">
-                        <div class="form-group">
-                            <label>Topic Filters (comma separated) *</label>
-                            <input type="text" id="topicFilters" required placeholder="sensors/#, production/line1/#">
-                        </div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                             <div class="form-group"><label>Bulk Size</label><input type="number" id="bulkSize" value="1000"></div>
                             <div class="form-group"><label>Bulk Timeout (ms)</label><input type="number" id="bulkTimeoutMs" value="5000"></div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div class="form-group">
+                                <label for="logger-queue-type">Queue Type</label>
+                                <select id="logger-queue-type">
+                                    <option value="MEMORY">Memory</option>
+                                    <option value="DISK">Disk</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="logger-queue-size">Queue Size</label>
+                                <input type="number" id="logger-queue-size" value="10000" min="100" max="1000000">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="logger-disk-path">Disk Path</label>
+                            <input type="text" id="logger-disk-path" value="./buffer" placeholder="./buffer">
+                            <small class="form-hint">Used when Queue Type is DISK</small>
                         </div>
                     </div>
                 </div>
