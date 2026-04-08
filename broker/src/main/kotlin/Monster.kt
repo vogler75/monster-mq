@@ -43,6 +43,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager
 import com.hazelcast.config.Config
+import com.hazelcast.config.XmlConfigBuilder
 import at.rocworks.devices.opcua.OpcUaExtension
 import at.rocworks.devices.opcuaserver.OpcUaServerExtension
 import at.rocworks.devices.mqttclient.MqttClientExtension
@@ -837,13 +838,36 @@ MORE INFO:
             }
         )
 
-        // Configure Hazelcast with custom node name
-        val hazelcastConfig = Config()
+        // Load Hazelcast config from HAZELCAST_CONFIG env var, or use defaults
+        val hazelcastConfigFile = System.getenv("HAZELCAST_CONFIG")
+        val hazelcastConfig = if (hazelcastConfigFile != null) {
+            val configFile = java.io.File(hazelcastConfigFile)
+            if (configFile.exists()) {
+                logger.info("Loading Hazelcast config from: $hazelcastConfigFile")
+                java.io.FileInputStream(configFile).use { XmlConfigBuilder(it).build() }
+            } else {
+                logger.warning("Hazelcast config file not found: $hazelcastConfigFile, using default")
+                Config()
+            }
+        } else {
+            Config()
+        }
+
         hazelcastConfig.clusterName = "MonsterMQ"
         hazelcastConfig.memberAttributeConfig.setAttribute("nodeName", this.nodeName)
-
-        // Set instance name to the node name for easier identification
         hazelcastConfig.instanceName = this.nodeName
+
+        // Configure TCP-IP discovery from HAZELCAST_MEMBERS env var
+        val members = System.getenv("HAZELCAST_MEMBERS")
+        if (members != null && members.isNotEmpty()) {
+            logger.info("Configuring TCP-IP discovery with members: $members")
+            val joinConfig = hazelcastConfig.networkConfig.join
+            joinConfig.multicastConfig.isEnabled = false
+            joinConfig.tcpIpConfig.isEnabled = true
+            members.split(",").map { it.trim() }.filter { it.isNotEmpty() }.forEach { member ->
+                joinConfig.tcpIpConfig.addMember(member)
+            }
+        }
 
         this.clusterManager = HazelcastClusterManager(hazelcastConfig)
 
