@@ -4,20 +4,20 @@ Thank you for your interest in contributing to MonsterMQ. This document explains
 
 ---
 
-## Copyright Assignment Requirement
+## Contributor License Agreement (CLA)
 
-**All contributions to MonsterMQ require a signed Copyright Assignment Agreement.**
+**All contributions to MonsterMQ require a signed Contributor License Agreement.**
 
-By submitting a contribution you irrevocably assign all intellectual property rights in that contribution — including copyright — to **Andreas Vogler**. This is a legal requirement; pull requests will not be merged until a signed agreement has been received.
+The CLA grants the project maintainer the necessary rights to use, distribute, and sublicense your contributions — including in commercial and enterprise editions of MonsterMQ. **You retain full copyright ownership of your work.** This is the same approach used by projects like Apache, Elasticsearch, and Grafana.
 
 ### Steps
 
-1. Download the agreement: [`doc/COPYRIGHT_ASSIGNMENT.pdf`](doc/COPYRIGHT_ASSIGNMENT.pdf)
-2. Fill in your **full legal name**, **address**, and the **date**.
-3. Sign the document (handwritten signature on a printed copy, or a qualified electronic signature).
+1. Download the agreement: [`doc/CONTRIBUTOR_LICENSE_AGREEMENT.pdf`](doc/CONTRIBUTOR_LICENSE_AGREEMENT.pdf)
+2. Fill in your **full legal name**, **email**, **GitHub username**, and the **date**.
+3. Sign the document (handwritten signature on a printed copy, or an electronic signature).
 4. Scan or photograph the signed document and e-mail it to the project maintainer, **or** attach it as a comment on your pull request.
 
-> **Why?** A full copyright assignment allows Andreas Vogler to relicense, commercialize, and legally protect MonsterMQ without encumbrance. Your contribution will still be reflected in the project history and you will be credited.
+> **Why a CLA?** The CLA ensures the maintainer has a clear legal right to distribute all contributions as part of the Project — under the current open-source license and under any future license, including commercial editions. You keep ownership and can use your code elsewhere however you like.
 
 ---
 
@@ -38,9 +38,9 @@ By submitting a contribution you irrevocably assign all intellectual property ri
    - **Summary** — what problem does this solve?
    - **Changes** — list of files/components affected.
    - **Testing** — how did you verify the change?
-   - **Copyright Assignment** — confirm you have signed and submitted the agreement.
+   - **CLA** — confirm you have signed and submitted the Contributor License Agreement.
 
-Pull requests that do not include a signed Copyright Assignment Agreement will not be merged.
+Pull requests that do not include a signed CLA will not be merged.
 
 ---
 

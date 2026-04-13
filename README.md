@@ -380,7 +380,7 @@ See also `dev/` for developer and AI coding documentation (iX guidelines, device
 
 ## Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request. All contributions require a signed Copyright Assignment Agreement.
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request. All contributions require a signed Contributor License Agreement (CLA).
 
 ## License
 
