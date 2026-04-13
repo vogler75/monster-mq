@@ -1,0 +1,10 @@
+Release v1.8.13
+Built from commit: 4b1de7a
+Date: 2026-04-13 12:54:00
+
+Changes since v1.8.12:
+---
+4b1de7a Switch to Contributor License Agreement (CLA)
+c8a26a2 Merge pull request #152 from eaulausanne/feat/hazelcast-env-config
+e29c8d6 feat: support HAZELCAST_CONFIG and HAZELCAST_MEMBERS env vars for cluster discovery
+b9178ab Update device-configs-examples.json
