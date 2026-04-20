@@ -221,7 +221,7 @@ class AgentExecutor(
                 defaultArchiveGroup = agentConfig.defaultArchiveGroup,
                 toolLogger = { name, args, result -> publishToolLog(name, args, result) },
                 vertx = vertx,
-                taskTimeoutMs = agentConfig.taskTimeoutMs,
+                taskTimeoutSeconds = agentConfig.taskTimeoutSeconds,
                 getCurrentTaskId = { currentTaskId },
                 registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
                 subAgentsAllowAll = agentConfig.subAgentsAllowAll,
@@ -810,16 +810,16 @@ class AgentExecutor(
 
     private fun setupTaskTimeoutChecker() {
         val checkIntervalMs = 15_000L // check every 15 seconds
-        val timeoutMs = agentConfig.taskTimeoutMs
+        val timeoutMs = agentConfig.taskTimeoutSeconds * 1000
 
         taskTimeoutTimerId = vertx.setPeriodic(checkIntervalMs) {
             val now = System.currentTimeMillis()
             val timedOut = pendingTasks.entries.filter { now - it.value.submittedAt > timeoutMs }
             timedOut.forEach { (taskId, pending) ->
                 pendingTasks.remove(taskId)
-                logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${timeoutMs / 1000}s")
+                logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${agentConfig.taskTimeoutSeconds}s")
                 collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, "timeout",
-                    "Agent '${pending.targetAgent}' did not respond within ${timeoutMs / 1000} seconds"))
+                    "Agent '${pending.targetAgent}' did not respond within ${agentConfig.taskTimeoutSeconds} seconds"))
             }
             // If timeouts cleared all pending tasks, resume with whatever we have
             if (pendingTasks.isEmpty() && collectedResults.isNotEmpty()) {

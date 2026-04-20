@@ -91,7 +91,7 @@ class AgentDetailManager {
         document.getElementById('agent-input-topics').value = '';
         document.getElementById('agent-output-topics').value = '';
         document.getElementById('agent-system-prompt').value = '';
-        document.getElementById('agent-task-timeout-ms').value = '60000';
+        document.getElementById('agent-task-timeout-seconds').value = '60';
         document.getElementById('agent-timezone').value = '';
         document.getElementById('agent-context-lastval-topics').value = '';
         document.getElementById('agent-context-retained').value = '';
@@ -485,7 +485,7 @@ class AgentDetailManager {
                         contextRetainedTopics
                         contextHistoryQueries { archiveGroup topics lastSeconds interval function fields decimals }
                         timezone
-                        taskTimeoutMs
+                        taskTimeoutSeconds
                         subAgentsAllowAll
                         subAgents
                         createdAt
@@ -569,7 +569,7 @@ class AgentDetailManager {
         document.getElementById('agent-max-tokens').value = d.maxTokens || '';
         document.getElementById('agent-max-tool-iterations').value = d.maxToolIterations != null ? d.maxToolIterations : 10;
         document.getElementById('agent-memory-window-size').value = d.memoryWindowSize != null ? d.memoryWindowSize : 20;
-        document.getElementById('agent-task-timeout-ms').value = d.taskTimeoutMs != null ? d.taskTimeoutMs : 60000;
+        document.getElementById('agent-task-timeout-seconds').value = d.taskTimeoutSeconds != null ? d.taskTimeoutSeconds : 60;
         document.getElementById('agent-enable-thinking').checked = d.enableThinking || false;
         document.getElementById('agent-conversation-log').checked = d.conversationLogEnabled || false;
 
@@ -681,7 +681,7 @@ class AgentDetailManager {
             maxTokens: parseInt(document.getElementById('agent-max-tokens').value) || null,
             maxToolIterations: parseInt(document.getElementById('agent-max-tool-iterations').value) || null,
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,
-            taskTimeoutMs: parseInt(document.getElementById('agent-task-timeout-ms').value) || null,
+            taskTimeoutSeconds: parseInt(document.getElementById('agent-task-timeout-seconds').value) || null,
             enableThinking: document.getElementById('agent-enable-thinking').checked,
             conversationLogEnabled: document.getElementById('agent-conversation-log').checked,
             triggerType: document.getElementById('agent-trigger-type').value,

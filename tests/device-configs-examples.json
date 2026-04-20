@@ -117,7 +117,7 @@
           "decimals": 0
         }
       ],
-      "taskTimeoutMs": 60000,
+      "taskTimeoutSeconds": 60,
       "subAgentsAllowAll": false,
       "subAgents": [],
       "enableThinking": true,
@@ -798,7 +798,7 @@
           ]
         }
       ],
-      "taskTimeoutMs": 60000,
+      "taskTimeoutSeconds": 60,
       "subAgentsAllowAll": false,
       "subAgents": [],
       "enableThinking": true,

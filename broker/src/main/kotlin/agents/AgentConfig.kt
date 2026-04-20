@@ -30,7 +30,7 @@ data class AgentConfig(
     val contextLastvalTopics: Map<String, List<String>> = emptyMap(),  // archiveGroup -> list of topic filters
     val contextRetainedTopics: List<String> = emptyList(),      // topic filters for retained messages
     val contextHistoryQueries: List<ContextHistoryQuery> = emptyList(),  // history data queries
-    val taskTimeoutMs: Long = 60000,  // timeout for sub-agent task invocations (default 60s)
+    val taskTimeoutSeconds: Long = 60,  // timeout for sub-agent task invocations and LLM calls (default 60s)
     val subAgentsAllowAll: Boolean = false,      // when true, agent can call any other agent
     val subAgents: List<String> = emptyList(),  // restrict which agents this orchestrator can invoke (ignored when allowAll=true)
     val enableThinking: Boolean = false,
@@ -74,7 +74,7 @@ data class AgentConfig(
                 contextRetainedTopics = json.getJsonArray("contextRetainedTopics", JsonArray()).filterIsInstance<String>().toList(),
                 contextHistoryQueries = json.getJsonArray("contextHistoryQueries", JsonArray())
                     .filterIsInstance<JsonObject>().map { ContextHistoryQuery.fromJsonObject(it) },
-                taskTimeoutMs = json.getLong("taskTimeoutMs", 60000),
+                taskTimeoutSeconds = json.getLong("taskTimeoutSeconds", 60),
                 subAgentsAllowAll = json.getBoolean("subAgentsAllowAll", false),
                 subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList(),
                 enableThinking = json.getBoolean("enableThinking", false),
@@ -117,7 +117,7 @@ data class AgentConfig(
             })
             .put("contextRetainedTopics", JsonArray(contextRetainedTopics))
             .put("contextHistoryQueries", JsonArray(contextHistoryQueries.map { it.toJsonObject() }))
-            .put("taskTimeoutMs", taskTimeoutMs)
+            .put("taskTimeoutSeconds", taskTimeoutSeconds)
             .put("subAgentsAllowAll", subAgentsAllowAll)
             .put("subAgents", JsonArray(subAgents))
             .put("enableThinking", enableThinking)

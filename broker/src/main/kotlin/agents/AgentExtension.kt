@@ -181,9 +181,12 @@ class AgentExtension : AbstractVerticle() {
 
         try {
             val executor = AgentExecutor(deviceConfig)
+            val agentCfg = AgentConfig.fromJsonObject(deviceConfig.config)
+            // Avoid blocked-thread warnings during long LLM calls: align with per-agent taskTimeoutSeconds (+30s buffer)
+            val maxWorkerNs = (agentCfg.taskTimeoutSeconds + 30) * 1_000_000_000L
             val options = io.vertx.core.DeploymentOptions()
                 .setConfig(vertx.orCreateContext.config())
-                .setMaxWorkerExecuteTime(2 * 60 * 1_000_000_000L) // 2 minutes — LLM calls with tool loops can be long
+                .setMaxWorkerExecuteTime(maxWorkerNs)
                 .setMaxWorkerExecuteTimeUnit(java.util.concurrent.TimeUnit.NANOSECONDS)
             vertx.deployVerticle(executor, options).onComplete { deployResult ->
                 if (deployResult.succeeded()) {

@@ -149,7 +149,7 @@ class AgentQueries(
                     )
                 },
                 "timezone" to agentConfig.timezone,
-                "taskTimeoutMs" to agentConfig.taskTimeoutMs,
+                "taskTimeoutSeconds" to agentConfig.taskTimeoutSeconds,
                 "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,
                 "subAgents" to agentConfig.subAgents,
                 "createdAt" to device.createdAt.toString(),

@@ -30,7 +30,7 @@ class AgentTools(
     private val defaultArchiveGroup: String = "Default",
     private val toolLogger: ((String, String, String) -> Unit)? = null,
     private val vertx: Vertx? = null,
-    private val taskTimeoutMs: Long = 60000,
+    private val taskTimeoutSeconds: Long = 60,
     private val getCurrentTaskId: (() -> String?)? = null,
     private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
     private val subAgentsAllowAll: Boolean = false,

@@ -23,7 +23,8 @@ data class ChatModelConfig(
     val serviceVersion: String? = null,
     val maxTokens: Int? = null,
     val temperature: Double = 0.7,
-    val enableThinking: Boolean = false
+    val enableThinking: Boolean = false,
+    val timeoutSeconds: Long? = null  // per-agent request timeout; overrides provider defaults when larger
 )
 
 object LangChain4jFactory {
@@ -63,16 +64,17 @@ object LangChain4jFactory {
                 .build()
 
             "ollama" -> {
-                val ollamaTimeoutSeconds = globalConfig
+                val globalOllamaTimeout = globalConfig
                     .getJsonObject("GenAI", JsonObject())
                     .getJsonObject("Providers", JsonObject())
                     .getJsonObject("Ollama", JsonObject())
-                    .getInteger("TimeoutSeconds")
+                    .getInteger("TimeoutSeconds")?.toLong()
+                val effectiveTimeout = listOfNotNull(config.timeoutSeconds, globalOllamaTimeout).maxOrNull()
                 OllamaChatModel.builder()
                     .baseUrl(apiKey)
                     .modelName(model ?: "llama3")
                     .temperature(config.temperature)
-                    .apply { ollamaTimeoutSeconds?.let { timeout(Duration.ofSeconds(it.toLong())) } }
+                    .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                     .listeners(listeners)
                     .build()
             }
@@ -106,7 +108,8 @@ object LangChain4jFactory {
                 serviceVersion = config.serviceVersion,
                 maxTokens = config.maxTokens,
                 temperature = config.temperature,
-                enableThinking = config.enableThinking
+                enableThinking = config.enableThinking,
+                timeoutSeconds = config.taskTimeoutSeconds
             ),
             globalConfig,
             listeners
@@ -133,7 +136,8 @@ object LangChain4jFactory {
                 serviceVersion = providerConfig.serviceVersion,
                 maxTokens = agentConfig.maxTokens ?: providerConfig.maxTokens,
                 temperature = agentConfig.temperature,
-                enableThinking = agentConfig.enableThinking
+                enableThinking = agentConfig.enableThinking,
+                timeoutSeconds = agentConfig.taskTimeoutSeconds
             ),
             globalConfig,
             listeners

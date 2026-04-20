@@ -50,7 +50,7 @@ Agents are configured via the GraphQL API or dashboard. All fields with their de
 | `contextLastvalTopics` | Map | `{}` | Last-value topics injected as context (see [Context Data](#context-data)) |
 | `contextRetainedTopics` | List | `[]` | Retained topics injected as context |
 | `contextHistoryQueries` | List | `[]` | Historical data queries injected as context |
-| `taskTimeoutMs` | Long | `60000` | Timeout (ms) when invoking sub-agents |
+| `taskTimeoutSeconds` | Long | `60` | Timeout (seconds) for LLM calls and sub-agent invocations. Overrides `GenAI.Providers.Ollama.TimeoutSeconds` when larger. |
 | `subAgents` | List | `[]` | Restrict which agents this orchestrator can invoke (empty = all) |
 | `skills` | List | `[]` | Declared agent skills for A2A discovery |
 
