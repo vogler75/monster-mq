@@ -33,13 +33,22 @@ class GraphQLAuthContext(
             "mqttClient",
             "kafkaClient",
             "natsClient",
+            "redisClient",
+            "telegramClient",
             "winCCOaDevice",
             "winCCUaDevice",
             "plc4xDevice",
             "neo4jClient",
             "jdbcLogger",
+            "influxdbLogger",
+            "timebaseLogger",
             "sparkplugBDecoder",
-            "flow"
+            "flow",
+            "topicSchemaPolicy",
+            "topicNamespace",
+            "agent",
+            "mcpServer",
+            "genAiProvider"
         )
     }
 
