@@ -91,12 +91,24 @@ class GraphQLAuthContext(
         return when (fieldName) {
             // User Management operations require admin
             "createUser", "updateUser", "deleteUser", "setPassword",
-            "getAllUsers", "getUser", 
+            "getAllUsers", "getUser",
             // ACL Management operations require admin
-            "createAclRule", "updateAclRule", "deleteAclRule", 
+            "createAclRule", "updateAclRule", "deleteAclRule",
             "getAllAclRules", "getUserAclRules",
             // Destructive / device-import operations require admin
-            "purgeQueuedMessages", "importDevices" -> true
+            "purgeQueuedMessages", "importDevices",
+            // Configuration-changing mutation groups require admin.
+            // Checked at the parent mutation field (e.g. `mutation { agent { create(...) } }`)
+            // before any child resolver runs.
+            "user", "session", "archiveGroup",
+            "opcUaDevice", "opcUaServer",
+            "mqttClient", "kafkaClient", "natsClient",
+            "redisClient", "telegramClient",
+            "winCCOaDevice", "winCCUaDevice", "plc4xDevice", "neo4jClient",
+            "jdbcLogger", "influxdbLogger", "timebaseLogger",
+            "sparkplugBDecoder", "flow",
+            "topicSchemaPolicy", "topicNamespace",
+            "agent", "mcpServer", "genAiProvider" -> true
             else -> false
         }
     }
