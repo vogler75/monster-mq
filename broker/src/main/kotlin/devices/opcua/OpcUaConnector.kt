@@ -500,7 +500,7 @@ class OpcUaConnector : AbstractVerticle() {
                 connectFuture.whenComplete { _, throwable ->
                     if (isStopped) {
                         isReconnecting = false
-                        client?.disconnect()
+                        disposeFailedClient()
                         promise.fail(Exception("Connector stopped during connection"))
                         return@whenComplete
                     }
@@ -527,6 +527,7 @@ class OpcUaConnector : AbstractVerticle() {
                     } else {
                         isReconnecting = false
                         logger.severe("Failed to connect to OPC UA server: ${throwable.message}")
+                        disposeFailedClient()
                         scheduleReconnection()
                         promise.fail(throwable)
                     }
@@ -535,6 +536,7 @@ class OpcUaConnector : AbstractVerticle() {
             } catch (e: Exception) {
                 isReconnecting = false
                 logger.severe("Exception during OPC UA connection: ${e.message}")
+                disposeFailedClient()
                 scheduleReconnection()
                 promise.fail(e)
             }
@@ -567,6 +569,23 @@ class OpcUaConnector : AbstractVerticle() {
         return promise.future()
     }
 
+    /**
+     * Disconnect a client whose initial connection failed and detach it from
+     * the connector. Milo's SessionFsm will keep retrying in the background
+     * after a failed connect (e.g. Bad_SecurityChecksFailed) unless disconnect
+     * is explicitly invoked, so we must shut the old client down before
+     * creating a new one or leaving the connector idle.
+     */
+    private fun disposeFailedClient() {
+        val failed = client ?: return
+        client = null
+        try {
+            failed.disconnect()
+        } catch (e: Exception) {
+            logger.fine { "Error disposing failed OPC UA client for device ${deviceConfig.name}: ${e.message}" }
+        }
+    }
+
     private fun disconnectFromOpcUaServer(): Future<Void> {
         val promise = Promise.promise<Void>()
 
@@ -577,24 +596,31 @@ class OpcUaConnector : AbstractVerticle() {
         }
         stopHealthCheck()
 
-        if (client != null && isConnected) {
-            client!!.disconnect().whenComplete { _, _ ->
-                isConnected = false
-                isReconnecting = false
-                client = null
-                subscription = null
-                addressSubscriptions.clear()
-                opcUaMonitoredItems.clear()
-                promise.complete()
-            }
-        } else {
+        val currentClient = client
+        client = null
+
+        val finishCleanup = {
             isConnected = false
             isReconnecting = false
-            client = null
             subscription = null
             addressSubscriptions.clear()
             opcUaMonitoredItems.clear()
             promise.complete()
+        }
+
+        if (currentClient != null) {
+            // Always call disconnect() on the Milo client, even if the initial
+            // connection never succeeded. Milo's SessionFsm may be retrying in
+            // the background (e.g. after Bad_SecurityChecksFailed); only an
+            // explicit disconnect stops those internal reconnect attempts.
+            try {
+                currentClient.disconnect().whenComplete { _, _ -> finishCleanup() }
+            } catch (e: Exception) {
+                logger.warning("Error invoking disconnect on OPC UA client for device ${deviceConfig.name}: ${e.message}")
+                finishCleanup()
+            }
+        } else {
+            finishCleanup()
         }
 
         return promise.future()
