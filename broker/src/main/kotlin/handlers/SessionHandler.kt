@@ -1923,13 +1923,17 @@ open class SessionHandler(
      * @param clientId Internal client identifier
      * @param topicFilter MQTT topic filter (with wildcards)
      * @param qos QoS level (0, 1, or 2)
+     * @param sendRetained If true, deliver currently retained messages matching the filter to the
+     *                    client's eventBus consumer. Mirrors MQTT v5 retainHandling=0. Default is
+     *                    false to preserve existing callers' behavior.
      */
     fun subscribeInternalClient(
         clientId: String,
         topicFilter: String,
-        qos: Int
+        qos: Int,
+        sendRetained: Boolean = false
     ) {
-        logger.fine { "Internal client '$clientId' subscribing to topicFilter='$topicFilter' with QoS $qos" }
+        logger.fine { "Internal client '$clientId' subscribing to topicFilter='$topicFilter' with QoS $qos (sendRetained=$sendRetained)" }
 
         // Subscribe using normal subscription mechanism
         subscriptionManager.subscribe(clientId, topicFilter, qos)
@@ -1938,6 +1942,16 @@ open class SessionHandler(
         // Update topic-node mapping for cluster awareness
         val localNodeId = Monster.getClusterNodeId(vertx)
         topicNodeMapping.addToSet(topicFilter, localNodeId)
+
+        if (sendRetained) {
+            messageHandler.findRetainedMessages(topicFilter, 0) { message -> // TODO: max must be configurable
+                logger.finest { "Publish retained message [${message.topicName}] to internal client [$clientId]" }
+                val effectiveMessage = if (qos < message.qosLevel) message.cloneWithNewQoS(qos) else message
+                sendMessageToClient(clientId, effectiveMessage)
+            }.onComplete {
+                logger.finest { "Retained messages published to internal client [$clientId]: ${it.result()}" }
+            }
+        }
     }
 
     /**

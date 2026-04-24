@@ -89,6 +89,7 @@ class Monster(args: Array<String>) {
     private var sessionHandler: SessionHandler? = null
     private var messageBus: IMessageBus? = null
     private var retainedStore: IMessageStore? = null
+    private var flowEngineExtension: FlowEngineExtension? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -231,6 +232,10 @@ class Monster(args: Array<String>) {
 
         fun getSessionHandler(): SessionHandler? {
             return getInstance().sessionHandler
+        }
+
+        fun getFlowEngineExtension(): FlowEngineExtension? {
+            return getInstance().flowEngineExtension
         }
 
         fun getArchiveHandler(): ArchiveHandler? {
@@ -1392,6 +1397,7 @@ MORE INFO:
                         // Flow Engine Extension
                         if (Monster.isFeatureEnabled("FlowEngine")) {
                             val flowEngineExtension = FlowEngineExtension()
+                            singleton?.flowEngineExtension = flowEngineExtension
                             val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(flowEngineExtension, flowEngineDeploymentOptions)
                         } else {

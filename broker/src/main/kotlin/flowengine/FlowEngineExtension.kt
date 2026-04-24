@@ -32,6 +32,9 @@ class FlowEngineExtension : AbstractVerticle() {
     // Track deployed flow verticles: instanceName -> deploymentId
     private val flowVerticles = ConcurrentHashMap<String, String>()
 
+    // Track deployed executor instances: instanceName -> FlowInstanceExecutor
+    private val executors = ConcurrentHashMap<String, FlowInstanceExecutor>()
+
     // Track loaded flow classes
     private val flowClasses = ConcurrentHashMap<String, DeviceConfig>()
 
@@ -282,6 +285,7 @@ class FlowEngineExtension : AbstractVerticle() {
             if (deployResult.succeeded()) {
                 val deploymentId = deployResult.result()
                 flowVerticles[instanceConfig.name] = deploymentId
+                executors[instanceConfig.name] = executor
                 logger.info("Deployed flow instance verticle ${instanceConfig.name} (class: $flowClassId, deploymentId: $deploymentId)")
                 promise.complete(instanceConfig.name)
             } else {
@@ -297,6 +301,7 @@ class FlowEngineExtension : AbstractVerticle() {
 
         try {
             val deploymentId = flowVerticles.remove(instanceName)
+            executors.remove(instanceName)
             if (deploymentId != null) {
                 vertx.undeploy(deploymentId).onComplete { result ->
                     if (result.succeeded()) {
@@ -438,5 +443,12 @@ class FlowEngineExtension : AbstractVerticle() {
      */
     fun getActiveFlows(): List<String> {
         return flowVerticles.keys.toList()
+    }
+
+    /**
+     * Get the running executor for a flow instance, if deployed on this node.
+     */
+    fun getExecutor(instanceName: String): FlowInstanceExecutor? {
+        return executors[instanceName]
     }
 }

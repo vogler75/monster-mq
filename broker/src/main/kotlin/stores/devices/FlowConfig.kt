@@ -245,6 +245,17 @@ data class FlowInstanceStatus(
             .put("subscribedTopics", JsonArray(subscribedTopics))
     }
 
+    fun toMap(): Map<String, Any?> {
+        return mapOf(
+            "running" to running,
+            "lastExecution" to lastExecution?.toString(),
+            "executionCount" to executionCount,
+            "errorCount" to errorCount,
+            "lastError" to lastError,
+            "subscribedTopics" to subscribedTopics
+        )
+    }
+
     companion object {
         fun fromJsonObject(json: JsonObject): FlowInstanceStatus {
             return FlowInstanceStatus(

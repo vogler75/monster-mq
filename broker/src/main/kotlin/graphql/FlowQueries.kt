@@ -258,6 +258,7 @@ class FlowQueries(
     private fun flowInstanceToMap(device: DeviceConfig): Map<String, Any> {
         val currentNodeId = Monster.getClusterNodeId(vertx)
         val flowInstance = FlowInstance.fromJsonObject(device.config)
+        val status = Monster.getFlowEngineExtension()?.getExecutor(device.name)?.getStatus()?.toMap()
 
         return mapOf(
             "name" to device.name,
@@ -268,7 +269,7 @@ class FlowQueries(
             "outputMappings" to flowInstance.outputMappings.map { outputMappingToMap(it) },
             "variables" to (flowInstance.variables?.map ?: emptyMap<String, Any>()),
             "enabled" to device.enabled,
-            "status" to (null as Any?),
+            "status" to status,
             "createdAt" to device.createdAt.toString(),
             "updatedAt" to device.updatedAt.toString(),
             "isOnCurrentNode" to device.isAssignedToNode(currentNodeId)

@@ -167,7 +167,8 @@ class FlowInstanceExecutor(
             sessionHandler.subscribeInternalClient(
                 clientId = clientId,
                 topicFilter = topic,
-                qos = 0
+                qos = 0,
+                sendRetained = true
             )
         }
     }
