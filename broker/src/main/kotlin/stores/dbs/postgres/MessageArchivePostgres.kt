@@ -167,16 +167,10 @@ class MessageArchivePostgres (
                             .put("qos", resultSet.getInt("qos"))
                             .put("client_id", resultSet.getString("client_id") ?: "")
 
-                        // Add payload - prefer JSON if available, otherwise use base64 blob
-                        val payloadJson = resultSet.getString("payload_json")
-                        if (payloadJson != null) {
-                            messageObj.put("payload_json", payloadJson)
-                        } else {
-                            val payloadBlob = resultSet.getBytes("payload_blob")
-                            if (payloadBlob != null) {
-                                messageObj.put("payload_base64", java.util.Base64.getEncoder().encodeToString(payloadBlob))
-                            }
-                        }
+                        // Decode payload with priority: parsed JSON -> UTF-8 text -> base64.
+                        at.rocworks.stores.PayloadDecoder
+                            .decode(resultSet.getString("payload_json"), resultSet.getBytes("payload_blob"))
+                            .applyTo(messageObj)
 
                         messages.add(messageObj)
                     }

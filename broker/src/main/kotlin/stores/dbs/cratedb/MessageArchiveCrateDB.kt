@@ -163,16 +163,16 @@ class MessageArchiveCrateDB (
                             .put("qos", resultSet.getInt("qos"))
                             .put("client_id", resultSet.getString("client_id") ?: "")
 
-                        // Add payload - prefer JSON if available, otherwise use base64
-                        val payloadJson = resultSet.getString("payload_obj")
-                        if (payloadJson != null) {
-                            messageObj.put("payload_json", payloadJson)
-                        } else {
-                            val payloadB64 = resultSet.getString("payload_b64")
-                            if (payloadB64 != null) {
-                                messageObj.put("payload_base64", payloadB64)
-                            }
+                        // Decode payload with priority: parsed JSON -> UTF-8 text -> base64.
+                        // payload_b64 is already base64-encoded on disk, so decode once before
+                        // feeding through the shared helper.
+                        val payloadObj = resultSet.getString("payload_obj")
+                        val rawBytes = resultSet.getString("payload_b64")?.let {
+                            try { java.util.Base64.getDecoder().decode(it) } catch (_: Exception) { null }
                         }
+                        at.rocworks.stores.PayloadDecoder
+                            .decode(payloadObj, rawBytes)
+                            .applyTo(messageObj)
 
                         messages.add(messageObj)
                     }

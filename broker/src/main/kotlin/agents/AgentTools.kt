@@ -156,9 +156,11 @@ class AgentTools(
                 val topic_ = row.getString("topic") ?: ""
                 val ts = row.getValue("timestamp")
                 val time = if (ts is Number) Instant.ofEpochMilli(ts.toLong()).toString() else ts?.toString() ?: ""
-                val value = row.getString("payload_json")
-                    ?: row.getString("payload_base64")?.let { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
-                    ?: ""
+                val value = when (val p = row.getValue("payload")) {
+                    null -> row.getString("payload_base64")?.let { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) } ?: ""
+                    is String -> p
+                    else -> p.toString()
+                }
                 sb.appendLine("$topic_,$time,$value")
             }
             sb.toString().trimEnd()

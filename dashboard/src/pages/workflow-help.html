@@ -775,7 +775,7 @@ for (let i = 0; i &lt; values.length; i++) {
                             </li>
                             <li>
                                 <div class="property-name">Returns</div>
-                                <div class="property-desc">Array of <code class="code-inline">{ topic, timestamp, qos, client_id, payload_json }</code></div>
+                                <div class="property-desc">Array of <code class="code-inline">{ topic, timestamp, qos, client_id, payload }</code> (payload is a parsed JSON value, UTF-8 string, or — for binary-only data — a <code class="code-inline">payload_base64</code> field instead)</div>
                             </li>
                         </ul>
                         <div class="code-block"><code>const history = archive.getHistory(

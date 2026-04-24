@@ -442,11 +442,15 @@ class PrometheusServer(
                 for (i in 0 until historyData.size()) {
                     val record = historyData.getJsonObject(i) ?: continue
                     val timestampMs = record.getLong("timestamp") ?: continue
-                    val payloadStr = record.getString("payload_json")
-                        ?: record.getString("payload")
-                        ?: record.getString("payload_base64")?.let { b64 ->
+                    val payloadStr = when (val p = record.getValue("payload")) {
+                        is io.vertx.core.json.JsonObject -> p.encode()
+                        is io.vertx.core.json.JsonArray -> p.encode()
+                        is String -> p
+                        null -> record.getString("payload_base64")?.let { b64 ->
                             try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
-                        } ?: continue
+                        }
+                        else -> p.toString()
+                    } ?: continue
                     val numVal = extractNumericValue(payloadStr, field) ?: continue
                     raw.add(timestampMs / 1000 to numVal)
                 }

@@ -250,11 +250,15 @@ class I3xServer(
     }
 
     private fun extractPayloadString(record: JsonObject): String? {
-        return record.getString("payload_json")
-            ?: record.getString("payload")
-            ?: record.getString("payload_base64")?.let { b64 ->
+        return when (val p = record.getValue("payload")) {
+            is JsonObject -> p.encode()
+            is JsonArray -> p.encode()
+            is String -> p
+            null -> record.getString("payload_base64")?.let { b64 ->
                 try { String(Base64.getDecoder().decode(b64)) } catch (e: Exception) { null }
             }
+            else -> p.toString()
+        }
     }
 
     private fun ok(ctx: RoutingContext, body: JsonObject) {

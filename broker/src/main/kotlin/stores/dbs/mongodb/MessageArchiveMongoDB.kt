@@ -306,27 +306,28 @@ class MessageArchiveMongoDB(
                         .put("qos", doc.getInteger("qos") ?: meta?.getInteger("qos") ?: 0)
                         .put("client_id", doc.getString("client_id") ?: meta?.getString("client_id") ?: "")
 
-                    // Handle both new format (payload as BSON) and legacy format (payload_blob/payload_json)
+                    // Decode payload with priority: parsed JSON -> UTF-8 text -> base64.
                     val nativePayload = doc.get("payload")
-                    if (nativePayload != null) {
-                        // New format: payload stored as native BSON object
-                        val payloadJson = when (nativePayload) {
-                            is Document -> nativePayload.toJson()
-                            is List<*> -> JsonArray(nativePayload).encode()
-                            else -> nativePayload.toString()
+                    val decoded = if (nativePayload != null) {
+                        // New format: payload stored as native BSON — map directly to JsonObject/JsonArray.
+                        when (nativePayload) {
+                            is Document -> at.rocworks.stores.PayloadDecoder.Decoded(JsonObject(nativePayload.toJson()), null)
+                            is List<*> -> at.rocworks.stores.PayloadDecoder.Decoded(JsonArray(nativePayload), null)
+                            is String -> at.rocworks.stores.PayloadDecoder.decode(nativePayload, null)
+                            is Binary -> at.rocworks.stores.PayloadDecoder.decode(nativePayload.data)
+                            is ByteArray -> at.rocworks.stores.PayloadDecoder.decode(nativePayload)
+                            else -> at.rocworks.stores.PayloadDecoder.decodeNative(nativePayload)
                         }
-                        messageObj.put("payload_json", payloadJson)
-                        messageObj.put("payload_base64", Base64.getEncoder().encodeToString(payloadJson.toByteArray()))
                     } else {
-                        // Legacy format: payload_blob and/or payload_json
-                        val payloadBytes = when (val payloadBlob = doc.get("payload_blob")) {
+                        // Legacy format: payload_json string and/or payload_blob bytes.
+                        val rawBytes = when (val payloadBlob = doc.get("payload_blob")) {
                             is Binary -> payloadBlob.data
                             is ByteArray -> payloadBlob
-                            else -> ByteArray(0)
+                            else -> null
                         }
-                        messageObj.put("payload_base64", Base64.getEncoder().encodeToString(payloadBytes))
-                        messageObj.put("payload_json", doc.getString("payload_json"))
+                        at.rocworks.stores.PayloadDecoder.decode(doc.getString("payload_json"), rawBytes)
                     }
+                    decoded.applyTo(messageObj)
 
                     messages.add(messageObj)
                 }

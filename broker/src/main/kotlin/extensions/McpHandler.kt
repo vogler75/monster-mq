@@ -1487,20 +1487,24 @@ A table with:
             val row = JsonArray()
                 .add(obj.getString("topic", ""))
                 .add(obj.getLong("timestamp", 0L).toString())
-                .add(if (obj.containsKey("payload_json") && obj.getString("payload_json") != null) {
-                    obj.getString("payload_json")
-                } else {
-                    // Decode base64 payload if no JSON payload available
-                    try {
-                        val base64 = obj.getString("payload_base64", "")
-                        if (base64.isNotEmpty()) {
-                            String(java.util.Base64.getDecoder().decode(base64), Charsets.UTF_8)
-                        } else {
-                            ""
+                .add(when (val p = obj.getValue("payload")) {
+                    is io.vertx.core.json.JsonObject -> p.encode()
+                    is io.vertx.core.json.JsonArray -> p.encode()
+                    is String -> p
+                    null -> {
+                        // Decode base64 payload if no structured payload available
+                        try {
+                            val base64 = obj.getString("payload_base64", "")
+                            if (base64.isNotEmpty()) {
+                                String(java.util.Base64.getDecoder().decode(base64), Charsets.UTF_8)
+                            } else {
+                                ""
+                            }
+                        } catch (e: Exception) {
+                            obj.getString("payload_base64", "")
                         }
-                    } catch (e: Exception) {
-                        obj.getString("payload_base64", "")
                     }
+                    else -> p.toString()
                 })
                 .add(obj.getInteger("qos", 0).toString())
                 .add(obj.getString("client_id", ""))

@@ -353,16 +353,14 @@ class QueryResolver(
                 val archived = mutableListOf<ArchivedMessage>()
                 for (i in 0 until jsonArray.size()) {
                     val obj = jsonArray.getJsonObject(i)
-                    val payloadBytes = when {
-                        format == DataFormat.JSON && obj.containsKey("payload_json") && obj.getString("payload_json") != null -> {
-                            obj.getString("payload_json").toByteArray(Charsets.UTF_8)
-                        }
-                        obj.containsKey("payload_base64") -> {
-                            java.util.Base64.getDecoder().decode(obj.getString("payload_base64"))
-                        }
-                        else -> {
-                            obj.getString("payload", "").toByteArray()
-                        }
+                    val payloadBytes = when (val p = obj.getValue("payload")) {
+                        is io.vertx.core.json.JsonObject -> p.encode().toByteArray(Charsets.UTF_8)
+                        is io.vertx.core.json.JsonArray -> p.encode().toByteArray(Charsets.UTF_8)
+                        is String -> p.toByteArray(Charsets.UTF_8)
+                        null -> obj.getString("payload_base64")?.let {
+                            java.util.Base64.getDecoder().decode(it)
+                        } ?: ByteArray(0)
+                        else -> p.toString().toByteArray(Charsets.UTF_8)
                     }
 
                     val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(

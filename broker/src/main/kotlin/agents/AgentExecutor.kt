@@ -657,10 +657,18 @@ class AgentExecutor(
         if (decimals != null && value is Number) {
             return "%.${decimals}f".format(value.toDouble())
         }
-        val str = value.toString()
+        val str = when (value) {
+            is io.vertx.core.json.JsonObject -> value.encode()
+            is io.vertx.core.json.JsonArray -> value.encode()
+            else -> value.toString()
+        }
         // Convert UTC timestamps to local time
         if (str.length > 18 && str[10] == 'T' && str.endsWith("Z")) {
             return toLocalTime(str)
+        }
+        // Escape CSV if the value contains characters that would break column separation.
+        if (str.contains(',') || str.contains('"') || str.contains('\n') || str.contains('\r')) {
+            return "\"" + str.replace("\"", "\"\"") + "\""
         }
         return str
     }
