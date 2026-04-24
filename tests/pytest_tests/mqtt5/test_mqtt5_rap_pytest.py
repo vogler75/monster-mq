@@ -16,7 +16,7 @@ from paho.mqtt.client import CallbackAPIVersion
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.subscribeoptions import SubscribeOptions
-from conftest import MessageCollector
+from pytest_tests.conftest import MessageCollector
 
 
 pytestmark = [

@@ -52,14 +52,14 @@ pip install -r requirements.txt
 pytest
 
 # Run by category
-pytest mqtt3/     # MQTT v3.1.1 tests
-pytest mqtt5/     # MQTT v5 tests
-pytest graphql/   # GraphQL API tests
-pytest opcua/     # OPC UA tests
-pytest database/  # Database backend tests
+pytest pytest_tests/mqtt3/     # MQTT v3.1.1 tests
+pytest pytest_tests/mqtt5/     # MQTT v5 tests
+pytest pytest_tests/graphql/   # GraphQL API tests
+pytest pytest_tests/opcua/     # OPC UA tests
+pytest pytest_tests/database/  # Database backend tests
 
 # Run single test
-pytest mqtt3/test_basic_pubsub.py::test_basic_pubsub_qos0 -v
+pytest pytest_tests/mqtt3/test_basic_pubsub.py::test_basic_pubsub_qos0 -v
 ```
 
 Test configuration via environment variables:
