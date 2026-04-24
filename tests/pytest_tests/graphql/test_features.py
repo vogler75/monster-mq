@@ -16,7 +16,7 @@ Optional environment variables for config-specific assertions:
 Default test run (no env vars) validates structure only and works with any config.
 
 Example with the config-no-features.yaml (MqttClient=true, all others false):
-    EXPECTED_FEATURES=MqttClient pytest graphql/test_features.py -v
+    EXPECTED_FEATURES=MqttClient pytest pytest_tests/graphql/test_features.py -v
 """
 
 import os
@@ -24,6 +24,7 @@ import pytest
 import requests
 
 GRAPHQL_URL = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
+pytestmark = [pytest.mark.graphql, pytest.mark.external, pytest.mark.integration]
 
 
 def _broker_available() -> bool:

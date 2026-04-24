@@ -10,6 +10,9 @@ Test Phase 5 (Message Expiry) across all 4 database backends:
 import sys
 import subprocess
 import time
+from pathlib import Path
+
+MQTT5_PHASE5_TEST = Path(__file__).resolve().parents[1] / "mqtt5" / "test_mqtt5_phase5_retained_expiry.py"
 
 def run_backend(name, port):
     """Test a single backend"""
@@ -19,7 +22,7 @@ def run_backend(name, port):
     
     try:
         result = subprocess.run(
-            [sys.executable, "test_mqtt5_phase5_retained_expiry.py", "--port", str(port)],
+            [sys.executable, str(MQTT5_PHASE5_TEST), "--port", str(port)],
             capture_output=True,
             text=True,
             timeout=30

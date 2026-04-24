@@ -23,7 +23,19 @@ pytest
 
 ### Run specific test file:
 ```bash
-pytest test_mqtt5_rap_pytest.py
+pytest pytest_tests/mqtt5/test_mqtt5_rap_pytest.py
+```
+
+### Run by category:
+```bash
+pytest pytest_tests/mqtt3/       # MQTT v3.1.1 tests
+pytest pytest_tests/mqtt5/       # MQTT v5 tests
+pytest pytest_tests/graphql/     # GraphQL API tests
+pytest pytest_tests/opcua/       # OPC UA tests
+pytest pytest_tests/database/    # Database backend tests
+pytest pytest_tests/rest/        # REST API tests
+pytest pytest_tests/latency/     # Latency tests
+pytest pytest_tests/queuing/     # Persistent queue tests
 ```
 
 ### Run tests by marker:
@@ -75,8 +87,15 @@ pytest --maxfail=3                 # Stop after 3 failures
 - `message_collector` - Helper for collecting/waiting for messages
 
 ### Test Files
-- `test_mqtt5_rap_pytest.py` - Retain As Published (example pytest conversion)
-- `test_mqtt5_*.py` - Original test files (can be run standalone or with pytest)
+- `pytest_tests/mqtt5/test_mqtt5_rap_pytest.py` - Retain As Published tests
+- `pytest_tests/mqtt5/test_mqtt5_*.py` - MQTT v5 protocol tests
+- `pytest_tests/mqtt3/test_*.py` - MQTT v3.1.1 protocol tests
+- `pytest_tests/graphql/test_*.py` - GraphQL HTTP and WebSocket tests
+- `pytest_tests/rest/test_*.py` - REST API tests
+- `pytest_tests/opcua/test_*.py` - OPC UA tests
+- `pytest_tests/database/test_*.py` - Database/backend tests
+- `pytest_tests/latency/test_*.py` - Latency tests
+- `pytest_tests/queuing/test_*.py` - Persistent queue tests
 
 ## Example Test Structure
 
@@ -115,7 +134,7 @@ python test_mqtt5_retain_as_published.py
 
 ### New way (pytest):
 ```bash
-pytest test_mqtt5_rap_pytest.py -v
+pytest pytest_tests/mqtt5/test_mqtt5_rap_pytest.py -v
 ```
 - Automatic test discovery
 - Shared fixtures (less code)
