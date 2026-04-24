@@ -1035,7 +1035,16 @@ MORE INFO:
                 val i3xEnabled = i3xConfig.getBoolean("Enabled", false)
                 val i3xPort = i3xConfig.getInteger("Port", 3002)
                 val i3xServer = if (i3xEnabled) {
-                    I3xServer("0.0.0.0", i3xPort, archiveHandler, sessionHandler, userManager)
+                    val brokerName = this.nodeName.ifBlank { "monstermq" }
+                    I3xServer(
+                        "0.0.0.0",
+                        i3xPort,
+                        brokerName,
+                        archiveHandler,
+                        sessionHandler,
+                        deviceConfigStore,
+                        userManager
+                    )
                 } else {
                     logger.fine("I3X API server is disabled in configuration")
                     null

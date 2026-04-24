@@ -311,7 +311,7 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 | OPC UA Server | 4840 |
 | GraphQL API, REST API, and Dashboard | 4000 |
 | MCP Server | 3000 |
-| I3X API | 3002 |
+| I3X API (v1, mounted at /i3x/v1) | 3002 |
 
 ## Example Usage
 

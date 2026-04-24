@@ -170,7 +170,7 @@ For device integration guidance, see `dev/plans/DEVICE_INTEGRATION.md`.
 | GraphQL + Dashboard | 4000 | HTTP API and web UI |
 | MCP Server | 3000 | Model Context Protocol for AI |
 | Grafana | 3001 | Grafana integration |
-| I3X API | 3002 | CESMII I3X manufacturing API |
+| I3X API | 3002 | i3X v1 manufacturing API (mounted at /i3x/v1 — see `dev/plans/I3X_SPEC.md`) |
 
 ### Configuration
 
@@ -188,7 +188,7 @@ Key configuration sections:
 ### Extension Points
 
 1. **MCP Server** (`extensions/McpServer.kt`, `extensions/McpHandler.kt`): Model Context Protocol integration for AI models
-2. **I3X API** (`extensions/I3xServer.kt`): CESMII I3X standard API for manufacturing data
+2. **I3X API** (`extensions/I3xServer.kt`): i3X v1 API for manufacturing data — mounted under `/i3x/v1`. See `dev/plans/I3X_SPEC.md` for the v1 envelope and endpoints.
 3. **REST API** (`extensions/RestApiServer.kt`): REST API endpoints for external integrations
 4. **Prometheus** (`extensions/PrometheusServer.kt`): Prometheus metrics exporter
 5. **OA4J Bridge** (`extensions/Oa4jBridge.kt`): WinCC OA Java API bridge for datapoint subscriptions
