@@ -464,6 +464,20 @@ class GraphQLServer(
             // Register query resolvers
             .type("Query") { builder ->
                 builder
+                    .dataFetcher("currentUser") { env ->
+                        val auth = AuthContextService.getAuthContext()
+                        val user = auth?.let { userManager.getUser(it.username) }
+                        java.util.concurrent.CompletableFuture.completedFuture(
+                            if (userManager.isUserManagementEnabled() && user?.enabled == true) {
+                                mapOf(
+                                    "username" to auth.username,
+                                    "isAdmin" to auth.isAdmin
+                                )
+                            } else {
+                                null
+                            }
+                        )
+                    }
                     .dataFetcher("currentValue", queryResolver.currentValue())
                     .dataFetcher("currentValues", queryResolver.currentValues())
                     .dataFetcher("retainedMessage", queryResolver.retainedMessage())

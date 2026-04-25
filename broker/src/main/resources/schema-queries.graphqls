@@ -1,4 +1,7 @@
 type Query {
+    # Authenticated dashboard/API user for the current request, or null when not logged in
+    currentUser: CurrentUser
+
     # Get the most recent value for a specific MQTT topic from the LastValueStore
     # Returns the latest published value with timestamp and QoS information
     # Useful for dashboard displays and current status monitoring

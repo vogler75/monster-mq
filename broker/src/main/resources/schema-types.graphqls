@@ -154,6 +154,11 @@ type BrokerConfig {
     kafkaServers: String!
 }
 
+type CurrentUser {
+    username: String!
+    isAdmin: Boolean!
+}
+
 # Represents a broker node in the MonsterMQ cluster
 # Each broker node runs independently and can handle MQTT clients, message processing, and data storage
 type Broker {

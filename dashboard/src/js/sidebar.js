@@ -14,6 +14,9 @@ class SidebarManager {
     async init() {
         this.injectFavicons();
         if (window.brokerManager) await window.brokerManager.ready();
+        const authStateValid = await this.validateCachedAuthState();
+        if (!authStateValid) return;
+        await this.updateAuthStatusIndicator();
         // Fetch enabled features; null = unknown (show all), [] = all disabled
         this._enabledFeatures = null;
         try {
@@ -48,6 +51,73 @@ class SidebarManager {
 
         // Load initial page based on current URL
         this.loadInitialPage();
+    }
+
+    async validateCachedAuthState() {
+        const token = safeStorage.getItem('monstermq_token');
+        const cachedAuthDisabled = token === 'null';
+        const cachedGuest = !token && safeStorage.getItem('monstermq_guest') === 'true';
+
+        if (!cachedAuthDisabled && !cachedGuest) return true;
+
+        try {
+            const endpoint = window.brokerManager ? window.brokerManager.getEndpoint() : '/graphql';
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    query: '{ broker { userManagementEnabled anonymousEnabled } }'
+                })
+            });
+            if (!response.ok) return true;
+
+            const result = await response.json();
+            const broker = result.data?.broker;
+            if (!broker) return true;
+
+            const userManagementEnabled = broker.userManagementEnabled === true;
+            const anonymousEnabled = broker.anonymousEnabled === true;
+
+            if (cachedAuthDisabled && userManagementEnabled) {
+                this.clearAuthState();
+                window.location.href = '/pages/login.html';
+                return false;
+            }
+
+            if (cachedGuest && !userManagementEnabled) {
+                safeStorage.removeItem('monstermq_guest');
+                safeStorage.setItem('monstermq_token', 'null');
+                safeStorage.setItem('monstermq_username', 'Anonymous');
+                safeStorage.setItem('monstermq_isAdmin', 'false');
+                safeStorage.setItem('monstermq_userManagementEnabled', 'false');
+                if (window.brokerManager) window.brokerManager.saveAuthForBroker();
+                return true;
+            }
+
+            if (cachedGuest && !anonymousEnabled) {
+                this.clearAuthState();
+                window.location.href = '/pages/login.html';
+                return false;
+            }
+        } catch (e) {
+            console.warn('Failed to validate cached auth state:', e);
+        }
+
+        return true;
+    }
+
+    clearAuthState() {
+        safeStorage.removeItem('monstermq_token');
+        safeStorage.removeItem('monstermq_username');
+        safeStorage.removeItem('monstermq_isAdmin');
+        safeStorage.removeItem('monstermq_guest');
+        safeStorage.removeItem('monstermq_userManagementEnabled');
+        if (window.brokerManager) window.brokerManager.saveAuthForBroker();
+        sessionStorage.clear();
+    }
+
+    async updateAuthStatusIndicator() {
+        await updateAuthStatusIndicator();
     }
 
     loadInitialPage() {
@@ -332,7 +402,11 @@ class SidebarManager {
         const token = safeStorage.getItem('monstermq_token');
         const isGuest = !token && safeStorage.getItem('monstermq_guest') === 'true';
 
-        if (isGuest) document.body.classList.add('read-only-mode');
+        if (isGuest) {
+            document.body.classList.add('read-only-mode');
+        } else {
+            document.body.classList.remove('read-only-mode');
+        }
         if (isAdmin) {
             const usersNavLink = document.getElementById('users-nav-link');
             if (usersNavLink) usersNavLink.style.display = '';
@@ -627,10 +701,115 @@ window.registerPageCleanup = function(fn) {
     }
 };
 
+// ===================== Header auth status =====================
+async function fetchBrokerAuthStatus() {
+    try {
+        const endpoint = window.brokerManager ? window.brokerManager.getEndpoint() : '/graphql';
+        const token = safeStorage.getItem('monstermq_token');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token && token !== 'null') {
+            headers.Authorization = 'Bearer ' + token;
+        }
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                query: '{ broker { userManagementEnabled anonymousEnabled } currentUser { username isAdmin } }'
+            })
+        });
+        if (!response.ok) return null;
+
+        const result = await response.json();
+        if (result.errors) {
+            return await fetchBrokerAuthStatusWithoutCurrentUser();
+        }
+        const broker = result.data?.broker;
+        if (!broker) return null;
+
+        return {
+            userManagementEnabled: broker.userManagementEnabled === true,
+            anonymousEnabled: broker.anonymousEnabled === true,
+            currentUser: result.data?.currentUser || null
+        };
+    } catch (e) {
+        console.warn('Failed to fetch broker auth status:', e);
+        return null;
+    }
+}
+
+async function fetchBrokerAuthStatusWithoutCurrentUser() {
+    try {
+        const endpoint = window.brokerManager ? window.brokerManager.getEndpoint() : '/graphql';
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: '{ broker { userManagementEnabled anonymousEnabled } }'
+            })
+        });
+        if (!response.ok) return null;
+
+        const result = await response.json();
+        const broker = result.data?.broker;
+        if (!broker) return null;
+
+        return {
+            userManagementEnabled: broker.userManagementEnabled === true,
+            anonymousEnabled: broker.anonymousEnabled === true,
+            currentUser: null
+        };
+    } catch (e) {
+        console.warn('Failed to fetch broker auth status:', e);
+        return null;
+    }
+}
+
+async function updateAuthStatusIndicator() {
+    let indicator = document.getElementById('auth-status-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'auth-status-indicator';
+    }
+    if (indicator.parentElement !== document.body) {
+        document.body.appendChild(indicator);
+    }
+
+    indicator.className = 'auth-status-indicator auth-status-checking';
+    indicator.textContent = 'Checking auth status...';
+    indicator.hidden = false;
+
+    const brokerAuth = await fetchBrokerAuthStatus();
+    const authEnabled = brokerAuth ? brokerAuth.userManagementEnabled : true;
+    const token = safeStorage.getItem('monstermq_token');
+    const isGuest = authEnabled && !token && safeStorage.getItem('monstermq_guest') === 'true';
+    const currentUser = authEnabled ? brokerAuth?.currentUser : null;
+
+    indicator.className = 'auth-status-indicator';
+
+    if (!authEnabled) {
+        indicator.textContent = 'Auth disabled - No login required';
+        indicator.classList.add('auth-status-disabled');
+    } else if (isGuest) {
+        indicator.textContent = 'Auth enabled - Not logged in - Read-only';
+        indicator.classList.add('auth-status-readonly');
+    } else if (currentUser) {
+        indicator.textContent = 'Auth enabled - Logged in as ' + currentUser.username;
+        indicator.classList.add('auth-status-logged-in');
+    } else {
+        indicator.textContent = 'Auth enabled - Not logged in';
+        indicator.classList.add('auth-status-readonly');
+    }
+
+    indicator.hidden = false;
+}
+
 // ===================== Init =====================
 document.addEventListener('DOMContentLoaded', () => {
     // Skip on login page
     if (window.location.pathname.endsWith('/pages/login.html')) return;
+
+    updateAuthStatusIndicator();
 
     if (window.__SPA_MODE) {
         // SPA mode (index.html): check auth, then init full SPA with navigation

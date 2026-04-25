@@ -31,6 +31,55 @@ body {
     overflow-x: hidden;
 }
 
+.auth-status-indicator {
+    position: fixed;
+    top: 0.65rem;
+    right: 1rem;
+    z-index: 10000;
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.5rem;
+    padding: 0.18rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    pointer-events: none;
+    max-width: 42vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.auth-status-indicator[hidden] {
+    display: none;
+}
+
+.auth-status-readonly {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.auth-status-logged-in {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+}
+
+.auth-status-disabled {
+    color: var(--theme-color-soft-text, #97bdd4);
+    background: rgba(151, 189, 212, 0.12);
+    border: 1px solid rgba(151, 189, 212, 0.35);
+}
+
+@media (max-width: 720px) {
+    .auth-status-indicator {
+        right: 0.75rem;
+        max-width: 45vw;
+    }
+}
+
 .container {
     max-width: 1400px;
     margin: 0 auto;

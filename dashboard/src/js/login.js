@@ -19,12 +19,12 @@ class LoginManager {
         await window.brokerManager.ready();
         this.populateBrokerSelect();
 
-        if (this.isLoggedIn()) {
+        var authStatus = await this.checkUserManagementEnabled();
+
+        if (authStatus?.userManagementEnabled && this.isLoggedIn()) {
             window.location.href = '/pages/dashboard.html';
             return;
         }
-
-        this.checkUserManagementEnabled();
 
         this.form.addEventListener('submit', (e) => this.handleLogin(e));
         this.brokerSelect.addEventListener('change', () => this.onBrokerSelectChange());
@@ -112,30 +112,32 @@ class LoginManager {
             this.showBrokerStatus('connected');
 
             if (!userManagementEnabled) {
-                console.log('User management is disabled, auto-logging in...');
-                this.autoLoginDisabled();
+                this.clearCachedAuthDisabled();
+                this.showAlert('Authentication is disabled on this broker. Submit with empty credentials to continue.', 'success');
             } else if (anonymousEnabled) {
+                this.clearCachedAuthDisabled();
                 var guestAccess = document.getElementById('guest-access');
                 if (guestAccess) guestAccess.style.display = 'block';
+            } else {
+                this.clearCachedAuthDisabled();
             }
+
+            return { userManagementEnabled: userManagementEnabled, anonymousEnabled: anonymousEnabled };
         } catch (error) {
             console.error('Error checking user management status:', error);
             this.showBrokerStatus('error', 'Cannot reach broker');
+            return null;
         }
     }
 
-    autoLoginDisabled() {
-        safeStorage.setItem('monstermq_token', 'null');
-        safeStorage.setItem('monstermq_username', 'Anonymous');
-        safeStorage.setItem('monstermq_isAdmin', 'false');
-        safeStorage.setItem('monstermq_userManagementEnabled', 'false');
-        window.brokerManager.saveAuthForBroker();
-
-        this.showAlert('Authentication disabled - accessing dashboard...', 'success');
-
-        setTimeout(function() {
-            window.location.href = '/pages/dashboard.html';
-        }, 500);
+    clearCachedAuthDisabled() {
+        if (safeStorage.getItem('monstermq_token') === 'null') {
+            safeStorage.removeItem('monstermq_token');
+            safeStorage.removeItem('monstermq_username');
+            safeStorage.removeItem('monstermq_isAdmin');
+            safeStorage.removeItem('monstermq_userManagementEnabled');
+            window.brokerManager.saveAuthForBroker();
+        }
     }
 
     enterGuestMode() {
@@ -217,9 +219,9 @@ class LoginManager {
 
                 var token = result.token || 'null';
                 safeStorage.setItem('monstermq_token', token);
-                safeStorage.setItem('monstermq_username', result.username);
-                safeStorage.setItem('monstermq_isAdmin', result.isAdmin);
-                safeStorage.setItem('monstermq_userManagementEnabled', 'true');
+                safeStorage.setItem('monstermq_username', result.token === null ? 'Anonymous' : result.username);
+                safeStorage.setItem('monstermq_isAdmin', result.token === null ? 'false' : result.isAdmin);
+                safeStorage.setItem('monstermq_userManagementEnabled', result.token === null ? 'false' : 'true');
                 window.brokerManager.saveAuthForBroker();
 
                 if (result.token === null) {
