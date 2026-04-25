@@ -262,6 +262,23 @@ class SidebarManager {
         });
 
         this._addBottomItems(ixMenu);
+        this._hideMenuExpandRow(ixMenu);
+    }
+
+    // Hide the top `.menu-buttons` row inside ix-menu's shadow DOM (the
+    // chevron toggle); we provide our own collapse/expand item in the
+    // bottom slot to reclaim the visual space.
+    _hideMenuExpandRow(ixMenu) {
+        const inject = () => {
+            const root = ixMenu.shadowRoot;
+            if (!root) { requestAnimationFrame(inject); return; }
+            if (root.querySelector('style[data-mmq-hide-menu-buttons]')) return;
+            const style = document.createElement('style');
+            style.setAttribute('data-mmq-hide-menu-buttons', 'true');
+            style.textContent = '.menu-buttons { display: none !important; }';
+            root.appendChild(style);
+        };
+        inject();
     }
 
     _addBottomItems(ixMenu) {
@@ -313,6 +330,28 @@ class SidebarManager {
             logoutItem.addEventListener('click', () => this.logout());
             ixMenu.appendChild(logoutItem);
         }
+
+        this._addCollapseToggle(ixMenu);
+    }
+
+    _addCollapseToggle(ixMenu) {
+        const item = document.createElement('ix-menu-item');
+        item.setAttribute('slot', 'bottom');
+
+        let expanded = ixMenu.hasAttribute('start-expanded');
+        const apply = () => {
+            item.setAttribute('label', expanded ? 'Collapse menu' : 'Expand menu');
+            item.setAttribute('icon', expanded ? 'double-chevron-left' : 'double-chevron-right');
+        };
+        apply();
+
+        item.addEventListener('click', () => ixMenu.toggleMenu());
+        ixMenu.addEventListener('expandChange', (e) => {
+            expanded = e.detail === true;
+            apply();
+        });
+
+        ixMenu.appendChild(item);
     }
 
     showBrokerSwitcher() {
