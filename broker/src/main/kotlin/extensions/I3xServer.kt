@@ -586,7 +586,7 @@ class I3xServer(
                 arr.add(obj)
             }
             arr
-        }).onSuccess { sendOk(ctx, it) }
+        }).onSuccess { result: JsonArray -> sendOk(ctx, result) }
             .onFailure { sendError(ctx, 500, "Objects query failed: ${it.message}") }
     }
 
@@ -604,7 +604,7 @@ class I3xServer(
                     else -> BulkItem.ok(id, buildObjectJson(id, snapshot, includeMetadata))
                 }
             }
-        }).onSuccess { @Suppress("UNCHECKED_CAST") sendBulk(ctx, it as List<BulkItem>) }
+        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
             .onFailure { sendError(ctx, 500, "Objects list failed: ${it.message}") }
     }
 
@@ -668,7 +668,7 @@ class I3xServer(
                 }
                 BulkItem.ok(id, results)
             }
-        }).onSuccess { @Suppress("UNCHECKED_CAST") sendBulk(ctx, it as List<BulkItem>) }
+        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
             .onFailure { sendError(ctx, 500, "Related query failed: ${it.message}") }
     }
 
@@ -785,7 +785,7 @@ class I3xServer(
                     else -> BulkItem.ok(id, buildValueResult(id, snapshot, maxDepth, 1))
                 }
             }
-        }).onSuccess { @Suppress("UNCHECKED_CAST") sendBulk(ctx, it as List<BulkItem>) }
+        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
             .onFailure { sendError(ctx, 500, "Value query failed: ${it.message}") }
     }
 
@@ -963,8 +963,8 @@ class I3xServer(
                 }
             }
             items
-        }).onSuccess { items ->
-            sendBulk(ctx, items as List<BulkItem>)
+        }).onSuccess { items: List<BulkItem> ->
+            sendBulk(ctx, items)
         }.onFailure { err ->
             logger.severe("I3X history query error: ${err.message}")
             sendError(ctx, 500, "History query failed: ${err.message}")
@@ -979,7 +979,7 @@ class I3xServer(
 
         vertx.executeBlocking(java.util.concurrent.Callable {
             historyForTopic(elementId, startTime, endTime, maxValues)
-        }).onSuccess { values ->
+        }).onSuccess { values: JsonArray ->
             sendOk(
                 ctx,
                 JsonObject().put("elementId", elementId).put("values", values)
