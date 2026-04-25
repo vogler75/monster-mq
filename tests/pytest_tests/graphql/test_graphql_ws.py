@@ -18,7 +18,7 @@ websockets = pytest.importorskip("websockets")
 pytestmark = [pytest.mark.graphql, pytest.mark.external, pytest.mark.integration]
 
 GRAPHQL_URL = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
-GRAPHQL_WS_URL = os.getenv("GRAPHQL_WS_URL", "ws://localhost:4000/graphqlws")
+GRAPHQL_WS_URL = os.getenv("GRAPHQL_WS_URL", "ws://localhost:4000/graphql")
 GRAPHQL_USERNAME = os.getenv("GRAPHQL_USERNAME", os.getenv("MQTT_USERNAME", "Admin"))
 GRAPHQL_PASSWORD = os.getenv("GRAPHQL_PASSWORD", os.getenv("MQTT_PASSWORD", "Admin"))
 REQUEST_TIMEOUT = 10

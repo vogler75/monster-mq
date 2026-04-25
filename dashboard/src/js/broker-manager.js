@@ -92,11 +92,11 @@ class BrokerManager {
 
     /**
      * Build the GraphQL WebSocket endpoint (always absolute — required by `new WebSocket(...)`).
-     * The broker registers WS at `endpoint + "ws"`.
+     * The broker serves HTTP and WebSocket on the same path.
      */
     getWsEndpoint(broker) {
         if (!broker) broker = this.getActiveBroker();
-        var path = (broker.endpoint || '/graphql') + 'ws';
+        var path = broker.endpoint || '/graphql';
         if (broker.host) {
             var protocol = broker.tls ? 'wss' : 'ws';
             return protocol + '://' + broker.host + ':' + broker.port + path;

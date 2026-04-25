@@ -135,9 +135,6 @@ class GraphQLServer(
             ctx.next()
         }
 
-        // Add body handler for POST requests
-        router.route().handler(BodyHandler.create())
-
         // Create GraphQL handler
         val graphQLHandler = GraphQLHandler.create(
             graphQL,
@@ -148,63 +145,55 @@ class GraphQLServer(
         // Create WebSocket handler for subscriptions
         val wsHandler = GraphQLWSHandler.create(graphQL)
 
-        // Setup routes with auth injection middleware and GraphQL handler
-        router.route(path).handler { ctx ->
-            try {
-                // Skip validation for OPTIONS requests (CORS preflight)
-                if (ctx.request().method() == HttpMethod.OPTIONS) {
-                    ctx.next()
-                    return@handler
-                }
+        // Both HTTP and WebSocket served from the same path. Vert.x rejects mixing
+        // BODY-priority (BodyHandler) and USER-priority (wsHandler/graphQLHandler)
+        // handlers on a single Route, so we register two routes on the same path:
+        //   1. WS-only route: GraphQLWSHandler intercepts WebSocket upgrades and
+        //      ends the request without calling ctx.next().
+        //   2. HTTP route: BodyHandler + auth + GraphQLHandler. Plain HTTP falls
+        //      through from route 1 (wsHandler calls ctx.next() for non-upgrades).
+        router.route(path).handler(wsHandler)
 
-                // Check if request has a query (only for POST requests)
-                if (ctx.request().method() == HttpMethod.POST) {
-                    val body = ctx.body()?.asJsonObject()
-                    if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
-                        ctx.response()
-                            .setStatusCode(400)
-                            .putHeader("content-type", "application/json")
-                            .end(JsonObject().put("error", "Query is missing").encode())
+        router.route(path)
+            .handler(BodyHandler.create())
+            .handler { ctx ->
+                try {
+                    // Skip validation for OPTIONS requests (CORS preflight)
+                    if (ctx.request().method() == HttpMethod.OPTIONS) {
+                        ctx.next()
                         return@handler
                     }
-                }
 
-                // Extract auth context and set it in thread-local for resolvers
-                val authCtx = authContext.extractAuthContext(ctx)
-                AuthContextService.setAuthContext(authCtx)
-                ctx.next()
-            } catch (e: Exception) {
-                logger.severe("Error setting auth context: ${e.message}")
-                ctx.fail(500, e)
+                    // Check if request has a query (only for POST requests)
+                    if (ctx.request().method() == HttpMethod.POST) {
+                        val body = ctx.body()?.asJsonObject()
+                        if (body == null || (!body.containsKey("query") && !body.containsKey("variables"))) {
+                            ctx.response()
+                                .setStatusCode(400)
+                                .putHeader("content-type", "application/json")
+                                .end(JsonObject().put("error", "Query is missing").encode())
+                            return@handler
+                        }
+                    }
+
+                    // Extract auth context and set it in thread-local for resolvers
+                    val authCtx = authContext.extractAuthContext(ctx)
+                    AuthContextService.setAuthContext(authCtx)
+                    ctx.next()
+                } catch (e: Exception) {
+                    logger.severe("Error setting auth context: ${e.message}")
+                    ctx.fail(500, e)
+                }
             }
-        }.handler(graphQLHandler).handler { ctx ->
-            // Clear auth context after GraphQL execution to prevent memory leaks
-            try {
-                AuthContextService.clearAuthContext()
-            } catch (e: Exception) {
-                logger.warning("Error clearing auth context: ${e.message}")
+            .handler(graphQLHandler)
+            .handler { _ ->
+                // Clear auth context after GraphQL execution to prevent memory leaks
+                try {
+                    AuthContextService.clearAuthContext()
+                } catch (e: Exception) {
+                    logger.warning("Error clearing auth context: ${e.message}")
+                }
             }
-            // Continue with response
-        }
-        // Add a preliminary handler to log incoming WebSocket handshake attempts
-        router.route("${path}ws").handler { ctx ->
-            try {
-                val req = ctx.request()
-                // Downgraded to FINE to reduce noise at INFO level
-                logger.finer("WS HANDSHAKE incoming: remote=${req.remoteAddress()} path=${req.path()} headers=${req.headers().entries().joinToString { it.key + '=' + it.value }}")
-            } catch (e: Exception) {
-                logger.severe("WS HANDSHAKE logging failed: ${e.message}")
-            }
-            ctx.next()
-        }.handler(wsHandler).failureHandler { failureCtx ->
-            val t = failureCtx.failure()
-            if (t != null) {
-                logger.severe("WS HANDSHAKE failure: ${t.message}")
-            } else {
-                logger.severe("WS HANDSHAKE failure with status ${failureCtx.statusCode()}")
-            }
-            failureCtx.next()
-        }
 
         // Health check endpoint
         router.get("/health").handler { ctx ->
@@ -258,7 +247,7 @@ class GraphQLServer(
                 .requestHandler(router)
                 .listen(port, "0.0.0.0")  // Explicitly specify port and host
                 .onSuccess {
-                    logger.info("GraphQL server started successfully on port $port with path $path and ${path}ws")
+                    logger.info("GraphQL server started successfully on port $port with path $path (HTTP + WebSocket)")
                 }
                 .onFailure { err ->
                     logger.severe("Failed to start GraphQL server: ${err.message}")

@@ -176,14 +176,11 @@ class AgentDetailMonitorManager {
     // ===================== WebSocket =====================
 
     getWebSocketUrl() {
+        if (window.brokerManager) return window.brokerManager.getWsEndpoint();
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
         const port = window.location.port;
-        if (window.brokerManager) {
-            const wsEndpoint = window.brokerManager.getWsEndpoint();
-            if (wsEndpoint) return `${protocol}//${host}${port ? ':' + port : ''}${wsEndpoint}`;
-        }
-        return `${protocol}//${host}${port ? ':' + port : ''}/graphqlws`;
+        return `${protocol}//${host}${port ? ':' + port : ''}/graphql`;
     }
 
     connectWebSocket() {

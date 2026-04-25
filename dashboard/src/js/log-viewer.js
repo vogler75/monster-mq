@@ -42,7 +42,7 @@ class LogViewer {
 
   getWebSocketUrl() {
     if (window.brokerManager) return window.brokerManager.getWsEndpoint();
-    return 'ws://localhost:4000/graphqlws';
+    return 'ws://localhost:4000/graphql';
   }
 
   init() {
