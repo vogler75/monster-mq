@@ -20,6 +20,7 @@
 
 # Parse script options (before --) and monster options (after --)
 BUILD_FIRST=false
+COMPILE_ONLY=false
 NO_RUN=false
 NO_KILL=false
 DASHBOARD_DEV=false
@@ -36,6 +37,9 @@ for arg in "$@"; do
             -build|-b)
                 BUILD_FIRST=true
                 ;;
+            -compile|-c)
+                COMPILE_ONLY=true
+                ;;
             -norun|-n)
                 NO_RUN=true
                 ;;
@@ -51,8 +55,9 @@ for arg in "$@"; do
                 echo "Usage: ./run.sh [SCRIPT_OPTIONS] [-- MONSTER_OPTIONS]"
                 echo ""
                 echo "Script Options (before --):"
-                echo "  -build, -b          Build dashboard and broker with Maven before starting"
-                echo "  -norun, -n          Do not run the broker (useful with -b for build-only)"
+                echo "  -build, -b          Build dashboard and package broker with Maven before starting"
+                echo "  -compile, -c        Only compile broker (mvn compile, no package, no dashboard); reuses target/dependencies"
+                echo "  -norun, -n          Do not run the broker (useful with -b/-c for build-only)"
                 echo "  -dashboard, -d      Build and serve dashboard from dashboard/dist/ (for live development)"
                 echo "  -nokill, -nk        Do not kill existing instances before starting"
                 echo "  -help, --help, -h   Show this help message"
@@ -64,6 +69,7 @@ for arg in "$@"; do
                 echo "Examples:"
                 echo "  ./run.sh                                        Start with default config"
                 echo "  ./run.sh -b                                     Build first, then start"
+                echo "  ./run.sh -c                                     Compile only (fast), then start"
                 echo "  ./run.sh -b -n                                  Build only, do not start"
                 echo "  ./run.sh -- -cluster                           Start with broker options"
                 echo "  ./run.sh -b -- -cluster                         Build and start in cluster mode"
@@ -108,6 +114,21 @@ if [ "$BUILD_FIRST" = true ]; then
         exit 1
     fi
     echo "Build completed successfully."
+fi
+
+# If -compile option is specified (and -b was not), only run mvn compile
+if [ "$COMPILE_ONLY" = true ] && [ "$BUILD_FIRST" = false ]; then
+    if [ ! -d "target/dependencies" ]; then
+        echo "target/dependencies/ not found. Run with -b once to populate it."
+        exit 1
+    fi
+    echo "Compiling MonsterMQ (no package)..."
+    mvn compile -DskipTests
+    if [ $? -ne 0 ]; then
+        echo "Compile failed!"
+        exit 1
+    fi
+    echo "Compile completed successfully."
 fi
 
 # Exit if -norun is set
