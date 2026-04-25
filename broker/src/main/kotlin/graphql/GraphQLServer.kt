@@ -135,9 +135,6 @@ class GraphQLServer(
             ctx.next()
         }
 
-        // Add body handler for POST requests
-        router.route().handler(BodyHandler.create())
-
         // Create GraphQL handler
         val graphQLHandler = GraphQLHandler.create(
             graphQL,
@@ -148,8 +145,12 @@ class GraphQLServer(
         // Create WebSocket handler for subscriptions
         val wsHandler = GraphQLWSHandler.create(graphQL)
 
-        // Setup routes with auth injection middleware and GraphQL handler
-        router.route(path).handler { ctx ->
+        // Setup routes with auth injection middleware and GraphQL handler.
+        // BodyHandler is scoped to the HTTP route only — registering it globally
+        // breaks WebSocket upgrades on `${path}ws` because it pauses the request
+        // and installs body handlers before `GraphQLWSHandler` can call
+        // `request.toWebSocket()`.
+        router.route(path).handler(BodyHandler.create()).handler { ctx ->
             try {
                 // Skip validation for OPTIONS requests (CORS preflight)
                 if (ctx.request().method() == HttpMethod.OPTIONS) {

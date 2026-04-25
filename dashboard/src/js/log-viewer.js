@@ -41,12 +41,8 @@ class LogViewer {
   }
 
   getWebSocketUrl() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname;
-    const port = window.location.port;
-    const portPart = port ? `:${port}` : '';
-    const wsPath = window.brokerManager ? window.brokerManager.getWsEndpoint() : '/graphqlws';
-    return `${protocol}//${host}${portPart}${wsPath}`;
+    if (window.brokerManager) return window.brokerManager.getWsEndpoint();
+    return 'ws://localhost:4000/graphqlws';
   }
 
   init() {

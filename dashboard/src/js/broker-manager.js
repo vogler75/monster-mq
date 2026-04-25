@@ -22,20 +22,23 @@ class BrokerManager {
     }
 
     async _loadConfig() {
-        // Always add a "Local" broker that uses relative URLs (same origin)
-        var localBroker = { name: 'Local', host: '', port: 0, tls: false, default: true };
+        // Default "Local" broker uses relative URLs (same origin as dashboard).
+        // Production strips brokers.json from the build, so this default applies
+        // when the broker serves the dashboard. In dev (Vite), brokers.json may
+        // include an explicit Local entry pointing at the actual broker URL.
+        var defaultLocal = { name: 'Local', host: '', port: 0, tls: false, default: true };
         try {
             var resp = await fetch('/config/brokers.json', { cache: 'no-store' });
             if (resp.ok) {
                 var remote = await resp.json();
-                // Filter out any "Local" entries from config — the auto-injected one takes precedence
-                this.configBrokers = [localBroker].concat(remote.filter(function(b) { return b.name !== 'Local'; }));
+                var hasUserLocal = remote.some(function(b) { return b.name === 'Local'; });
+                this.configBrokers = hasUserLocal ? remote : [defaultLocal].concat(remote);
             } else {
-                this.configBrokers = [localBroker];
+                this.configBrokers = [defaultLocal];
             }
         } catch (e) {
             console.warn('BrokerManager: could not load brokers.json', e);
-            this.configBrokers = [localBroker];
+            this.configBrokers = [defaultLocal];
         }
         this.loaded = true;
     }
@@ -74,18 +77,34 @@ class BrokerManager {
         return defaultBroker || all[0] || { name: 'Local', host: '', port: 4000, tls: false };
     }
 
-    /** Build the GraphQL endpoint path for a broker (always proxied) */
+    /**
+     * Build the GraphQL HTTP endpoint for a broker.
+     * - With explicit host: full URL `http(s)://host:port/endpoint`.
+     * - Without host (Local served by broker): relative path `endpoint`.
+     */
     getEndpoint(broker) {
         if (!broker) broker = this.getActiveBroker();
-        if (!broker.host) return '/graphql';
-        return '/broker-api/' + encodeURIComponent(broker.name) + '/graphql';
+        var path = broker.endpoint || '/graphql';
+        if (!broker.host) return path;
+        var protocol = broker.tls ? 'https' : 'http';
+        return protocol + '://' + broker.host + ':' + broker.port + path;
     }
 
-    /** Build the WebSocket endpoint path for a broker (always proxied) */
+    /**
+     * Build the GraphQL WebSocket endpoint (always absolute — required by `new WebSocket(...)`).
+     * The broker registers WS at `endpoint + "ws"`.
+     */
     getWsEndpoint(broker) {
         if (!broker) broker = this.getActiveBroker();
-        if (!broker.host) return '/graphqlws';
-        return '/broker-ws/' + encodeURIComponent(broker.name) + '/graphqlws';
+        var path = (broker.endpoint || '/graphql') + 'ws';
+        if (broker.host) {
+            var protocol = broker.tls ? 'wss' : 'ws';
+            return protocol + '://' + broker.host + ':' + broker.port + path;
+        }
+        // No host: derive from page origin (broker serves dashboard same-origin)
+        var pageProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var port = window.location.port ? ':' + window.location.port : '';
+        return pageProtocol + '//' + window.location.hostname + port + path;
     }
 
     /** Get a display label for a broker */
