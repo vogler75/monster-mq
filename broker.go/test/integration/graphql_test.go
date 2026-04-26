@@ -18,7 +18,7 @@ import (
 	"monstermq.io/edge/internal/config"
 )
 
-func startWithGraphQL(t *testing.T, mqttPort, gqlPort int) (*broker.Server, string) {
+func startWithGraphQL(t *testing.T, mqttPort, gqlPort int, cfgFns ...func(*config.Config)) (*broker.Server, string) {
 	t.Helper()
 	cfg := config.Default()
 	cfg.NodeID = fmt.Sprintf("g-%d", gqlPort)
@@ -29,6 +29,9 @@ func startWithGraphQL(t *testing.T, mqttPort, gqlPort int) (*broker.Server, stri
 	cfg.GraphQL.Port = gqlPort
 	cfg.Dashboard.Enabled = false
 	cfg.SQLite.Path = filepath.Join(t.TempDir(), "g.db")
+	for _, fn := range cfgFns {
+		fn(cfg)
+	}
 	srv, err := broker.New(cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("broker: %v", err)
@@ -185,7 +188,12 @@ func TestGraphQLArchiveGroupCRUD(t *testing.T) {
 }
 
 func TestGraphQLUserManagement(t *testing.T) {
-	srv, url := startWithGraphQL(t, 23005, 28005)
+	srv, url := startWithGraphQL(t, 23005, 28005, func(c *config.Config) {
+		// Login validation only kicks in with user management on; with it off,
+		// we deliberately accept any credentials so the dashboard works.
+		c.UserManagement.Enabled = true
+		c.UserManagement.AnonymousEnabled = false
+	})
 	defer srv.Close()
 
 	// Create

@@ -224,8 +224,22 @@ func parseTimeArg(s *string) (*time.Time, error) {
 // Mutations -----------------------------------------------------------------
 
 func (r *mutationResolver) Login(ctx context.Context, username, password string) (*generated.LoginResult, error) {
+	// When user management is disabled (or anonymous is permitted), the dashboard
+	// still calls login(). Match the JVM broker's response exactly so the UI
+	// behaves identically: success=true, no token, username="anonymous",
+	// isAdmin=true, message="Authentication disabled".
+	if !r.Cfg.UserManagement.Enabled || r.Cfg.UserManagement.AnonymousEnabled {
+		name := "anonymous"
+		admin := true
+		return &generated.LoginResult{
+			Success:  true,
+			Message:  ptr("Authentication disabled"),
+			Username: &name,
+			IsAdmin:  &admin,
+		}, nil
+	}
 	if r.Storage == nil {
-		return &generated.LoginResult{Success: false, Message: ptr("auth disabled")}, nil
+		return &generated.LoginResult{Success: false, Message: ptr("auth unavailable")}, nil
 	}
 	user, err := r.Storage.Users.ValidateCredentials(ctx, username, password)
 	if err != nil {
@@ -341,7 +355,7 @@ func (r *Resolver) brokerObj() *generated.Broker {
 		UserManagementEnabled: r.Cfg.UserManagement.Enabled,
 		AnonymousEnabled:      r.Cfg.UserManagement.AnonymousEnabled,
 		IsLeader:              true, IsCurrent: true,
-		EnabledFeatures: []string{"MqttBroker", "MqttBridge"},
+		EnabledFeatures: []string{"MqttClient"},
 	}
 }
 
