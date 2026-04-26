@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
@@ -27,7 +28,7 @@ class FlowMutations(
     fun createClass(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
-            if (!Monster.isFeatureEnabled("FlowEngine"))
+            if (!Monster.isFeatureEnabled(Features.FlowEngine))
                 return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("FlowEngine feature is not enabled on this node"))) }
 
             try {

@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.natsclient.NatsClientExtension
 import at.rocworks.stores.DeviceConfig
@@ -32,6 +33,8 @@ class NatsClientConfigMutations(
     fun createNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
@@ -70,6 +73,8 @@ class NatsClientConfigMutations(
     fun updateNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -113,6 +118,8 @@ class NatsClientConfigMutations(
     fun deleteNatsClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name") ?: run { future.complete(false); return@DataFetcher future }
                 deviceStore.getDevice(name).onComplete { existingRes ->
@@ -141,14 +148,20 @@ class NatsClientConfigMutations(
     // ── Start / Stop / Toggle ─────────────────────────────────────────────
 
     fun startNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Nats))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Nats feature is not enabled on this node"))
         toggleNatsClient(env.getArgument("name"), true)
     }
 
     fun stopNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Nats))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Nats feature is not enabled on this node"))
         toggleNatsClient(env.getArgument("name"), false)
     }
 
     fun toggleNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Nats))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Nats feature is not enabled on this node"))
         toggleNatsClient(env.getArgument("name"), env.getArgument("enabled"))
     }
 
@@ -181,6 +194,8 @@ class NatsClientConfigMutations(
     fun reassignNatsClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")
@@ -222,6 +237,8 @@ class NatsClientConfigMutations(
     fun addNatsClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }
@@ -263,6 +280,8 @@ class NatsClientConfigMutations(
     fun updateNatsClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }
@@ -307,6 +326,8 @@ class NatsClientConfigMutations(
     fun deleteNatsClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(errorResult("Nats feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }

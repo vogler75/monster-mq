@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.logger.JDBCLoggerExtension
 import at.rocworks.stores.DeviceConfig
@@ -27,6 +28,8 @@ class JDBCLoggerMutations(
     fun createJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Input is required"))) }
@@ -76,6 +79,8 @@ class JDBCLoggerMutations(
     fun updateJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -148,6 +153,8 @@ class JDBCLoggerMutations(
     fun deleteJDBCLogger(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name")
                 if (name == null) { future.complete(false); return@DataFetcher future }
@@ -173,16 +180,22 @@ class JDBCLoggerMutations(
     }
 
     fun startJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleJDBCLogger(name, true)
     }
 
     fun stopJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleJDBCLogger(name, false)
     }
 
     fun toggleJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         val enabled = env.getArgument<Boolean>("enabled")
         toggleJDBCLogger(name, enabled)
@@ -220,6 +233,8 @@ class JDBCLoggerMutations(
     fun reassignJDBCLogger(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("JdbcLogger feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")

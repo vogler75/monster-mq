@@ -185,6 +185,20 @@ Key configuration sections:
 - Auth/User management (UserStoreType, JwtSecret)
 - MCP Server requires an ArchiveGroup named "Default"
 
+### Feature Flags
+
+Optional broker features are toggled via the top-level `Features` block in `config.yaml`. The single source of truth is the `Features` object at `broker/src/main/kotlin/Features.kt` — every flag is declared as a `const val`, and `Features.all` is the list iterated at startup to compute `enabledFeatures` (see `Monster.kt`).
+
+**When you add a new feature, you MUST update all four of these:**
+
+1. **`broker/src/main/kotlin/Features.kt`** — add a `const val MyFeature = "MyFeature"` and append it to `Features.all`.
+2. **`broker/yaml-json-schema.json`** — add an entry under `properties.Features.properties` so the YAML config validates and IDEs autocomplete it.
+3. **`broker/src/main/kotlin/Monster.kt`** — gate the verticle deployment with `if (Monster.isFeatureEnabled(Features.MyFeature)) { ... }` next to the other deployments around line 1223+.
+4. **GraphQL resolvers** — gate every public DataFetcher method that backs the feature with `if (!Monster.isFeatureEnabled(Features.MyFeature)) return@DataFetcher ...`. Use the existing pattern in `FlowMutations.kt:30-31` for mutation results, return `emptyList()`/`null`/`false` for queries based on declared return type. Without this, disabled features still respond to GraphQL calls (the verticle is gone but the resolver is wired).
+5. **Dashboard sidebar** — if the feature has a UI page, add `feature: 'MyFeature'` to the sidebar item in `dashboard/src/js/sidebar.js` so it auto-hides when the broker reports the feature as disabled.
+
+The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard reads it once and hides any sidebar entry whose `feature:` flag isn't in the set.
+
 ### Extension Points
 
 1. **MCP Server** (`extensions/McpServer.kt`, `extensions/McpHandler.kt`): Model Context Protocol integration for AI models

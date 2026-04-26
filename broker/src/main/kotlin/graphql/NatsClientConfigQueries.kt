@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
@@ -25,6 +26,8 @@ class NatsClientConfigQueries(
     fun natsClients(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(emptyList()) }
             try {
                 val name = env.getArgument<String?>("name")
                 val nodeId = env.getArgument<String?>("node")
@@ -97,6 +100,8 @@ class NatsClientConfigQueries(
     fun natsClientMetrics(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.Nats))
+                return@DataFetcher future.apply { complete(emptyList()) }
             val natsClient = env.getSource<Map<String, Any>>()
             val deviceName = natsClient?.get("name") as? String
 

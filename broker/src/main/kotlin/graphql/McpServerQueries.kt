@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.McpServerConfig
 import at.rocworks.stores.DeviceConfig
@@ -18,6 +20,8 @@ class McpServerQueries(
     fun mcpServers(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher {
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.Mcp))
+                return@DataFetcher future.apply { complete(emptyList()) }
             deviceStore.getAllDevices().onComplete { result ->
                 if (result.succeeded()) {
                     val servers = result.result()
@@ -36,6 +40,8 @@ class McpServerQueries(
     fun mcpServer(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.Mcp))
+                return@DataFetcher future.apply { complete(null) }
             val name = env.getArgument<String>("name")!!
             deviceStore.getDevice(name).onComplete { result ->
                 if (result.succeeded()) {

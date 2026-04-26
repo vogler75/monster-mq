@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
@@ -24,6 +25,8 @@ class JDBCLoggerQueries(
     fun jdbcLoggers(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.JdbcLogger))
+                return@DataFetcher future.apply { complete(emptyList()) }
             try {
                 val name = env.getArgument<String?>("name")
                 val nodeId = env.getArgument<String?>("node")

@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.GenAiProviderConfig
 import at.rocworks.stores.DeviceConfig
@@ -21,6 +23,8 @@ class GenAiProviderQueries(
     fun genAiProviders(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { _ ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.GenAi))
+                return@DataFetcher future.apply { complete(emptyList()) }
             deviceStore.getAllDevices().onComplete { result ->
                 val dbProviders = if (result.succeeded()) {
                     result.result()
@@ -40,6 +44,8 @@ class GenAiProviderQueries(
     fun genAiProvider(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.GenAi))
+                return@DataFetcher future.apply { complete(null) }
             val name = env.getArgument<String>("name")!!
             deviceStore.getDevice(name).onComplete { result ->
                 if (result.succeeded() && result.result() != null &&

@@ -2,6 +2,7 @@ package at.rocworks.graphql
 
 import at.rocworks.Utils
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
 import at.rocworks.stores.IDeviceConfigStore
@@ -28,6 +29,8 @@ class Plc4xClientConfigMutations(
     fun create(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -116,6 +119,8 @@ class Plc4xClientConfigMutations(
     fun update(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -222,6 +227,8 @@ class Plc4xClientConfigMutations(
     fun delete(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(false) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -272,12 +279,16 @@ class Plc4xClientConfigMutations(
 
     fun start(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node")))
             toggle().get(env)
         }
     }
 
     fun stop(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node")))
             toggle().get(env)
         }
     }
@@ -285,6 +296,8 @@ class Plc4xClientConfigMutations(
     fun toggle(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -355,6 +368,8 @@ class Plc4xClientConfigMutations(
     fun reassign(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -445,6 +460,8 @@ class Plc4xClientConfigMutations(
     fun addAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -595,6 +612,8 @@ class Plc4xClientConfigMutations(
     fun updateAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -737,6 +756,8 @@ class Plc4xClientConfigMutations(
     fun deleteAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Plc4x))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Plc4x feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")

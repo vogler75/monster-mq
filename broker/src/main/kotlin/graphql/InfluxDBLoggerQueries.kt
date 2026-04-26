@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
@@ -18,6 +19,8 @@ class InfluxDBLoggerQueries(private val vertx: Vertx, private val deviceStore: I
     fun influxdbLoggers(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(emptyList()) }
             val name = env.getArgument<String?>("name")
             val nodeId = env.getArgument<String?>("node")
 
@@ -50,6 +53,8 @@ class InfluxDBLoggerQueries(private val vertx: Vertx, private val deviceStore: I
 
     fun influxdbLoggerMetrics(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher CompletableFuture.completedFuture(null)
             val source = env.getSource<Map<String, Any?>>() ?: return@DataFetcher CompletableFuture.completedFuture(null)
             val deviceName = source["name"] as String
             val future = CompletableFuture<Map<String, Any?>>()

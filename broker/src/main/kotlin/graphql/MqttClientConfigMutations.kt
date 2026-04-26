@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.stores.DeviceConfig
@@ -27,6 +28,8 @@ class MqttClientConfigMutations(
     fun createMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -115,6 +118,8 @@ class MqttClientConfigMutations(
     fun updateMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -223,6 +228,8 @@ class MqttClientConfigMutations(
     fun deleteMqttClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(false) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -273,6 +280,8 @@ class MqttClientConfigMutations(
 
     fun startMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             toggleMqttClient(name, true)
         }
@@ -280,6 +289,8 @@ class MqttClientConfigMutations(
 
     fun stopMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             toggleMqttClient(name, false)
         }
@@ -287,6 +298,8 @@ class MqttClientConfigMutations(
 
     fun toggleMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             val enabled = env.getArgument<Boolean>("enabled")
             toggleMqttClient(name, enabled)
@@ -361,6 +374,8 @@ class MqttClientConfigMutations(
     fun reassignMqttClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -447,6 +462,8 @@ class MqttClientConfigMutations(
     fun addMqttClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -605,6 +622,8 @@ class MqttClientConfigMutations(
     fun updateMqttClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -777,6 +796,8 @@ class MqttClientConfigMutations(
     fun deleteMqttClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.MqttClient))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")

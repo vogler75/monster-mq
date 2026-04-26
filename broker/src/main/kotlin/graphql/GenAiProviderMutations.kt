@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.GenAiProviderConfig
 import at.rocworks.stores.DeviceConfig
@@ -20,6 +22,8 @@ class GenAiProviderMutations(
     fun createProvider(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.GenAi))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "GenAi feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")!!
                 if (!name.matches(Regex("^[a-zA-Z0-9_-]+$"))) {
@@ -57,6 +61,8 @@ class GenAiProviderMutations(
     fun updateProvider(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.GenAi))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "GenAi feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")!!
                 val input = env.getArgument<Map<String, Any>>("input")!!
@@ -102,6 +108,8 @@ class GenAiProviderMutations(
     fun deleteProvider(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.GenAi))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name")!!
                 deviceStore.deleteDevice(name).onComplete { result ->

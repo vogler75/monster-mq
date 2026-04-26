@@ -2,6 +2,7 @@ package at.rocworks.graphql
 
 import at.rocworks.Utils
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.devices.OpcUaConnectionConfig
@@ -22,6 +23,8 @@ class OpcUaClientConfigQueries(
     fun opcUaDevices(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
                 val name = env.getArgument<String?>("name")

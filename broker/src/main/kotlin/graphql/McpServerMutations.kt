@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.McpServerConfig
 import at.rocworks.stores.DeviceConfig
@@ -20,6 +22,8 @@ class McpServerMutations(
     fun createMcpServer(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Mcp))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Mcp feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
                 val deviceConfig = inputToDeviceConfig(input)
@@ -40,6 +44,8 @@ class McpServerMutations(
     fun updateMcpServer(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Mcp))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Mcp feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")!!
                 val input = env.getArgument<Map<String, Any>>("input")!!
@@ -83,6 +89,8 @@ class McpServerMutations(
     fun deleteMcpServer(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Mcp))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name")!!
                 deviceStore.deleteDevice(name).onComplete { result ->

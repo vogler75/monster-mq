@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.neo4j.Neo4jExtension
 import at.rocworks.stores.DeviceConfig
@@ -27,6 +28,8 @@ class Neo4jClientConfigMutations(
     fun createNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Neo4j))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Input is required"))) }
@@ -76,6 +79,8 @@ class Neo4jClientConfigMutations(
     fun updateNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Neo4j))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -148,6 +153,8 @@ class Neo4jClientConfigMutations(
     fun deleteNeo4jClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Neo4j))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name")
                 if (name == null) { future.complete(false); return@DataFetcher future }
@@ -173,14 +180,20 @@ class Neo4jClientConfigMutations(
     }
 
     fun startNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Neo4j))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleNeo4jClient(name, true)
     }
     fun stopNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Neo4j))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleNeo4jClient(name, false)
     }
     fun toggleNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Neo4j))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         val enabled = env.getArgument<Boolean>("enabled")
         toggleNeo4jClient(name, enabled)
@@ -218,6 +231,8 @@ class Neo4jClientConfigMutations(
     fun reassignNeo4jClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Neo4j))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Neo4j feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")
