@@ -65,13 +65,17 @@ type ArchiveGroupResult struct {
 }
 
 type ArchivedMessage struct {
-	Topic         string         `json:"topic"`
-	Payload       *string        `json:"payload,omitempty"`
-	PayloadJSON   map[string]any `json:"payloadJson,omitempty"`
-	PayloadBase64 *string        `json:"payloadBase64,omitempty"`
-	Qos           int            `json:"qos"`
-	Timestamp     string         `json:"timestamp"`
-	ClientID      *string        `json:"clientId,omitempty"`
+	Topic                  string          `json:"topic"`
+	Payload                string          `json:"payload"`
+	Format                 DataFormat      `json:"format"`
+	Timestamp              int64           `json:"timestamp"`
+	Qos                    int             `json:"qos"`
+	ClientID               *string         `json:"clientId,omitempty"`
+	MessageExpiryInterval  *int64          `json:"messageExpiryInterval,omitempty"`
+	ContentType            *string         `json:"contentType,omitempty"`
+	ResponseTopic          *string         `json:"responseTopic,omitempty"`
+	PayloadFormatIndicator *bool           `json:"payloadFormatIndicator,omitempty"`
+	UserProperties         []*UserProperty `json:"userProperties,omitempty"`
 }
 
 type Broker struct {
@@ -277,13 +281,16 @@ type Query struct {
 }
 
 type RetainedMessage struct {
-	Topic         string         `json:"topic"`
-	Payload       *string        `json:"payload,omitempty"`
-	PayloadJSON   map[string]any `json:"payloadJson,omitempty"`
-	PayloadBase64 *string        `json:"payloadBase64,omitempty"`
-	Qos           int            `json:"qos"`
-	Timestamp     string         `json:"timestamp"`
-	ClientID      *string        `json:"clientId,omitempty"`
+	Topic                  string          `json:"topic"`
+	Payload                string          `json:"payload"`
+	Format                 DataFormat      `json:"format"`
+	Timestamp              int64           `json:"timestamp"`
+	Qos                    int             `json:"qos"`
+	MessageExpiryInterval  *int64          `json:"messageExpiryInterval,omitempty"`
+	ContentType            *string         `json:"contentType,omitempty"`
+	ResponseTopic          *string         `json:"responseTopic,omitempty"`
+	PayloadFormatIndicator *bool           `json:"payloadFormatIndicator,omitempty"`
+	UserProperties         []*UserProperty `json:"userProperties,omitempty"`
 }
 
 type Session struct {
@@ -344,34 +351,38 @@ type SystemLogEntry struct {
 }
 
 type Topic struct {
-	Name   string `json:"name"`
-	IsLeaf bool   `json:"isLeaf"`
+	Name   string      `json:"name"`
+	IsLeaf bool        `json:"isLeaf"`
+	Value  *TopicValue `json:"value,omitempty"`
 }
 
 type TopicUpdate struct {
-	Topic         string         `json:"topic"`
-	Payload       *string        `json:"payload,omitempty"`
-	PayloadJSON   map[string]any `json:"payloadJson,omitempty"`
-	PayloadBase64 *string        `json:"payloadBase64,omitempty"`
-	Qos           int            `json:"qos"`
-	Retain        bool           `json:"retain"`
-	Timestamp     string         `json:"timestamp"`
-	ClientID      *string        `json:"clientId,omitempty"`
+	Topic     string     `json:"topic"`
+	Payload   string     `json:"payload"`
+	Format    DataFormat `json:"format"`
+	Timestamp int64      `json:"timestamp"`
+	Qos       int        `json:"qos"`
+	Retained  bool       `json:"retained"`
+	ClientID  *string    `json:"clientId,omitempty"`
 }
 
 type TopicUpdateBulk struct {
-	Updates []*TopicUpdate `json:"updates"`
+	Updates   []*TopicUpdate `json:"updates"`
+	Count     int            `json:"count"`
+	Timestamp int64          `json:"timestamp"`
 }
 
 type TopicValue struct {
-	Topic         string         `json:"topic"`
-	Payload       *string        `json:"payload,omitempty"`
-	PayloadJSON   map[string]any `json:"payloadJson,omitempty"`
-	PayloadBase64 *string        `json:"payloadBase64,omitempty"`
-	Qos           int            `json:"qos"`
-	Timestamp     string         `json:"timestamp"`
-	ClientID      *string        `json:"clientId,omitempty"`
-	ArchiveGroup  *string        `json:"archiveGroup,omitempty"`
+	Topic                  string          `json:"topic"`
+	Payload                string          `json:"payload"`
+	Format                 DataFormat      `json:"format"`
+	Timestamp              int64           `json:"timestamp"`
+	Qos                    int             `json:"qos"`
+	MessageExpiryInterval  *int64          `json:"messageExpiryInterval,omitempty"`
+	ContentType            *string         `json:"contentType,omitempty"`
+	ResponseTopic          *string         `json:"responseTopic,omitempty"`
+	PayloadFormatIndicator *bool           `json:"payloadFormatIndicator,omitempty"`
+	UserProperties         []*UserProperty `json:"userProperties,omitempty"`
 }
 
 type UpdateACLRuleInput struct {
@@ -429,6 +440,11 @@ type UserManagementResult struct {
 	Message *string      `json:"message,omitempty"`
 	User    *UserInfo    `json:"user,omitempty"`
 	ACLRule *ACLRuleInfo `json:"aclRule,omitempty"`
+}
+
+type UserProperty struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type DataFormat string

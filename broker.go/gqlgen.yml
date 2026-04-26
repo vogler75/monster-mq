@@ -71,6 +71,9 @@ models:
       metrics:          { resolver: true }
       metricsHistory:   { resolver: true }
       connectionStatus: { resolver: true }
+  Topic:
+    fields:
+      value: { resolver: true }
   MqttClient:
     fields:
       metrics:        { resolver: true }

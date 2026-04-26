@@ -36,6 +36,7 @@ type ResolverRoot interface {
 	Session() SessionResolver
 	SessionMutations() SessionMutationsResolver
 	Subscription() SubscriptionResolver
+	Topic() TopicResolver
 	UserInfo() UserInfoResolver
 	UserManagementMutations() UserManagementMutationsResolver
 }
@@ -121,6 +122,9 @@ type SubscriptionResolver interface {
 	TopicUpdates(ctx context.Context, topicFilters []string, format *DataFormat) (<-chan *TopicUpdate, error)
 	TopicUpdatesBulk(ctx context.Context, topicFilters []string, format *DataFormat, timeoutMs *int, maxSize *int) (<-chan *TopicUpdateBulk, error)
 	SystemLogs(ctx context.Context, node *string, level *string, logger *string, thread *string, sourceClass *string, sourceMethod *string, message *string) (<-chan *SystemLogEntry, error)
+}
+type TopicResolver interface {
+	Value(ctx context.Context, obj *Topic, format *DataFormat) (*TopicValue, error)
 }
 type UserInfoResolver interface {
 	ACLRules(ctx context.Context, obj *UserInfo) ([]*ACLRuleInfo, error)
@@ -412,40 +416,58 @@ type MqttSubscription {
 # Topics / values
 # -----------------------------------------------------------------------------
 
+type UserProperty {
+    key: String!
+    value: String!
+}
+
 type Topic {
     name: String!
     isLeaf: Boolean!
+    value(format: DataFormat = JSON): TopicValue
+}
+
+# Payload conventions (matching the JVM broker exactly):
+#   format = JSON   → payload is the JSON text
+#   format = BINARY → payload is base64-encoded bytes
+type TopicValue {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type RetainedMessage {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    timestamp: String!
-    clientId: String
-}
-
-type TopicValue {
-    topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
-    qos: Int!
-    timestamp: String!
-    clientId: String
-    archiveGroup: String
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type ArchivedMessage {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    timestamp: String!
     clientId: String
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type AggregatedResult {
@@ -711,17 +733,18 @@ type MqttClientMutations {
 
 type TopicUpdate {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    retain: Boolean!
-    timestamp: String!
+    retained: Boolean!
     clientId: String
 }
 
 type TopicUpdateBulk {
     updates: [TopicUpdate!]!
+    count: Int!
+    timestamp: Long!
 }
 
 # -----------------------------------------------------------------------------
@@ -1565,6 +1588,17 @@ func (ec *executionContext) field_Subscription_topicUpdates_args(ctx context.Con
 		return nil, err
 	}
 	args["format"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Topic_value_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "format", ec.unmarshalODataFormat2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat)
+	if err != nil {
+		return nil, err
+	}
+	args["format"] = arg0
 	return args, nil
 }
 
@@ -2985,9 +3019,9 @@ func (ec *executionContext) _ArchivedMessage_payload(ctx context.Context, field 
 			return obj.Payload, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNString2string,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -3004,59 +3038,59 @@ func (ec *executionContext) fieldContext_ArchivedMessage_payload(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _ArchivedMessage_payloadJson(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _ArchivedMessage_format(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_ArchivedMessage_payloadJson,
+		ec.fieldContext_ArchivedMessage_format,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadJSON, nil
+			return obj.Format, nil
 		},
 		nil,
-		ec.marshalOJSON2map,
+		ec.marshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_ArchivedMessage_payloadJson(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_ArchivedMessage_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ArchivedMessage",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type DataFormat does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _ArchivedMessage_payloadBase64(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _ArchivedMessage_timestamp(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_ArchivedMessage_payloadBase64,
+		ec.fieldContext_ArchivedMessage_timestamp,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadBase64, nil
+			return obj.Timestamp, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNLong2int64,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_ArchivedMessage_payloadBase64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_ArchivedMessage_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ArchivedMessage",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Long does not have child fields")
 		},
 	}
 	return fc, nil
@@ -3091,35 +3125,6 @@ func (ec *executionContext) fieldContext_ArchivedMessage_qos(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _ArchivedMessage_timestamp(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_ArchivedMessage_timestamp,
-		func(ctx context.Context) (any, error) {
-			return obj.Timestamp, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_ArchivedMessage_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "ArchivedMessage",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _ArchivedMessage_clientId(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -3144,6 +3149,157 @@ func (ec *executionContext) fieldContext_ArchivedMessage_clientId(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchivedMessage_messageExpiryInterval(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchivedMessage_messageExpiryInterval,
+		func(ctx context.Context) (any, error) {
+			return obj.MessageExpiryInterval, nil
+		},
+		nil,
+		ec.marshalOLong2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchivedMessage_messageExpiryInterval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchivedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchivedMessage_contentType(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchivedMessage_contentType,
+		func(ctx context.Context) (any, error) {
+			return obj.ContentType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchivedMessage_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchivedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchivedMessage_responseTopic(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchivedMessage_responseTopic,
+		func(ctx context.Context) (any, error) {
+			return obj.ResponseTopic, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchivedMessage_responseTopic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchivedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchivedMessage_payloadFormatIndicator(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchivedMessage_payloadFormatIndicator,
+		func(ctx context.Context) (any, error) {
+			return obj.PayloadFormatIndicator, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchivedMessage_payloadFormatIndicator(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchivedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchivedMessage_userProperties(ctx context.Context, field graphql.CollectedField, obj *ArchivedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchivedMessage_userProperties,
+		func(ctx context.Context) (any, error) {
+			return obj.UserProperties, nil
+		},
+		nil,
+		ec.marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchivedMessage_userProperties(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchivedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_UserProperty_key(ctx, field)
+			case "value":
+				return ec.fieldContext_UserProperty_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserProperty", field.Name)
 		},
 	}
 	return fc, nil
@@ -7107,18 +7263,22 @@ func (ec *executionContext) fieldContext_Query_currentValue(ctx context.Context,
 				return ec.fieldContext_TopicValue_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_TopicValue_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_TopicValue_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_TopicValue_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_TopicValue_qos(ctx, field)
+			case "format":
+				return ec.fieldContext_TopicValue_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_TopicValue_timestamp(ctx, field)
-			case "clientId":
-				return ec.fieldContext_TopicValue_clientId(ctx, field)
-			case "archiveGroup":
-				return ec.fieldContext_TopicValue_archiveGroup(ctx, field)
+			case "qos":
+				return ec.fieldContext_TopicValue_qos(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_TopicValue_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_TopicValue_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_TopicValue_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_TopicValue_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_TopicValue_userProperties(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TopicValue", field.Name)
 		},
@@ -7166,18 +7326,22 @@ func (ec *executionContext) fieldContext_Query_currentValues(ctx context.Context
 				return ec.fieldContext_TopicValue_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_TopicValue_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_TopicValue_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_TopicValue_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_TopicValue_qos(ctx, field)
+			case "format":
+				return ec.fieldContext_TopicValue_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_TopicValue_timestamp(ctx, field)
-			case "clientId":
-				return ec.fieldContext_TopicValue_clientId(ctx, field)
-			case "archiveGroup":
-				return ec.fieldContext_TopicValue_archiveGroup(ctx, field)
+			case "qos":
+				return ec.fieldContext_TopicValue_qos(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_TopicValue_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_TopicValue_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_TopicValue_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_TopicValue_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_TopicValue_userProperties(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TopicValue", field.Name)
 		},
@@ -7225,16 +7389,22 @@ func (ec *executionContext) fieldContext_Query_retainedMessage(ctx context.Conte
 				return ec.fieldContext_RetainedMessage_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_RetainedMessage_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_RetainedMessage_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_RetainedMessage_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_RetainedMessage_qos(ctx, field)
+			case "format":
+				return ec.fieldContext_RetainedMessage_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_RetainedMessage_timestamp(ctx, field)
-			case "clientId":
-				return ec.fieldContext_RetainedMessage_clientId(ctx, field)
+			case "qos":
+				return ec.fieldContext_RetainedMessage_qos(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_RetainedMessage_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_RetainedMessage_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_RetainedMessage_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_RetainedMessage_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_RetainedMessage_userProperties(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RetainedMessage", field.Name)
 		},
@@ -7282,16 +7452,22 @@ func (ec *executionContext) fieldContext_Query_retainedMessages(ctx context.Cont
 				return ec.fieldContext_RetainedMessage_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_RetainedMessage_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_RetainedMessage_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_RetainedMessage_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_RetainedMessage_qos(ctx, field)
+			case "format":
+				return ec.fieldContext_RetainedMessage_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_RetainedMessage_timestamp(ctx, field)
-			case "clientId":
-				return ec.fieldContext_RetainedMessage_clientId(ctx, field)
+			case "qos":
+				return ec.fieldContext_RetainedMessage_qos(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_RetainedMessage_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_RetainedMessage_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_RetainedMessage_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_RetainedMessage_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_RetainedMessage_userProperties(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type RetainedMessage", field.Name)
 		},
@@ -7339,16 +7515,24 @@ func (ec *executionContext) fieldContext_Query_archivedMessages(ctx context.Cont
 				return ec.fieldContext_ArchivedMessage_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_ArchivedMessage_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_ArchivedMessage_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_ArchivedMessage_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_ArchivedMessage_qos(ctx, field)
+			case "format":
+				return ec.fieldContext_ArchivedMessage_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_ArchivedMessage_timestamp(ctx, field)
+			case "qos":
+				return ec.fieldContext_ArchivedMessage_qos(ctx, field)
 			case "clientId":
 				return ec.fieldContext_ArchivedMessage_clientId(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_ArchivedMessage_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_ArchivedMessage_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_ArchivedMessage_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_ArchivedMessage_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_ArchivedMessage_userProperties(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArchivedMessage", field.Name)
 		},
@@ -7543,6 +7727,8 @@ func (ec *executionContext) fieldContext_Query_browseTopics(ctx context.Context,
 				return ec.fieldContext_Topic_name(ctx, field)
 			case "isLeaf":
 				return ec.fieldContext_Topic_isLeaf(ctx, field)
+			case "value":
+				return ec.fieldContext_Topic_value(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Topic", field.Name)
 		},
@@ -8335,9 +8521,9 @@ func (ec *executionContext) _RetainedMessage_payload(ctx context.Context, field 
 			return obj.Payload, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNString2string,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -8354,59 +8540,59 @@ func (ec *executionContext) fieldContext_RetainedMessage_payload(_ context.Conte
 	return fc, nil
 }
 
-func (ec *executionContext) _RetainedMessage_payloadJson(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _RetainedMessage_format(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_RetainedMessage_payloadJson,
+		ec.fieldContext_RetainedMessage_format,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadJSON, nil
+			return obj.Format, nil
 		},
 		nil,
-		ec.marshalOJSON2map,
+		ec.marshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_RetainedMessage_payloadJson(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_RetainedMessage_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RetainedMessage",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type DataFormat does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _RetainedMessage_payloadBase64(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _RetainedMessage_timestamp(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_RetainedMessage_payloadBase64,
+		ec.fieldContext_RetainedMessage_timestamp,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadBase64, nil
+			return obj.Timestamp, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNLong2int64,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_RetainedMessage_payloadBase64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_RetainedMessage_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RetainedMessage",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Long does not have child fields")
 		},
 	}
 	return fc, nil
@@ -8441,23 +8627,52 @@ func (ec *executionContext) fieldContext_RetainedMessage_qos(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _RetainedMessage_timestamp(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _RetainedMessage_messageExpiryInterval(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_RetainedMessage_timestamp,
+		ec.fieldContext_RetainedMessage_messageExpiryInterval,
 		func(ctx context.Context) (any, error) {
-			return obj.Timestamp, nil
+			return obj.MessageExpiryInterval, nil
 		},
 		nil,
-		ec.marshalNString2string,
+		ec.marshalOLong2ᚖint64,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_RetainedMessage_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_RetainedMessage_messageExpiryInterval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RetainedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RetainedMessage_contentType(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RetainedMessage_contentType,
+		func(ctx context.Context) (any, error) {
+			return obj.ContentType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RetainedMessage_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RetainedMessage",
 		Field:      field,
@@ -8470,14 +8685,14 @@ func (ec *executionContext) fieldContext_RetainedMessage_timestamp(_ context.Con
 	return fc, nil
 }
 
-func (ec *executionContext) _RetainedMessage_clientId(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+func (ec *executionContext) _RetainedMessage_responseTopic(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_RetainedMessage_clientId,
+		ec.fieldContext_RetainedMessage_responseTopic,
 		func(ctx context.Context) (any, error) {
-			return obj.ClientID, nil
+			return obj.ResponseTopic, nil
 		},
 		nil,
 		ec.marshalOString2ᚖstring,
@@ -8486,7 +8701,7 @@ func (ec *executionContext) _RetainedMessage_clientId(ctx context.Context, field
 	)
 }
 
-func (ec *executionContext) fieldContext_RetainedMessage_clientId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_RetainedMessage_responseTopic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RetainedMessage",
 		Field:      field,
@@ -8494,6 +8709,70 @@ func (ec *executionContext) fieldContext_RetainedMessage_clientId(_ context.Cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RetainedMessage_payloadFormatIndicator(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RetainedMessage_payloadFormatIndicator,
+		func(ctx context.Context) (any, error) {
+			return obj.PayloadFormatIndicator, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RetainedMessage_payloadFormatIndicator(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RetainedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RetainedMessage_userProperties(ctx context.Context, field graphql.CollectedField, obj *RetainedMessage) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RetainedMessage_userProperties,
+		func(ctx context.Context) (any, error) {
+			return obj.UserProperties, nil
+		},
+		nil,
+		ec.marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RetainedMessage_userProperties(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RetainedMessage",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_UserProperty_key(ctx, field)
+			case "value":
+				return ec.fieldContext_UserProperty_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserProperty", field.Name)
 		},
 	}
 	return fc, nil
@@ -9358,16 +9637,14 @@ func (ec *executionContext) fieldContext_Subscription_topicUpdates(ctx context.C
 				return ec.fieldContext_TopicUpdate_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_TopicUpdate_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_TopicUpdate_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_TopicUpdate_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_TopicUpdate_qos(ctx, field)
-			case "retain":
-				return ec.fieldContext_TopicUpdate_retain(ctx, field)
+			case "format":
+				return ec.fieldContext_TopicUpdate_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_TopicUpdate_timestamp(ctx, field)
+			case "qos":
+				return ec.fieldContext_TopicUpdate_qos(ctx, field)
+			case "retained":
+				return ec.fieldContext_TopicUpdate_retained(ctx, field)
 			case "clientId":
 				return ec.fieldContext_TopicUpdate_clientId(ctx, field)
 			}
@@ -9415,6 +9692,10 @@ func (ec *executionContext) fieldContext_Subscription_topicUpdatesBulk(ctx conte
 			switch field.Name {
 			case "updates":
 				return ec.fieldContext_TopicUpdateBulk_updates(ctx, field)
+			case "count":
+				return ec.fieldContext_TopicUpdateBulk_count(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_TopicUpdateBulk_timestamp(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TopicUpdateBulk", field.Name)
 		},
@@ -9782,6 +10063,69 @@ func (ec *executionContext) fieldContext_Topic_isLeaf(_ context.Context, field g
 	return fc, nil
 }
 
+func (ec *executionContext) _Topic_value(ctx context.Context, field graphql.CollectedField, obj *Topic) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Topic_value,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Topic().Value(ctx, obj, fc.Args["format"].(*DataFormat))
+		},
+		nil,
+		ec.marshalOTopicValue2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐTopicValue,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Topic_value(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Topic",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "topic":
+				return ec.fieldContext_TopicValue_topic(ctx, field)
+			case "payload":
+				return ec.fieldContext_TopicValue_payload(ctx, field)
+			case "format":
+				return ec.fieldContext_TopicValue_format(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_TopicValue_timestamp(ctx, field)
+			case "qos":
+				return ec.fieldContext_TopicValue_qos(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_TopicValue_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_TopicValue_contentType(ctx, field)
+			case "responseTopic":
+				return ec.fieldContext_TopicValue_responseTopic(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_TopicValue_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_TopicValue_userProperties(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type TopicValue", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Topic_value_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _TopicUpdate_topic(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9821,9 +10165,9 @@ func (ec *executionContext) _TopicUpdate_payload(ctx context.Context, field grap
 			return obj.Payload, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNString2string,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -9840,59 +10184,59 @@ func (ec *executionContext) fieldContext_TopicUpdate_payload(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicUpdate_payloadJson(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicUpdate_format(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicUpdate_payloadJson,
+		ec.fieldContext_TopicUpdate_format,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadJSON, nil
+			return obj.Format, nil
 		},
 		nil,
-		ec.marshalOJSON2map,
+		ec.marshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicUpdate_payloadJson(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicUpdate_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicUpdate",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type DataFormat does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicUpdate_payloadBase64(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicUpdate_timestamp(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicUpdate_payloadBase64,
+		ec.fieldContext_TopicUpdate_timestamp,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadBase64, nil
+			return obj.Timestamp, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNLong2int64,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicUpdate_payloadBase64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicUpdate_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicUpdate",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Long does not have child fields")
 		},
 	}
 	return fc, nil
@@ -9927,14 +10271,14 @@ func (ec *executionContext) fieldContext_TopicUpdate_qos(_ context.Context, fiel
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicUpdate_retain(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicUpdate_retained(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicUpdate_retain,
+		ec.fieldContext_TopicUpdate_retained,
 		func(ctx context.Context) (any, error) {
-			return obj.Retain, nil
+			return obj.Retained, nil
 		},
 		nil,
 		ec.marshalNBoolean2bool,
@@ -9943,7 +10287,7 @@ func (ec *executionContext) _TopicUpdate_retain(ctx context.Context, field graph
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicUpdate_retain(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicUpdate_retained(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicUpdate",
 		Field:      field,
@@ -9951,35 +10295,6 @@ func (ec *executionContext) fieldContext_TopicUpdate_retain(_ context.Context, f
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _TopicUpdate_timestamp(ctx context.Context, field graphql.CollectedField, obj *TopicUpdate) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_TopicUpdate_timestamp,
-		func(ctx context.Context) (any, error) {
-			return obj.Timestamp, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_TopicUpdate_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "TopicUpdate",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10042,20 +10357,76 @@ func (ec *executionContext) fieldContext_TopicUpdateBulk_updates(_ context.Conte
 				return ec.fieldContext_TopicUpdate_topic(ctx, field)
 			case "payload":
 				return ec.fieldContext_TopicUpdate_payload(ctx, field)
-			case "payloadJson":
-				return ec.fieldContext_TopicUpdate_payloadJson(ctx, field)
-			case "payloadBase64":
-				return ec.fieldContext_TopicUpdate_payloadBase64(ctx, field)
-			case "qos":
-				return ec.fieldContext_TopicUpdate_qos(ctx, field)
-			case "retain":
-				return ec.fieldContext_TopicUpdate_retain(ctx, field)
+			case "format":
+				return ec.fieldContext_TopicUpdate_format(ctx, field)
 			case "timestamp":
 				return ec.fieldContext_TopicUpdate_timestamp(ctx, field)
+			case "qos":
+				return ec.fieldContext_TopicUpdate_qos(ctx, field)
+			case "retained":
+				return ec.fieldContext_TopicUpdate_retained(ctx, field)
 			case "clientId":
 				return ec.fieldContext_TopicUpdate_clientId(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type TopicUpdate", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TopicUpdateBulk_count(ctx context.Context, field graphql.CollectedField, obj *TopicUpdateBulk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TopicUpdateBulk_count,
+		func(ctx context.Context) (any, error) {
+			return obj.Count, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TopicUpdateBulk_count(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TopicUpdateBulk",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TopicUpdateBulk_timestamp(ctx context.Context, field graphql.CollectedField, obj *TopicUpdateBulk) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TopicUpdateBulk_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNLong2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_TopicUpdateBulk_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TopicUpdateBulk",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10100,9 +10471,9 @@ func (ec *executionContext) _TopicValue_payload(ctx context.Context, field graph
 			return obj.Payload, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNString2string,
 		true,
-		false,
+		true,
 	)
 }
 
@@ -10119,59 +10490,59 @@ func (ec *executionContext) fieldContext_TopicValue_payload(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicValue_payloadJson(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicValue_format(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicValue_payloadJson,
+		ec.fieldContext_TopicValue_format,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadJSON, nil
+			return obj.Format, nil
 		},
 		nil,
-		ec.marshalOJSON2map,
+		ec.marshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicValue_payloadJson(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicValue_format(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicValue",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type DataFormat does not have child fields")
 		},
 	}
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicValue_payloadBase64(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicValue_timestamp(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicValue_payloadBase64,
+		ec.fieldContext_TopicValue_timestamp,
 		func(ctx context.Context) (any, error) {
-			return obj.PayloadBase64, nil
+			return obj.Timestamp, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalNLong2int64,
 		true,
-		false,
+		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicValue_payloadBase64(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicValue_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicValue",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Long does not have child fields")
 		},
 	}
 	return fc, nil
@@ -10206,23 +10577,52 @@ func (ec *executionContext) fieldContext_TopicValue_qos(_ context.Context, field
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicValue_timestamp(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicValue_messageExpiryInterval(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicValue_timestamp,
+		ec.fieldContext_TopicValue_messageExpiryInterval,
 		func(ctx context.Context) (any, error) {
-			return obj.Timestamp, nil
+			return obj.MessageExpiryInterval, nil
 		},
 		nil,
-		ec.marshalNString2string,
+		ec.marshalOLong2ᚖint64,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicValue_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicValue_messageExpiryInterval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TopicValue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TopicValue_contentType(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TopicValue_contentType,
+		func(ctx context.Context) (any, error) {
+			return obj.ContentType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TopicValue_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicValue",
 		Field:      field,
@@ -10235,14 +10635,14 @@ func (ec *executionContext) fieldContext_TopicValue_timestamp(_ context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicValue_clientId(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicValue_responseTopic(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicValue_clientId,
+		ec.fieldContext_TopicValue_responseTopic,
 		func(ctx context.Context) (any, error) {
-			return obj.ClientID, nil
+			return obj.ResponseTopic, nil
 		},
 		nil,
 		ec.marshalOString2ᚖstring,
@@ -10251,7 +10651,7 @@ func (ec *executionContext) _TopicValue_clientId(ctx context.Context, field grap
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicValue_clientId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicValue_responseTopic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicValue",
 		Field:      field,
@@ -10264,30 +10664,65 @@ func (ec *executionContext) fieldContext_TopicValue_clientId(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _TopicValue_archiveGroup(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+func (ec *executionContext) _TopicValue_payloadFormatIndicator(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_TopicValue_archiveGroup,
+		ec.fieldContext_TopicValue_payloadFormatIndicator,
 		func(ctx context.Context) (any, error) {
-			return obj.ArchiveGroup, nil
+			return obj.PayloadFormatIndicator, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalOBoolean2ᚖbool,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_TopicValue_archiveGroup(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_TopicValue_payloadFormatIndicator(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "TopicValue",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _TopicValue_userProperties(ctx context.Context, field graphql.CollectedField, obj *TopicValue) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_TopicValue_userProperties,
+		func(ctx context.Context) (any, error) {
+			return obj.UserProperties, nil
+		},
+		nil,
+		ec.marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_TopicValue_userProperties(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "TopicValue",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_UserProperty_key(ctx, field)
+			case "value":
+				return ec.fieldContext_UserProperty_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserProperty", field.Name)
 		},
 	}
 	return fc, nil
@@ -11043,6 +11478,64 @@ func (ec *executionContext) fieldContext_UserManagementResult_aclRule(_ context.
 				return ec.fieldContext_AclRuleInfo_createdAt(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type AclRuleInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserProperty_key(ctx context.Context, field graphql.CollectedField, obj *UserProperty) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserProperty_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserProperty_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserProperty",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _UserProperty_value(ctx context.Context, field graphql.CollectedField, obj *UserProperty) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_UserProperty_value,
+		func(ctx context.Context) (any, error) {
+			return obj.Value, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_UserProperty_value(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "UserProperty",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -13722,12 +14215,11 @@ func (ec *executionContext) _ArchivedMessage(ctx context.Context, sel ast.Select
 			}
 		case "payload":
 			out.Values[i] = ec._ArchivedMessage_payload(ctx, field, obj)
-		case "payloadJson":
-			out.Values[i] = ec._ArchivedMessage_payloadJson(ctx, field, obj)
-		case "payloadBase64":
-			out.Values[i] = ec._ArchivedMessage_payloadBase64(ctx, field, obj)
-		case "qos":
-			out.Values[i] = ec._ArchivedMessage_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "format":
+			out.Values[i] = ec._ArchivedMessage_format(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -13736,8 +14228,23 @@ func (ec *executionContext) _ArchivedMessage(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "qos":
+			out.Values[i] = ec._ArchivedMessage_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "clientId":
 			out.Values[i] = ec._ArchivedMessage_clientId(ctx, field, obj)
+		case "messageExpiryInterval":
+			out.Values[i] = ec._ArchivedMessage_messageExpiryInterval(ctx, field, obj)
+		case "contentType":
+			out.Values[i] = ec._ArchivedMessage_contentType(ctx, field, obj)
+		case "responseTopic":
+			out.Values[i] = ec._ArchivedMessage_responseTopic(ctx, field, obj)
+		case "payloadFormatIndicator":
+			out.Values[i] = ec._ArchivedMessage_payloadFormatIndicator(ctx, field, obj)
+		case "userProperties":
+			out.Values[i] = ec._ArchivedMessage_userProperties(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -15649,12 +16156,11 @@ func (ec *executionContext) _RetainedMessage(ctx context.Context, sel ast.Select
 			}
 		case "payload":
 			out.Values[i] = ec._RetainedMessage_payload(ctx, field, obj)
-		case "payloadJson":
-			out.Values[i] = ec._RetainedMessage_payloadJson(ctx, field, obj)
-		case "payloadBase64":
-			out.Values[i] = ec._RetainedMessage_payloadBase64(ctx, field, obj)
-		case "qos":
-			out.Values[i] = ec._RetainedMessage_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "format":
+			out.Values[i] = ec._RetainedMessage_format(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -15663,8 +16169,21 @@ func (ec *executionContext) _RetainedMessage(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "clientId":
-			out.Values[i] = ec._RetainedMessage_clientId(ctx, field, obj)
+		case "qos":
+			out.Values[i] = ec._RetainedMessage_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageExpiryInterval":
+			out.Values[i] = ec._RetainedMessage_messageExpiryInterval(ctx, field, obj)
+		case "contentType":
+			out.Values[i] = ec._RetainedMessage_contentType(ctx, field, obj)
+		case "responseTopic":
+			out.Values[i] = ec._RetainedMessage_responseTopic(ctx, field, obj)
+		case "payloadFormatIndicator":
+			out.Values[i] = ec._RetainedMessage_payloadFormatIndicator(ctx, field, obj)
+		case "userProperties":
+			out.Values[i] = ec._RetainedMessage_userProperties(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16179,13 +16698,46 @@ func (ec *executionContext) _Topic(ctx context.Context, sel ast.SelectionSet, ob
 		case "name":
 			out.Values[i] = ec._Topic_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "isLeaf":
 			out.Values[i] = ec._Topic_isLeaf(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "value":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Topic_value(ctx, field, obj)
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16227,22 +16779,26 @@ func (ec *executionContext) _TopicUpdate(ctx context.Context, sel ast.SelectionS
 			}
 		case "payload":
 			out.Values[i] = ec._TopicUpdate_payload(ctx, field, obj)
-		case "payloadJson":
-			out.Values[i] = ec._TopicUpdate_payloadJson(ctx, field, obj)
-		case "payloadBase64":
-			out.Values[i] = ec._TopicUpdate_payloadBase64(ctx, field, obj)
-		case "qos":
-			out.Values[i] = ec._TopicUpdate_qos(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "retain":
-			out.Values[i] = ec._TopicUpdate_retain(ctx, field, obj)
+		case "format":
+			out.Values[i] = ec._TopicUpdate_format(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
 		case "timestamp":
 			out.Values[i] = ec._TopicUpdate_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "qos":
+			out.Values[i] = ec._TopicUpdate_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "retained":
+			out.Values[i] = ec._TopicUpdate_retained(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -16287,6 +16843,16 @@ func (ec *executionContext) _TopicUpdateBulk(ctx context.Context, sel ast.Select
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "count":
+			out.Values[i] = ec._TopicUpdateBulk_count(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._TopicUpdateBulk_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16328,12 +16894,11 @@ func (ec *executionContext) _TopicValue(ctx context.Context, sel ast.SelectionSe
 			}
 		case "payload":
 			out.Values[i] = ec._TopicValue_payload(ctx, field, obj)
-		case "payloadJson":
-			out.Values[i] = ec._TopicValue_payloadJson(ctx, field, obj)
-		case "payloadBase64":
-			out.Values[i] = ec._TopicValue_payloadBase64(ctx, field, obj)
-		case "qos":
-			out.Values[i] = ec._TopicValue_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "format":
+			out.Values[i] = ec._TopicValue_format(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -16342,10 +16907,21 @@ func (ec *executionContext) _TopicValue(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "clientId":
-			out.Values[i] = ec._TopicValue_clientId(ctx, field, obj)
-		case "archiveGroup":
-			out.Values[i] = ec._TopicValue_archiveGroup(ctx, field, obj)
+		case "qos":
+			out.Values[i] = ec._TopicValue_qos(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageExpiryInterval":
+			out.Values[i] = ec._TopicValue_messageExpiryInterval(ctx, field, obj)
+		case "contentType":
+			out.Values[i] = ec._TopicValue_contentType(ctx, field, obj)
+		case "responseTopic":
+			out.Values[i] = ec._TopicValue_responseTopic(ctx, field, obj)
+		case "payloadFormatIndicator":
+			out.Values[i] = ec._TopicValue_payloadFormatIndicator(ctx, field, obj)
+		case "userProperties":
+			out.Values[i] = ec._TopicValue_userProperties(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16776,6 +17352,50 @@ func (ec *executionContext) _UserManagementResult(ctx context.Context, sel ast.S
 			out.Values[i] = ec._UserManagementResult_user(ctx, field, obj)
 		case "aclRule":
 			out.Values[i] = ec._UserManagementResult_aclRule(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var userPropertyImplementors = []string{"UserProperty"}
+
+func (ec *executionContext) _UserProperty(ctx context.Context, sel ast.SelectionSet, obj *UserProperty) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, userPropertyImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("UserProperty")
+		case "key":
+			out.Values[i] = ec._UserProperty_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "value":
+			out.Values[i] = ec._UserProperty_value(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -17375,6 +17995,16 @@ func (ec *executionContext) unmarshalNCreateArchiveGroupInput2monstermqᚗioᚋe
 func (ec *executionContext) unmarshalNCreateUserInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐCreateUserInput(ctx context.Context, v any) (CreateUserInput, error) {
 	res, err := ec.unmarshalInputCreateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat(ctx context.Context, v any) (DataFormat, error) {
+	var res DataFormat
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNDataFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐDataFormat(ctx context.Context, sel ast.SelectionSet, v DataFormat) graphql.Marshaler {
+	return v
 }
 
 func (ec *executionContext) unmarshalNFloat2float64(ctx context.Context, v any) (float64, error) {
@@ -18103,6 +18733,16 @@ func (ec *executionContext) marshalNUserManagementResult2ᚖmonstermqᚗioᚋedg
 	return ec._UserManagementResult(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNUserProperty2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserProperty(ctx context.Context, sel ast.SelectionSet, v *UserProperty) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._UserProperty(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -18523,6 +19163,25 @@ func (ec *executionContext) marshalOUserInfo2ᚖmonstermqᚗioᚋedgeᚋinternal
 		return graphql.Null
 	}
 	return ec._UserInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyᚄ(ctx context.Context, sel ast.SelectionSet, v []*UserProperty) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNUserProperty2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserProperty(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

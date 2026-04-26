@@ -77,6 +77,7 @@ func (r *Resolver) MqttClient() generated.MqttClientResolver { return &mqttClien
 func (r *Resolver) MqttClientMutations() generated.MqttClientMutationsResolver {
 	return &mqttClientMutationsResolver{r}
 }
+func (r *Resolver) Topic() generated.TopicResolver { return &topicResolver{r} }
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
@@ -90,6 +91,12 @@ type userManagementMutationsResolver struct{ *Resolver }
 type sessionMutationsResolver struct{ *Resolver }
 type mqttClientResolver struct{ *Resolver }
 type mqttClientMutationsResolver struct{ *Resolver }
+type topicResolver struct{ *Resolver }
+
+func (r *topicResolver) Value(ctx context.Context, obj *generated.Topic, format *generated.DataFormat) (*generated.TopicValue, error) {
+	q := &queryResolver{r.Resolver}
+	return q.CurrentValue(ctx, obj.Name, format, nil)
+}
 
 // Helpers -------------------------------------------------------------------
 
@@ -102,44 +109,27 @@ func intPtr(p *int, def int) int      { if p == nil { return def }; return *p }
 func ptrIfNotEmpty(s string) *string  { if s == "" { return nil }; return &s }
 func derefStr(s *string) string       { if s == nil { return "" }; return *s }
 
-func encodePayload(raw []byte, format *generated.DataFormat) (*string, map[string]any, *string) {
+// encodePayload returns the payload string and the format it was encoded in,
+// matching the JVM broker's contract:
+//
+//	requested = JSON   → return (json text, JSON) if it parses as JSON,
+//	                     otherwise fall through to BINARY
+//	requested = BINARY → return (base64, BINARY)
+//	requested = nil    → default to JSON behaviour (try JSON first, then base64)
+func encodePayload(raw []byte, requested *generated.DataFormat) (string, generated.DataFormat) {
 	if raw == nil {
-		return nil, nil, nil
+		return "", generated.DataFormatJSON
 	}
-	wantJSON := format != nil && *format == generated.DataFormatJSON
-	wantBinary := format != nil && *format == generated.DataFormatBinary
-	if wantJSON {
-		var m map[string]any
-		if err := json.Unmarshal(raw, &m); err == nil {
-			return nil, m, nil
-		}
+	wantBinary := requested != nil && *requested == generated.DataFormatBinary
+	if !wantBinary && isJSON(raw) {
+		return string(raw), generated.DataFormatJSON
 	}
-	if wantBinary {
-		s := base64.StdEncoding.EncodeToString(raw)
-		return nil, nil, &s
-	}
-	var m map[string]any
-	if json.Unmarshal(raw, &m) == nil {
-		return nil, m, nil
-	}
-	if isPrintable(raw) {
-		s := string(raw)
-		return &s, nil, nil
-	}
-	s := base64.StdEncoding.EncodeToString(raw)
-	return nil, nil, &s
+	return base64.StdEncoding.EncodeToString(raw), generated.DataFormatBinary
 }
 
-func isPrintable(b []byte) bool {
-	for _, c := range b {
-		if c == '\t' || c == '\r' || c == '\n' {
-			continue
-		}
-		if c < 0x20 || c == 0x7f {
-			return false
-		}
-	}
-	return true
+func isJSON(raw []byte) bool {
+	var v any
+	return json.Unmarshal(raw, &v) == nil
 }
 
 func decodePayload(in *generated.PublishInput) ([]byte, error) {
@@ -433,27 +423,57 @@ func (r *queryResolver) RetainedMessage(ctx context.Context, topic string, forma
 	if err != nil || msg == nil {
 		return nil, err
 	}
-	payload, payloadJSON, b64 := encodePayload(msg.Payload, format)
-	cid := msg.ClientID
-	return &generated.RetainedMessage{
-		Topic: msg.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-		Qos: int(msg.QoS), Timestamp: formatTime(msg.Time), ClientID: &cid,
-	}, nil
+	return brokerMsgToRetained(*msg, format), nil
 }
 
 func (r *queryResolver) RetainedMessages(ctx context.Context, topicFilter string, format *generated.DataFormat, limit *int) ([]*generated.RetainedMessage, error) {
 	max := intPtr(limit, 1000)
 	out := []*generated.RetainedMessage{}
 	err := r.Storage.Retained.FindMatchingMessages(ctx, topicFilter, func(m stores.BrokerMessage) bool {
-		payload, payloadJSON, b64 := encodePayload(m.Payload, format)
-		cid := m.ClientID
-		out = append(out, &generated.RetainedMessage{
-			Topic: m.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-			Qos: int(m.QoS), Timestamp: formatTime(m.Time), ClientID: &cid,
-		})
+		out = append(out, brokerMsgToRetained(m, format))
 		return len(out) < max
 	})
 	return out, err
+}
+
+func brokerMsgToRetained(m stores.BrokerMessage, fmt *generated.DataFormat) *generated.RetainedMessage {
+	payload, fm := encodePayload(m.Payload, fmt)
+	r := &generated.RetainedMessage{
+		Topic:          m.TopicName,
+		Payload:        payload,
+		Format:         fm,
+		Timestamp:      m.Time.UnixMilli(),
+		Qos:            int(m.QoS),
+		UserProperties: userPropsTo(m.UserProperties),
+	}
+	if m.MessageExpiryInterval != nil {
+		v := int64(*m.MessageExpiryInterval)
+		r.MessageExpiryInterval = &v
+	}
+	if m.ContentType != "" {
+		ct := m.ContentType
+		r.ContentType = &ct
+	}
+	if m.ResponseTopic != "" {
+		rt := m.ResponseTopic
+		r.ResponseTopic = &rt
+	}
+	if m.PayloadFormatIndicator != nil {
+		v := *m.PayloadFormatIndicator != 0
+		r.PayloadFormatIndicator = &v
+	}
+	return r
+}
+
+func userPropsTo(p map[string]string) []*generated.UserProperty {
+	if len(p) == 0 {
+		return nil
+	}
+	out := make([]*generated.UserProperty, 0, len(p))
+	for k, v := range p {
+		out = append(out, &generated.UserProperty{Key: k, Value: v})
+	}
+	return out
 }
 
 func (r *queryResolver) CurrentValue(ctx context.Context, topic string, format *generated.DataFormat, archiveGroup *string) (*generated.TopicValue, error) {
@@ -465,12 +485,7 @@ func (r *queryResolver) CurrentValue(ctx context.Context, topic string, format *
 	if err != nil || msg == nil {
 		return nil, err
 	}
-	payload, payloadJSON, b64 := encodePayload(msg.Payload, format)
-	cid := msg.ClientID
-	return &generated.TopicValue{
-		Topic: msg.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-		Qos: int(msg.QoS), Timestamp: formatTime(msg.Time), ClientID: &cid, ArchiveGroup: archiveGroup,
-	}, nil
+	return brokerMsgToTopicValue(*msg, format), nil
 }
 
 func (r *queryResolver) CurrentValues(ctx context.Context, topicFilter string, format *generated.DataFormat, limit *int, archiveGroup *string) ([]*generated.TopicValue, error) {
@@ -481,15 +496,39 @@ func (r *queryResolver) CurrentValues(ctx context.Context, topicFilter string, f
 	max := intPtr(limit, 1000)
 	out := []*generated.TopicValue{}
 	err := store.FindMatchingMessages(ctx, topicFilter, func(m stores.BrokerMessage) bool {
-		payload, payloadJSON, b64 := encodePayload(m.Payload, format)
-		cid := m.ClientID
-		out = append(out, &generated.TopicValue{
-			Topic: m.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-			Qos: int(m.QoS), Timestamp: formatTime(m.Time), ClientID: &cid, ArchiveGroup: archiveGroup,
-		})
+		out = append(out, brokerMsgToTopicValue(m, format))
 		return len(out) < max
 	})
 	return out, err
+}
+
+func brokerMsgToTopicValue(m stores.BrokerMessage, fmt *generated.DataFormat) *generated.TopicValue {
+	payload, fm := encodePayload(m.Payload, fmt)
+	tv := &generated.TopicValue{
+		Topic:          m.TopicName,
+		Payload:        payload,
+		Format:         fm,
+		Timestamp:      m.Time.UnixMilli(),
+		Qos:            int(m.QoS),
+		UserProperties: userPropsTo(m.UserProperties),
+	}
+	if m.MessageExpiryInterval != nil {
+		v := int64(*m.MessageExpiryInterval)
+		tv.MessageExpiryInterval = &v
+	}
+	if m.ContentType != "" {
+		ct := m.ContentType
+		tv.ContentType = &ct
+	}
+	if m.ResponseTopic != "" {
+		rt := m.ResponseTopic
+		tv.ResponseTopic = &rt
+	}
+	if m.PayloadFormatIndicator != nil {
+		v := *m.PayloadFormatIndicator != 0
+		tv.PayloadFormatIndicator = &v
+	}
+	return tv
 }
 
 func (r *Resolver) lastValueStore(group *string) stores.MessageStore {
@@ -531,11 +570,15 @@ func (r *queryResolver) ArchivedMessages(ctx context.Context, topicFilter string
 	}
 	out := make([]*generated.ArchivedMessage, 0, len(rows))
 	for _, row := range rows {
-		payload, payloadJSON, b64 := encodePayload(row.Payload, format)
+		payload, fm := encodePayload(row.Payload, format)
 		cid := row.ClientID
 		out = append(out, &generated.ArchivedMessage{
-			Topic: row.Topic, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-			Qos: int(row.QoS), Timestamp: formatTime(row.Timestamp), ClientID: &cid,
+			Topic:     row.Topic,
+			Payload:   payload,
+			Format:    fm,
+			Timestamp: row.Timestamp.UnixMilli(),
+			Qos:       int(row.QoS),
+			ClientID:  &cid,
 		})
 	}
 	return out, nil
@@ -561,31 +604,60 @@ func (r *queryResolver) SearchTopics(ctx context.Context, pattern string, limit 
 	return out, err
 }
 
+// BrowseTopics returns the distinct topic prefixes truncated at the level of
+// the trailing "+". Matches the JVM broker's contract so the dashboard's
+// topic browser can walk the tree level-by-level.
+//
+// Examples:
+//
+//	pattern = "+"           with topics {"a", "a/b", "c/d"}     → {"a", "c"}
+//	pattern = "sensor/+"    with topics {"sensor/temp",
+//	                                     "sensor/temp/celsius",
+//	                                     "sensor/humid"}        → {"sensor/temp", "sensor/humid"}
+//	pattern = "sensor/temp" (no wildcards, exact match)         → {"sensor/temp"} if it exists
 func (r *queryResolver) BrowseTopics(ctx context.Context, topic string, archiveGroup *string) ([]*generated.Topic, error) {
 	store := r.lastValueStore(archiveGroup)
 	if store == nil {
 		return []*generated.Topic{}, nil
 	}
-	prefix := strings.TrimSuffix(topic, "/")
-	pattern := "#"
-	if prefix != "" {
-		pattern = prefix + "/#"
+	if topic == "" {
+		topic = "+"
 	}
-	depth := 0
-	if prefix != "" {
-		depth = strings.Count(prefix, "/") + 1
+	patternLevels := strings.Split(topic, "/")
+	extractDepth := len(patternLevels)
+	hasWildcard := strings.ContainsAny(topic, "+#")
+
+	// Exact topic — return it iff it has a value.
+	if !hasWildcard {
+		msg, err := store.Get(ctx, topic)
+		if err != nil || msg == nil {
+			return []*generated.Topic{}, err
+		}
+		return []*generated.Topic{{Name: topic, IsLeaf: true}}, nil
 	}
-	seen := map[string]bool{}
+
+	seen := map[string]struct{}{}
 	leaves := map[string]bool{}
-	err := store.FindMatchingTopics(ctx, pattern, func(t string) bool {
-		parts := strings.Split(t, "/")
-		if len(parts) <= depth {
+	err := store.FindMatchingTopics(ctx, "#", func(t string) bool {
+		topicLevels := strings.Split(t, "/")
+		if len(topicLevels) < extractDepth {
 			return true
 		}
-		next := strings.Join(parts[:depth+1], "/")
-		seen[next] = true
-		if len(parts) == depth+1 {
-			leaves[next] = true
+		// Each non-wildcard level in the pattern must match the topic.
+		for i, lvl := range patternLevels {
+			if lvl == "+" || lvl == "#" {
+				continue
+			}
+			if lvl != topicLevels[i] {
+				return true
+			}
+		}
+		prefix := strings.Join(topicLevels[:extractDepth], "/")
+		seen[prefix] = struct{}{}
+		// "Leaf" means the topic itself terminates at this depth — i.e. there
+		// is a stored value at exactly this prefix.
+		if len(topicLevels) == extractDepth {
+			leaves[prefix] = true
 		}
 		return true
 	})
@@ -702,12 +774,7 @@ func (r *subscriptionResolver) TopicUpdates(ctx context.Context, topicFilters []
 				if !ok {
 					return
 				}
-				payload, payloadJSON, b64 := encodePayload(m.Payload, format)
-				cid := m.ClientID
-				out <- &generated.TopicUpdate{
-					Topic: m.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-					Qos: int(m.QoS), Retain: m.IsRetain, Timestamp: formatTime(m.Time), ClientID: &cid,
-				}
+				out <- brokerMsgToTopicUpdate(m, format)
 			}
 		}
 	}()
@@ -734,7 +801,11 @@ func (r *subscriptionResolver) TopicUpdatesBulk(ctx context.Context, topicFilter
 			if len(batch) == 0 {
 				return
 			}
-			out <- &generated.TopicUpdateBulk{Updates: batch}
+			out <- &generated.TopicUpdateBulk{
+				Updates:   batch,
+				Count:     len(batch),
+				Timestamp: time.Now().UnixMilli(),
+			}
 			batch = make([]*generated.TopicUpdate, 0, max)
 		}
 		for {
@@ -749,12 +820,7 @@ func (r *subscriptionResolver) TopicUpdatesBulk(ctx context.Context, topicFilter
 					flush()
 					return
 				}
-				payload, payloadJSON, b64 := encodePayload(m.Payload, format)
-				cid := m.ClientID
-				batch = append(batch, &generated.TopicUpdate{
-					Topic: m.TopicName, Payload: payload, PayloadJSON: payloadJSON, PayloadBase64: b64,
-					Qos: int(m.QoS), Retain: m.IsRetain, Timestamp: formatTime(m.Time), ClientID: &cid,
-				})
+				batch = append(batch, brokerMsgToTopicUpdate(m, format))
 				if len(batch) >= max {
 					flush()
 					if !t.Stop() {
@@ -766,6 +832,20 @@ func (r *subscriptionResolver) TopicUpdatesBulk(ctx context.Context, topicFilter
 		}
 	}()
 	return out, nil
+}
+
+func brokerMsgToTopicUpdate(m stores.BrokerMessage, fmt *generated.DataFormat) *generated.TopicUpdate {
+	payload, fm := encodePayload(m.Payload, fmt)
+	cid := m.ClientID
+	return &generated.TopicUpdate{
+		Topic:     m.TopicName,
+		Payload:   payload,
+		Format:    fm,
+		Timestamp: m.Time.UnixMilli(),
+		Qos:       int(m.QoS),
+		Retained:  m.IsRetain,
+		ClientID:  &cid,
+	}
 }
 
 func (r *subscriptionResolver) SystemLogs(ctx context.Context, node, level, logger, thread, sourceClass, sourceMethod, message *string) (<-chan *generated.SystemLogEntry, error) {

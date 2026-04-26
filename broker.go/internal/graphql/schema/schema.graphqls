@@ -154,40 +154,58 @@ type MqttSubscription {
 # Topics / values
 # -----------------------------------------------------------------------------
 
+type UserProperty {
+    key: String!
+    value: String!
+}
+
 type Topic {
     name: String!
     isLeaf: Boolean!
+    value(format: DataFormat = JSON): TopicValue
+}
+
+# Payload conventions (matching the JVM broker exactly):
+#   format = JSON   → payload is the JSON text
+#   format = BINARY → payload is base64-encoded bytes
+type TopicValue {
+    topic: String!
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
+    qos: Int!
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type RetainedMessage {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    timestamp: String!
-    clientId: String
-}
-
-type TopicValue {
-    topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
-    qos: Int!
-    timestamp: String!
-    clientId: String
-    archiveGroup: String
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type ArchivedMessage {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    timestamp: String!
     clientId: String
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopic: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
 }
 
 type AggregatedResult {
@@ -453,17 +471,18 @@ type MqttClientMutations {
 
 type TopicUpdate {
     topic: String!
-    payload: String
-    payloadJson: JSON
-    payloadBase64: String
+    payload: String!
+    format: DataFormat!
+    timestamp: Long!
     qos: Int!
-    retain: Boolean!
-    timestamp: String!
+    retained: Boolean!
     clientId: String
 }
 
 type TopicUpdateBulk {
     updates: [TopicUpdate!]!
+    count: Int!
+    timestamp: Long!
 }
 
 # -----------------------------------------------------------------------------
