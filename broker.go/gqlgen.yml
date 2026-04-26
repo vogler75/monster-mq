@@ -68,7 +68,9 @@ models:
       queuedMessageCount: { resolver: true }
   ArchiveGroupInfo:
     fields:
-      metrics: { resolver: true }
+      metrics:          { resolver: true }
+      metricsHistory:   { resolver: true }
+      connectionStatus: { resolver: true }
   MqttClient:
     fields:
       metrics:        { resolver: true }

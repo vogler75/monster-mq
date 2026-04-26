@@ -609,7 +609,7 @@ func (r *queryResolver) ArchiveGroups(ctx context.Context, enabled *bool) ([]*ge
 		if enabled != nil && c.Enabled != *enabled {
 			continue
 		}
-		out = append(out, archiveGroupInfoTo(c))
+		out = append(out, r.archiveGroupInfoTo(c))
 	}
 	return out, nil
 }
@@ -619,17 +619,33 @@ func (r *queryResolver) ArchiveGroup(ctx context.Context, name string) (*generat
 	if err != nil || c == nil {
 		return nil, err
 	}
-	return archiveGroupInfoTo(*c), nil
+	return r.archiveGroupInfoTo(*c), nil
 }
 
-func archiveGroupInfoTo(c stores.ArchiveGroupConfig) *generated.ArchiveGroupInfo {
+func (r *Resolver) archiveGroupInfoTo(c stores.ArchiveGroupConfig) *generated.ArchiveGroupInfo {
+	deployed := false
+	var deploymentID *string
+	if r.Archives != nil {
+		for _, g := range r.Archives.Snapshot() {
+			if g.Name() == c.Name {
+				deployed = true
+				id := r.NodeID + ":" + c.Name
+				deploymentID = &id
+				break
+			}
+		}
+	}
 	return &generated.ArchiveGroupInfo{
-		Name: c.Name, Enabled: c.Enabled, TopicFilter: c.TopicFilters, RetainedOnly: c.RetainedOnly,
+		Name: c.Name, Enabled: c.Enabled,
+		Deployed: deployed, DeploymentID: deploymentID,
+		TopicFilter: c.TopicFilters, RetainedOnly: c.RetainedOnly,
 		LastValType: toMessageStoreType(c.LastValType), ArchiveType: toMessageArchiveType(c.ArchiveType),
 		PayloadFormat:    generated.PayloadFormat(c.PayloadFormat),
 		LastValRetention: ptrIfNotEmpty(c.LastValRetention),
 		ArchiveRetention: ptrIfNotEmpty(c.ArchiveRetention),
 		PurgeInterval:    ptrIfNotEmpty(c.PurgeInterval),
+		// createdAt/updatedAt aren't tracked in ArchiveGroupConfig today;
+		// surface as nil so the dashboard renders "—".
 	}
 }
 
@@ -857,6 +873,28 @@ func (r *archiveGroupInfoResolver) Metrics(ctx context.Context, _ *generated.Arc
 	return []*generated.ArchiveGroupMetrics{{Timestamp: nowISO()}}, nil
 }
 
+func (r *archiveGroupInfoResolver) MetricsHistory(ctx context.Context, _ *generated.ArchiveGroupInfo, from, to *string, lastMinutes *int) ([]*generated.ArchiveGroupMetrics, error) {
+	return []*generated.ArchiveGroupMetrics{}, nil
+}
+
+func (r *archiveGroupInfoResolver) ConnectionStatus(ctx context.Context, obj *generated.ArchiveGroupInfo) ([]*generated.NodeConnectionStatus, error) {
+	// Single-node broker: report this node's status. We treat the configured
+	// stores as connected if a deployed Group exists for this archive.
+	connected := false
+	for _, g := range r.Archives.Snapshot() {
+		if g.Name() == obj.Name {
+			connected = true
+			break
+		}
+	}
+	return []*generated.NodeConnectionStatus{{
+		NodeID:         r.NodeID,
+		MessageArchive: &connected,
+		LastValueStore: &connected,
+		Timestamp:      time.Now().UnixMilli(),
+	}}, nil
+}
+
 func (r *mqttClientResolver) Metrics(ctx context.Context, _ *generated.MqttClient) ([]*generated.MqttClientMetrics, error) {
 	return []*generated.MqttClientMetrics{{Timestamp: nowISO()}}, nil
 }
@@ -882,7 +920,7 @@ func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated
 	if err := r.Storage.ArchiveConfig.Save(ctx, cfg); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
 	}
-	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: archiveGroupInfoTo(cfg)}, nil
+	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(cfg)}, nil
 }
 func (r *archiveGroupMutationsResolver) Update(ctx context.Context, obj *generated.ArchiveGroupMutations, input generated.ArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
 	return r.Create(ctx, obj, input)
@@ -908,7 +946,7 @@ func (r *archiveGroupMutationsResolver) toggleArchive(ctx context.Context, name 
 	if err := r.Storage.ArchiveConfig.Save(ctx, *cfg); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
 	}
-	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: archiveGroupInfoTo(*cfg)}, nil
+	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(*cfg)}, nil
 }
 
 func (r *userManagementMutationsResolver) CreateUser(ctx context.Context, _ *generated.UserManagementMutations, input generated.CreateUserInput) (*generated.UserManagementResult, error) {

@@ -25,17 +25,23 @@ type AggregatedResult struct {
 }
 
 type ArchiveGroupInfo struct {
-	Name             string                 `json:"name"`
-	Enabled          bool                   `json:"enabled"`
-	TopicFilter      []string               `json:"topicFilter"`
-	RetainedOnly     bool                   `json:"retainedOnly"`
-	LastValType      MessageStoreType       `json:"lastValType"`
-	ArchiveType      MessageArchiveType     `json:"archiveType"`
-	PayloadFormat    PayloadFormat          `json:"payloadFormat"`
-	LastValRetention *string                `json:"lastValRetention,omitempty"`
-	ArchiveRetention *string                `json:"archiveRetention,omitempty"`
-	PurgeInterval    *string                `json:"purgeInterval,omitempty"`
-	Metrics          []*ArchiveGroupMetrics `json:"metrics"`
+	Name             string                  `json:"name"`
+	Enabled          bool                    `json:"enabled"`
+	Deployed         bool                    `json:"deployed"`
+	DeploymentID     *string                 `json:"deploymentId,omitempty"`
+	TopicFilter      []string                `json:"topicFilter"`
+	RetainedOnly     bool                    `json:"retainedOnly"`
+	LastValType      MessageStoreType        `json:"lastValType"`
+	ArchiveType      MessageArchiveType      `json:"archiveType"`
+	PayloadFormat    PayloadFormat           `json:"payloadFormat"`
+	LastValRetention *string                 `json:"lastValRetention,omitempty"`
+	ArchiveRetention *string                 `json:"archiveRetention,omitempty"`
+	PurgeInterval    *string                 `json:"purgeInterval,omitempty"`
+	CreatedAt        *string                 `json:"createdAt,omitempty"`
+	UpdatedAt        *string                 `json:"updatedAt,omitempty"`
+	ConnectionStatus []*NodeConnectionStatus `json:"connectionStatus"`
+	Metrics          []*ArchiveGroupMetrics  `json:"metrics"`
+	MetricsHistory   []*ArchiveGroupMetrics  `json:"metricsHistory"`
 }
 
 type ArchiveGroupInput struct {
@@ -236,6 +242,14 @@ type MqttSubscription struct {
 }
 
 type Mutation struct {
+}
+
+type NodeConnectionStatus struct {
+	NodeID         string  `json:"nodeId"`
+	MessageArchive *bool   `json:"messageArchive,omitempty"`
+	LastValueStore *bool   `json:"lastValueStore,omitempty"`
+	Error          *string `json:"error,omitempty"`
+	Timestamp      int64   `json:"timestamp"`
 }
 
 type PublishInput struct {

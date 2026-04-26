@@ -47,7 +47,9 @@ type ComplexityRoot struct {
 }
 
 type ArchiveGroupInfoResolver interface {
+	ConnectionStatus(ctx context.Context, obj *ArchiveGroupInfo) ([]*NodeConnectionStatus, error)
 	Metrics(ctx context.Context, obj *ArchiveGroupInfo) ([]*ArchiveGroupMetrics, error)
+	MetricsHistory(ctx context.Context, obj *ArchiveGroupInfo, from *string, to *string, lastMinutes *int) ([]*ArchiveGroupMetrics, error)
 }
 type ArchiveGroupMutationsResolver interface {
 	Create(ctx context.Context, obj *ArchiveGroupMutations, input ArchiveGroupInput) (*ArchiveGroupResult, error)
@@ -454,9 +456,19 @@ type AggregatedResult {
 # Archive groups
 # -----------------------------------------------------------------------------
 
+type NodeConnectionStatus {
+    nodeId: String!
+    messageArchive: Boolean
+    lastValueStore: Boolean
+    error: String
+    timestamp: Long!
+}
+
 type ArchiveGroupInfo {
     name: String!
     enabled: Boolean!
+    deployed: Boolean!
+    deploymentId: String
     topicFilter: [String!]!
     retainedOnly: Boolean!
     lastValType: MessageStoreType!
@@ -465,7 +477,11 @@ type ArchiveGroupInfo {
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
+    createdAt: String
+    updatedAt: String
+    connectionStatus: [NodeConnectionStatus!]!
     metrics: [ArchiveGroupMetrics!]!
+    metricsHistory(from: String, to: String, lastMinutes: Int): [ArchiveGroupMetrics!]!
 }
 
 input ArchiveGroupInput {
@@ -773,6 +789,27 @@ var parsedSchema = gqlparser.MustLoadSchema(sources...)
 // endregion ************************** generated!.gotpl **************************
 
 // region    ***************************** args.gotpl *****************************
+
+func (ec *executionContext) field_ArchiveGroupInfo_metricsHistory_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "from", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["from"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "to", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["to"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "lastMinutes", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["lastMinutes"] = arg2
+	return args, nil
+}
 
 func (ec *executionContext) field_ArchiveGroupMutations_create_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
@@ -1953,6 +1990,64 @@ func (ec *executionContext) fieldContext_ArchiveGroupInfo_enabled(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ArchiveGroupInfo_deployed(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_deployed,
+		func(ctx context.Context) (any, error) {
+			return obj.Deployed, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_deployed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchiveGroupInfo_deploymentId(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_deploymentId,
+		func(ctx context.Context) (any, error) {
+			return obj.DeploymentID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_deploymentId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ArchiveGroupInfo_topicFilter(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2185,6 +2280,105 @@ func (ec *executionContext) fieldContext_ArchiveGroupInfo_purgeInterval(_ contex
 	return fc, nil
 }
 
+func (ec *executionContext) _ArchiveGroupInfo_createdAt(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchiveGroupInfo_updatedAt(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchiveGroupInfo_connectionStatus(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_connectionStatus,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.ArchiveGroupInfo().ConnectionStatus(ctx, obj)
+		},
+		nil,
+		ec.marshalNNodeConnectionStatus2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐNodeConnectionStatusᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_connectionStatus(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nodeId":
+				return ec.fieldContext_NodeConnectionStatus_nodeId(ctx, field)
+			case "messageArchive":
+				return ec.fieldContext_NodeConnectionStatus_messageArchive(ctx, field)
+			case "lastValueStore":
+				return ec.fieldContext_NodeConnectionStatus_lastValueStore(ctx, field)
+			case "error":
+				return ec.fieldContext_NodeConnectionStatus_error(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_NodeConnectionStatus_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type NodeConnectionStatus", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ArchiveGroupInfo_metrics(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -2218,6 +2412,55 @@ func (ec *executionContext) fieldContext_ArchiveGroupInfo_metrics(_ context.Cont
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArchiveGroupMetrics", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArchiveGroupInfo_metricsHistory(ctx context.Context, field graphql.CollectedField, obj *ArchiveGroupInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArchiveGroupInfo_metricsHistory,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.ArchiveGroupInfo().MetricsHistory(ctx, obj, fc.Args["from"].(*string), fc.Args["to"].(*string), fc.Args["lastMinutes"].(*int))
+		},
+		nil,
+		ec.marshalNArchiveGroupMetrics2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupMetricsᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArchiveGroupInfo_metricsHistory(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArchiveGroupInfo",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "messagesOut":
+				return ec.fieldContext_ArchiveGroupMetrics_messagesOut(ctx, field)
+			case "bufferSize":
+				return ec.fieldContext_ArchiveGroupMetrics_bufferSize(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_ArchiveGroupMetrics_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArchiveGroupMetrics", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_ArchiveGroupInfo_metricsHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -2640,6 +2883,10 @@ func (ec *executionContext) fieldContext_ArchiveGroupResult_archiveGroup(_ conte
 				return ec.fieldContext_ArchiveGroupInfo_name(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ArchiveGroupInfo_enabled(ctx, field)
+			case "deployed":
+				return ec.fieldContext_ArchiveGroupInfo_deployed(ctx, field)
+			case "deploymentId":
+				return ec.fieldContext_ArchiveGroupInfo_deploymentId(ctx, field)
 			case "topicFilter":
 				return ec.fieldContext_ArchiveGroupInfo_topicFilter(ctx, field)
 			case "retainedOnly":
@@ -2656,8 +2903,16 @@ func (ec *executionContext) fieldContext_ArchiveGroupResult_archiveGroup(_ conte
 				return ec.fieldContext_ArchiveGroupInfo_archiveRetention(ctx, field)
 			case "purgeInterval":
 				return ec.fieldContext_ArchiveGroupInfo_purgeInterval(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ArchiveGroupInfo_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_ArchiveGroupInfo_updatedAt(ctx, field)
+			case "connectionStatus":
+				return ec.fieldContext_ArchiveGroupInfo_connectionStatus(ctx, field)
 			case "metrics":
 				return ec.fieldContext_ArchiveGroupInfo_metrics(ctx, field)
+			case "metricsHistory":
+				return ec.fieldContext_ArchiveGroupInfo_metricsHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArchiveGroupInfo", field.Name)
 		},
@@ -6443,6 +6698,151 @@ func (ec *executionContext) fieldContext_Mutation_mqttClient(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _NodeConnectionStatus_nodeId(ctx context.Context, field graphql.CollectedField, obj *NodeConnectionStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NodeConnectionStatus_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NodeConnectionStatus_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NodeConnectionStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NodeConnectionStatus_messageArchive(ctx context.Context, field graphql.CollectedField, obj *NodeConnectionStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NodeConnectionStatus_messageArchive,
+		func(ctx context.Context) (any, error) {
+			return obj.MessageArchive, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NodeConnectionStatus_messageArchive(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NodeConnectionStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NodeConnectionStatus_lastValueStore(ctx context.Context, field graphql.CollectedField, obj *NodeConnectionStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NodeConnectionStatus_lastValueStore,
+		func(ctx context.Context) (any, error) {
+			return obj.LastValueStore, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NodeConnectionStatus_lastValueStore(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NodeConnectionStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NodeConnectionStatus_error(ctx context.Context, field graphql.CollectedField, obj *NodeConnectionStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NodeConnectionStatus_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_NodeConnectionStatus_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NodeConnectionStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _NodeConnectionStatus_timestamp(ctx context.Context, field graphql.CollectedField, obj *NodeConnectionStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_NodeConnectionStatus_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNLong2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_NodeConnectionStatus_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "NodeConnectionStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _PublishResult_success(ctx context.Context, field graphql.CollectedField, obj *PublishResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -7580,6 +7980,10 @@ func (ec *executionContext) fieldContext_Query_archiveGroups(ctx context.Context
 				return ec.fieldContext_ArchiveGroupInfo_name(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ArchiveGroupInfo_enabled(ctx, field)
+			case "deployed":
+				return ec.fieldContext_ArchiveGroupInfo_deployed(ctx, field)
+			case "deploymentId":
+				return ec.fieldContext_ArchiveGroupInfo_deploymentId(ctx, field)
 			case "topicFilter":
 				return ec.fieldContext_ArchiveGroupInfo_topicFilter(ctx, field)
 			case "retainedOnly":
@@ -7596,8 +8000,16 @@ func (ec *executionContext) fieldContext_Query_archiveGroups(ctx context.Context
 				return ec.fieldContext_ArchiveGroupInfo_archiveRetention(ctx, field)
 			case "purgeInterval":
 				return ec.fieldContext_ArchiveGroupInfo_purgeInterval(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ArchiveGroupInfo_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_ArchiveGroupInfo_updatedAt(ctx, field)
+			case "connectionStatus":
+				return ec.fieldContext_ArchiveGroupInfo_connectionStatus(ctx, field)
 			case "metrics":
 				return ec.fieldContext_ArchiveGroupInfo_metrics(ctx, field)
+			case "metricsHistory":
+				return ec.fieldContext_ArchiveGroupInfo_metricsHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArchiveGroupInfo", field.Name)
 		},
@@ -7645,6 +8057,10 @@ func (ec *executionContext) fieldContext_Query_archiveGroup(ctx context.Context,
 				return ec.fieldContext_ArchiveGroupInfo_name(ctx, field)
 			case "enabled":
 				return ec.fieldContext_ArchiveGroupInfo_enabled(ctx, field)
+			case "deployed":
+				return ec.fieldContext_ArchiveGroupInfo_deployed(ctx, field)
+			case "deploymentId":
+				return ec.fieldContext_ArchiveGroupInfo_deploymentId(ctx, field)
 			case "topicFilter":
 				return ec.fieldContext_ArchiveGroupInfo_topicFilter(ctx, field)
 			case "retainedOnly":
@@ -7661,8 +8077,16 @@ func (ec *executionContext) fieldContext_Query_archiveGroup(ctx context.Context,
 				return ec.fieldContext_ArchiveGroupInfo_archiveRetention(ctx, field)
 			case "purgeInterval":
 				return ec.fieldContext_ArchiveGroupInfo_purgeInterval(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ArchiveGroupInfo_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_ArchiveGroupInfo_updatedAt(ctx, field)
+			case "connectionStatus":
+				return ec.fieldContext_ArchiveGroupInfo_connectionStatus(ctx, field)
 			case "metrics":
 				return ec.fieldContext_ArchiveGroupInfo_metrics(ctx, field)
+			case "metricsHistory":
+				return ec.fieldContext_ArchiveGroupInfo_metricsHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArchiveGroupInfo", field.Name)
 		},
@@ -12689,6 +13113,13 @@ func (ec *executionContext) _ArchiveGroupInfo(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "deployed":
+			out.Values[i] = ec._ArchiveGroupInfo_deployed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "deploymentId":
+			out.Values[i] = ec._ArchiveGroupInfo_deploymentId(ctx, field, obj)
 		case "topicFilter":
 			out.Values[i] = ec._ArchiveGroupInfo_topicFilter(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -12720,6 +13151,46 @@ func (ec *executionContext) _ArchiveGroupInfo(ctx context.Context, sel ast.Selec
 			out.Values[i] = ec._ArchiveGroupInfo_archiveRetention(ctx, field, obj)
 		case "purgeInterval":
 			out.Values[i] = ec._ArchiveGroupInfo_purgeInterval(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._ArchiveGroupInfo_createdAt(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._ArchiveGroupInfo_updatedAt(ctx, field, obj)
+		case "connectionStatus":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ArchiveGroupInfo_connectionStatus(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "metrics":
 			field := field
 
@@ -12730,6 +13201,42 @@ func (ec *executionContext) _ArchiveGroupInfo(ctx context.Context, sel ast.Selec
 					}
 				}()
 				res = ec._ArchiveGroupInfo_metrics(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "metricsHistory":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._ArchiveGroupInfo_metricsHistory(ctx, field, obj)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -14394,6 +14901,56 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_mqttClient(ctx, field)
 			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var nodeConnectionStatusImplementors = []string{"NodeConnectionStatus"}
+
+func (ec *executionContext) _NodeConnectionStatus(ctx context.Context, sel ast.SelectionSet, obj *NodeConnectionStatus) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, nodeConnectionStatusImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("NodeConnectionStatus")
+		case "nodeId":
+			out.Values[i] = ec._NodeConnectionStatus_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "messageArchive":
+			out.Values[i] = ec._NodeConnectionStatus_messageArchive(ctx, field, obj)
+		case "lastValueStore":
+			out.Values[i] = ec._NodeConnectionStatus_lastValueStore(ctx, field, obj)
+		case "error":
+			out.Values[i] = ec._NodeConnectionStatus_error(ctx, field, obj)
+		case "timestamp":
+			out.Values[i] = ec._NodeConnectionStatus_timestamp(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -16975,6 +17532,32 @@ func (ec *executionContext) marshalNMqttSubscription2ᚖmonstermqᚗioᚋedgeᚋ
 		return graphql.Null
 	}
 	return ec._MqttSubscription(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNNodeConnectionStatus2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐNodeConnectionStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []*NodeConnectionStatus) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNNodeConnectionStatus2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐNodeConnectionStatus(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNNodeConnectionStatus2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐNodeConnectionStatus(ctx context.Context, sel ast.SelectionSet, v *NodeConnectionStatus) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._NodeConnectionStatus(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNPayloadFormat2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐPayloadFormat(ctx context.Context, v any) (PayloadFormat, error) {

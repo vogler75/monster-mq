@@ -199,9 +199,19 @@ type AggregatedResult {
 # Archive groups
 # -----------------------------------------------------------------------------
 
+type NodeConnectionStatus {
+    nodeId: String!
+    messageArchive: Boolean
+    lastValueStore: Boolean
+    error: String
+    timestamp: Long!
+}
+
 type ArchiveGroupInfo {
     name: String!
     enabled: Boolean!
+    deployed: Boolean!
+    deploymentId: String
     topicFilter: [String!]!
     retainedOnly: Boolean!
     lastValType: MessageStoreType!
@@ -210,7 +220,11 @@ type ArchiveGroupInfo {
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
+    createdAt: String
+    updatedAt: String
+    connectionStatus: [NodeConnectionStatus!]!
     metrics: [ArchiveGroupMetrics!]!
+    metricsHistory(from: String, to: String, lastMinutes: Int): [ArchiveGroupMetrics!]!
 }
 
 input ArchiveGroupInput {
