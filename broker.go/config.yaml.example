@@ -1,0 +1,56 @@
+NodeId: edge-rpi-01
+
+TCP:  { Enabled: true,  Port: 1883 }
+TCPS: { Enabled: false, Port: 8883, KeyStorePath: "", KeyStorePassword: "" }
+WS:   { Enabled: true,  Port: 1884 }
+WSS:  { Enabled: false, Port: 8884 }
+MaxMessageSize: 1048576
+
+DefaultStoreType: SQLITE
+SessionStoreType: SQLITE
+RetainedStoreType: SQLITE
+ConfigStoreType: SQLITE
+
+SQLite:
+  Path: ./data/monstermq.db
+
+Postgres:
+  Url: "postgres://localhost:5432/monstermq"
+  User: monstermq
+  Pass: monstermq
+
+MongoDB:
+  Url: "mongodb://localhost:27017"
+  Database: monstermq
+
+UserManagement:
+  Enabled: false
+  PasswordAlgorithm: BCRYPT
+  AnonymousEnabled: true
+  AclCacheEnabled: true
+
+Metrics:
+  Enabled: true
+  CollectionIntervalSeconds: 1
+  RetentionHours: 168
+
+Logging:
+  Level: INFO
+  MqttSyslogEnabled: false
+  RingBufferSize: 1000
+
+GraphQL:
+  Enabled: true
+  Port: 8080
+
+Dashboard:
+  Enabled: true
+
+Bridges:
+  Mqtt:
+    Enabled: true
+
+# QueuedMessagesEnabled: true  → messages for offline persistent (clean=false)
+# sessions are stored in the QueueStore table and survive broker restarts.
+# false → rely on mochi-mqtt's in-memory inflight buffer (lost on restart).
+QueuedMessagesEnabled: true

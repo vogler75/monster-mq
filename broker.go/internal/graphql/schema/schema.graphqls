@@ -1,0 +1,513 @@
+scalar Long
+scalar JSON
+
+# Field/type names mirror the Kotlin schema in
+# broker/src/main/resources/schema-*.graphqls so the existing dashboard works
+# unchanged. Bridge-specific shapes (OPC UA, Kafka, NATS, Redis, WinCC, PLC4X,
+# Neo4j, GenAI, flows, MCP) are intentionally omitted.
+
+enum DataFormat { JSON BINARY }
+enum OrderDirection { ASC DESC }
+
+enum MessageStoreType { NONE MEMORY HAZELCAST POSTGRES CRATEDB MONGODB SQLITE }
+enum MessageArchiveType { NONE POSTGRES CRATEDB MONGODB KAFKA SQLITE }
+enum PayloadFormat { DEFAULT JSON }
+
+# -----------------------------------------------------------------------------
+# Metrics
+# -----------------------------------------------------------------------------
+
+type BrokerMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    nodeSessionCount: Int!
+    clusterSessionCount: Int!
+    queuedMessagesCount: Long!
+    subscriptionCount: Int!
+    clientNodeMappingSize: Int!
+    topicNodeMappingSize: Int!
+    messageBusIn: Float!
+    messageBusOut: Float!
+    mqttClientIn: Float!
+    mqttClientOut: Float!
+    kafkaClientIn: Float!
+    kafkaClientOut: Float!
+    opcUaClientIn: Float!
+    opcUaClientOut: Float!
+    winCCOaClientIn: Float!
+    winCCUaClientIn: Float!
+    natsClientIn: Float!
+    natsClientOut: Float!
+    redisClientIn: Float!
+    redisClientOut: Float!
+    neo4jClientIn: Float!
+    timestamp: String!
+}
+
+type SessionMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    connected: Boolean
+    lastPing: String
+    inFlightMessagesRcv: Int
+    inFlightMessagesSnd: Int
+    timestamp: String!
+}
+
+type MqttClientMetrics {
+    messagesIn: Float!
+    messagesOut: Float!
+    timestamp: String!
+}
+
+type ArchiveGroupMetrics {
+    messagesOut: Float!
+    bufferSize: Int!
+    timestamp: String!
+}
+
+# -----------------------------------------------------------------------------
+# Broker / Session
+# -----------------------------------------------------------------------------
+
+type BrokerConfig {
+    nodeId: String!
+    version: String!
+    clustered: Boolean!
+    tcpPort: Int!
+    wsPort: Int!
+    tcpsPort: Int!
+    wssPort: Int!
+    natsPort: Int!
+    sessionStoreType: String!
+    retainedStoreType: String!
+    configStoreType: String!
+    userManagementEnabled: Boolean!
+    anonymousEnabled: Boolean!
+    mcpEnabled: Boolean!
+    mcpPort: Int!
+    prometheusEnabled: Boolean!
+    prometheusPort: Int!
+    i3xEnabled: Boolean!
+    i3xPort: Int!
+    graphqlEnabled: Boolean!
+    graphqlPort: Int!
+    metricsEnabled: Boolean!
+    genAiEnabled: Boolean!
+    genAiProvider: String!
+    genAiModel: String!
+    postgresUrl: String!
+    postgresUser: String!
+    crateDbUrl: String!
+    crateDbUser: String!
+    mongoDbUrl: String!
+    mongoDbDatabase: String!
+    sqlitePath: String!
+    kafkaServers: String!
+}
+
+type CurrentUser {
+    username: String!
+    isAdmin: Boolean!
+}
+
+type Broker {
+    nodeId: String!
+    version: String!
+    userManagementEnabled: Boolean!
+    anonymousEnabled: Boolean!
+    isLeader: Boolean!
+    isCurrent: Boolean!
+    enabledFeatures: [String!]!
+    metrics: [BrokerMetrics!]!
+    metricsHistory(from: String, to: String, lastMinutes: Int): [BrokerMetrics!]!
+    sessions(cleanSession: Boolean, connected: Boolean): [Session!]!
+}
+
+type Session {
+    clientId: String!
+    nodeId: String!
+    metrics: [SessionMetrics!]!
+    metricsHistory(from: String, to: String, lastMinutes: Int): [SessionMetrics!]!
+    subscriptions: [MqttSubscription!]!
+    cleanSession: Boolean!
+    sessionExpiryInterval: Long!
+    clientAddress: String
+    connected: Boolean!
+    queuedMessageCount: Long!
+    information: String
+    protocolVersion: Int
+    receiveMaximum: Int
+    maximumPacketSize: Long
+    topicAliasMaximum: Int
+}
+
+type MqttSubscription {
+    topicFilter: String!
+    qos: Int!
+    noLocal: Boolean
+    retainHandling: Int
+    retainAsPublished: Boolean
+}
+
+# -----------------------------------------------------------------------------
+# Topics / values
+# -----------------------------------------------------------------------------
+
+type Topic {
+    name: String!
+    isLeaf: Boolean!
+}
+
+type RetainedMessage {
+    topic: String!
+    payload: String
+    payloadJson: JSON
+    payloadBase64: String
+    qos: Int!
+    timestamp: String!
+    clientId: String
+}
+
+type TopicValue {
+    topic: String!
+    payload: String
+    payloadJson: JSON
+    payloadBase64: String
+    qos: Int!
+    timestamp: String!
+    clientId: String
+    archiveGroup: String
+}
+
+type ArchivedMessage {
+    topic: String!
+    payload: String
+    payloadJson: JSON
+    payloadBase64: String
+    qos: Int!
+    timestamp: String!
+    clientId: String
+}
+
+type AggregatedResult {
+    columns: [String!]!
+    rows: [[JSON]!]!
+}
+
+# -----------------------------------------------------------------------------
+# Archive groups
+# -----------------------------------------------------------------------------
+
+type ArchiveGroupInfo {
+    name: String!
+    enabled: Boolean!
+    topicFilter: [String!]!
+    retainedOnly: Boolean!
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat!
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+    metrics: [ArchiveGroupMetrics!]!
+}
+
+input ArchiveGroupInput {
+    name: String!
+    enabled: Boolean
+    topicFilter: [String!]!
+    retainedOnly: Boolean
+    lastValType: MessageStoreType!
+    archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+type ArchiveGroupResult {
+    success: Boolean!
+    message: String
+    archiveGroup: ArchiveGroupInfo
+}
+
+# -----------------------------------------------------------------------------
+# Users / ACL
+# -----------------------------------------------------------------------------
+
+type UserInfo {
+    username: String!
+    enabled: Boolean!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    isAdmin: Boolean!
+    createdAt: String
+    updatedAt: String
+    aclRules: [AclRuleInfo!]!
+}
+
+type AclRuleInfo {
+    id: String!
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean!
+    canPublish: Boolean!
+    priority: Int!
+    createdAt: String
+}
+
+input CreateUserInput {
+    username: String!
+    password: String!
+    enabled: Boolean
+    canSubscribe: Boolean
+    canPublish: Boolean
+    isAdmin: Boolean
+}
+
+input UpdateUserInput {
+    username: String!
+    enabled: Boolean
+    canSubscribe: Boolean
+    canPublish: Boolean
+    isAdmin: Boolean
+}
+
+input SetPasswordInput {
+    username: String!
+    password: String!
+}
+
+input CreateAclRuleInput {
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean
+    canPublish: Boolean
+    priority: Int
+}
+
+input UpdateAclRuleInput {
+    id: String!
+    username: String!
+    topicPattern: String!
+    canSubscribe: Boolean
+    canPublish: Boolean
+    priority: Int
+}
+
+type UserManagementResult {
+    success: Boolean!
+    message: String
+    user: UserInfo
+    aclRule: AclRuleInfo
+}
+
+type LoginResult {
+    success: Boolean!
+    message: String
+    token: String
+    username: String
+    isAdmin: Boolean
+}
+
+# -----------------------------------------------------------------------------
+# MQTT bridge (devices)
+# -----------------------------------------------------------------------------
+
+type MqttClient {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    config: JSON!
+    metrics: [MqttClientMetrics!]!
+    metricsHistory(from: String, to: String, lastMinutes: Int): [MqttClientMetrics!]!
+}
+
+input MqttClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean
+    config: JSON!
+}
+
+type MqttClientResult {
+    success: Boolean!
+    message: String
+    client: MqttClient
+}
+
+# -----------------------------------------------------------------------------
+# Publish / sessions
+# -----------------------------------------------------------------------------
+
+input PublishInput {
+    topic: String!
+    payload: String
+    payloadBase64: String
+    payloadJson: JSON
+    qos: Int
+    retain: Boolean
+    format: DataFormat
+}
+
+type PublishResult {
+    success: Boolean!
+    message: String
+    topic: String!
+}
+
+type PurgeResult {
+    success: Boolean!
+    message: String
+    purgedCount: Long!
+}
+
+type SessionRemovalResult {
+    success: Boolean!
+    message: String
+    removedCount: Int!
+}
+
+# -----------------------------------------------------------------------------
+# System logs
+# -----------------------------------------------------------------------------
+
+type SystemLogEntry {
+    timestamp: String!
+    node: String!
+    level: String!
+    logger: String!
+    sourceClass: String
+    sourceMethod: String
+    thread: String
+    message: String!
+}
+
+# -----------------------------------------------------------------------------
+# Mutation groups
+# -----------------------------------------------------------------------------
+
+type UserManagementMutations {
+    createUser(input: CreateUserInput!): UserManagementResult!
+    updateUser(input: UpdateUserInput!): UserManagementResult!
+    deleteUser(username: String!): UserManagementResult!
+    setPassword(input: SetPasswordInput!): UserManagementResult!
+    createAclRule(input: CreateAclRuleInput!): UserManagementResult!
+    updateAclRule(input: UpdateAclRuleInput!): UserManagementResult!
+    deleteAclRule(id: String!): UserManagementResult!
+}
+
+type SessionMutations {
+    removeSessions(clientIds: [String!]!): SessionRemovalResult!
+}
+
+type ArchiveGroupMutations {
+    create(input: ArchiveGroupInput!): ArchiveGroupResult!
+    update(input: ArchiveGroupInput!): ArchiveGroupResult!
+    delete(name: String!): ArchiveGroupResult!
+    enable(name: String!): ArchiveGroupResult!
+    disable(name: String!): ArchiveGroupResult!
+}
+
+type MqttClientMutations {
+    create(input: MqttClientInput!): MqttClientResult!
+    update(input: MqttClientInput!): MqttClientResult!
+    delete(name: String!): MqttClientResult!
+    start(name: String!): MqttClientResult!
+    stop(name: String!): MqttClientResult!
+    toggle(name: String!): MqttClientResult!
+    reassign(name: String!, nodeId: String!): MqttClientResult!
+}
+
+# -----------------------------------------------------------------------------
+# Subscription payloads
+# -----------------------------------------------------------------------------
+
+type TopicUpdate {
+    topic: String!
+    payload: String
+    payloadJson: JSON
+    payloadBase64: String
+    qos: Int!
+    retain: Boolean!
+    timestamp: String!
+    clientId: String
+}
+
+type TopicUpdateBulk {
+    updates: [TopicUpdate!]!
+}
+
+# -----------------------------------------------------------------------------
+# Roots
+# -----------------------------------------------------------------------------
+
+type Query {
+    currentUser: CurrentUser
+    currentValue(topic: String!, format: DataFormat, archiveGroup: String): TopicValue
+    currentValues(topicFilter: String!, format: DataFormat, limit: Int, archiveGroup: String): [TopicValue!]!
+    retainedMessage(topic: String!, format: DataFormat): RetainedMessage
+    retainedMessages(topicFilter: String!, format: DataFormat, limit: Int): [RetainedMessage!]!
+    archivedMessages(
+        topicFilter: String!
+        startTime: String
+        endTime: String
+        format: DataFormat
+        limit: Int
+        archiveGroup: String
+        includeTopic: Boolean
+    ): [ArchivedMessage!]!
+    aggregatedMessages(
+        topics: [String!]!
+        interval: Int!
+        startTime: String!
+        endTime: String!
+        functions: [String!]!
+        fields: [String!]
+        archiveGroup: String
+    ): AggregatedResult!
+    systemLogs(
+        startTime: String
+        endTime: String
+        lastMinutes: Int
+        node: String
+        level: String
+        logger: String
+        sourceClass: String
+        sourceMethod: String
+        message: String
+        limit: Int
+        orderByTime: OrderDirection
+    ): [SystemLogEntry!]!
+    searchTopics(pattern: String!, limit: Int, archiveGroup: String): [String!]!
+    browseTopics(topic: String!, archiveGroup: String): [Topic!]!
+    brokerConfig: BrokerConfig!
+    broker(nodeId: String): Broker
+    brokers: [Broker!]!
+    sessions(nodeId: String, cleanSession: Boolean, connected: Boolean): [Session!]!
+    session(clientId: String!, nodeId: String): Session
+    users(username: String): [UserInfo!]!
+    archiveGroups(enabled: Boolean): [ArchiveGroupInfo!]!
+    archiveGroup(name: String!): ArchiveGroupInfo
+    mqttClients(name: String, node: String): [MqttClient!]!
+}
+
+type Mutation {
+    login(username: String!, password: String!): LoginResult!
+    publish(input: PublishInput!): PublishResult!
+    publishBatch(inputs: [PublishInput!]!): [PublishResult!]!
+    purgeQueuedMessages(clientId: String!): PurgeResult!
+    user: UserManagementMutations!
+    session: SessionMutations!
+    archiveGroup: ArchiveGroupMutations!
+    mqttClient: MqttClientMutations!
+}
+
+type Subscription {
+    topicUpdates(topicFilters: [String!]!, format: DataFormat): TopicUpdate!
+    topicUpdatesBulk(topicFilters: [String!]!, format: DataFormat, timeoutMs: Int, maxSize: Int): TopicUpdateBulk!
+    systemLogs(node: String, level: String, logger: String, thread: String, sourceClass: String, sourceMethod: String, message: String): SystemLogEntry!
+}
