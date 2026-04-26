@@ -515,7 +515,11 @@ type Query {
     sessions(nodeId: String, cleanSession: Boolean, connected: Boolean): [Session!]!
     session(clientId: String!, nodeId: String): Session
     users(username: String): [UserInfo!]!
-    archiveGroups(enabled: Boolean): [ArchiveGroupInfo!]!
+    archiveGroups(
+        enabled: Boolean
+        lastValTypeEquals: MessageStoreType
+        lastValTypeNotEquals: MessageStoreType
+    ): [ArchiveGroupInfo!]!
     archiveGroup(name: String!): ArchiveGroupInfo
     mqttClients(name: String, node: String): [MqttClient!]!
 }

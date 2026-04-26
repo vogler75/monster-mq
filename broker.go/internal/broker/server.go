@@ -49,15 +49,17 @@ func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	var (
 		storage  *stores.Storage
 		sqliteDB *storesqlite.DB
+		pgDB     *storepg.DB
+		mongoDB  *storemongo.DB
 		err      error
 	)
 	switch cfg.DefaultStoreType {
 	case config.StoreSQLite, "":
 		storage, sqliteDB, err = storesqlite.Build(ctx, cfg)
 	case config.StorePostgres:
-		storage, err = storepg.Build(ctx, cfg)
+		storage, pgDB, err = storepg.Build(ctx, cfg)
 	case config.StoreMongoDB:
-		storage, err = storemongo.Build(ctx, cfg)
+		storage, mongoDB, err = storemongo.Build(ctx, cfg)
 	default:
 		return nil, fmt.Errorf("unsupported DefaultStoreType %q", cfg.DefaultStoreType)
 	}
@@ -74,7 +76,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 
 	// 3. Pub/sub bus + archive manager
 	bus := pubsub.NewBus()
-	archives := archive.NewManager(cfg, storage, sqliteDB, logger)
+	archives := archive.NewManager(cfg, storage, sqliteDB, pgDB, mongoDB, logger)
 	if err := archives.Load(ctx); err != nil {
 		logger.Warn("archive groups load failed", "err", err)
 	}

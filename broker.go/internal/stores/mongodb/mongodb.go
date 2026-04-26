@@ -41,10 +41,10 @@ func (d *DB) Close() error {
 	return d.client.Disconnect(context.Background())
 }
 
-func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
+func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, *DB, error) {
 	db, err := Open(ctx, cfg.MongoDB.URL, cfg.MongoDB.Database)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	retained := &MessageStore{name: "retainedmessages", db: db}
 	sessions := &SessionStore{db: db}
@@ -58,7 +58,7 @@ func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
 	} {
 		if err := t.EnsureTable(ctx); err != nil {
 			db.Close()
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	return &stores.Storage{
@@ -67,7 +67,7 @@ func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
 		Queue: queue, Retained: retained, Users: users,
 		ArchiveConfig: archives, DeviceConfig: devices, Metrics: metricsStore,
 		Closer: db.Close,
-	}, nil
+	}, db, nil
 }
 
 // MessageStore (retained) ------------------------------------------------

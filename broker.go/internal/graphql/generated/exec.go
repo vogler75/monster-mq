@@ -103,7 +103,7 @@ type QueryResolver interface {
 	Sessions(ctx context.Context, nodeID *string, cleanSession *bool, connected *bool) ([]*Session, error)
 	Session(ctx context.Context, clientID string, nodeID *string) (*Session, error)
 	Users(ctx context.Context, username *string) ([]*UserInfo, error)
-	ArchiveGroups(ctx context.Context, enabled *bool) ([]*ArchiveGroupInfo, error)
+	ArchiveGroups(ctx context.Context, enabled *bool, lastValTypeEquals *MessageStoreType, lastValTypeNotEquals *MessageStoreType) ([]*ArchiveGroupInfo, error)
 	ArchiveGroup(ctx context.Context, name string) (*ArchiveGroupInfo, error)
 	MqttClients(ctx context.Context, name *string, node *string) ([]*MqttClient, error)
 }
@@ -773,7 +773,11 @@ type Query {
     sessions(nodeId: String, cleanSession: Boolean, connected: Boolean): [Session!]!
     session(clientId: String!, nodeId: String): Session
     users(username: String): [UserInfo!]!
-    archiveGroups(enabled: Boolean): [ArchiveGroupInfo!]!
+    archiveGroups(
+        enabled: Boolean
+        lastValTypeEquals: MessageStoreType
+        lastValTypeNotEquals: MessageStoreType
+    ): [ArchiveGroupInfo!]!
     archiveGroup(name: String!): ArchiveGroupInfo
     mqttClients(name: String, node: String): [MqttClient!]!
 }
@@ -1138,6 +1142,16 @@ func (ec *executionContext) field_Query_archiveGroups_args(ctx context.Context, 
 		return nil, err
 	}
 	args["enabled"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "lastValTypeEquals", ec.unmarshalOMessageStoreType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageStoreType)
+	if err != nil {
+		return nil, err
+	}
+	args["lastValTypeEquals"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "lastValTypeNotEquals", ec.unmarshalOMessageStoreType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageStoreType)
+	if err != nil {
+		return nil, err
+	}
+	args["lastValTypeNotEquals"] = arg2
 	return args, nil
 }
 
@@ -7971,7 +7985,7 @@ func (ec *executionContext) _Query_archiveGroups(ctx context.Context, field grap
 		ec.fieldContext_Query_archiveGroups,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().ArchiveGroups(ctx, fc.Args["enabled"].(*bool))
+			return ec.Resolvers.Query().ArchiveGroups(ctx, fc.Args["enabled"].(*bool), fc.Args["lastValTypeEquals"].(*MessageStoreType), fc.Args["lastValTypeNotEquals"].(*MessageStoreType))
 		},
 		nil,
 		ec.marshalNArchiveGroupInfo2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupInfoᚄ,

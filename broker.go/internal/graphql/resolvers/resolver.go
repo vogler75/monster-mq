@@ -599,7 +599,7 @@ func (r *queryResolver) BrowseTopics(ctx context.Context, topic string, archiveG
 	return out, nil
 }
 
-func (r *queryResolver) ArchiveGroups(ctx context.Context, enabled *bool) ([]*generated.ArchiveGroupInfo, error) {
+func (r *queryResolver) ArchiveGroups(ctx context.Context, enabled *bool, lastValTypeEquals, lastValTypeNotEquals *generated.MessageStoreType) ([]*generated.ArchiveGroupInfo, error) {
 	configs, err := r.Storage.ArchiveConfig.GetAll(ctx)
 	if err != nil {
 		return nil, err
@@ -607,6 +607,13 @@ func (r *queryResolver) ArchiveGroups(ctx context.Context, enabled *bool) ([]*ge
 	out := []*generated.ArchiveGroupInfo{}
 	for _, c := range configs {
 		if enabled != nil && c.Enabled != *enabled {
+			continue
+		}
+		lvType := toMessageStoreType(c.LastValType)
+		if lastValTypeEquals != nil && lvType != *lastValTypeEquals {
+			continue
+		}
+		if lastValTypeNotEquals != nil && lvType == *lastValTypeNotEquals {
 			continue
 		}
 		out = append(out, r.archiveGroupInfoTo(c))
@@ -879,12 +886,12 @@ func (r *archiveGroupInfoResolver) MetricsHistory(ctx context.Context, _ *genera
 
 func (r *archiveGroupInfoResolver) ConnectionStatus(ctx context.Context, obj *generated.ArchiveGroupInfo) ([]*generated.NodeConnectionStatus, error) {
 	// Single-node broker: report this node's status. Each underlying store
-	// (last-value and archive) is reported independently — a group may have
-	// only one of the two configured.
+	// (last-value and archive) is reported independently. If the manager
+	// failed to start the group (e.g. wrong backend type for the broker),
+	// surface the error so the dashboard can show it.
 	var (
-		hasLV  bool
-		hasAR  bool
-		errMsg string
+		hasLV bool
+		hasAR bool
 	)
 	for _, g := range r.Archives.Snapshot() {
 		if g.Name() != obj.Name {
@@ -904,8 +911,8 @@ func (r *archiveGroupInfoResolver) ConnectionStatus(ctx context.Context, obj *ge
 	if obj.ArchiveType != generated.MessageArchiveTypeNone {
 		status.MessageArchive = &hasAR
 	}
-	if errMsg != "" {
-		status.Error = &errMsg
+	if msg := r.Archives.DeployError(obj.Name); msg != "" {
+		status.Error = &msg
 	}
 	return []*generated.NodeConnectionStatus{status}, nil
 }
@@ -920,6 +927,9 @@ func (r *mqttClientResolver) MetricsHistory(ctx context.Context, _ *generated.Mq
 // Grouped mutation resolvers -----------------------------------------------
 
 func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated.ArchiveGroupMutations, input generated.CreateArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
+	if err := archive.ValidateGroupName(input.Name); err != nil {
+		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
 	cfg := stores.ArchiveGroupConfig{
 		Name:             input.Name,
 		Enabled:          true,
@@ -937,6 +947,9 @@ func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated
 	}
 	if err := r.Storage.ArchiveConfig.Save(ctx, cfg); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
+	if err := r.Archives.Reload(ctx); err != nil {
+		r.Logger.Warn("archive reload after create failed", "name", cfg.Name, "err", err)
 	}
 	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(cfg)}, nil
 }
@@ -978,11 +991,17 @@ func (r *archiveGroupMutationsResolver) Update(ctx context.Context, _ *generated
 	if err := r.Storage.ArchiveConfig.Save(ctx, *existing); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
 	}
+	if err := r.Archives.Reload(ctx); err != nil {
+		r.Logger.Warn("archive reload after update failed", "name", existing.Name, "err", err)
+	}
 	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(*existing)}, nil
 }
 func (r *archiveGroupMutationsResolver) Delete(ctx context.Context, _ *generated.ArchiveGroupMutations, name string) (*generated.ArchiveGroupResult, error) {
 	if err := r.Storage.ArchiveConfig.Delete(ctx, name); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
+	if err := r.Archives.Reload(ctx); err != nil {
+		r.Logger.Warn("archive reload after delete failed", "name", name, "err", err)
 	}
 	return &generated.ArchiveGroupResult{Success: true}, nil
 }
@@ -1000,6 +1019,9 @@ func (r *archiveGroupMutationsResolver) toggleArchive(ctx context.Context, name 
 	cfg.Enabled = enabled
 	if err := r.Storage.ArchiveConfig.Save(ctx, *cfg); err != nil {
 		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
+	if err := r.Archives.Reload(ctx); err != nil {
+		r.Logger.Warn("archive reload after toggle failed", "name", name, "err", err)
 	}
 	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(*cfg)}, nil
 }

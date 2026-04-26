@@ -44,14 +44,14 @@ func Open(ctx context.Context, dsn string) (*DB, error) {
 func (d *DB) Close() error { d.pool.Close(); return nil }
 
 // Build constructs a Storage backed by Postgres.
-func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
+func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, *DB, error) {
 	dsn := cfg.Postgres.URL
 	if cfg.Postgres.User != "" || cfg.Postgres.Pass != "" {
 		dsn = fmt.Sprintf("%s?user=%s&password=%s", dsn, cfg.Postgres.User, cfg.Postgres.Pass)
 	}
 	db, err := Open(ctx, dsn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	retained := &MessageStore{name: "retainedmessages", db: db}
 	sessions := &SessionStore{db: db}
@@ -65,7 +65,7 @@ func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
 	} {
 		if err := t.EnsureTable(ctx); err != nil {
 			db.Close()
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	return &stores.Storage{
@@ -74,7 +74,7 @@ func Build(ctx context.Context, cfg *config.Config) (*stores.Storage, error) {
 		Queue: queue, Retained: retained, Users: users,
 		ArchiveConfig: archives, DeviceConfig: devices, Metrics: metricsStore,
 		Closer: db.Close,
-	}, nil
+	}, db, nil
 }
 
 // MessageStore -------------------------------------------------------------

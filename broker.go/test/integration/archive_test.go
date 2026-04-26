@@ -3,17 +3,23 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	_ "modernc.org/sqlite"
+
+	"monstermq.io/edge/internal/archive"
 )
 
 // TestArchiveGroupWrites confirms the Default archive group is created on
-// startup and that published messages reach both the last-value (lv_Default)
-// and history (ar_Default) tables.
+// startup and that published messages reach both its last-value and history
+// tables. Table names are derived from the group name via the same helpers
+// production uses (archive.LastValName / archive.ArchiveName), so this test
+// breaks loudly if the naming convention changes.
 func TestArchiveGroupWrites(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "archive.db")
 	port := 22003
@@ -42,18 +48,25 @@ func TestArchiveGroupWrites(t *testing.T) {
 	ctx := context.Background()
 
 	var lvCount int
-	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM lv_Default WHERE topic = ?", "sensor/temp").Scan(&lvCount); err != nil {
+	lvTable := strings.ToLower(archive.LastValName("Default"))  // "defaultlastval"
+	arTable := strings.ToLower(archive.ArchiveName("Default"))  // "defaultarchive"
+
+	if err := conn.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE topic = ?", lvTable),
+		"sensor/temp").Scan(&lvCount); err != nil {
 		t.Fatal(err)
 	}
 	if lvCount != 1 {
-		t.Fatalf("lv_Default expected 1 row, got %d", lvCount)
+		t.Fatalf("%s expected 1 row, got %d", lvTable, lvCount)
 	}
 
 	var arCount int
-	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM ar_Default WHERE topic = ?", "sensor/temp").Scan(&arCount); err != nil {
+	if err := conn.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE topic = ?", arTable),
+		"sensor/temp").Scan(&arCount); err != nil {
 		t.Fatal(err)
 	}
 	if arCount < 1 {
-		t.Fatalf("ar_Default expected >= 1 row, got %d", arCount)
+		t.Fatalf("%s expected >= 1 row, got %d", arTable, arCount)
 	}
 }
