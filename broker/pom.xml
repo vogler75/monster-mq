@@ -123,6 +123,14 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/dependencies</outputDirectory>
+                            <!-- PLC4X 0.13.1, Eclipse Milo 0.6.16, and Azure SDK still pull
+                                 netty-codec 4.1.x. That artifact ships the same
+                                 io.netty.handler.codec.* classes as netty-codec-base 4.2.x
+                                 (which Vert.x 5 uses), and the duplicate-class shadowing
+                                 silently breaks WebSocket upgrades. Skip it here so the
+                                 4.1 jar never reaches the runtime classpath; the same
+                                 classes are supplied by netty-codec-base 4.2. -->
+                            <excludeArtifactIds>netty-codec</excludeArtifactIds>
                         </configuration>
                     </execution>
                 </executions>
@@ -330,10 +338,6 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-azure-open-ai</artifactId>
             <version>1.12.2</version>
-            <exclusions>
-                <!-- See PLC4X block: netty-codec 4.1 conflicts with netty-codec-base 4.2 -->
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
@@ -386,43 +390,23 @@
             <groupId>org.eclipse.milo</groupId>
             <artifactId>sdk-client</artifactId>
             <version>0.6.16</version>
-            <exclusions>
-                <!-- See PLC4X block: netty-codec 4.1 conflicts with netty-codec-base 4.2 -->
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>sdk-server</artifactId>
             <version>0.6.16</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>sdk-core</artifactId>
             <version>0.6.16</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
 
-        <!-- Apache PLC4X - Industrial Protocol Integration
-
-             PLC4X 0.13.1 transitively depends on netty-codec 4.1.x. That artifact
-             ships the same io.netty.handler.codec.* classes that netty-codec-base
-             4.2.x (used by Vert.x 5) ships, and the duplicate-class shadowing
-             breaks the WebSocket handshake (the 101 response is never written).
-             Excluding netty-codec is safe: Vert.x's netty-codec-base 4.2 supplies
-             the same classes PLC4X needs at runtime. -->
+        <!-- Apache PLC4X - Industrial Protocol Integration -->
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-api</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
 
         <!-- PLC4X Protocol Drivers - Stable -->
@@ -430,73 +414,46 @@
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-s7</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-modbus</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-ads</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-ab-eth</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-bacnet</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-knxnetip</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-eip</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-canopen</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-firmata</artifactId>
             <version>0.13.1</version>
-            <exclusions>
-                <exclusion><groupId>io.netty</groupId><artifactId>netty-codec</artifactId></exclusion>
-            </exclusions>
         </dependency>
 
         <!-- Neo4j Java Driver for graph database integration -->
