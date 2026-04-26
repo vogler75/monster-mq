@@ -44,19 +44,6 @@ type ArchiveGroupInfo struct {
 	MetricsHistory   []*ArchiveGroupMetrics  `json:"metricsHistory"`
 }
 
-type ArchiveGroupInput struct {
-	Name             string             `json:"name"`
-	Enabled          *bool              `json:"enabled,omitempty"`
-	TopicFilter      []string           `json:"topicFilter"`
-	RetainedOnly     *bool              `json:"retainedOnly,omitempty"`
-	LastValType      MessageStoreType   `json:"lastValType"`
-	ArchiveType      MessageArchiveType `json:"archiveType"`
-	PayloadFormat    *PayloadFormat     `json:"payloadFormat,omitempty"`
-	LastValRetention *string            `json:"lastValRetention,omitempty"`
-	ArchiveRetention *string            `json:"archiveRetention,omitempty"`
-	PurgeInterval    *string            `json:"purgeInterval,omitempty"`
-}
-
 type ArchiveGroupMetrics struct {
 	MessagesOut float64 `json:"messagesOut"`
 	BufferSize  int     `json:"bufferSize"`
@@ -169,6 +156,18 @@ type CreateACLRuleInput struct {
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	Priority     *int   `json:"priority,omitempty"`
+}
+
+type CreateArchiveGroupInput struct {
+	Name             string             `json:"name"`
+	TopicFilter      []string           `json:"topicFilter"`
+	RetainedOnly     *bool              `json:"retainedOnly,omitempty"`
+	LastValType      MessageStoreType   `json:"lastValType"`
+	ArchiveType      MessageArchiveType `json:"archiveType"`
+	PayloadFormat    *PayloadFormat     `json:"payloadFormat,omitempty"`
+	LastValRetention *string            `json:"lastValRetention,omitempty"`
+	ArchiveRetention *string            `json:"archiveRetention,omitempty"`
+	PurgeInterval    *string            `json:"purgeInterval,omitempty"`
 }
 
 type CreateUserInput struct {
@@ -382,6 +381,18 @@ type UpdateACLRuleInput struct {
 	CanSubscribe *bool  `json:"canSubscribe,omitempty"`
 	CanPublish   *bool  `json:"canPublish,omitempty"`
 	Priority     *int   `json:"priority,omitempty"`
+}
+
+type UpdateArchiveGroupInput struct {
+	Name             string              `json:"name"`
+	TopicFilter      []string            `json:"topicFilter,omitempty"`
+	RetainedOnly     *bool               `json:"retainedOnly,omitempty"`
+	LastValType      *MessageStoreType   `json:"lastValType,omitempty"`
+	ArchiveType      *MessageArchiveType `json:"archiveType,omitempty"`
+	PayloadFormat    *PayloadFormat      `json:"payloadFormat,omitempty"`
+	LastValRetention *string             `json:"lastValRetention,omitempty"`
+	ArchiveRetention *string             `json:"archiveRetention,omitempty"`
+	PurgeInterval    *string             `json:"purgeInterval,omitempty"`
 }
 
 type UpdateUserInput struct {

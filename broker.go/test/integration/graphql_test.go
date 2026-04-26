@@ -168,12 +168,11 @@ func TestGraphQLArchiveGroupCRUD(t *testing.T) {
 	}
 
 	// Create a new group.
-	gqlQuery(t, url, `mutation Create($input: ArchiveGroupInput!) {
+	gqlQuery(t, url, `mutation Create($input: CreateArchiveGroupInput!) {
         archiveGroup { create(input: $input) { success archiveGroup { name enabled } } }
     }`, map[string]any{
 		"input": map[string]any{
 			"name":        "Sensors",
-			"enabled":     true,
 			"topicFilter": []string{"sensor/#"},
 			"lastValType": "SQLITE",
 			"archiveType": "SQLITE",

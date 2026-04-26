@@ -52,8 +52,8 @@ type ArchiveGroupInfoResolver interface {
 	MetricsHistory(ctx context.Context, obj *ArchiveGroupInfo, from *string, to *string, lastMinutes *int) ([]*ArchiveGroupMetrics, error)
 }
 type ArchiveGroupMutationsResolver interface {
-	Create(ctx context.Context, obj *ArchiveGroupMutations, input ArchiveGroupInput) (*ArchiveGroupResult, error)
-	Update(ctx context.Context, obj *ArchiveGroupMutations, input ArchiveGroupInput) (*ArchiveGroupResult, error)
+	Create(ctx context.Context, obj *ArchiveGroupMutations, input CreateArchiveGroupInput) (*ArchiveGroupResult, error)
+	Update(ctx context.Context, obj *ArchiveGroupMutations, input UpdateArchiveGroupInput) (*ArchiveGroupResult, error)
 	Delete(ctx context.Context, obj *ArchiveGroupMutations, name string) (*ArchiveGroupResult, error)
 	Enable(ctx context.Context, obj *ArchiveGroupMutations, name string) (*ArchiveGroupResult, error)
 	Disable(ctx context.Context, obj *ArchiveGroupMutations, name string) (*ArchiveGroupResult, error)
@@ -155,13 +155,14 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := newExecutionContext(opCtx, e, make(chan graphql.DeferredResult))
 	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
-		ec.unmarshalInputArchiveGroupInput,
 		ec.unmarshalInputCreateAclRuleInput,
+		ec.unmarshalInputCreateArchiveGroupInput,
 		ec.unmarshalInputCreateUserInput,
 		ec.unmarshalInputMqttClientInput,
 		ec.unmarshalInputPublishInput,
 		ec.unmarshalInputSetPasswordInput,
 		ec.unmarshalInputUpdateAclRuleInput,
+		ec.unmarshalInputUpdateArchiveGroupInput,
 		ec.unmarshalInputUpdateUserInput,
 	)
 	first := true
@@ -484,13 +485,24 @@ type ArchiveGroupInfo {
     metricsHistory(from: String, to: String, lastMinutes: Int): [ArchiveGroupMetrics!]!
 }
 
-input ArchiveGroupInput {
+input CreateArchiveGroupInput {
     name: String!
-    enabled: Boolean
     topicFilter: [String!]!
-    retainedOnly: Boolean
+    retainedOnly: Boolean = false
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat = DEFAULT
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+input UpdateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]
+    retainedOnly: Boolean
+    lastValType: MessageStoreType
+    archiveType: MessageArchiveType
     payloadFormat: PayloadFormat
     lastValRetention: String
     archiveRetention: String
@@ -676,8 +688,8 @@ type SessionMutations {
 }
 
 type ArchiveGroupMutations {
-    create(input: ArchiveGroupInput!): ArchiveGroupResult!
-    update(input: ArchiveGroupInput!): ArchiveGroupResult!
+    create(input: CreateArchiveGroupInput!): ArchiveGroupResult!
+    update(input: UpdateArchiveGroupInput!): ArchiveGroupResult!
     delete(name: String!): ArchiveGroupResult!
     enable(name: String!): ArchiveGroupResult!
     disable(name: String!): ArchiveGroupResult!
@@ -814,7 +826,7 @@ func (ec *executionContext) field_ArchiveGroupInfo_metricsHistory_args(ctx conte
 func (ec *executionContext) field_ArchiveGroupMutations_create_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNCreateArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐCreateArchiveGroupInput)
 	if err != nil {
 		return nil, err
 	}
@@ -858,7 +870,7 @@ func (ec *executionContext) field_ArchiveGroupMutations_enable_args(ctx context.
 func (ec *executionContext) field_ArchiveGroupMutations_update_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNUpdateArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUpdateArchiveGroupInput)
 	if err != nil {
 		return nil, err
 	}
@@ -2560,7 +2572,7 @@ func (ec *executionContext) _ArchiveGroupMutations_create(ctx context.Context, f
 		ec.fieldContext_ArchiveGroupMutations_create,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.ArchiveGroupMutations().Create(ctx, obj, fc.Args["input"].(ArchiveGroupInput))
+			return ec.Resolvers.ArchiveGroupMutations().Create(ctx, obj, fc.Args["input"].(CreateArchiveGroupInput))
 		},
 		nil,
 		ec.marshalNArchiveGroupResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupResult,
@@ -2609,7 +2621,7 @@ func (ec *executionContext) _ArchiveGroupMutations_update(ctx context.Context, f
 		ec.fieldContext_ArchiveGroupMutations_update,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.ArchiveGroupMutations().Update(ctx, obj, fc.Args["input"].(ArchiveGroupInput))
+			return ec.Resolvers.ArchiveGroupMutations().Update(ctx, obj, fc.Args["input"].(UpdateArchiveGroupInput))
 		},
 		nil,
 		ec.marshalNArchiveGroupResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupResult,
@@ -12468,8 +12480,8 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
-func (ec *executionContext) unmarshalInputArchiveGroupInput(ctx context.Context, obj any) (ArchiveGroupInput, error) {
-	var it ArchiveGroupInput
+func (ec *executionContext) unmarshalInputCreateAclRuleInput(ctx context.Context, obj any) (CreateACLRuleInput, error) {
+	var it CreateACLRuleInput
 	if obj == nil {
 		return it, nil
 	}
@@ -12479,7 +12491,72 @@ func (ec *executionContext) unmarshalInputArchiveGroupInput(ctx context.Context,
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "enabled", "topicFilter", "retainedOnly", "lastValType", "archiveType", "payloadFormat", "lastValRetention", "archiveRetention", "purgeInterval"}
+	fieldsInOrder := [...]string{"username", "topicPattern", "canSubscribe", "canPublish", "priority"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "topicPattern":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topicPattern"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopicPattern = data
+		case "canSubscribe":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canSubscribe"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CanSubscribe = data
+		case "canPublish":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canPublish"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CanPublish = data
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Priority = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputCreateArchiveGroupInput(ctx context.Context, obj any) (CreateArchiveGroupInput, error) {
+	var it CreateArchiveGroupInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["retainedOnly"]; !present {
+		asMap["retainedOnly"] = false
+	}
+	if _, present := asMap["payloadFormat"]; !present {
+		asMap["payloadFormat"] = "DEFAULT"
+	}
+
+	fieldsInOrder := [...]string{"name", "topicFilter", "retainedOnly", "lastValType", "archiveType", "payloadFormat", "lastValRetention", "archiveRetention", "purgeInterval"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -12493,13 +12570,6 @@ func (ec *executionContext) unmarshalInputArchiveGroupInput(ctx context.Context,
 				return it, err
 			}
 			it.Name = data
-		case "enabled":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("enabled"))
-			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Enabled = data
 		case "topicFilter":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topicFilter"))
 			data, err := ec.unmarshalNString2ᚕstringᚄ(ctx, v)
@@ -12556,64 +12626,6 @@ func (ec *executionContext) unmarshalInputArchiveGroupInput(ctx context.Context,
 				return it, err
 			}
 			it.PurgeInterval = data
-		}
-	}
-	return it, nil
-}
-
-func (ec *executionContext) unmarshalInputCreateAclRuleInput(ctx context.Context, obj any) (CreateACLRuleInput, error) {
-	var it CreateACLRuleInput
-	if obj == nil {
-		return it, nil
-	}
-
-	asMap := map[string]any{}
-	for k, v := range obj.(map[string]any) {
-		asMap[k] = v
-	}
-
-	fieldsInOrder := [...]string{"username", "topicPattern", "canSubscribe", "canPublish", "priority"}
-	for _, k := range fieldsInOrder {
-		v, ok := asMap[k]
-		if !ok {
-			continue
-		}
-		switch k {
-		case "username":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Username = data
-		case "topicPattern":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topicPattern"))
-			data, err := ec.unmarshalNString2string(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.TopicPattern = data
-		case "canSubscribe":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canSubscribe"))
-			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.CanSubscribe = data
-		case "canPublish":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("canPublish"))
-			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.CanPublish = data
-		case "priority":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
-			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
-			if err != nil {
-				return it, err
-			}
-			it.Priority = data
 		}
 	}
 	return it, nil
@@ -12911,6 +12923,92 @@ func (ec *executionContext) unmarshalInputUpdateAclRuleInput(ctx context.Context
 				return it, err
 			}
 			it.Priority = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUpdateArchiveGroupInput(ctx context.Context, obj any) (UpdateArchiveGroupInput, error) {
+	var it UpdateArchiveGroupInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"name", "topicFilter", "retainedOnly", "lastValType", "archiveType", "payloadFormat", "lastValRetention", "archiveRetention", "purgeInterval"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "name":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Name = data
+		case "topicFilter":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topicFilter"))
+			data, err := ec.unmarshalOString2ᚕstringᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopicFilter = data
+		case "retainedOnly":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("retainedOnly"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RetainedOnly = data
+		case "lastValType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("lastValType"))
+			data, err := ec.unmarshalOMessageStoreType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageStoreType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LastValType = data
+		case "archiveType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("archiveType"))
+			data, err := ec.unmarshalOMessageArchiveType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageArchiveType(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArchiveType = data
+		case "payloadFormat":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("payloadFormat"))
+			data, err := ec.unmarshalOPayloadFormat2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐPayloadFormat(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PayloadFormat = data
+		case "lastValRetention":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("lastValRetention"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LastValRetention = data
+		case "archiveRetention":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("archiveRetention"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArchiveRetention = data
+		case "purgeInterval":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("purgeInterval"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PurgeInterval = data
 		}
 	}
 	return it, nil
@@ -17088,11 +17186,6 @@ func (ec *executionContext) marshalNArchiveGroupInfo2ᚖmonstermqᚗioᚋedgeᚋ
 	return ec._ArchiveGroupInfo(ctx, sel, v)
 }
 
-func (ec *executionContext) unmarshalNArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupInput(ctx context.Context, v any) (ArchiveGroupInput, error) {
-	res, err := ec.unmarshalInputArchiveGroupInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
 func (ec *executionContext) marshalNArchiveGroupMetrics2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐArchiveGroupMetricsᚄ(ctx context.Context, sel ast.SelectionSet, v []*ArchiveGroupMetrics) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -17257,6 +17350,11 @@ func (ec *executionContext) marshalNBrokerMetrics2ᚖmonstermqᚗioᚋedgeᚋint
 
 func (ec *executionContext) unmarshalNCreateAclRuleInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐCreateACLRuleInput(ctx context.Context, v any) (CreateACLRuleInput, error) {
 	res, err := ec.unmarshalInputCreateAclRuleInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNCreateArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐCreateArchiveGroupInput(ctx context.Context, v any) (CreateArchiveGroupInput, error) {
+	res, err := ec.unmarshalInputCreateArchiveGroupInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -17927,6 +18025,11 @@ func (ec *executionContext) unmarshalNUpdateAclRuleInput2monstermqᚗioᚋedge�
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNUpdateArchiveGroupInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUpdateArchiveGroupInput(ctx context.Context, v any) (UpdateArchiveGroupInput, error) {
+	res, err := ec.unmarshalInputUpdateArchiveGroupInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNUpdateUserInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUpdateUserInput(ctx context.Context, v any) (UpdateUserInput, error) {
 	res, err := ec.unmarshalInputUpdateUserInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -18253,6 +18356,38 @@ func (ec *executionContext) marshalOLong2ᚖint64(ctx context.Context, sel ast.S
 	_ = ctx
 	res := graphql.MarshalInt64(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOMessageArchiveType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageArchiveType(ctx context.Context, v any) (*MessageArchiveType, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(MessageArchiveType)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOMessageArchiveType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageArchiveType(ctx context.Context, sel ast.SelectionSet, v *MessageArchiveType) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
+func (ec *executionContext) unmarshalOMessageStoreType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageStoreType(ctx context.Context, v any) (*MessageStoreType, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(MessageStoreType)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOMessageStoreType2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMessageStoreType(ctx context.Context, sel ast.SelectionSet, v *MessageStoreType) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOMqttClient2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClient(ctx context.Context, sel ast.SelectionSet, v *MqttClient) graphql.Marshaler {

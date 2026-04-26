@@ -227,13 +227,24 @@ type ArchiveGroupInfo {
     metricsHistory(from: String, to: String, lastMinutes: Int): [ArchiveGroupMetrics!]!
 }
 
-input ArchiveGroupInput {
+input CreateArchiveGroupInput {
     name: String!
-    enabled: Boolean
     topicFilter: [String!]!
-    retainedOnly: Boolean
+    retainedOnly: Boolean = false
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    payloadFormat: PayloadFormat = DEFAULT
+    lastValRetention: String
+    archiveRetention: String
+    purgeInterval: String
+}
+
+input UpdateArchiveGroupInput {
+    name: String!
+    topicFilter: [String!]
+    retainedOnly: Boolean
+    lastValType: MessageStoreType
+    archiveType: MessageArchiveType
     payloadFormat: PayloadFormat
     lastValRetention: String
     archiveRetention: String
@@ -419,8 +430,8 @@ type SessionMutations {
 }
 
 type ArchiveGroupMutations {
-    create(input: ArchiveGroupInput!): ArchiveGroupResult!
-    update(input: ArchiveGroupInput!): ArchiveGroupResult!
+    create(input: CreateArchiveGroupInput!): ArchiveGroupResult!
+    update(input: UpdateArchiveGroupInput!): ArchiveGroupResult!
     delete(name: String!): ArchiveGroupResult!
     enable(name: String!): ArchiveGroupResult!
     disable(name: String!): ArchiveGroupResult!

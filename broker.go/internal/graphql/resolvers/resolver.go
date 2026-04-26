@@ -878,21 +878,36 @@ func (r *archiveGroupInfoResolver) MetricsHistory(ctx context.Context, _ *genera
 }
 
 func (r *archiveGroupInfoResolver) ConnectionStatus(ctx context.Context, obj *generated.ArchiveGroupInfo) ([]*generated.NodeConnectionStatus, error) {
-	// Single-node broker: report this node's status. We treat the configured
-	// stores as connected if a deployed Group exists for this archive.
-	connected := false
+	// Single-node broker: report this node's status. Each underlying store
+	// (last-value and archive) is reported independently — a group may have
+	// only one of the two configured.
+	var (
+		hasLV  bool
+		hasAR  bool
+		errMsg string
+	)
 	for _, g := range r.Archives.Snapshot() {
-		if g.Name() == obj.Name {
-			connected = true
-			break
+		if g.Name() != obj.Name {
+			continue
 		}
+		hasLV = g.LastValue() != nil
+		hasAR = g.Archive() != nil
+		break
 	}
-	return []*generated.NodeConnectionStatus{{
-		NodeID:         r.NodeID,
-		MessageArchive: &connected,
-		LastValueStore: &connected,
-		Timestamp:      time.Now().UnixMilli(),
-	}}, nil
+	status := &generated.NodeConnectionStatus{
+		NodeID:    r.NodeID,
+		Timestamp: time.Now().UnixMilli(),
+	}
+	if obj.LastValType != generated.MessageStoreTypeNone {
+		status.LastValueStore = &hasLV
+	}
+	if obj.ArchiveType != generated.MessageArchiveTypeNone {
+		status.MessageArchive = &hasAR
+	}
+	if errMsg != "" {
+		status.Error = &errMsg
+	}
+	return []*generated.NodeConnectionStatus{status}, nil
 }
 
 func (r *mqttClientResolver) Metrics(ctx context.Context, _ *generated.MqttClient) ([]*generated.MqttClientMetrics, error) {
@@ -904,11 +919,14 @@ func (r *mqttClientResolver) MetricsHistory(ctx context.Context, _ *generated.Mq
 
 // Grouped mutation resolvers -----------------------------------------------
 
-func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated.ArchiveGroupMutations, input generated.ArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
+func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated.ArchiveGroupMutations, input generated.CreateArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
 	cfg := stores.ArchiveGroupConfig{
-		Name: input.Name, Enabled: boolPtr(input.Enabled, true),
-		TopicFilters: input.TopicFilter, RetainedOnly: boolPtr(input.RetainedOnly, false),
-		LastValType: fromMessageStoreType(input.LastValType), ArchiveType: fromMessageArchiveType(input.ArchiveType),
+		Name:             input.Name,
+		Enabled:          true,
+		TopicFilters:     input.TopicFilter,
+		RetainedOnly:     boolPtr(input.RetainedOnly, false),
+		LastValType:      fromMessageStoreType(input.LastValType),
+		ArchiveType:      fromMessageArchiveType(input.ArchiveType),
 		PayloadFormat:    stores.PayloadDefault,
 		LastValRetention: derefStr(input.LastValRetention),
 		ArchiveRetention: derefStr(input.ArchiveRetention),
@@ -922,8 +940,45 @@ func (r *archiveGroupMutationsResolver) Create(ctx context.Context, _ *generated
 	}
 	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(cfg)}, nil
 }
-func (r *archiveGroupMutationsResolver) Update(ctx context.Context, obj *generated.ArchiveGroupMutations, input generated.ArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
-	return r.Create(ctx, obj, input)
+
+func (r *archiveGroupMutationsResolver) Update(ctx context.Context, _ *generated.ArchiveGroupMutations, input generated.UpdateArchiveGroupInput) (*generated.ArchiveGroupResult, error) {
+	// Update merges the input over the existing config — only fields the
+	// caller supplied are changed.
+	existing, err := r.Storage.ArchiveConfig.Get(ctx, input.Name)
+	if err != nil {
+		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
+	if existing == nil {
+		return &generated.ArchiveGroupResult{Success: false, Message: ptr("archive group not found")}, nil
+	}
+	if input.TopicFilter != nil {
+		existing.TopicFilters = input.TopicFilter
+	}
+	if input.RetainedOnly != nil {
+		existing.RetainedOnly = *input.RetainedOnly
+	}
+	if input.LastValType != nil {
+		existing.LastValType = fromMessageStoreType(*input.LastValType)
+	}
+	if input.ArchiveType != nil {
+		existing.ArchiveType = fromMessageArchiveType(*input.ArchiveType)
+	}
+	if input.PayloadFormat != nil {
+		existing.PayloadFormat = stores.PayloadFormat(*input.PayloadFormat)
+	}
+	if input.LastValRetention != nil {
+		existing.LastValRetention = *input.LastValRetention
+	}
+	if input.ArchiveRetention != nil {
+		existing.ArchiveRetention = *input.ArchiveRetention
+	}
+	if input.PurgeInterval != nil {
+		existing.PurgeInterval = *input.PurgeInterval
+	}
+	if err := r.Storage.ArchiveConfig.Save(ctx, *existing); err != nil {
+		return &generated.ArchiveGroupResult{Success: false, Message: ptr(err.Error())}, nil
+	}
+	return &generated.ArchiveGroupResult{Success: true, ArchiveGroup: r.archiveGroupInfoTo(*existing)}, nil
 }
 func (r *archiveGroupMutationsResolver) Delete(ctx context.Context, _ *generated.ArchiveGroupMutations, name string) (*generated.ArchiveGroupResult, error) {
 	if err := r.Storage.ArchiveConfig.Delete(ctx, name); err != nil {
