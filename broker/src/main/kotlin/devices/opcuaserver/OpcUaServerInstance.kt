@@ -6,13 +6,16 @@ import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
 import at.rocworks.data.TopicTree
 import io.vertx.core.Vertx
+import org.eclipse.milo.opcua.sdk.server.EndpointConfig
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
-import org.eclipse.milo.opcua.sdk.server.api.config.OpcUaServerConfigBuilder
+import org.eclipse.milo.opcua.sdk.server.OpcUaServerConfigBuilder
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import org.eclipse.milo.opcua.stack.core.transport.TransportProfile
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
-import org.eclipse.milo.opcua.stack.server.EndpointConfiguration
+import org.eclipse.milo.opcua.stack.transport.server.OpcServerTransportFactory
+import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransport
+import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransportConfig
 import java.net.InetAddress
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
@@ -52,22 +55,17 @@ class OpcUaServerInstance(
 
             // Create server with simplified configuration
             val serverConfig = createServerConfig()
-            server = OpcUaServer(serverConfig)
-
-            // For Eclipse Milo 0.6.16, set certificate information after server creation if available
-            if (keyStoreLoader?.serverCertificate != null && keyStoreLoader?.serverKeyPair != null) {
-                try {
-                    // Access the server's configuration to set certificates
-                    // This is a workaround for Eclipse Milo 0.6.16 certificate handling
-                    logger.info("Setting certificates on OPC UA server instance")
-
-                    // The certificates should already be configured through the endpoints
-                    // This is just for logging confirmation
-                    logger.info("OPC UA server created with certificate support for encrypted endpoints")
-                } catch (e: Exception) {
-                    logger.warning("Could not configure certificates on server: ${e.message}")
+            // Milo 1.x requires an OpcServerTransportFactory: build an OpcTcpServerTransport
+            // for every TCP-binary endpoint Milo asks for.
+            val transportFactory = OpcServerTransportFactory { profile ->
+                when (profile) {
+                    TransportProfile.TCP_UASC_UABINARY ->
+                        OpcTcpServerTransport(OpcTcpServerTransportConfig.newBuilder().build())
+                    else ->
+                        throw IllegalStateException("Unsupported transport profile: $profile")
                 }
             }
+            server = OpcUaServer(serverConfig, transportFactory)
 
             // Create namespace following gateway pattern
             val opcUaNamespace = OpcUaServerNamespace(server!!, config.namespaceUri)
@@ -143,7 +141,7 @@ class OpcUaServerInstance(
     /**
      * Create OPC UA server configuration with security support
      */
-    private fun createServerConfig(): org.eclipse.milo.opcua.sdk.server.api.config.OpcUaServerConfig {
+    private fun createServerConfig(): org.eclipse.milo.opcua.sdk.server.OpcUaServerConfig {
         // Load certificates if security is enabled
         val certificateInfo = if (config.security.securityPolicies.any { it != "None" }) {
             try {
@@ -165,7 +163,7 @@ class OpcUaServerInstance(
         val (certificate, certificateChain, keyPair) = certificateInfo
 
         // Build endpoints based on security configuration
-        val endpoints = mutableSetOf<EndpointConfiguration>()
+        val endpoints = mutableSetOf<EndpointConfig>()
         val hostname = config.hostname ?: InetAddress.getLocalHost().hostName
         val bindAddress = config.bindAddress ?: "0.0.0.0"
         val path = "/${config.path}"
@@ -177,7 +175,7 @@ class OpcUaServerInstance(
                     if (config.security.allowUnencrypted) {
                         // Add unencrypted endpoint
                         endpoints.add(
-                            EndpointConfiguration.newBuilder()
+                            EndpointConfig.newBuilder()
                                 .setBindAddress(bindAddress)
                                 .setBindPort(config.port)
                                 .setHostname(hostname)
@@ -196,7 +194,7 @@ class OpcUaServerInstance(
                     if (certificate != null && keyPair != null) {
                         // Add encrypted endpoint with Sign mode
                         endpoints.add(
-                            EndpointConfiguration.newBuilder()
+                            EndpointConfig.newBuilder()
                                 .setBindAddress(bindAddress)
                                 .setBindPort(config.port)
                                 .setHostname(hostname)
@@ -209,7 +207,7 @@ class OpcUaServerInstance(
                         )
                         // Add encrypted endpoint with SignAndEncrypt mode
                         endpoints.add(
-                            EndpointConfiguration.newBuilder()
+                            EndpointConfig.newBuilder()
                                 .setBindAddress(bindAddress)
                                 .setBindPort(config.port)
                                 .setHostname(hostname)
@@ -229,7 +227,7 @@ class OpcUaServerInstance(
                     if (certificate != null && keyPair != null) {
                         // Add Basic128Rsa15 endpoints
                         endpoints.add(
-                            EndpointConfiguration.newBuilder()
+                            EndpointConfig.newBuilder()
                                 .setBindAddress(bindAddress)
                                 .setBindPort(config.port)
                                 .setHostname(hostname)
@@ -241,7 +239,7 @@ class OpcUaServerInstance(
                                 .build()
                         )
                         endpoints.add(
-                            EndpointConfiguration.newBuilder()
+                            EndpointConfig.newBuilder()
                                 .setBindAddress(bindAddress)
                                 .setBindPort(config.port)
                                 .setHostname(hostname)
@@ -265,47 +263,33 @@ class OpcUaServerInstance(
             throw IllegalStateException("No valid endpoints configured. Check security configuration.")
         }
 
-        // Configure server based on research of Eclipse Milo 0.6.16 requirements
         val configBuilder = OpcUaServerConfigBuilder()
             .setApplicationName(LocalizedText.english("MonsterMQ OPC UA Server - ${config.name}"))
             .setApplicationUri("urn:MonsterMQ:OpcUaServer:${config.name}")
             .setProductUri("urn:MonsterMQ:OpcUaServer")
             .setEndpoints(endpoints)
 
-        // Add certificate management and validation if certificates are available
+        // Configure certificate management for encrypted endpoints (Milo 1.x model:
+        // CertificateManager wraps a CertificateGroup that exposes our keystore-backed
+        // server certificate plus a TrustListManager-backed CertificateValidator).
         if (certificate != null && keyPair != null) {
             logger.info("Configuring OPC UA server with certificate support for encrypted endpoints")
-
             try {
-                // Create a certificate manager for Eclipse Milo 0.6.16
-                val certificateManager = org.eclipse.milo.opcua.stack.core.security.DefaultCertificateManager(
-                    keyPair,
-                    certificate
-                )
+                val securityDir = java.nio.file.Paths.get(config.security.certificateDir)
+                java.nio.file.Files.createDirectories(securityDir)
+                val trustedDir = securityDir.resolve("trusted-${config.name}")
+                java.nio.file.Files.createDirectories(trustedDir)
+
+                val quarantine = org.eclipse.milo.opcua.stack.core.security.MemoryCertificateQuarantine()
+                val trustListManager = org.eclipse.milo.opcua.stack.core.security.FileBasedTrustListManager.createAndInitialize(trustedDir)
+                val validator = org.eclipse.milo.opcua.stack.core.security.DefaultServerCertificateValidator(trustListManager, quarantine)
+
+                val chain = certificateChain.takeIf { it.isNotEmpty() } ?: arrayOf(certificate)
+                val certGroup = ServerCertificateGroup(keyPair, chain, trustListManager, validator)
+
+                val certificateManager = org.eclipse.milo.opcua.stack.core.security.DefaultCertificateManager(quarantine, certGroup)
                 configBuilder.setCertificateManager(certificateManager)
-
-                // Configure certificate validator with TrustListManager as required by Eclipse Milo 0.6.16
-                try {
-                    // Create a trust list manager for certificate validation
-                    val securityDir = java.nio.file.Paths.get(config.security.certificateDir)
-                    java.nio.file.Files.createDirectories(securityDir)
-
-                    // Create trust directories for server certificate validation
-                    val trustedDir = securityDir.resolve("trusted-${config.name}")
-                    java.nio.file.Files.createDirectories(trustedDir)
-
-                    val trustListManager = org.eclipse.milo.opcua.stack.core.security.DefaultTrustListManager(trustedDir.toFile())
-                    val certificateValidator = org.eclipse.milo.opcua.stack.server.security.DefaultServerCertificateValidator(trustListManager)
-
-                    configBuilder.setCertificateValidator(certificateValidator)
-                    logger.info("Configured server certificate validator with trust directory: $trustedDir")
-                } catch (e: Exception) {
-                    // If certificate validator setup fails, log and continue without it
-                    logger.warning("Could not configure certificate validator: ${e.message}")
-                    logger.info("Server will operate without certificate validation - clients may need to trust server certificate manually")
-                }
-
-                logger.info("Certificate manager and validator configured successfully")
+                logger.info("Configured server certificate manager with trust directory: $trustedDir")
             } catch (e: Exception) {
                 logger.warning("Failed to configure certificate manager/validator: ${e.message}")
                 logger.info("Falling back to unencrypted-only configuration")

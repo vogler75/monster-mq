@@ -9,23 +9,19 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient
-import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder
-import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider
-import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider
-import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider
-import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
-import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
-import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription
-import org.eclipse.milo.opcua.stack.core.util.EndpointUtil
-import org.eclipse.milo.opcua.stack.core.security.DefaultTrustListManager
-import org.eclipse.milo.opcua.stack.client.security.ClientCertificateValidator
-import org.eclipse.milo.opcua.stack.client.security.DefaultClientCertificateValidator
-import java.nio.file.Files
-import java.nio.file.Paths
-import java.security.cert.X509Certificate
-import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem
-import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription
+import org.eclipse.milo.opcua.sdk.client.OpcUaClientConfigBuilder
+import org.eclipse.milo.opcua.sdk.client.identity.AnonymousProvider
+import org.eclipse.milo.opcua.sdk.client.identity.IdentityProvider
+import org.eclipse.milo.opcua.sdk.client.identity.UsernameProvider
+import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaMonitoredItem
+import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription
 import org.eclipse.milo.opcua.stack.core.Identifiers
+import org.eclipse.milo.opcua.stack.core.security.CertificateValidator
+import org.eclipse.milo.opcua.stack.core.security.DefaultClientCertificateValidator
+import org.eclipse.milo.opcua.stack.core.security.MemoryCertificateQuarantine
+import org.eclipse.milo.opcua.stack.core.security.MemoryTrustListManager
+import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
+import org.eclipse.milo.opcua.stack.core.security.TrustListManager
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UByte
@@ -34,6 +30,10 @@ import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.ULong
 import org.eclipse.milo.opcua.stack.core.types.enumerated.*
 import org.eclipse.milo.opcua.stack.core.types.structured.*
+import org.eclipse.milo.opcua.stack.core.util.EndpointUtil
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.security.cert.X509Certificate
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.OpcUaAddress
 import at.rocworks.stores.devices.OpcUaConnectionConfig
@@ -72,11 +72,12 @@ class OpcUaConnector : AbstractVerticle() {
 
     // OPC UA client
     private var client: OpcUaClient? = null
-    private var subscription: UaSubscription? = null
+    private var subscription: OpcUaSubscription? = null
 
     // Certificate management
     private var keyStoreLoader: KeyStoreLoader? = null
-    private var trustListManager: DefaultTrustListManager? = null
+    private var trustListManager: TrustListManager? = null
+    private var trustListPersister: TrustListPersister? = null
 
     // Connection state
     private var isConnected = false
@@ -90,7 +91,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     // Write support
     private var writeConsumer: MessageConsumer<Any>? = null
-    private val opcUaMonitoredItems = ConcurrentHashMap<String, UaMonitoredItem>() // address -> item
+    private val opcUaMonitoredItems = ConcurrentHashMap<String, OpcUaMonitoredItem>() // address -> item
 
     data class AddressSubscription(
         val address: OpcUaAddress,
@@ -117,19 +118,25 @@ class OpcUaConnector : AbstractVerticle() {
                     val securityDir = Paths.get(opcUaConfig.certificateConfig.securityDir)
                     Files.createDirectories(securityDir)
 
-                    // For OPC UA client, only create trust directories when validation is enabled
                     val deviceTrustedDir = securityDir.resolve("trusted-${deviceConfig.name.replace(Regex("[^a-zA-Z0-9-]"), "_")}")
 
-                    // DefaultTrustListManager requires this PKI structure, even though we only use trusted/certs
-                    // We create these on-demand only when certificate validation is actually needed
-                    Files.createDirectories(deviceTrustedDir.resolve("trusted/certs"))
-                    Files.createDirectories(deviceTrustedDir.resolve("issuers/certs"))
-                    Files.createDirectories(deviceTrustedDir.resolve("rejected/certs"))
+                    // Mirror the PKI directory layout used previously so existing on-disk certs are honored.
+                    val trustedCertsDir = deviceTrustedDir.resolve("trusted/certs")
+                    val issuersCertsDir = deviceTrustedDir.resolve("issuers/certs")
+                    val rejectedCertsDir = deviceTrustedDir.resolve("rejected/certs")
+                    Files.createDirectories(trustedCertsDir)
+                    Files.createDirectories(issuersCertsDir)
+                    Files.createDirectories(rejectedCertsDir)
 
-                    trustListManager = DefaultTrustListManager(deviceTrustedDir.toFile())
+                    val persister = TrustListPersister(trustedCertsDir, issuersCertsDir)
+                    val memoryTrustList = MemoryTrustListManager()
+                    persister.loadInto(memoryTrustList)
+                    trustListPersister = persister
+                    trustListManager = memoryTrustList
                     logger.info("Trust store initialized for device ${deviceConfig.name} at: $deviceTrustedDir")
                 } else {
                     trustListManager = null
+                    trustListPersister = null
                     logger.info("Certificate validation disabled for device ${deviceConfig.name} - no trust store created")
                 }
             } catch (e: Exception) {
@@ -279,52 +286,38 @@ class OpcUaConnector : AbstractVerticle() {
     private fun createMonitoredItemsBatch(items: List<Triple<OpcUaAddress, NodeId, String>>): Future<Void> {
         val promise = Promise.promise<Void>()
 
-        if (subscription == null) {
+        val sub = subscription
+        if (sub == null) {
             promise.fail(Exception("OPC UA subscription not available"))
             return promise.future()
         }
 
-        try {
-            val requests = items.map { (_, nodeId, _) ->
-                val clientHandle = subscription!!.nextClientHandle()
-                MonitoredItemCreateRequest(
-                    ReadValueId(nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE),
-                    MonitoringMode.Reporting,
-                    MonitoringParameters(
-                        clientHandle,
-                        opcUaConfig.monitoringParameters.samplingInterval,
-                        null,
-                        Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize),
-                        opcUaConfig.monitoringParameters.discardOldest
-                    )
-                )
-            }
-
-            subscription!!.createMonitoredItems(
-                TimestampsToReturn.Both,
-                requests
-            ) { item, idx ->
-                val (address, nodeId, browsePath) = items[idx]
-                item.setValueConsumer { dataValue ->
-                    handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
+        thread {
+            try {
+                val createdItems = items.map { (address, nodeId, browsePath) ->
+                    val item = OpcUaMonitoredItem.newDataItem(nodeId)
+                    item.setSamplingInterval(opcUaConfig.monitoringParameters.samplingInterval)
+                    item.setQueueSize(Unsigned.uint(opcUaConfig.monitoringParameters.bufferSize))
+                    item.setDiscardOldest(opcUaConfig.monitoringParameters.discardOldest)
+                    item.setDataValueListener { _, dataValue ->
+                        handleOpcUaValueChangeForAddress(address, nodeId, browsePath, dataValue)
+                    }
+                    item
                 }
-            }.whenComplete { createdItems, throwable ->
-                if (throwable != null) {
-                    logger.severe("Failed to create monitored items batch: ${throwable.message}")
-                    promise.fail(throwable)
-                    return@whenComplete
-                }
+                sub.addMonitoredItems(createdItems)
+                sub.createMonitoredItems()
 
                 var successCount = 0
                 createdItems.forEachIndexed { idx, item ->
                     val (address, nodeId, _) = items[idx]
-                    if (item.statusCode.isGood) {
+                    val createStatus = item.createResult.orElse(null)
+                    if (createStatus != null && createStatus.isGood) {
                         addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
                         opcUaMonitoredItems[address.address] = item
                         successCount++
                         logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
                     } else {
-                        logger.warning("Failed to create monitored item for address ${address.address}: ${item.statusCode}")
+                        logger.warning("Failed to create monitored item for address ${address.address}: $createStatus")
                     }
                 }
 
@@ -334,9 +327,10 @@ class OpcUaConnector : AbstractVerticle() {
                 } else {
                     promise.fail(Exception("All ${items.size} monitored items in batch failed"))
                 }
+            } catch (e: Exception) {
+                logger.severe("Failed to create monitored items batch: ${e.message}")
+                promise.fail(e)
             }
-        } catch (e: Exception) {
-            promise.fail(e)
         }
 
         return promise.future()
@@ -393,70 +387,39 @@ class OpcUaConnector : AbstractVerticle() {
         }
 
         val certificateConfig = opcUaConfig.certificateConfig
+        val updateEndpoint = opcUaConfig.updateEndpointUrl
 
-        return if (securityPolicy == SecurityPolicy.None || keyStoreLoader?.clientCertificate == null) {
-            // Create client without certificates for unsecured connections
-            logger.info("Creating OPC UA client without certificates (security policy: ${opcUaConfig.securityPolicy})")
-
-            if (opcUaConfig.updateEndpointUrl) {
-                // For unsecured connections with endpoint updating
-                OpcUaClient.create(
-                    opcUaConfig.endpointUrl,
-                    { endpoints: List<EndpointDescription> ->
-                        endpoints.stream()
-                            .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
-                            .map { endpoint -> endpointUpdater(endpoint) }
-                            .findFirst()
-                    }
-                ) { configBuilder: OpcUaClientConfigBuilder ->
-                    configBuilder
-                        .setIdentityProvider(identityProvider)
-                        .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
-                        .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
-                        .build()
-                }
-            } else {
-                // Simple client creation without endpoint updating
-                OpcUaClient.create(
-                    opcUaConfig.endpointUrl,
-                    { endpoints: List<EndpointDescription> ->
-                        endpoints.stream()
-                            .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
-                            .findFirst()
-                    }
-                ) { configBuilder: OpcUaClientConfigBuilder ->
-                    configBuilder
-                        .setIdentityProvider(identityProvider)
-                        .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
-                        .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
-                        .build()
-                }
+        val endpointSelector: java.util.function.Function<List<EndpointDescription>, java.util.Optional<EndpointDescription>> =
+            java.util.function.Function { endpoints ->
+                endpoints.stream()
+                    .filter { it.securityPolicyUri == securityPolicy.uri }
+                    .map { if (updateEndpoint) endpointUpdater(it) else it }
+                    .findFirst()
             }
-        } else {
-            // Create client with certificates for secured connections
-            logger.info("Creating OPC UA client with certificates (security policy: ${opcUaConfig.securityPolicy})")
 
-            OpcUaClient.create(
-                opcUaConfig.endpointUrl,
-                { endpoints: List<EndpointDescription> ->
-                    endpoints.stream()
-                        .filter { endpoint -> endpoint.securityPolicyUri == securityPolicy.uri }
-                        .map { endpoint -> endpointUpdater(endpoint) }
-                        .findFirst()
-                }
-            ) { configBuilder: OpcUaClientConfigBuilder ->
+        val transportConfigConsumer = java.util.function.Consumer<org.eclipse.milo.opcua.stack.transport.client.tcp.OpcTcpClientTransportConfigBuilder> { /* defaults */ }
+
+        val configConsumer = java.util.function.Consumer<OpcUaClientConfigBuilder> { configBuilder ->
+            configBuilder
+                .setIdentityProvider(identityProvider)
+                .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
+            if (securityPolicy != SecurityPolicy.None && keyStoreLoader?.clientCertificate != null) {
+                logger.info("Creating OPC UA client with certificates (security policy: ${opcUaConfig.securityPolicy})")
+                val cert = keyStoreLoader!!.clientCertificate!!
+                val chain = keyStoreLoader!!.clientCertificateChain?.takeIf { it.isNotEmpty() } ?: arrayOf(cert)
                 configBuilder
                     .setApplicationName(LocalizedText.english(certificateConfig.applicationName))
                     .setApplicationUri(certificateConfig.applicationUri)
-                    .setCertificate(keyStoreLoader!!.clientCertificate)
+                    .setCertificate(cert)
+                    .setCertificateChain(chain)
                     .setKeyPair(keyStoreLoader!!.clientKeyPair)
-                    .setIdentityProvider(identityProvider)
-                    .setRequestTimeout(UInteger.valueOf(opcUaConfig.requestTimeout))
-                    .setConnectTimeout(UInteger.valueOf(opcUaConfig.connectionTimeout))
                     .setCertificateValidator(createCertificateValidator())
-                    .build()
+            } else {
+                logger.info("Creating OPC UA client without certificates (security policy: ${opcUaConfig.securityPolicy})")
             }
         }
+
+        return OpcUaClient.create(opcUaConfig.endpointUrl, endpointSelector, transportConfigConsumer, configConsumer)
     }
 
     private fun connectToOpcUaServer(): Future<Void> {
@@ -496,7 +459,7 @@ class OpcUaConnector : AbstractVerticle() {
                 client = createOpcUaClient(identityProvider)
 
                 // Connect
-                val connectFuture = client!!.connect()
+                val connectFuture = client!!.connectAsync()
                 connectFuture.whenComplete { _, throwable ->
                     if (isStopped) {
                         isReconnecting = false
@@ -548,23 +511,25 @@ class OpcUaConnector : AbstractVerticle() {
     private fun createOpcUaSubscription(): Future<Void> {
         val promise = Promise.promise<Void>()
 
-        if (client == null || !isConnected) {
+        val c = client
+        if (c == null || !isConnected) {
             promise.fail(Exception("OPC UA client not connected"))
             return promise.future()
         }
 
-        client!!.subscriptionManager
-            .createSubscription(opcUaConfig.subscriptionSamplingInterval)
-            .whenComplete { sub, throwable ->
-                if (throwable == null) {
-                    subscription = sub
-                    logger.fine { "Created OPC UA subscription: ${sub.subscriptionId}" }
-                    promise.complete()
-                } else {
-                    logger.severe("Failed to create OPC UA subscription: ${throwable.message}")
-                    promise.fail(throwable)
-                }
+        thread {
+            try {
+                val sub = OpcUaSubscription(c, opcUaConfig.subscriptionSamplingInterval)
+                sub.create()
+                c.addSubscription(sub)
+                subscription = sub
+                logger.fine { "Created OPC UA subscription: ${sub.subscriptionId.orElse(null)}" }
+                promise.complete()
+            } catch (t: Throwable) {
+                logger.severe("Failed to create OPC UA subscription: ${t.message}")
+                promise.fail(t)
             }
+        }
 
         return promise.future()
     }
@@ -580,7 +545,7 @@ class OpcUaConnector : AbstractVerticle() {
         val failed = client ?: return
         client = null
         try {
-            failed.disconnect()
+            failed.disconnectAsync()
         } catch (e: Exception) {
             logger.fine { "Error disposing failed OPC UA client for device ${deviceConfig.name}: ${e.message}" }
         }
@@ -614,7 +579,7 @@ class OpcUaConnector : AbstractVerticle() {
             // the background (e.g. after Bad_SecurityChecksFailed); only an
             // explicit disconnect stops those internal reconnect attempts.
             try {
-                currentClient.disconnect().whenComplete { _, _ -> finishCleanup() }
+                currentClient.disconnectAsync().whenComplete { _, _ -> finishCleanup() }
             } catch (e: Exception) {
                 logger.warning("Error invoking disconnect on OPC UA client for device ${deviceConfig.name}: ${e.message}")
                 finishCleanup()
@@ -640,7 +605,7 @@ class OpcUaConnector : AbstractVerticle() {
                 try {
                     thread {
                         try {
-                            val readFuture = client!!.read(
+                            val readFuture = client!!.readAsync(
                                 0.0,
                                 org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn.Neither,
                                 listOf(
@@ -829,7 +794,7 @@ class OpcUaConnector : AbstractVerticle() {
                     }
 
                     if (nodeId != null) {
-                        val browseResult = client!!.browse(
+                        val browseResult = client!!.browseAsync(
                             BrowseDescription(
                                 nodeId,
                                 BrowseDirection.Forward,
@@ -840,8 +805,9 @@ class OpcUaConnector : AbstractVerticle() {
                             )
                         ).get()
 
-                        if (browseResult.references != null) {
-                            val filteredRefs = browseResult.references.filter {
+                        val refs = browseResult.references
+                        if (refs != null) {
+                            val filteredRefs = refs.filter {
                                 it.referenceTypeId == Identifiers.Organizes ||
                                 it.referenceTypeId == Identifiers.HasComponent ||
                                 it.referenceTypeId == Identifiers.HasProperty
@@ -906,108 +872,66 @@ class OpcUaConnector : AbstractVerticle() {
     }
 
 
-    private fun createCertificateValidator(): ClientCertificateValidator {
+    private fun createCertificateValidator(): CertificateValidator {
         val certificateConfig = opcUaConfig.certificateConfig
 
-        return when {
-            !certificateConfig.validateServerCertificate -> {
-                // Certificate validation is disabled - accept all
-                logger.warning("Server certificate validation is disabled for device ${deviceConfig.name}")
-                object : ClientCertificateValidator {
-                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
-                        // Accept all certificates - no validation
-                    }
+        // Stub validator that accepts everything; used when validation is disabled or no trust manager is set up.
+        val acceptAllValidator = object : CertificateValidator {
+            override fun validateCertificateChain(
+                certificateChain: MutableList<X509Certificate>,
+                applicationUri: String?,
+                validHostNames: Array<out String?>?
+            ) {
+                // accept all
+            }
+        }
 
-                    override fun validateCertificateChain(
-                        certificateChain: MutableList<X509Certificate>,
-                        applicationUri: String,
-                        vararg validHostNames: String
-                    ) {
-                        // Accept all certificates - no validation
+        if (!certificateConfig.validateServerCertificate) {
+            logger.warning("Server certificate validation is disabled for device ${deviceConfig.name}")
+            return acceptAllValidator
+        }
+
+        val tlm = trustListManager ?: run {
+            logger.warning("Trust list manager not available - using insecure certificate validation for device ${deviceConfig.name}")
+            return acceptAllValidator
+        }
+
+        if (certificateConfig.autoAcceptServerCertificates) {
+            logger.info("Auto-accepting server certificates and adding to trust list for device ${deviceConfig.name}")
+            return object : CertificateValidator {
+                override fun validateCertificateChain(
+                    certificateChain: List<X509Certificate>,
+                    applicationUri: String?,
+                    vararg validHostNames: String?
+                ) {
+                    if (certificateChain.isNotEmpty()) {
+                        val certificate = certificateChain[0]
+                        tlm.addTrustedCertificate(certificate)
+                        trustListPersister?.persistTrusted(certificate)
+                        logger.info("Auto-accepted server certificate: ${certificate.subjectX500Principal}")
                     }
                 }
             }
-            certificateConfig.autoAcceptServerCertificates && trustListManager != null -> {
-                // Auto-accept certificates and add them to trust list
-                logger.info("Auto-accepting server certificates and adding to trust list for device ${deviceConfig.name}")
-                object : ClientCertificateValidator {
-                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
-                        try {
-                            if (certificateChain.isNotEmpty()) {
-                                val certificate = certificateChain[0]
-                                trustListManager!!.addTrustedCertificate(certificate)
-                                logger.info("Auto-accepted server certificate: ${certificate.subjectX500Principal}")
-                            }
-                        } catch (e: Exception) {
-                            logger.warning("Failed to auto-accept certificate: ${e.message}")
-                            throw e
-                        }
-                    }
+        }
 
-                    override fun validateCertificateChain(
-                        certificateChain: MutableList<X509Certificate>,
-                        applicationUri: String,
-                        vararg validHostNames: String
-                    ) {
-                        validateCertificateChain(certificateChain)
-                    }
+        // Standard validation, with empty-trust-store leniency mirroring the prior behavior.
+        logger.info("Using trust list validation for device ${deviceConfig.name}")
+        val quarantine = MemoryCertificateQuarantine()
+        val defaultValidator = DefaultClientCertificateValidator(tlm, quarantine)
+        return object : CertificateValidator {
+            override fun validateCertificateChain(
+                certificateChain: MutableList<X509Certificate>,
+                applicationUri: String?,
+                validHostNames: Array<out String?>?
+            ) {
+                if (tlm.trustedCertificates.isEmpty() && certificateChain.isNotEmpty()) {
+                    val certificate = certificateChain[0]
+                    logger.warning("Trust store is empty for device ${deviceConfig.name}; auto-accepting server certificate.")
+                    tlm.addTrustedCertificate(certificate)
+                    trustListPersister?.persistTrusted(certificate)
+                    return
                 }
-            }
-            trustListManager != null -> {
-                // Use custom validator that handles empty trust store gracefully
-                logger.info("Using trust list validation for device ${deviceConfig.name}")
-                object : ClientCertificateValidator {
-                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
-                        try {
-                            // Check if we have any trusted certificates
-                            val trustedCerts = trustListManager!!.trustedCertificates
-                            if (trustedCerts.isEmpty()) {
-                                logger.warning("Trust store is empty for device ${deviceConfig.name}. " +
-                                    "Auto-accepting server certificate since no trusted certificates are configured.")
-
-                                // Auto-accept the certificate when trust store is empty
-                                if (certificateChain.isNotEmpty()) {
-                                    val certificate = certificateChain[0]
-                                    trustListManager!!.addTrustedCertificate(certificate)
-                                    logger.info("Auto-accepted and saved server certificate: ${certificate.subjectX500Principal}")
-                                }
-                                return
-                            }
-
-                            // Use the default validator if we have trusted certificates
-                            val defaultValidator = DefaultClientCertificateValidator(trustListManager)
-                            defaultValidator.validateCertificateChain(certificateChain)
-                        } catch (e: Exception) {
-                            logger.severe("Certificate validation failed for device ${deviceConfig.name}: ${e.message}")
-                            throw e
-                        }
-                    }
-
-                    override fun validateCertificateChain(
-                        certificateChain: MutableList<X509Certificate>,
-                        applicationUri: String,
-                        vararg validHostNames: String
-                    ) {
-                        validateCertificateChain(certificateChain)
-                    }
-                }
-            }
-            else -> {
-                // Fallback to accepting all certificates (logs warning)
-                logger.warning("Trust list manager not available - using insecure certificate validation for device ${deviceConfig.name}")
-                object : ClientCertificateValidator {
-                    override fun validateCertificateChain(certificateChain: MutableList<X509Certificate>) {
-                        // Accept all certificates - no validation
-                    }
-
-                    override fun validateCertificateChain(
-                        certificateChain: MutableList<X509Certificate>,
-                        applicationUri: String,
-                        vararg validHostNames: String
-                    ) {
-                        // Accept all certificates - no validation
-                    }
-                }
+                defaultValidator.validateCertificateChain(certificateChain, applicationUri, validHostNames)
             }
         }
     }
@@ -1211,14 +1135,14 @@ class OpcUaConnector : AbstractVerticle() {
                     QualifiedName.NULL_VALUE
                 )
 
-                val readResponse = client!!.read(
+                val readResponse = client!!.readAsync(
                     0.0,
                     TimestampsToReturn.Both,
                     listOf(readValueId)
                 ).get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
 
-                val dataValue = readResponse.results[0]
-                val statusCode = dataValue.statusCode ?: StatusCode.GOOD
+                val dataValue = readResponse.results!![0]
+                val statusCode = dataValue.statusCode
                 val value = dataValue.value?.value
                 val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
 
@@ -1267,13 +1191,13 @@ class OpcUaConnector : AbstractVerticle() {
                     nodeId,
                     Unsigned.uint(13), // AttributeId.Value
                     null,
-                    DataValue(variant, null, null, null)
+                    DataValue(variant)
                 )
 
-                val writeResponse = client!!.write(listOf(writeValue))
+                val writeResponse = client!!.writeAsync(listOf(writeValue))
                     .get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
 
-                val statusCode = writeResponse.results[0]
+                val statusCode = writeResponse.results!![0]
                 messagesOutCounter.incrementAndGet()
                 logger.fine { "OPC UA write to $nodeIdStr: status=${statusCode}" }
 
@@ -1315,7 +1239,7 @@ class OpcUaConnector : AbstractVerticle() {
                             nodeId,
                             Unsigned.uint(13), // AttributeId.Value
                             null,
-                            DataValue(variant, null, null, null)
+                            DataValue(variant)
                         )))
                     } else {
                         reads.add(ReadEntry(i, nodeIdStr, nodeId))
@@ -1328,12 +1252,13 @@ class OpcUaConnector : AbstractVerticle() {
 
                 // Execute writes
                 if (writes.isNotEmpty()) {
-                    val writeResponse = client!!.write(writes.map { it.writeValue })
+                    val writeResponse = client!!.writeAsync(writes.map { it.writeValue })
                         .get(timeout, TimeUnit.MILLISECONDS)
                     messagesOutCounter.addAndGet(writes.size.toLong())
 
+                    val writeResults = writeResponse.results!!
                     writes.forEachIndexed { idx, entry ->
-                        val sc = writeResponse.results[idx]
+                        val sc = writeResults[idx]
                         results[entry.index] = JsonObject()
                             .put("nodeId", entry.nodeIdStr)
                             .put("status", if (sc.isGood) "Good" else sc.toString())
@@ -1347,12 +1272,13 @@ class OpcUaConnector : AbstractVerticle() {
                     val readValueIds = reads.map { entry ->
                         ReadValueId(entry.nodeId, Unsigned.uint(13), null, QualifiedName.NULL_VALUE)
                     }
-                    val readResponse = client!!.read(0.0, TimestampsToReturn.Both, readValueIds)
+                    val readResponse = client!!.readAsync(0.0, TimestampsToReturn.Both, readValueIds)
                         .get(timeout, TimeUnit.MILLISECONDS)
 
+                    val readResults = readResponse.results!!
                     reads.forEachIndexed { idx, entry ->
-                        val dv = readResponse.results[idx]
-                        val sc = dv.statusCode ?: StatusCode.GOOD
+                        val dv = readResults[idx]
+                        val sc = dv.statusCode
                         val value = dv.value?.value
                         val ts = dv.sourceTime?.javaInstant ?: Instant.now()
                         val r = JsonObject()

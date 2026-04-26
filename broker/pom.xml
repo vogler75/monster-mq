@@ -123,7 +123,7 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/dependencies</outputDirectory>
-                            <!-- PLC4X 0.13.1, Eclipse Milo 0.6.16, and Azure SDK still pull
+                            <!-- PLC4X 0.13.1, Eclipse Milo 1.1.1, and Azure SDK still pull
                                  netty-codec 4.1.x. That artifact ships the same
                                  io.netty.handler.codec.* classes as netty-codec-base 4.2.x
                                  (which Vert.x 5 uses), and the duplicate-class shadowing
@@ -152,18 +152,18 @@
             <version>2.3.0</version>
         </dependency>
 
-        <!-- SLF4J API dependency -->
+        <!-- SLF4J API dependency (2.x required by Milo 1.x for Logger.atLevel) -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.36</version>
+            <version>2.0.17</version>
         </dependency>
 
         <!-- SLF4J to JUL bridge — routes SLF4J logs (e.g. MongoDB driver) through java.util.logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-jdk14</artifactId>
-            <version>1.7.36</version>
+            <version>2.0.17</version>
         </dependency>
 
         <!-- Vert.x dependencies -->
@@ -281,6 +281,18 @@
                     <groupId>com.google.protobuf</groupId>
                     <artifactId>protobuf-java</artifactId>
                 </exclusion>
+                <!-- Tahu pulls in logback-classic. With SLF4J 2.x's ServiceLoader binding,
+                     having both logback and slf4j-jdk14 on the classpath causes one to win
+                     non-deterministically; logback ignores our JUL config and logs at DEBUG.
+                     We want JUL to be the single backend, so exclude logback here. -->
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-classic</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-core</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -388,18 +400,18 @@
         <!-- Eclipse Milo OPC UA Client and Server -->
         <dependency>
             <groupId>org.eclipse.milo</groupId>
-            <artifactId>sdk-client</artifactId>
-            <version>0.6.16</version>
+            <artifactId>milo-sdk-client</artifactId>
+            <version>1.1.1</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
-            <artifactId>sdk-server</artifactId>
-            <version>0.6.16</version>
+            <artifactId>milo-sdk-server</artifactId>
+            <version>1.1.1</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
-            <artifactId>sdk-core</artifactId>
-            <version>0.6.16</version>
+            <artifactId>milo-sdk-core</artifactId>
+            <version>1.1.1</version>
         </dependency>
 
         <!-- Apache PLC4X - Industrial Protocol Integration -->

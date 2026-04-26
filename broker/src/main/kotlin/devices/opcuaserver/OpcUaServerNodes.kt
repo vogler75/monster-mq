@@ -3,22 +3,23 @@ package at.rocworks.devices.opcuaserver
 import at.rocworks.Utils
 import org.eclipse.milo.opcua.sdk.core.AccessLevel
 import org.eclipse.milo.opcua.sdk.core.Reference
+import org.eclipse.milo.opcua.sdk.server.AddressSpace
+import org.eclipse.milo.opcua.sdk.server.AddressSpaceComposite
+import org.eclipse.milo.opcua.sdk.server.ManagedAddressSpaceFragmentWithLifecycle
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
-import org.eclipse.milo.opcua.sdk.server.api.AddressSpaceComposite
-import org.eclipse.milo.opcua.sdk.server.api.DataItem
-import org.eclipse.milo.opcua.sdk.server.api.ManagedAddressSpaceFragmentWithLifecycle
-import org.eclipse.milo.opcua.sdk.server.api.MonitoredItem
-import org.eclipse.milo.opcua.sdk.server.api.SimpleAddressSpaceFilter
-import org.eclipse.milo.opcua.sdk.server.nodes.AttributeContext
-import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn
+import org.eclipse.milo.opcua.sdk.server.SimpleAddressSpaceFilter
+import org.eclipse.milo.opcua.sdk.server.items.DataItem
+import org.eclipse.milo.opcua.sdk.server.items.MonitoredItem
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
 import org.eclipse.milo.opcua.stack.core.Identifiers
-import org.eclipse.milo.opcua.stack.core.StatusCodes
-import org.eclipse.milo.opcua.sdk.server.api.services.AttributeServices
-import org.eclipse.milo.opcua.stack.core.types.structured.WriteValue
-import org.eclipse.milo.opcua.stack.core.types.builtin.*
+import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue
+import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId
+import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName
+import org.eclipse.milo.opcua.stack.core.types.builtin.Variant
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UShort
+import org.eclipse.milo.opcua.stack.core.types.structured.WriteValue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
@@ -40,8 +41,8 @@ class OpcUaServerNodes(
 
     private val rootFolderName: String = config.namespace // Use namespace as root folder name
 
-    private val filter = SimpleAddressSpaceFilter.create {
-        nodeManager.containsNode(it)
+    private val filter = SimpleAddressSpaceFilter.create { nodeId ->
+        nodeManager.containsNode(nodeId)
     }
 
     private val folderNodes = ConcurrentHashMap<String, NodeId>()
@@ -57,17 +58,17 @@ class OpcUaServerNodes(
     private var monsterMqRootNodeId: NodeId? = null
 
     init {
-        lifecycleManager.addStartupTask {
+        lifecycleManager.addStartupTask(Runnable {
             createMonsterMQRootFolder()
-        }
+        })
     }
 
     override fun getFilter() = filter
 
     override fun onDataItemsCreated(items: List<DataItem>) {
-        logger.info("DataItems created: ${items.size} items")
+        logger.fine { "DataItems created: ${items.size} items" }
         items.forEach { item ->
-            logger.info("  Created DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}")
+            logger.fine { "  Created DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}" }
 
             val nodeId = item.readValueId.nodeId
 
@@ -80,17 +81,8 @@ class OpcUaServerNodes(
                 val node = variableNodes[topic]
                 if (node != null) {
                     try {
-                        // Get current value using proper OPC UA read mechanism (like gateway)
-                        val currentValue = node.readAttribute(
-                            AttributeContext(item.session.server),
-                            item.readValueId.attributeId,
-                            TimestampsToReturn.Both,
-                            item.readValueId.indexRange,
-                            item.readValueId.dataEncoding
-                        )
-                        logger.info("  Sending current value to new subscriber for topic: $topic, value: ${currentValue.value}")
-
-                        // Use item.setValue() to properly trigger subscription notifications (like gateway)
+                        val currentValue = node.value
+                        logger.fine { "  Sending current value to new subscriber for topic: $topic, value: ${currentValue.value}" }
                         item.setValue(currentValue)
                     } catch (e: Exception) {
                         logger.warning("Error sending current value to new subscriber: ${e.message}")
@@ -105,16 +97,16 @@ class OpcUaServerNodes(
     }
 
     override fun onDataItemsModified(items: List<DataItem>) {
-        logger.info("DataItems modified: ${items.size} items")
+        logger.fine { "DataItems modified: ${items.size} items" }
         items.forEach { item ->
-            logger.info("  Modified DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}")
+            logger.fine { "  Modified DataItem: ${item.readValueId.nodeId} sampling interval: ${item.samplingInterval}" }
         }
     }
 
     override fun onDataItemsDeleted(items: List<DataItem>) {
-        logger.info("DataItems deleted: ${items.size} items")
+        logger.fine { "DataItems deleted: ${items.size} items" }
         items.forEach { item ->
-            logger.info("  Deleted DataItem: ${item.readValueId.nodeId}")
+            logger.fine { "  Deleted DataItem: ${item.readValueId.nodeId}" }
 
             // Remove DataItem from our tracking map to prevent memory leaks
             val nodeId = item.readValueId.nodeId
@@ -128,9 +120,9 @@ class OpcUaServerNodes(
     }
 
     override fun onMonitoringModeChanged(items: List<MonitoredItem>) {
-        logger.info("Monitoring mode changed: ${items.size} items")
+        logger.fine { "Monitoring mode changed: ${items.size} items" }
         items.forEach { item ->
-            logger.info("  MonitoredItem: ${item.readValueId.nodeId}")
+            logger.fine { "  MonitoredItem: ${item.readValueId.nodeId}" }
         }
     }
 
@@ -371,33 +363,31 @@ class OpcUaServerNodes(
     /**
      * Override write method to handle OPC UA node writes
      */
-    override fun write(context: AttributeServices.WriteContext, writeValues: MutableList<WriteValue>) {
-        // Process each write request
+    override fun write(
+        context: AddressSpace.WriteContext,
+        writeValues: List<WriteValue>
+    ): List<org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode> {
+        // Process each write request - notify the bridge callback for any writable topic
         writeValues.forEach { writeValue ->
             val nodeId = writeValue.nodeId
             val topic = nodeIdToTopic[nodeId]
 
-            if (topic != null) {
-                // Fast access level check - only process writes for READ_WRITE nodes
-                if (writableTopics.contains(topic)) {
-                    try {
-                        val dataValue = writeValue.value
-                        logger.fine { "OPC UA write to node: $topic, value: ${dataValue.value}" }
-                        logger.fine { "Calling onNodeWrite callback for topic: $topic" }
-                        onNodeWrite(topic, dataValue)
-                        logger.fine { "onNodeWrite callback completed for topic: $topic" }
-                    } catch (e: Exception) {
-                        logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
-                        e.printStackTrace()
-                    }
-                } else {
-                    logger.fine { "Write to READ_ONLY node rejected: $topic" }
+            if (topic != null && writableTopics.contains(topic)) {
+                try {
+                    val dataValue = writeValue.value
+                    logger.fine { "OPC UA write to node: $topic, value: ${dataValue.value}" }
+                    onNodeWrite(topic, dataValue)
+                } catch (e: Exception) {
+                    logger.warning("Error handling OPC UA write for topic $topic: ${e.message}")
+                    e.printStackTrace()
                 }
+            } else if (topic != null) {
+                logger.fine { "Write to READ_ONLY node rejected: $topic" }
             }
         }
 
-        // Call super to perform the actual write
-        super.write(context, writeValues)
+        // Delegate to super to perform the actual write and return result codes
+        return super.write(context, writeValues)
     }
 
     /**
