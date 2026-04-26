@@ -1,6 +1,5 @@
 package at.rocworks.extensions.graphql
 
-import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
@@ -399,22 +398,19 @@ class SubscriptionResolver(
         private val messageRegex = messageFilter?.let { runCatching { Regex(it) }.getOrNull() }
 
         init {
-            // Subscribe to broadcast event bus for system logs
-            vertx.eventBus().consumer<BrokerMessage>(EventBusAddresses.Cluster.BROADCAST) { message ->
-                message.body()?.let { brokerMessage ->
-                    if (!cancelled.get() && brokerMessage.topicName.startsWith("${Const.SYS_TOPIC_NAME}/${Const.LOG_TOPIC_NAME}/")) {
-                        handleLogMessage(brokerMessage)
+            // Subscribe to the global syslog address SyslogVerticle re-publishes on.
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Syslog.LOGS) { message ->
+                message.body()?.let { logJson ->
+                    if (!cancelled.get()) {
+                        handleLogMessage(logJson)
                     }
                 }
             }
             logger.fine { "GraphQL system logs subscription created (node: $nodeFilter, levels: $levelFilters)" }
         }
 
-        private fun handleLogMessage(message: BrokerMessage) {
+        private fun handleLogMessage(logJson: JsonObject) {
             try {
-                // Parse JSON payload
-                val logJson = JsonObject(String(message.payload))
-                
                 // Extract fields
                 val node = logJson.getString("node") ?: return
                 val level = logJson.getString("level") ?: return

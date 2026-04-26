@@ -75,6 +75,10 @@ class SyslogVerticle(
             if (enableSyslogStore) {
                 InMemorySyslogStore.addLog(logData)
             }
+            // Re-publish on a global syslog address so the GraphQL `systemLogs`
+            // subscription can stream live logs without the (loop-prone) MQTT path
+            // that f496e88 removed.
+            vertx.eventBus().publish(EventBusAddresses.Syslog.LOGS, logData)
         } catch (e: Exception) {
             logger.warning("Error handling log entry: ${e.message}")
         }
