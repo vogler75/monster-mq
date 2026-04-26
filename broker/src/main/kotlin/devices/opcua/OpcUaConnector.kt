@@ -15,7 +15,7 @@ import org.eclipse.milo.opcua.sdk.client.identity.IdentityProvider
 import org.eclipse.milo.opcua.sdk.client.identity.UsernameProvider
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription
-import org.eclipse.milo.opcua.stack.core.Identifiers
+import org.eclipse.milo.opcua.stack.core.NodeIds0
 import org.eclipse.milo.opcua.stack.core.security.CertificateValidator
 import org.eclipse.milo.opcua.stack.core.security.DefaultClientCertificateValidator
 import org.eclipse.milo.opcua.stack.core.security.MemoryCertificateQuarantine
@@ -610,7 +610,7 @@ class OpcUaConnector : AbstractVerticle() {
                                 org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn.Neither,
                                 listOf(
                                     org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId(
-                                        Identifiers.Server,
+                                        NodeIds0.Server,
                                         org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(1),
                                         null,
                                         org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName.NULL_VALUE
@@ -786,10 +786,10 @@ class OpcUaConnector : AbstractVerticle() {
                     logger.finest("Find $nodeStr | $item ($itemIdx) | $path")
 
                     val nodeId = when (nodeStr) {
-                        "Root" -> Identifiers.RootFolder
-                        "Objects" -> Identifiers.ObjectsFolder
-                        "Types" -> Identifiers.TypesFolder
-                        "Views" -> Identifiers.ViewsFolder
+                        "Root" -> NodeIds0.RootFolder
+                        "Objects" -> NodeIds0.ObjectsFolder
+                        "Types" -> NodeIds0.TypesFolder
+                        "Views" -> NodeIds0.ViewsFolder
                         else -> NodeId.parseOrNull(nodeStr)
                     }
 
@@ -798,7 +798,7 @@ class OpcUaConnector : AbstractVerticle() {
                             BrowseDescription(
                                 nodeId,
                                 BrowseDirection.Forward,
-                                Identifiers.References,
+                                NodeIds0.References,
                                 true,
                                 Unsigned.uint(NodeClass.Variable.value or NodeClass.Object.value),
                                 Unsigned.uint(BrowseResultMask.All.value)
@@ -808,9 +808,9 @@ class OpcUaConnector : AbstractVerticle() {
                         val refs = browseResult.references
                         if (refs != null) {
                             val filteredRefs = refs.filter {
-                                it.referenceTypeId == Identifiers.Organizes ||
-                                it.referenceTypeId == Identifiers.HasComponent ||
-                                it.referenceTypeId == Identifiers.HasProperty
+                                it.referenceTypeId == NodeIds0.Organizes ||
+                                it.referenceTypeId == NodeIds0.HasComponent ||
+                                it.referenceTypeId == NodeIds0.HasProperty
                             }
 
                             logger.finest("Find $nodeStr | $item ($itemIdx) | $path >>> Nodes: ${filteredRefs.joinToString { it.browseName.name ?: "unknown" }}")
@@ -939,9 +939,9 @@ class OpcUaConnector : AbstractVerticle() {
     private fun handleOpcUaValueChangeForAddress(address: OpcUaAddress, nodeId: NodeId, browsePath: String, dataValue: DataValue) {
         try {
             // Convert OPC UA value to MQTT message
-            val value = dataValue.value?.value
+            val value = dataValue.value.value
             val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
-            val statusCode = dataValue.statusCode?.value ?: 0
+            val statusCode = dataValue.statusCode.value
 
             // Create MQTT message payload with proper data types
             val payload = JsonObject()
@@ -1143,7 +1143,7 @@ class OpcUaConnector : AbstractVerticle() {
 
                 val dataValue = readResponse.results!![0]
                 val statusCode = dataValue.statusCode
-                val value = dataValue.value?.value
+                val value = dataValue.value.value
                 val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
 
                 val response = JsonObject()
@@ -1279,7 +1279,7 @@ class OpcUaConnector : AbstractVerticle() {
                     reads.forEachIndexed { idx, entry ->
                         val dv = readResults[idx]
                         val sc = dv.statusCode
-                        val value = dv.value?.value
+                        val value = dv.value.value
                         val ts = dv.sourceTime?.javaInstant ?: Instant.now()
                         val r = JsonObject()
                             .put("nodeId", entry.nodeIdStr)

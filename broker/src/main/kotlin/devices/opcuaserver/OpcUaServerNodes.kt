@@ -12,7 +12,7 @@ import org.eclipse.milo.opcua.sdk.server.items.DataItem
 import org.eclipse.milo.opcua.sdk.server.items.MonitoredItem
 import org.eclipse.milo.opcua.sdk.server.nodes.UaFolderNode
 import org.eclipse.milo.opcua.sdk.server.nodes.UaVariableNode
-import org.eclipse.milo.opcua.stack.core.Identifiers
+import org.eclipse.milo.opcua.stack.core.NodeIds0
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId
@@ -161,8 +161,8 @@ class OpcUaServerNodes(
                 rootFolder.addReference(
                     Reference(
                         rootNodeId,
-                        Identifiers.HasComponent,
-                        Identifiers.ObjectsFolder.expanded(),
+                        NodeIds0.HasComponent,
+                        NodeIds0.ObjectsFolder.expanded(),
                         Reference.Direction.INVERSE
                     )
                 )
@@ -195,7 +195,7 @@ class OpcUaServerNodes(
             folderNode.addReference(
                 Reference(
                     folderNode.nodeId,
-                    Identifiers.HasComponent,
+                    NodeIds0.HasComponent,
                     parentNodeId.expanded(),
                     Reference.Direction.INVERSE
                 )
@@ -274,7 +274,7 @@ class OpcUaServerNodes(
             setBrowseName(QualifiedName(namespaceIndex, browseName))
             setDisplayName(LocalizedText.english(displayName))
             setDataType(OpcUaDataConverter.getOpcUaDataType(address.dataType))
-            setTypeDefinition(Identifiers.BaseDataVariableType)
+            setTypeDefinition(NodeIds0.BaseDataVariableType)
             setMinimumSamplingInterval(100.0)
             setValue(initialValue ?: DataValue(Variant.NULL_VALUE))
 
@@ -296,7 +296,7 @@ class OpcUaServerNodes(
         nodeManager.addNode(variableNode)
 
         // Add reference to parent folder (like gateway pattern)
-        inverseReferenceTo(variableNode, parentNodeId, Identifiers.HasComponent)
+        inverseReferenceTo(variableNode, parentNodeId, NodeIds0.HasComponent)
 
         // Store mappings
         variableNodes[mqttTopic] = variableNode

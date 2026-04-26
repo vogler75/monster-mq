@@ -2,7 +2,7 @@ package at.rocworks.devices.opcuaserver
 
 import at.rocworks.Utils
 import io.vertx.core.json.JsonObject
-import org.eclipse.milo.opcua.stack.core.Identifiers
+import org.eclipse.milo.opcua.stack.core.NodeIds0
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger
 import java.time.Instant
@@ -108,19 +108,19 @@ class OpcUaDataConverter {
                 when (dataType) {
                     OpcUaServerDataType.BINARY -> {
                         // Extract ByteString
-                        val byteString = dataValue.value?.value as? ByteString
+                        val byteString = dataValue.value.value as? ByteString
                         byteString?.bytes() ?: byteArrayOf()
                     }
 
                     OpcUaServerDataType.TEXT -> {
                         // Convert to string
-                        val text = dataValue.value?.value?.toString() ?: ""
+                        val text = dataValue.value.value?.toString() ?: ""
                         text.toByteArray(Charsets.UTF_8)
                     }
 
                     OpcUaServerDataType.NUMERIC -> {
                         // Convert number to string
-                        val number = when (val value = dataValue.value?.value) {
+                        val number = when (val value = dataValue.value.value) {
                             is Number -> value.toString()
                             else -> "0"
                         }
@@ -129,7 +129,7 @@ class OpcUaDataConverter {
 
                     OpcUaServerDataType.BOOLEAN -> {
                         // Convert boolean to string
-                        val bool = when (val value = dataValue.value?.value) {
+                        val bool = when (val value = dataValue.value.value) {
                             is Boolean -> value.toString()
                             else -> "false"
                         }
@@ -141,7 +141,7 @@ class OpcUaDataConverter {
                         val json = JsonObject()
 
                         // Extract value
-                        val value = dataValue.value?.value
+                        val value = dataValue.value.value
                         when (value) {
                             is Boolean -> json.put("value", value)
                             is Number -> json.put("value", value.toDouble())
@@ -156,9 +156,7 @@ class OpcUaDataConverter {
                         }
 
                         // Add status code
-                        dataValue.statusCode?.let {
-                            json.put("status", it.value.toInt())
-                        }
+                        json.put("status", dataValue.statusCode.value.toInt())
 
                         json.encode().toByteArray(Charsets.UTF_8)
                     }
@@ -174,11 +172,11 @@ class OpcUaDataConverter {
          */
         fun getOpcUaDataType(dataType: OpcUaServerDataType): NodeId {
             return when (dataType) {
-                OpcUaServerDataType.BINARY -> Identifiers.ByteString
-                OpcUaServerDataType.TEXT -> Identifiers.String
-                OpcUaServerDataType.NUMERIC -> Identifiers.Double
-                OpcUaServerDataType.BOOLEAN -> Identifiers.Boolean
-                OpcUaServerDataType.JSON -> Identifiers.BaseDataType // Use generic type for JSON
+                OpcUaServerDataType.BINARY -> NodeIds0.ByteString
+                OpcUaServerDataType.TEXT -> NodeIds0.String
+                OpcUaServerDataType.NUMERIC -> NodeIds0.Double
+                OpcUaServerDataType.BOOLEAN -> NodeIds0.Boolean
+                OpcUaServerDataType.JSON -> NodeIds0.BaseDataType // Use generic type for JSON
             }
         }
     }
