@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sync"
+	"time"
 
 	"monstermq.io/edge/internal/config"
 	"monstermq.io/edge/internal/stores"
@@ -130,7 +131,10 @@ func (m *Manager) startGroup(ctx context.Context, c stores.ArchiveGroupConfig) e
 	if err != nil {
 		return err
 	}
-	g := NewGroup(c, lastVal, arch, m.logger)
+	flushInterval := time.Duration(m.cfg.Archive.FlushIntervalMs) * time.Millisecond
+	g := NewGroup(c, lastVal, arch,
+		m.cfg.Archive.BufferSize, m.cfg.Archive.MaxBatchSize, flushInterval,
+		m.logger)
 	g.Start()
 	m.mu.Lock()
 	m.groups[c.Name] = g

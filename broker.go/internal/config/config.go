@@ -45,6 +45,15 @@ type MetricsConfig struct {
 	RetentionHours            int  `yaml:"RetentionHours"`
 }
 
+// ArchiveConfig tunes the in-memory queue every archive group uses to
+// decouple publish from disk write. Buffer is bounded — overflow drops
+// new messages rather than growing memory.
+type ArchiveConfig struct {
+	BufferSize      int `yaml:"BufferSize"`      // 0 → 100_000
+	MaxBatchSize    int `yaml:"MaxBatchSize"`    // 0 → 1000
+	FlushIntervalMs int `yaml:"FlushIntervalMs"` // 0 → 250
+}
+
 type LoggingConfig struct {
 	Level             string `yaml:"Level"`
 	MqttSyslogEnabled bool   `yaml:"MqttSyslogEnabled"`
@@ -97,6 +106,7 @@ type Config struct {
 
 	UserManagement UserManagementConfig `yaml:"UserManagement"`
 	Metrics        MetricsConfig        `yaml:"Metrics"`
+	Archive        ArchiveConfig        `yaml:"Archive"`
 	Logging        LoggingConfig        `yaml:"Logging"`
 	GraphQL        GraphQLConfig        `yaml:"GraphQL"`
 	Dashboard      DashboardConfig      `yaml:"Dashboard"`
@@ -127,6 +137,7 @@ func Default() *Config {
 		SQLite:            SQLiteConfig{Path: "./data/monstermq.db"},
 		UserManagement:    UserManagementConfig{Enabled: false, PasswordAlgorithm: "BCRYPT", AnonymousEnabled: true, AclCacheEnabled: true},
 		Metrics:           MetricsConfig{Enabled: true, CollectionIntervalSeconds: 1, RetentionHours: 168},
+		Archive:           ArchiveConfig{BufferSize: 100_000, MaxBatchSize: 1000, FlushIntervalMs: 250},
 		Logging:           LoggingConfig{Level: "INFO", MqttSyslogEnabled: false, RingBufferSize: 1000},
 		GraphQL:               GraphQLConfig{Enabled: true, Port: 8080},
 		Dashboard:             DashboardConfig{Enabled: true},

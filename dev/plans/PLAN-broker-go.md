@@ -146,38 +146,24 @@ Priority key:
 
 Suggested execution order at the bottom.
 
-### 5.1 — Archive group buffer: bound the queue & batch size (P0)
+### 5.1 — Archive group buffer: bound the queue & batch size (P0) — **DONE**
 
-**Current**: Per-group `pending []BrokerMessage` slice grows unboundedly.
-A ticker (250 ms) or a 100-message threshold triggers `flush()` which
-writes the whole pending slice in one bulk call. If a backend stalls (DB
-lock, network), memory grows without limit.
-
-**JVM**: `ArrayBlockingQueue<BrokerMessage>(100_000)` — bounded; writer
-thread drains up to `maxWriteBlockSize` per cycle. Producer-side
-`saveMessage` swallows `IllegalStateException` when full (drops on
-overflow).
-
-**Plan**:
-1. Replace `pending []BrokerMessage` with a buffered channel of size
-   `cfg.BufferSize` (default 100_000).
-2. `Submit()` does a non-blocking send — drops on full and increments a
-   `droppedCount` atomic surfaced via the `messagesOut` / `bufferSize`
-   metrics later.
-3. `flush()` drains up to `cfg.MaxBatchSize` (default 1000); loops while
-   channel still has items.
-4. Make `BufferSize`, `MaxBatchSize`, `FlushInterval` per-group fields in
-   `stores.ArchiveGroupConfig`, with broker-wide defaults from a new
-   `Archive: { BufferSize, MaxBatchSize, FlushIntervalMs }` config block.
-5. New integration test: 200k publishes against a deliberately slow store
-   (mock that sleeps 1s in `AddAll`) — assert memory bounded and dropped
-   counter rises.
-
-**Files**: `internal/archive/group.go`, `manager.go`,
-`internal/stores/types.go`, the three `archive_config_store.go`,
-`internal/config/config.go`, `test/integration/archive_overflow_test.go`.
-
-**LOC**: ~150 prod + ~80 test.
+**As built**: `internal/archive/group.go` rewritten around a bounded
+`chan BrokerMessage` of size `Archive.BufferSize`. `Submit` is
+non-blocking — overflow increments `dropped atomic.Uint64` (exposed
+via `Group.Dropped()` and logged at warn on first drop and every
+10000th). The flush loop batches up to `Archive.MaxBatchSize` per
+cycle and flushes on either size or `Archive.FlushIntervalMs`
+ticker. `Stop()` drains remaining buffered messages then exits, so
+no in-flight data is lost on graceful shutdown. Defaults: 100_000 /
+1000 / 250 ms, matching the JVM broker. Per-group overrides on
+`ArchiveGroupConfig` deferred — broker-wide is sufficient for the
+P0 fix; a follow-up can add columns to the three config-store
+schemas + GraphQL when a user needs per-group tuning. Tests:
+`group_test.go` (5 cases) — fast-path drains everything,
+size-trigger fires the right number of batches, **slow store keeps
+memory bounded and `dropped > 0`**, RetainedOnly gate, and default
+fallback for zero-valued ctor args.
 
 ---
 
