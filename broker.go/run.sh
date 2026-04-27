@@ -3,9 +3,10 @@
 # Usage: ./run.sh [SCRIPT_OPTIONS] [-- BROKER_OPTIONS]
 #
 # Script options (before --):
+#   -c,  -clean       Run "go clean -cache" before anything else (forces a
+#                     full recompile next build)
 #   -b,  -build       Build the binary (CGO_ENABLED=0) before starting
-#   -c,  -compile     Type-check / compile all packages (no binary output)
-#   -n,  -norun       Don't start the broker (combine with -b/-c for build-only)
+#   -n,  -norun       Don't start the broker (combine with -b/-c for no-run)
 #   -d,  -dashboard   Build the dashboard and serve it from dashboard/dist
 #   -nk, -nokill      Don't kill any already-running monstermq-edge first
 #   -h,  -help        Show this help
@@ -17,6 +18,7 @@
 # Examples:
 #   ./run.sh                       Start with config.yaml (or config.yaml.example)
 #   ./run.sh -b                    Build, then start
+#   ./run.sh -c -b                 Clean cache, rebuild from scratch, then start
 #   ./run.sh -b -n                 Build only
 #   ./run.sh -b -- -config foo.yaml
 #   ./run.sh -d                    Serve the dashboard from filesystem
@@ -27,8 +29,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 BIN="bin/monstermq-edge"
+CLEAN=false
 BUILD=false
-COMPILE=false
 NORUN=false
 DASHBOARD_DEV=false
 NOKILL=false
@@ -41,27 +43,27 @@ for arg in "$@"; do
         continue
     fi
     case "$arg" in
+        -c|-clean)        CLEAN=true ;;
         -b|-build)        BUILD=true ;;
-        -c|-compile)      COMPILE=true ;;
         -n|-norun)        NORUN=true ;;
         -d|-dashboard)    DASHBOARD_DEV=true ;;
         -nk|-nokill)      NOKILL=true ;;
-        -h|-help|--help)  sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|-help|--help)  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --)               SAW_SEP=true ;;
         *)                REMAINING+=("$arg") ;;
     esac
 done
+
+if [ "$CLEAN" = true ]; then
+    echo "Cleaning Go build cache..."
+    go clean -cache
+fi
 
 if [ "$BUILD" = true ]; then
     echo "Building monstermq-edge..."
     mkdir -p bin
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$BIN" ./cmd/monstermq-edge
     echo "Built: $BIN ($(du -h "$BIN" | cut -f1))"
-fi
-
-if [ "$COMPILE" = true ] && [ "$BUILD" = false ]; then
-    echo "Compiling all packages..."
-    go build ./...
 fi
 
 if [ "$DASHBOARD_DEV" = true ]; then
