@@ -37,6 +37,14 @@ type Config struct {
 	ConnectionTimeout int       `json:"connectionTimeout,omitempty"`
 	ReconnectDelay    int       `json:"reconnectDelay,omitempty"`
 	Addresses         []Address `json:"addresses"`
+
+	// Outbound publish buffer for when the remote broker is offline.
+	// When BufferEnabled is false (default), publishes that arrive while
+	// disconnected are dropped immediately.
+	BufferEnabled        bool `json:"bufferEnabled,omitempty"`
+	BufferSize           int  `json:"bufferSize,omitempty"`           // 0 → unbounded; recommended ≤ 100_000
+	PersistBuffer        bool `json:"persistBuffer,omitempty"`        // true → SQLite-backed; false → in-memory
+	DeleteOldestMessages bool `json:"deleteOldestMessages,omitempty"` // true → drop oldest on overflow (FIFO); false → reject new
 }
 
 // LocalPublisher is implemented by mochi-mqtt's *Server (Publish).
@@ -69,16 +77,37 @@ type Connector struct {
 	client paho.Client
 	subID  int
 	stopCh chan struct{}
+	buffer Buffer
 
 	IncIn  func()
 	IncOut func()
 }
 
 func NewConnector(name string, cfg Config, publisher LocalPublisher, subBus LocalSubscriber, logger *slog.Logger) *Connector {
-	return &Connector{
+	c := &Connector{
 		name: name, cfg: cfg, publisher: publisher, subBus: subBus, logger: logger,
 		stopCh: make(chan struct{}),
 	}
+	if cfg.BufferEnabled {
+		c.buffer = c.newBuffer()
+	}
+	return c
+}
+
+// newBuffer constructs the configured outbound buffer; falls back to the
+// in-memory variant if the SQLite path can't be opened.
+func (c *Connector) newBuffer() Buffer {
+	if c.cfg.PersistBuffer {
+		path := fmt.Sprintf("./data/bridge_%s.db", c.name)
+		b, err := newSqliteBuffer(path, c.cfg.BufferSize, c.cfg.DeleteOldestMessages)
+		if err != nil {
+			c.logger.Warn("bridge: persistent buffer unavailable, falling back to memory",
+				"name", c.name, "path", path, "err", err)
+			return newMemoryBuffer(c.cfg.BufferSize, c.cfg.DeleteOldestMessages)
+		}
+		return b
+	}
+	return newMemoryBuffer(c.cfg.BufferSize, c.cfg.DeleteOldestMessages)
 }
 
 func (c *Connector) Name() string { return c.name }
@@ -113,6 +142,7 @@ func (c *Connector) Start(ctx context.Context) error {
 	opts.SetOnConnectHandler(func(_ paho.Client) {
 		c.logger.Info("bridge connected", "name", c.name, "url", c.cfg.BrokerURL)
 		c.subscribeInbound()
+		c.drainBuffer()
 	})
 	opts.SetConnectionLostHandler(func(_ paho.Client, err error) {
 		c.logger.Warn("bridge connection lost", "name", c.name, "err", err)
@@ -212,19 +242,72 @@ func (c *Connector) startOutbound(ctx context.Context) {
 				}
 				addr := pickAddress(addrByFilter, msg.Topic)
 				remote := mapOutboundTopic(addr, msg.Topic)
+				item := BufferItem{
+					Topic: remote, QoS: byte(addr.QoS), Retain: addr.Retain, Payload: msg.Payload,
+				}
 				c.mu.Lock()
 				client := c.client
+				buf := c.buffer
 				c.mu.Unlock()
-				if client == nil || !client.IsConnected() {
+				// IsConnectionOpen is the strict variant of IsConnected: it returns
+				// false the instant the network drops, whereas IsConnected can
+				// briefly remain true while paho's reconnect logic spins up. Without
+				// this check, publishes during the gap are silently dropped at QoS 0.
+				if client == nil || !client.IsConnectionOpen() {
+					if buf != nil {
+						if err := buf.Push(item); err != nil {
+							c.logger.Warn("bridge buffer push failed", "name", c.name, "err", err)
+						}
+					}
 					continue
 				}
-				if c.IncOut != nil {
-					c.IncOut()
+				if err := c.publishOne(client, item); err != nil {
+					// Failed to publish while supposedly connected — buffer
+					// it so the next OnConnect can drain it.
+					if buf != nil {
+						if perr := buf.Push(item); perr != nil {
+							c.logger.Warn("bridge buffer push failed after publish error",
+								"name", c.name, "err", perr)
+						}
+					}
 				}
-				_ = client.Publish(remote, byte(addr.QoS), addr.Retain, msg.Payload)
 			}
 		}
 	}()
+}
+
+// publishOne sends a single buffered or fresh item to the remote broker via
+// paho. Returns the publish-token error so the caller can decide to re-buffer
+// on failure.
+func (c *Connector) publishOne(client paho.Client, item BufferItem) error {
+	if c.IncOut != nil {
+		c.IncOut()
+	}
+	tok := client.Publish(item.Topic, item.QoS, item.Retain, item.Payload)
+	if !tok.WaitTimeout(5 * time.Second) {
+		return fmt.Errorf("publish timeout topic=%s", item.Topic)
+	}
+	return tok.Error()
+}
+
+// drainBuffer is called from the OnConnect handler. It walks the outbound
+// buffer FIFO and re-publishes each entry; on the first publish failure it
+// stops and leaves the rest in the buffer for the next reconnect.
+func (c *Connector) drainBuffer() {
+	c.mu.Lock()
+	buf := c.buffer
+	client := c.client
+	c.mu.Unlock()
+	if buf == nil || client == nil {
+		return
+	}
+	if buf.Len() == 0 {
+		return
+	}
+	c.logger.Info("bridge: draining outbound buffer", "name", c.name, "pending", buf.Len())
+	if err := buf.Drain(func(item BufferItem) error { return c.publishOne(client, item) }); err != nil {
+		c.logger.Warn("bridge: buffer drain interrupted", "name", c.name, "err", err)
+	}
 }
 
 func pickAddress(filters map[string]Address, topic string) Address {
@@ -288,6 +371,22 @@ func (c *Connector) Stop() {
 		c.client.Disconnect(250)
 		c.client = nil
 	}
+	if c.buffer != nil {
+		_ = c.buffer.Close()
+		c.buffer = nil
+	}
+}
+
+// BufferLen exposes the current outbound buffer depth (0 if buffering is
+// disabled). Used by tests and metrics.
+func (c *Connector) BufferLen() int {
+	c.mu.Lock()
+	buf := c.buffer
+	c.mu.Unlock()
+	if buf == nil {
+		return 0
+	}
+	return buf.Len()
 }
 
 func matchTopic(pattern, topic string) bool {
