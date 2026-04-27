@@ -291,32 +291,22 @@ as separate rows in the `metrics` table (`metric_type` discriminator).
 
 ---
 
-### 5.5 — MQTT bridge offline disk buffer (P2)
+### 5.5 — MQTT bridge offline disk buffer (P2) — **DONE** (b9713e3)
 
-**Current**: When the remote broker is unreachable, paho buffers in
-memory (no disk persistence). Outbound publishes that paho can't
-deliver are either lost or queued in paho's own bounded buffer.
-
-**JVM**: Optional disk-backed buffer with FIFO / delete-oldest policy.
-`bufferEnabled`, `bufferSize`, `persistBuffer`, `deleteOldestMessages`
-config fields exist on `MqttClientConnectionConfig` and are honored.
-
-**Plan**:
-1. When `cfg.PersistBuffer && cfg.BufferEnabled`, use a small SQLite
-   file per bridge (`./data/bridge_<name>.db`) instead of paho's
-   in-memory buffer.
-2. Wrap paho's publish: enqueue to local SQLite. A drain goroutine
-   reads from SQLite and publishes when paho reports connected.
-3. On overflow (`bufferSize` rows): if `deleteOldestMessages`, drop the
-   oldest row; else reject the new publish.
-4. On ack from paho (token Done with no error), delete the row.
-5. Integration test: stop the remote, publish 50 messages, restart the
-   remote, assert all 50 arrive after reconnect.
-
-**Files**: `internal/bridge/mqttclient/buffer.go` (new),
-`connector.go`, `test/integration/bridge_buffer_test.go`.
-
-**LOC**: ~250 prod + ~80 test.
+**As built**: Buffer interface in
+`internal/bridge/mqttclient/buffer.go` with two implementations —
+`memoryBuffer` (mutex-guarded slice) and `sqliteBuffer` (per-bridge
+file at `./data/bridge_<name>.db`, FIFO via `id` autoincrement,
+WAL+busy_timeout(5000)). Capacity policy is reject-new
+(`ErrBufferFull`) or evict-oldest, picked via
+`DeleteOldestMessages`. Connector pushes to the buffer when
+`!client.IsConnectionOpen()` (strict) or when a connected publish
+fails; drain runs from `OnConnect` and stops on first publish error,
+leaving the rest queued for the next reconnect. Tests:
+`buffer_test.go` exercises a shared contract (FIFO, reject overflow,
+evict-oldest overflow, drain-stops-on-error) against both
+implementations plus a process-restart test for the SQLite
+variant.
 
 ---
 
