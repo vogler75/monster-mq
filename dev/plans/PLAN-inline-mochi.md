@@ -1,198 +1,170 @@
-# Inline mochi-mqtt-server into broker.go
+# broker.go — switch to our own mochi-mqtt fork
 
 ## Context
 
-We currently depend on `github.com/mochi-mqtt/server/v2 v2.7.9` from the
-public module proxy. That release is several commits behind the upstream
-`main` branch (e.g. message-expiry improvements, `IsTakenOver` switch to
-atomic.Bool, MQTT 5 fixes). A working copy lives at
-`/Users/vogler/Workspace/mochi-mqtt-server` — currently at HEAD `5b7f94b`,
-~13.4 kLOC of production Go, MIT-licensed.
+`broker.go/` currently depends on `github.com/mochi-mqtt/server/v2 v2.7.9`
+from the public Go module proxy. That release is several commits behind
+upstream `main` (notably the message-expiry fix and the `IsTakenOver`
+atomic.Bool change), and we want the freedom to apply local patches —
+e.g. a pre-resend hook so our persistent-queue replay can be exact
+rather than gated on the inflight-buffer length.
 
-We want to:
+We have a fork at <https://github.com/vogler75/mochi-mqtt-server>. This
+plan switches the broker to consume that fork instead of the upstream
+release.
 
-1. Take the upstream code as our own copy so we can apply the latest fixes
-   without waiting on a release.
-2. Be free to patch the source for our needs (e.g. expose a pre-resend hook
-   so the persistent-queue replay can be exact rather than gated on the
-   inflight buffer length).
-3. Ship a single self-contained binary with no external `mochi-mqtt`
-   dependency.
+## Goals
 
-## Scope
+1. Build broker.go against our fork rather than upstream
+   `mochi-mqtt/server v2.7.9`.
+2. Keep the option to apply local patches in the fork without breaking
+   anyone else's builds.
+3. Reproducible: anyone cloning broker.go can build with no extra setup
+   (no required `replace` directive pointing at a local checkout).
+4. Easy to keep in sync with upstream when we want to.
 
-**In scope**: copy the production source of mochi-mqtt-server into our tree,
-rewrite imports, drop the external module dependency, keep all integration
-tests green.
+## Strategy comparison
 
-**Out of scope** (separate follow-ups, can be scheduled after this lands):
-- Apply local patches (e.g. pre-resend hook, custom listeners).
-- Bump versions of mochi's transitive dependencies (`rs/xid`, `gorilla/websocket`,
-  `mochi-co/queue`, etc.) — we'll inherit whatever upstream main pins.
-- A `scripts/sync-mochi.sh` to re-import future upstream changes.
+| Approach | Pro | Con |
+|---|---|---|
+| **A. `replace` to our fork's GitHub URL** — keep import path `github.com/mochi-mqtt/server/v2`, add `replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server v2.x.y` to `go.mod` | No source changes in broker.go; fork keeps upstream's module path so cherry-picks from upstream are clean. | Module-import path doesn't reflect fork ownership at a glance. `go mod tidy` will silently follow the replace. |
+| **B. Rename module to `github.com/vogler75/mochi-mqtt-server/v2`** — change one line in fork's `go.mod`, sed-rewrite `github.com/mochi-mqtt/server/v2` → `github.com/vogler75/mochi-mqtt-server/v2` across the fork's source, then update broker.go's 5 import lines | Imports clearly say "this is ours". No `replace` directive. | Every upstream cherry-pick needs the same sed pass; merges are noisier. |
+| **C. Vendor the fork into `broker.go/internal/mqtt/`** | Single self-contained checkout; `internal/` enforces that nothing outside our module imports it. | ~13 kLOC carried in our tree; future upstream syncs are manual diff-and-apply. |
 
-## Approach
+**Pick A.** It's reversible (drop the replace and we're back on upstream),
+keeps the fork itself easy to re-base on upstream, and matches how other
+mature Go projects manage forks (e.g. Caddy's xcaddy, Argo's k8s
+forks).
 
-Strategy: **fork the source into `broker.go/internal/mqtt/`** (Strategy C in
-the design notes). Reasons:
+## Steps
 
-- We want full ownership — replace directives or `go mod vendor` keep the
-  external import path, which discourages local patches and complicates
-  the module graph.
-- mochi is MIT-licensed; the only obligation is preserving the LICENSE file
-  and copyright, which we'll include.
-- ~13 kLOC is small enough to maintain. Future upstream syncs are mechanical.
-- Go's `internal/` rule actually helps here: nothing outside our module can
-  accidentally import this fork's API.
+### 1. Prepare the fork
 
-## Layout
+In the fork repo at <https://github.com/vogler75/mochi-mqtt-server>:
+
+1. Confirm the fork's `go.mod` still reads
+   `module github.com/mochi-mqtt/server/v2` (it does today; we keep it
+   that way for Strategy A).
+2. Ensure `main` includes everything we want from upstream (currently
+   `5b7f94b "Update server version"` past the released v2.7.9, plus
+   the message-expiry and `IsTakenOver` improvements).
+3. Tag a release that we can pin to:
+   ```bash
+   git -C /Users/vogler/Workspace/mochi-mqtt-server tag v2.7.10-monstermq.1
+   git -C /Users/vogler/Workspace/mochi-mqtt-server push origin v2.7.10-monstermq.1
+   ```
+   The `-monstermq.N` suffix makes it obvious this is a local build and
+   sorts after upstream's `v2.7.10` if/when upstream publishes one.
+
+### 2. Switch broker.go to consume the fork
+
+In `broker.go/`:
+
+```bash
+cd broker.go
+
+# Drop the upstream require + add the replace pointing at our fork.
+go mod edit -replace github.com/mochi-mqtt/server/v2=github.com/vogler75/mochi-mqtt-server/v2@v2.7.10-monstermq.1
+go mod tidy
+```
+
+Note the `/v2` suffix on the fork URL — Go module conventions require
+`/v2` for any `go.mod` whose module path ends in `/v2`. The fork's
+existing module path `github.com/mochi-mqtt/server/v2` still works on
+the require side; the replace target needs its own `/v2`.
+
+After `go mod tidy`, expect `go.mod` to contain:
 
 ```
-broker.go/internal/mqtt/                 ← from mochi root
-├── LICENSE.md                           ← preserved
-├── server.go
-├── clients.go
-├── hooks.go
-├── inflight.go
-├── topics.go
-├── packets/                             ← from mochi/packets
-├── listeners/                           ← from mochi/listeners
-├── system/                              ← from mochi/system
-├── mempool/                             ← from mochi/mempool
-├── hooks/
-│   └── auth/                            ← only the auth hook;
-│                                          drop hooks/storage/* (we have ours)
-└── README-mochi.md                      ← short note: imported from upstream
-                                          at HEAD <sha>, MIT, see LICENSE.md
+require github.com/mochi-mqtt/server/v2 v2.7.9   // tracks upstream's last release for the version pin
+
+replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server/v2 v2.7.10-monstermq.1
 ```
 
-Excluded from the import:
-- `cmd/`, `examples/`, `config/`, `Dockerfile`, top-level `README*`, `docker/`.
-- All `*_test.go` files (mochi's test suite is fine to keep but adds 8 kLOC
-  noise; rerun upstream's tests against the fork once on import).
-- `hooks/storage/*` (Redis/Pebble/Badger/Bolt) — we use our own SQLite/PG/Mongo
-  hooks; carrying these adds dependencies we don't want.
+### 3. Verify
 
-## Step-by-step
+```bash
+go mod download
+go build ./...                          # uses the fork
+go test ./... -count=1 -timeout 90s     # all 18 integration tests still pass
+./run.sh -b -- -config test/smoke.yaml  # smoke
+```
 
-1. **Capture the source SHA**
-   ```bash
-   cd /Users/vogler/Workspace/mochi-mqtt-server
-   git rev-parse HEAD > /tmp/mochi-sha   # for the README note
-   ```
+Then sanity-check that the fork is in fact what's being compiled:
 
-2. **Copy the source tree**
-   ```bash
-   DEST=/Users/vogler/Workspace/monster-mq.1/broker.go/internal/mqtt
-   mkdir -p $DEST
-   cd /Users/vogler/Workspace/mochi-mqtt-server
+```bash
+go list -m all | grep mochi
+# expect:
+#   github.com/mochi-mqtt/server/v2 v2.7.9 => github.com/vogler75/mochi-mqtt-server/v2 v2.7.10-monstermq.1
+```
 
-   # top-level production .go files
-   cp server.go clients.go hooks.go inflight.go topics.go LICENSE.md $DEST/
+### 4. Commit
 
-   # subpackages we need
-   cp -r packets listeners system mempool $DEST/
-   mkdir -p $DEST/hooks
-   cp -r hooks/auth $DEST/hooks/
-   ```
+```
+broker.go: switch to vogler75/mochi-mqtt-server fork
 
-3. **Rewrite imports** (one sed pass over the copied tree):
-   ```bash
-   cd $DEST
-   find . -name "*.go" -print0 | xargs -0 sed -i '' \
-     -e 's|"github.com/mochi-mqtt/server/v2"|"monstermq.io/edge/internal/mqtt"|g' \
-     -e 's|"github.com/mochi-mqtt/server/v2/|"monstermq.io/edge/internal/mqtt/|g'
-   ```
-   Imports of `system`, `packets`, `listeners`, `mempool`, `hooks/auth` all
-   resolve under `monstermq.io/edge/internal/mqtt/...`.
+Adds a replace directive in go.mod so we consume our own fork instead
+of upstream mochi-mqtt v2.7.9. Pinned to v2.7.10-monstermq.1, which
+includes upstream's message-expiry and IsTakenOver fixes that aren't in
+the released v2.7.9 yet, plus headroom to apply our own patches without
+waiting for an upstream release.
 
-4. **Drop the test files** (optional but recommended to keep the diff small):
-   ```bash
-   find $DEST -name "*_test.go" -delete
-   ```
+Build and all 18 integration tests green against the fork.
+```
 
-5. **Add the attribution note**
-   ```bash
-   cat > $DEST/README-mochi.md <<EOF
-   This directory is a vendored fork of [mochi-mqtt-server](https://github.com/mochi-mqtt/server)
-   (MIT-licensed; see LICENSE.md). Imported from upstream HEAD $(cat /tmp/mochi-sha).
+## Maintaining the fork
 
-   We took a copy rather than depend on the published module so we can apply
-   local patches (see git history of this directory). To re-sync from
-   upstream, see scripts/sync-mochi.sh (TODO).
-   EOF
-   ```
+### Pulling in upstream changes
 
-6. **Update our 5 broker files**
-   - `broker.go/internal/broker/server.go`
-   - `broker.go/internal/broker/hook_auth.go`
-   - `broker.go/internal/broker/hook_storage.go`
-   - `broker.go/internal/broker/hook_queue.go`
-   - `broker.go/internal/broker/tls.go` *(if it imports anything mochi)*
+```bash
+cd /Users/vogler/Workspace/mochi-mqtt-server
+git fetch upstream                     # if upstream isn't already a remote: git remote add upstream https://github.com/mochi-mqtt/server
+git checkout main
+git merge upstream/main
+git tag v2.7.11-monstermq.1
+git push origin main v2.7.11-monstermq.1
+```
 
-   In each, replace:
-   ```
-   "github.com/mochi-mqtt/server/v2"          → "monstermq.io/edge/internal/mqtt"
-   "github.com/mochi-mqtt/server/v2/hooks/auth" → "monstermq.io/edge/internal/mqtt/hooks/auth"
-   "github.com/mochi-mqtt/server/v2/listeners"  → "monstermq.io/edge/internal/mqtt/listeners"
-   "github.com/mochi-mqtt/server/v2/packets"    → "monstermq.io/edge/internal/mqtt/packets"
-   ```
+Then in `broker.go/`:
 
-7. **Detach the external dependency**
-   ```bash
-   cd /Users/vogler/Workspace/monster-mq.1/broker.go
-   go mod edit -droprequire=github.com/mochi-mqtt/server/v2
-   go mod tidy
-   ```
-   `go mod tidy` will pull in any of mochi's transitive deps (rs/xid,
-   gorilla/websocket, golang/glog, etc.) that we now import directly. Check
-   the resulting `go.mod` diff and confirm the list is reasonable
-   (~5–10 modules added).
+```bash
+go get github.com/vogler75/mochi-mqtt-server/v2@v2.7.11-monstermq.1
+go mod tidy
+go test ./... -count=1
+```
 
-8. **Build + test**
-   ```bash
-   go build ./...
-   go test ./... -count=1 -timeout 120s
-   ./run.sh -b -- -config test/smoke.yaml &
-   curl http://localhost:18080/health
-   pkill -f bin/monstermq-edge
-   ```
+### Applying our own patches
 
-9. **Commit in two pieces** (so the diff is reviewable):
-   - Commit 1: "Inline mochi-mqtt-server source under internal/mqtt" — pure
-     copy + import rewrite, no behavioural change.
-   - Commit 2: "Switch broker to inlined mochi" — the 5-file rewrite of our
-     own broker package + go.mod cleanup.
+For changes we want only in our fork (e.g. a new pre-resend hook):
 
-## Risks & mitigations
+1. Branch in the fork: `git checkout -b feature/pre-resend-hook`
+2. Edit, commit, push to the fork.
+3. Merge into `main` of the fork once tested.
+4. Cut a new `vX.Y.Z-monstermq.N+1` tag.
+5. `go get` the new tag in broker.go.
 
-- **Transitive dep churn**: mochi pulls `gorilla/websocket`, `rs/xid`,
-  `golang/glog`, `goccy/go-json`. After step 7, these become direct
-  requires. Verify the binary still builds with `CGO_ENABLED=0`.
-  Mitigation: list `go mod graph | grep mochi` before/after to confirm.
+When upstream merges our patch (or we don't need it any more), drop the
+local commit on the next sync and tag a fresh `-monstermq.N`.
 
-- **License hygiene**: MIT requires preserving copyright notice and
-  permission notice. Step 5 keeps `LICENSE.md` next to the code, and the
-  `README-mochi.md` records provenance. Add a top-level `NOTICE` if our
-  README doesn't already credit mochi-mqtt.
+## Risks / open questions
 
-- **Future upstream syncs**: with the source forked, every upstream change
-  has to be re-applied manually. Mitigation: write `scripts/sync-mochi.sh`
-  in a follow-up that re-runs steps 2–4 with proper conflict reporting.
+- **Module path collision**: Strategy A relies on `replace` rewriting the
+  resolved module. Some tooling (linters, IDEs) may still display the
+  upstream import path. This is cosmetic.
+- **Fork drift**: with our own tag we're now responsible for keeping the
+  fork on a buildable commit. CI on the fork repo (just `go build ./...`
+  + `go test ./...`) is recommended.
+- **Open-source distribution**: if broker.go is ever released publicly,
+  the `replace` directive flows through to consumers. A re-pinned
+  upstream version (drop the replace) is the cleanest "we want to be
+  back on upstream" knob.
 
-- **Internal/ visibility**: `internal/mqtt` is only importable by code under
-  `monstermq.io/edge/`. Fine for us, but if we ever publish the broker as a
-  library, we'd need to move it out of `internal/`.
+## Verification checklist
 
-## Verification (must all pass before commit)
-
-- `go build ./...` clean
-- `go vet ./...` clean
-- `go test ./... -count=1 -timeout 120s` — all 14 integration tests + the
-  SQLite store unit tests still green
-- `./run.sh -b -- -config test/smoke.yaml` boots, health probe returns ok,
-  GraphQL `{ broker { version enabledFeatures } }` responds
-- `mosquitto_pub` / paho client smoke: pub/sub QoS 0/1, retained, persistent
-  session offline queue
-- Binary size delta: before vs after `ls -la bin/monstermq-edge`
-- `go mod graph | grep mochi-mqtt` returns nothing
+- [ ] Fork tagged `v2.7.10-monstermq.1` and pushed to GitHub
+- [ ] `go.mod` contains the replace and `go mod tidy` runs clean
+- [ ] `go list -m all | grep mochi` confirms the fork is in use
+- [ ] `go build ./...` clean
+- [ ] `go test ./... -count=1 -timeout 90s` green
+- [ ] `./run.sh -b -- -config test/smoke.yaml` boots and serves MQTT + GraphQL
+- [ ] Smoke a publish/subscribe round-trip with `mosquitto_pub`/`paho`
