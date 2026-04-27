@@ -358,28 +358,111 @@ type LoginResult {
 # MQTT bridge (devices)
 # -----------------------------------------------------------------------------
 
+type MqttClientAddress {
+    mode: String!
+    remoteTopic: String!
+    localTopic: String!
+    removePath: Boolean!
+    qos: Int
+    noLocal: Boolean
+    retainHandling: Int
+    retainAsPublished: Boolean
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopicPattern: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
+}
+
+type MqttClientConnectionConfig {
+    brokerUrl: String!
+    username: String
+    clientId: String!
+    cleanSession: Boolean!
+    keepAlive: Int!
+    reconnectDelay: Long!
+    connectionTimeout: Long!
+    addresses: [MqttClientAddress!]!
+    bufferEnabled: Boolean!
+    bufferSize: Int!
+    persistBuffer: Boolean!
+    deleteOldestMessages: Boolean!
+    sslVerifyCertificate: Boolean!
+    protocolVersion: Int
+    sessionExpiryInterval: Long
+    receiveMaximum: Int
+    maximumPacketSize: Long
+    topicAliasMaximum: Int
+}
+
 type MqttClient {
     name: String!
     namespace: String!
     nodeId: String!
+    config: MqttClientConnectionConfig!
     enabled: Boolean!
-    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
     metrics: [MqttClientMetrics!]!
     metricsHistory(from: String, to: String, lastMinutes: Int): [MqttClientMetrics!]!
+}
+
+input UserPropertyInput {
+    key: String!
+    value: String!
+}
+
+input MqttClientAddressInput {
+    mode: String!
+    remoteTopic: String!
+    localTopic: String!
+    removePath: Boolean = true
+    qos: Int = 0
+    noLocal: Boolean = false
+    retainHandling: Int = 0
+    retainAsPublished: Boolean = false
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopicPattern: String
+    payloadFormatIndicator: Boolean = false
+    userProperties: [UserPropertyInput!]
+}
+
+input MqttClientConnectionConfigInput {
+    brokerUrl: String!
+    username: String
+    password: String
+    clientId: String = "monstermq-client"
+    cleanSession: Boolean = true
+    keepAlive: Int = 60
+    reconnectDelay: Long = 5000
+    connectionTimeout: Long = 30000
+    addresses: [MqttClientAddressInput!]
+    bufferEnabled: Boolean = false
+    bufferSize: Int = 5000
+    persistBuffer: Boolean = false
+    deleteOldestMessages: Boolean = true
+    sslVerifyCertificate: Boolean = true
+    protocolVersion: Int = 4
+    sessionExpiryInterval: Long
+    receiveMaximum: Int
+    maximumPacketSize: Long
+    topicAliasMaximum: Int
 }
 
 input MqttClientInput {
     name: String!
     namespace: String!
     nodeId: String!
-    enabled: Boolean
-    config: JSON!
+    enabled: Boolean = true
+    config: MqttClientConnectionConfigInput!
 }
 
 type MqttClientResult {
     success: Boolean!
-    message: String
     client: MqttClient
+    errors: [String!]!
 }
 
 # -----------------------------------------------------------------------------
@@ -420,13 +503,21 @@ type SessionRemovalResult {
 
 type SystemLogEntry {
     timestamp: String!
-    node: String!
     level: String!
     logger: String!
+    message: String!
+    thread: Long!
+    node: String!
     sourceClass: String
     sourceMethod: String
-    thread: String
-    message: String!
+    parameters: [String!]
+    exception: ExceptionInfo
+}
+
+type ExceptionInfo {
+    class: String!
+    message: String
+    stackTrace: String!
 }
 
 # -----------------------------------------------------------------------------
@@ -457,12 +548,15 @@ type ArchiveGroupMutations {
 
 type MqttClientMutations {
     create(input: MqttClientInput!): MqttClientResult!
-    update(input: MqttClientInput!): MqttClientResult!
-    delete(name: String!): MqttClientResult!
+    update(name: String!, input: MqttClientInput!): MqttClientResult!
+    delete(name: String!): Boolean!
     start(name: String!): MqttClientResult!
     stop(name: String!): MqttClientResult!
-    toggle(name: String!): MqttClientResult!
+    toggle(name: String!, enabled: Boolean!): MqttClientResult!
     reassign(name: String!, nodeId: String!): MqttClientResult!
+    addAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
+    updateAddress(deviceName: String!, remoteTopic: String!, input: MqttClientAddressInput!): MqttClientResult!
+    deleteAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
 }
 
 # -----------------------------------------------------------------------------
@@ -518,7 +612,7 @@ type Query {
         endTime: String
         lastMinutes: Int
         node: String
-        level: String
+        level: [String!]
         logger: String
         sourceClass: String
         sourceMethod: String
@@ -557,5 +651,13 @@ type Mutation {
 type Subscription {
     topicUpdates(topicFilters: [String!]!, format: DataFormat): TopicUpdate!
     topicUpdatesBulk(topicFilters: [String!]!, format: DataFormat, timeoutMs: Int, maxSize: Int): TopicUpdateBulk!
-    systemLogs(node: String, level: String, logger: String, thread: String, sourceClass: String, sourceMethod: String, message: String): SystemLogEntry!
+    systemLogs(
+        node: String = "+"
+        level: [String!]
+        logger: String
+        thread: Long
+        sourceClass: String
+        sourceMethod: String
+        message: String
+    ): SystemLogEntry!
 }

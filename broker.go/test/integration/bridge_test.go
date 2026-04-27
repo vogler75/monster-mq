@@ -31,7 +31,7 @@ func TestMqttBridgeOutboundAndInbound(t *testing.T) {
 	cfgA.Dashboard.Enabled = false
 	cfgA.Metrics.Enabled = false
 	cfgA.SQLite.Path = dbA
-	srvA, err := broker.New(cfgA, slog.New(slog.DiscardHandler))
+	srvA, err := broker.New(cfgA, slog.New(slog.DiscardHandler), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestMqttBridgeOutboundAndInbound(t *testing.T) {
 	cfgB.Metrics.Enabled = false
 	cfgB.SQLite.Path = dbB
 	cfgB.Bridges.Mqtt.Enabled = true
-	srvB, err := broker.New(cfgB, slog.New(slog.DiscardHandler))
+	srvB, err := broker.New(cfgB, slog.New(slog.DiscardHandler), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

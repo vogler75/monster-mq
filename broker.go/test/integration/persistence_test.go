@@ -30,7 +30,7 @@ func startWithDB(t *testing.T, port int, dbPath string, cfgFn func(*config.Confi
 	if cfgFn != nil {
 		cfgFn(cfg)
 	}
-	srv, err := broker.New(cfg, slog.New(slog.DiscardHandler))
+	srv, err := broker.New(cfg, slog.New(slog.DiscardHandler), nil)
 	if err != nil {
 		t.Fatalf("broker: %v", err)
 	}

@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-func Setup(levelStr string) *slog.Logger {
+// Setup builds a logger that writes to stderr AND fans out to bus (if non-nil)
+// so the GraphQL systemLogs subscription can stream live entries.
+func Setup(levelStr string, bus *Bus, nodeID string) *slog.Logger {
 	var level slog.Level
 	switch strings.ToUpper(levelStr) {
 	case "DEBUG":
@@ -18,7 +20,11 @@ func Setup(levelStr string) *slog.Logger {
 	default:
 		level = slog.LevelInfo
 	}
-	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	inner := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	var h slog.Handler = inner
+	if bus != nil {
+		h = NewHandler(bus, inner, nodeID)
+	}
 	logger := slog.New(h)
 	slog.SetDefault(logger)
 	return logger

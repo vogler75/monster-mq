@@ -32,7 +32,7 @@ func startWithGraphQL(t *testing.T, mqttPort, gqlPort int, cfgFns ...func(*confi
 	for _, fn := range cfgFns {
 		fn(cfg)
 	}
-	srv, err := broker.New(cfg, slog.New(slog.DiscardHandler))
+	srv, err := broker.New(cfg, slog.New(slog.DiscardHandler), nil)
 	if err != nil {
 		t.Fatalf("broker: %v", err)
 	}

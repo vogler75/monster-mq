@@ -27,7 +27,7 @@ func startEphemeral(t *testing.T, port int) (*broker.Server, string) {
 	cfg.SQLite.Path = t.TempDir() + "/test.db"
 
 	logger := slog.New(slog.DiscardHandler)
-	srv, err := broker.New(cfg, logger)
+	srv, err := broker.New(cfg, logger, nil)
 	if err != nil {
 		t.Fatalf("broker init: %v", err)
 	}

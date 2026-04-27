@@ -70,11 +70,11 @@ type MqttClientResolver interface {
 }
 type MqttClientMutationsResolver interface {
 	Create(ctx context.Context, obj *MqttClientMutations, input MqttClientInput) (*MqttClientResult, error)
-	Update(ctx context.Context, obj *MqttClientMutations, input MqttClientInput) (*MqttClientResult, error)
-	Delete(ctx context.Context, obj *MqttClientMutations, name string) (*MqttClientResult, error)
+	Update(ctx context.Context, obj *MqttClientMutations, name string, input MqttClientInput) (*MqttClientResult, error)
+	Delete(ctx context.Context, obj *MqttClientMutations, name string) (bool, error)
 	Start(ctx context.Context, obj *MqttClientMutations, name string) (*MqttClientResult, error)
 	Stop(ctx context.Context, obj *MqttClientMutations, name string) (*MqttClientResult, error)
-	Toggle(ctx context.Context, obj *MqttClientMutations, name string) (*MqttClientResult, error)
+	Toggle(ctx context.Context, obj *MqttClientMutations, name string, enabled bool) (*MqttClientResult, error)
 	Reassign(ctx context.Context, obj *MqttClientMutations, name string, nodeID string) (*MqttClientResult, error)
 }
 type MutationResolver interface {
@@ -95,7 +95,7 @@ type QueryResolver interface {
 	RetainedMessages(ctx context.Context, topicFilter string, format *DataFormat, limit *int) ([]*RetainedMessage, error)
 	ArchivedMessages(ctx context.Context, topicFilter string, startTime *string, endTime *string, format *DataFormat, limit *int, archiveGroup *string, includeTopic *bool) ([]*ArchivedMessage, error)
 	AggregatedMessages(ctx context.Context, topics []string, interval int, startTime string, endTime string, functions []string, fields []string, archiveGroup *string) (*AggregatedResult, error)
-	SystemLogs(ctx context.Context, startTime *string, endTime *string, lastMinutes *int, node *string, level *string, logger *string, sourceClass *string, sourceMethod *string, message *string, limit *int, orderByTime *OrderDirection) ([]*SystemLogEntry, error)
+	SystemLogs(ctx context.Context, startTime *string, endTime *string, lastMinutes *int, node *string, level []string, logger *string, sourceClass *string, sourceMethod *string, message *string, limit *int, orderByTime *OrderDirection) ([]*SystemLogEntry, error)
 	SearchTopics(ctx context.Context, pattern string, limit *int, archiveGroup *string) ([]string, error)
 	BrowseTopics(ctx context.Context, topic string, archiveGroup *string) ([]*Topic, error)
 	BrokerConfig(ctx context.Context) (*BrokerConfig, error)
@@ -121,7 +121,7 @@ type SessionMutationsResolver interface {
 type SubscriptionResolver interface {
 	TopicUpdates(ctx context.Context, topicFilters []string, format *DataFormat) (<-chan *TopicUpdate, error)
 	TopicUpdatesBulk(ctx context.Context, topicFilters []string, format *DataFormat, timeoutMs *int, maxSize *int) (<-chan *TopicUpdateBulk, error)
-	SystemLogs(ctx context.Context, node *string, level *string, logger *string, thread *string, sourceClass *string, sourceMethod *string, message *string) (<-chan *SystemLogEntry, error)
+	SystemLogs(ctx context.Context, node *string, level []string, logger *string, thread *int64, sourceClass *string, sourceMethod *string, message *string) (<-chan *SystemLogEntry, error)
 }
 type TopicResolver interface {
 	Value(ctx context.Context, obj *Topic, format *DataFormat) (*TopicValue, error)
@@ -162,12 +162,15 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputCreateAclRuleInput,
 		ec.unmarshalInputCreateArchiveGroupInput,
 		ec.unmarshalInputCreateUserInput,
+		ec.unmarshalInputMqttClientAddressInput,
+		ec.unmarshalInputMqttClientConnectionConfigInput,
 		ec.unmarshalInputMqttClientInput,
 		ec.unmarshalInputPublishInput,
 		ec.unmarshalInputSetPasswordInput,
 		ec.unmarshalInputUpdateAclRuleInput,
 		ec.unmarshalInputUpdateArchiveGroupInput,
 		ec.unmarshalInputUpdateUserInput,
+		ec.unmarshalInputUserPropertyInput,
 	)
 	first := true
 
@@ -620,28 +623,111 @@ type LoginResult {
 # MQTT bridge (devices)
 # -----------------------------------------------------------------------------
 
+type MqttClientAddress {
+    mode: String!
+    remoteTopic: String!
+    localTopic: String!
+    removePath: Boolean!
+    qos: Int
+    noLocal: Boolean
+    retainHandling: Int
+    retainAsPublished: Boolean
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopicPattern: String
+    payloadFormatIndicator: Boolean
+    userProperties: [UserProperty!]
+}
+
+type MqttClientConnectionConfig {
+    brokerUrl: String!
+    username: String
+    clientId: String!
+    cleanSession: Boolean!
+    keepAlive: Int!
+    reconnectDelay: Long!
+    connectionTimeout: Long!
+    addresses: [MqttClientAddress!]!
+    bufferEnabled: Boolean!
+    bufferSize: Int!
+    persistBuffer: Boolean!
+    deleteOldestMessages: Boolean!
+    sslVerifyCertificate: Boolean!
+    protocolVersion: Int
+    sessionExpiryInterval: Long
+    receiveMaximum: Int
+    maximumPacketSize: Long
+    topicAliasMaximum: Int
+}
+
 type MqttClient {
     name: String!
     namespace: String!
     nodeId: String!
+    config: MqttClientConnectionConfig!
     enabled: Boolean!
-    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
     metrics: [MqttClientMetrics!]!
     metricsHistory(from: String, to: String, lastMinutes: Int): [MqttClientMetrics!]!
+}
+
+input UserPropertyInput {
+    key: String!
+    value: String!
+}
+
+input MqttClientAddressInput {
+    mode: String!
+    remoteTopic: String!
+    localTopic: String!
+    removePath: Boolean = true
+    qos: Int = 0
+    noLocal: Boolean = false
+    retainHandling: Int = 0
+    retainAsPublished: Boolean = false
+    messageExpiryInterval: Long
+    contentType: String
+    responseTopicPattern: String
+    payloadFormatIndicator: Boolean = false
+    userProperties: [UserPropertyInput!]
+}
+
+input MqttClientConnectionConfigInput {
+    brokerUrl: String!
+    username: String
+    password: String
+    clientId: String = "monstermq-client"
+    cleanSession: Boolean = true
+    keepAlive: Int = 60
+    reconnectDelay: Long = 5000
+    connectionTimeout: Long = 30000
+    addresses: [MqttClientAddressInput!]
+    bufferEnabled: Boolean = false
+    bufferSize: Int = 5000
+    persistBuffer: Boolean = false
+    deleteOldestMessages: Boolean = true
+    sslVerifyCertificate: Boolean = true
+    protocolVersion: Int = 4
+    sessionExpiryInterval: Long
+    receiveMaximum: Int
+    maximumPacketSize: Long
+    topicAliasMaximum: Int
 }
 
 input MqttClientInput {
     name: String!
     namespace: String!
     nodeId: String!
-    enabled: Boolean
-    config: JSON!
+    enabled: Boolean = true
+    config: MqttClientConnectionConfigInput!
 }
 
 type MqttClientResult {
     success: Boolean!
-    message: String
     client: MqttClient
+    errors: [String!]!
 }
 
 # -----------------------------------------------------------------------------
@@ -682,13 +768,21 @@ type SessionRemovalResult {
 
 type SystemLogEntry {
     timestamp: String!
-    node: String!
     level: String!
     logger: String!
+    message: String!
+    thread: Long!
+    node: String!
     sourceClass: String
     sourceMethod: String
-    thread: String
-    message: String!
+    parameters: [String!]
+    exception: ExceptionInfo
+}
+
+type ExceptionInfo {
+    class: String!
+    message: String
+    stackTrace: String!
 }
 
 # -----------------------------------------------------------------------------
@@ -719,12 +813,15 @@ type ArchiveGroupMutations {
 
 type MqttClientMutations {
     create(input: MqttClientInput!): MqttClientResult!
-    update(input: MqttClientInput!): MqttClientResult!
-    delete(name: String!): MqttClientResult!
+    update(name: String!, input: MqttClientInput!): MqttClientResult!
+    delete(name: String!): Boolean!
     start(name: String!): MqttClientResult!
     stop(name: String!): MqttClientResult!
-    toggle(name: String!): MqttClientResult!
+    toggle(name: String!, enabled: Boolean!): MqttClientResult!
     reassign(name: String!, nodeId: String!): MqttClientResult!
+    addAddress(deviceName: String!, input: MqttClientAddressInput!): MqttClientResult!
+    updateAddress(deviceName: String!, remoteTopic: String!, input: MqttClientAddressInput!): MqttClientResult!
+    deleteAddress(deviceName: String!, remoteTopic: String!): MqttClientResult!
 }
 
 # -----------------------------------------------------------------------------
@@ -780,7 +877,7 @@ type Query {
         endTime: String
         lastMinutes: Int
         node: String
-        level: String
+        level: [String!]
         logger: String
         sourceClass: String
         sourceMethod: String
@@ -819,7 +916,15 @@ type Mutation {
 type Subscription {
     topicUpdates(topicFilters: [String!]!, format: DataFormat): TopicUpdate!
     topicUpdatesBulk(topicFilters: [String!]!, format: DataFormat, timeoutMs: Int, maxSize: Int): TopicUpdateBulk!
-    systemLogs(node: String, level: String, logger: String, thread: String, sourceClass: String, sourceMethod: String, message: String): SystemLogEntry!
+    systemLogs(
+        node: String = "+"
+        level: [String!]
+        logger: String
+        thread: Long
+        sourceClass: String
+        sourceMethod: String
+        message: String
+    ): SystemLogEntry!
 }
 `, BuiltIn: false},
 }
@@ -942,6 +1047,22 @@ func (ec *executionContext) field_Broker_sessions_args(ctx context.Context, rawA
 	return args, nil
 }
 
+func (ec *executionContext) field_MqttClientMutations_addAddress_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceName", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceName"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMqttClientAddressInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_MqttClientMutations_create_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -950,6 +1071,22 @@ func (ec *executionContext) field_MqttClientMutations_create_args(ctx context.Co
 		return nil, err
 	}
 	args["input"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_MqttClientMutations_deleteAddress_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceName", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceName"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "remoteTopic", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["remoteTopic"] = arg1
 	return args, nil
 }
 
@@ -1010,17 +1147,48 @@ func (ec *executionContext) field_MqttClientMutations_toggle_args(ctx context.Co
 		return nil, err
 	}
 	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "enabled", ec.unmarshalNBoolean2bool)
+	if err != nil {
+		return nil, err
+	}
+	args["enabled"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_MqttClientMutations_updateAddress_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "deviceName", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["deviceName"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "remoteTopic", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["remoteTopic"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMqttClientAddressInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg2
 	return args, nil
 }
 
 func (ec *executionContext) field_MqttClientMutations_update_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMqttClientInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientInput)
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
 	if err != nil {
 		return nil, err
 	}
-	args["input"] = arg0
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNMqttClientInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg1
 	return args, nil
 }
 
@@ -1427,7 +1595,7 @@ func (ec *executionContext) field_Query_systemLogs_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["node"] = arg3
-	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "level", ec.unmarshalOString2ᚖstring)
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "level", ec.unmarshalOString2ᚕstringᚄ)
 	if err != nil {
 		return nil, err
 	}
@@ -1516,7 +1684,7 @@ func (ec *executionContext) field_Subscription_systemLogs_args(ctx context.Conte
 		return nil, err
 	}
 	args["node"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "level", ec.unmarshalOString2ᚖstring)
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "level", ec.unmarshalOString2ᚕstringᚄ)
 	if err != nil {
 		return nil, err
 	}
@@ -1526,7 +1694,7 @@ func (ec *executionContext) field_Subscription_systemLogs_args(ctx context.Conte
 		return nil, err
 	}
 	args["logger"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "thread", ec.unmarshalOString2ᚖstring)
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "thread", ec.unmarshalOLong2ᚖint64)
 	if err != nil {
 		return nil, err
 	}
@@ -5462,6 +5630,93 @@ func (ec *executionContext) fieldContext_CurrentUser_isAdmin(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _ExceptionInfo_class(ctx context.Context, field graphql.CollectedField, obj *ExceptionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ExceptionInfo_class,
+		func(ctx context.Context) (any, error) {
+			return obj.Class, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ExceptionInfo_class(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ExceptionInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ExceptionInfo_message(ctx context.Context, field graphql.CollectedField, obj *ExceptionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ExceptionInfo_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ExceptionInfo_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ExceptionInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ExceptionInfo_stackTrace(ctx context.Context, field graphql.CollectedField, obj *ExceptionInfo) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ExceptionInfo_stackTrace,
+		func(ctx context.Context) (any, error) {
+			return obj.StackTrace, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ExceptionInfo_stackTrace(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ExceptionInfo",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _LoginResult_success(ctx context.Context, field graphql.CollectedField, obj *LoginResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5694,6 +5949,73 @@ func (ec *executionContext) fieldContext_MqttClient_nodeId(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _MqttClient_config(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClient_config,
+		func(ctx context.Context) (any, error) {
+			return obj.Config, nil
+		},
+		nil,
+		ec.marshalNMqttClientConnectionConfig2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientConnectionConfig,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClient_config(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "brokerUrl":
+				return ec.fieldContext_MqttClientConnectionConfig_brokerUrl(ctx, field)
+			case "username":
+				return ec.fieldContext_MqttClientConnectionConfig_username(ctx, field)
+			case "clientId":
+				return ec.fieldContext_MqttClientConnectionConfig_clientId(ctx, field)
+			case "cleanSession":
+				return ec.fieldContext_MqttClientConnectionConfig_cleanSession(ctx, field)
+			case "keepAlive":
+				return ec.fieldContext_MqttClientConnectionConfig_keepAlive(ctx, field)
+			case "reconnectDelay":
+				return ec.fieldContext_MqttClientConnectionConfig_reconnectDelay(ctx, field)
+			case "connectionTimeout":
+				return ec.fieldContext_MqttClientConnectionConfig_connectionTimeout(ctx, field)
+			case "addresses":
+				return ec.fieldContext_MqttClientConnectionConfig_addresses(ctx, field)
+			case "bufferEnabled":
+				return ec.fieldContext_MqttClientConnectionConfig_bufferEnabled(ctx, field)
+			case "bufferSize":
+				return ec.fieldContext_MqttClientConnectionConfig_bufferSize(ctx, field)
+			case "persistBuffer":
+				return ec.fieldContext_MqttClientConnectionConfig_persistBuffer(ctx, field)
+			case "deleteOldestMessages":
+				return ec.fieldContext_MqttClientConnectionConfig_deleteOldestMessages(ctx, field)
+			case "sslVerifyCertificate":
+				return ec.fieldContext_MqttClientConnectionConfig_sslVerifyCertificate(ctx, field)
+			case "protocolVersion":
+				return ec.fieldContext_MqttClientConnectionConfig_protocolVersion(ctx, field)
+			case "sessionExpiryInterval":
+				return ec.fieldContext_MqttClientConnectionConfig_sessionExpiryInterval(ctx, field)
+			case "receiveMaximum":
+				return ec.fieldContext_MqttClientConnectionConfig_receiveMaximum(ctx, field)
+			case "maximumPacketSize":
+				return ec.fieldContext_MqttClientConnectionConfig_maximumPacketSize(ctx, field)
+			case "topicAliasMaximum":
+				return ec.fieldContext_MqttClientConnectionConfig_topicAliasMaximum(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MqttClientConnectionConfig", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _MqttClient_enabled(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -5723,30 +6045,88 @@ func (ec *executionContext) fieldContext_MqttClient_enabled(_ context.Context, f
 	return fc, nil
 }
 
-func (ec *executionContext) _MqttClient_config(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
+func (ec *executionContext) _MqttClient_createdAt(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_MqttClient_config,
+		ec.fieldContext_MqttClient_createdAt,
 		func(ctx context.Context) (any, error) {
-			return obj.Config, nil
+			return obj.CreatedAt, nil
 		},
 		nil,
-		ec.marshalNJSON2map,
+		ec.marshalNString2string,
 		true,
 		true,
 	)
 }
 
-func (ec *executionContext) fieldContext_MqttClient_config(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_MqttClient_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "MqttClient",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type JSON does not have child fields")
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClient_updatedAt(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClient_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClient_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClient_isOnCurrentNode(ctx context.Context, field graphql.CollectedField, obj *MqttClient) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClient_isOnCurrentNode,
+		func(ctx context.Context) (any, error) {
+			return obj.IsOnCurrentNode, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClient_isOnCurrentNode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClient",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -5834,6 +6214,939 @@ func (ec *executionContext) fieldContext_MqttClient_metricsHistory(ctx context.C
 	if fc.Args, err = ec.field_MqttClient_metricsHistory_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_mode(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_mode,
+		func(ctx context.Context) (any, error) {
+			return obj.Mode, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_mode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_remoteTopic(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_remoteTopic,
+		func(ctx context.Context) (any, error) {
+			return obj.RemoteTopic, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_remoteTopic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_localTopic(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_localTopic,
+		func(ctx context.Context) (any, error) {
+			return obj.LocalTopic, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_localTopic(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_removePath(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_removePath,
+		func(ctx context.Context) (any, error) {
+			return obj.RemovePath, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_removePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_qos(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_qos,
+		func(ctx context.Context) (any, error) {
+			return obj.Qos, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_qos(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_noLocal(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_noLocal,
+		func(ctx context.Context) (any, error) {
+			return obj.NoLocal, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_noLocal(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_retainHandling(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_retainHandling,
+		func(ctx context.Context) (any, error) {
+			return obj.RetainHandling, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_retainHandling(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_retainAsPublished(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_retainAsPublished,
+		func(ctx context.Context) (any, error) {
+			return obj.RetainAsPublished, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_retainAsPublished(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_messageExpiryInterval(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_messageExpiryInterval,
+		func(ctx context.Context) (any, error) {
+			return obj.MessageExpiryInterval, nil
+		},
+		nil,
+		ec.marshalOLong2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_messageExpiryInterval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_contentType(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_contentType,
+		func(ctx context.Context) (any, error) {
+			return obj.ContentType, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_contentType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_responseTopicPattern(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_responseTopicPattern,
+		func(ctx context.Context) (any, error) {
+			return obj.ResponseTopicPattern, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_responseTopicPattern(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_payloadFormatIndicator(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_payloadFormatIndicator,
+		func(ctx context.Context) (any, error) {
+			return obj.PayloadFormatIndicator, nil
+		},
+		nil,
+		ec.marshalOBoolean2ᚖbool,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_payloadFormatIndicator(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientAddress_userProperties(ctx context.Context, field graphql.CollectedField, obj *MqttClientAddress) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientAddress_userProperties,
+		func(ctx context.Context) (any, error) {
+			return obj.UserProperties, nil
+		},
+		nil,
+		ec.marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientAddress_userProperties(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientAddress",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_UserProperty_key(ctx, field)
+			case "value":
+				return ec.fieldContext_UserProperty_value(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type UserProperty", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_brokerUrl(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_brokerUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.BrokerURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_brokerUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_username(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_username,
+		func(ctx context.Context) (any, error) {
+			return obj.Username, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_username(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_clientId(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_clientId,
+		func(ctx context.Context) (any, error) {
+			return obj.ClientID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_clientId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_cleanSession(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_cleanSession,
+		func(ctx context.Context) (any, error) {
+			return obj.CleanSession, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_cleanSession(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_keepAlive(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_keepAlive,
+		func(ctx context.Context) (any, error) {
+			return obj.KeepAlive, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_keepAlive(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_reconnectDelay(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_reconnectDelay,
+		func(ctx context.Context) (any, error) {
+			return obj.ReconnectDelay, nil
+		},
+		nil,
+		ec.marshalNLong2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_reconnectDelay(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_connectionTimeout(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_connectionTimeout,
+		func(ctx context.Context) (any, error) {
+			return obj.ConnectionTimeout, nil
+		},
+		nil,
+		ec.marshalNLong2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_connectionTimeout(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_addresses(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_addresses,
+		func(ctx context.Context) (any, error) {
+			return obj.Addresses, nil
+		},
+		nil,
+		ec.marshalNMqttClientAddress2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_addresses(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "mode":
+				return ec.fieldContext_MqttClientAddress_mode(ctx, field)
+			case "remoteTopic":
+				return ec.fieldContext_MqttClientAddress_remoteTopic(ctx, field)
+			case "localTopic":
+				return ec.fieldContext_MqttClientAddress_localTopic(ctx, field)
+			case "removePath":
+				return ec.fieldContext_MqttClientAddress_removePath(ctx, field)
+			case "qos":
+				return ec.fieldContext_MqttClientAddress_qos(ctx, field)
+			case "noLocal":
+				return ec.fieldContext_MqttClientAddress_noLocal(ctx, field)
+			case "retainHandling":
+				return ec.fieldContext_MqttClientAddress_retainHandling(ctx, field)
+			case "retainAsPublished":
+				return ec.fieldContext_MqttClientAddress_retainAsPublished(ctx, field)
+			case "messageExpiryInterval":
+				return ec.fieldContext_MqttClientAddress_messageExpiryInterval(ctx, field)
+			case "contentType":
+				return ec.fieldContext_MqttClientAddress_contentType(ctx, field)
+			case "responseTopicPattern":
+				return ec.fieldContext_MqttClientAddress_responseTopicPattern(ctx, field)
+			case "payloadFormatIndicator":
+				return ec.fieldContext_MqttClientAddress_payloadFormatIndicator(ctx, field)
+			case "userProperties":
+				return ec.fieldContext_MqttClientAddress_userProperties(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MqttClientAddress", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_bufferEnabled(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_bufferEnabled,
+		func(ctx context.Context) (any, error) {
+			return obj.BufferEnabled, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_bufferEnabled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_bufferSize(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_bufferSize,
+		func(ctx context.Context) (any, error) {
+			return obj.BufferSize, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_bufferSize(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_persistBuffer(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_persistBuffer,
+		func(ctx context.Context) (any, error) {
+			return obj.PersistBuffer, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_persistBuffer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_deleteOldestMessages(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_deleteOldestMessages,
+		func(ctx context.Context) (any, error) {
+			return obj.DeleteOldestMessages, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_deleteOldestMessages(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_sslVerifyCertificate(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_sslVerifyCertificate,
+		func(ctx context.Context) (any, error) {
+			return obj.SslVerifyCertificate, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_sslVerifyCertificate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_protocolVersion(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_protocolVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.ProtocolVersion, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_protocolVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_sessionExpiryInterval(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_sessionExpiryInterval,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionExpiryInterval, nil
+		},
+		nil,
+		ec.marshalOLong2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_sessionExpiryInterval(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_receiveMaximum(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_receiveMaximum,
+		func(ctx context.Context) (any, error) {
+			return obj.ReceiveMaximum, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_receiveMaximum(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_maximumPacketSize(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_maximumPacketSize,
+		func(ctx context.Context) (any, error) {
+			return obj.MaximumPacketSize, nil
+		},
+		nil,
+		ec.marshalOLong2ᚖint64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_maximumPacketSize(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientConnectionConfig_topicAliasMaximum(ctx context.Context, field graphql.CollectedField, obj *MqttClientConnectionConfig) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientConnectionConfig_topicAliasMaximum,
+		func(ctx context.Context) (any, error) {
+			return obj.TopicAliasMaximum, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientConnectionConfig_topicAliasMaximum(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientConnectionConfig",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
 	}
 	return fc, nil
 }
@@ -5952,10 +7265,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_create(ctx context.
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -5982,7 +7295,7 @@ func (ec *executionContext) _MqttClientMutations_update(ctx context.Context, fie
 		ec.fieldContext_MqttClientMutations_update,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.MqttClientMutations().Update(ctx, obj, fc.Args["input"].(MqttClientInput))
+			return ec.Resolvers.MqttClientMutations().Update(ctx, obj, fc.Args["name"].(string), fc.Args["input"].(MqttClientInput))
 		},
 		nil,
 		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
@@ -6001,10 +7314,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_update(ctx context.
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -6034,7 +7347,7 @@ func (ec *executionContext) _MqttClientMutations_delete(ctx context.Context, fie
 			return ec.Resolvers.MqttClientMutations().Delete(ctx, obj, fc.Args["name"].(string))
 		},
 		nil,
-		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
+		ec.marshalNBoolean2bool,
 		true,
 		true,
 	)
@@ -6047,15 +7360,7 @@ func (ec *executionContext) fieldContext_MqttClientMutations_delete(ctx context.
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "success":
-				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
-			case "client":
-				return ec.fieldContext_MqttClientResult_client(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	defer func() {
@@ -6099,10 +7404,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_start(ctx context.C
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -6148,10 +7453,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_stop(ctx context.Co
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -6178,7 +7483,7 @@ func (ec *executionContext) _MqttClientMutations_toggle(ctx context.Context, fie
 		ec.fieldContext_MqttClientMutations_toggle,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.MqttClientMutations().Toggle(ctx, obj, fc.Args["name"].(string))
+			return ec.Resolvers.MqttClientMutations().Toggle(ctx, obj, fc.Args["name"].(string), fc.Args["enabled"].(bool))
 		},
 		nil,
 		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
@@ -6197,10 +7502,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_toggle(ctx context.
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -6246,10 +7551,10 @@ func (ec *executionContext) fieldContext_MqttClientMutations_reassign(ctx contex
 			switch field.Name {
 			case "success":
 				return ec.fieldContext_MqttClientResult_success(ctx, field)
-			case "message":
-				return ec.fieldContext_MqttClientResult_message(ctx, field)
 			case "client":
 				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
 		},
@@ -6262,6 +7567,150 @@ func (ec *executionContext) fieldContext_MqttClientMutations_reassign(ctx contex
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_MqttClientMutations_reassign_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientMutations_addAddress(ctx context.Context, field graphql.CollectedField, obj *MqttClientMutations) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientMutations_addAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.AddAddress, nil
+		},
+		nil,
+		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientMutations_addAddress(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientMutations",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_MqttClientResult_success(ctx, field)
+			case "client":
+				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_MqttClientMutations_addAddress_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientMutations_updateAddress(ctx context.Context, field graphql.CollectedField, obj *MqttClientMutations) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientMutations_updateAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdateAddress, nil
+		},
+		nil,
+		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientMutations_updateAddress(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientMutations",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_MqttClientResult_success(ctx, field)
+			case "client":
+				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_MqttClientMutations_updateAddress_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientMutations_deleteAddress(ctx context.Context, field graphql.CollectedField, obj *MqttClientMutations) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientMutations_deleteAddress,
+		func(ctx context.Context) (any, error) {
+			return obj.DeleteAddress, nil
+		},
+		nil,
+		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientMutations_deleteAddress(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientMutations",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "success":
+				return ec.fieldContext_MqttClientResult_success(ctx, field)
+			case "client":
+				return ec.fieldContext_MqttClientResult_client(ctx, field)
+			case "errors":
+				return ec.fieldContext_MqttClientResult_errors(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type MqttClientResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_MqttClientMutations_deleteAddress_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -6297,35 +7746,6 @@ func (ec *executionContext) fieldContext_MqttClientResult_success(_ context.Cont
 	return fc, nil
 }
 
-func (ec *executionContext) _MqttClientResult_message(ctx context.Context, field graphql.CollectedField, obj *MqttClientResult) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_MqttClientResult_message,
-		func(ctx context.Context) (any, error) {
-			return obj.Message, nil
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_MqttClientResult_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "MqttClientResult",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _MqttClientResult_client(ctx context.Context, field graphql.CollectedField, obj *MqttClientResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -6356,16 +7776,51 @@ func (ec *executionContext) fieldContext_MqttClientResult_client(_ context.Conte
 				return ec.fieldContext_MqttClient_namespace(ctx, field)
 			case "nodeId":
 				return ec.fieldContext_MqttClient_nodeId(ctx, field)
-			case "enabled":
-				return ec.fieldContext_MqttClient_enabled(ctx, field)
 			case "config":
 				return ec.fieldContext_MqttClient_config(ctx, field)
+			case "enabled":
+				return ec.fieldContext_MqttClient_enabled(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_MqttClient_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MqttClient_updatedAt(ctx, field)
+			case "isOnCurrentNode":
+				return ec.fieldContext_MqttClient_isOnCurrentNode(ctx, field)
 			case "metrics":
 				return ec.fieldContext_MqttClient_metrics(ctx, field)
 			case "metricsHistory":
 				return ec.fieldContext_MqttClient_metricsHistory(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClient", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _MqttClientResult_errors(ctx context.Context, field graphql.CollectedField, obj *MqttClientResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_MqttClientResult_errors,
+		func(ctx context.Context) (any, error) {
+			return obj.Errors, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_MqttClientResult_errors(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "MqttClientResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -6873,6 +8328,12 @@ func (ec *executionContext) fieldContext_Mutation_mqttClient(_ context.Context, 
 				return ec.fieldContext_MqttClientMutations_toggle(ctx, field)
 			case "reassign":
 				return ec.fieldContext_MqttClientMutations_reassign(ctx, field)
+			case "addAddress":
+				return ec.fieldContext_MqttClientMutations_addAddress(ctx, field)
+			case "updateAddress":
+				return ec.fieldContext_MqttClientMutations_updateAddress(ctx, field)
+			case "deleteAddress":
+				return ec.fieldContext_MqttClientMutations_deleteAddress(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type MqttClientMutations", field.Name)
 		},
@@ -7606,7 +9067,7 @@ func (ec *executionContext) _Query_systemLogs(ctx context.Context, field graphql
 		ec.fieldContext_Query_systemLogs,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().SystemLogs(ctx, fc.Args["startTime"].(*string), fc.Args["endTime"].(*string), fc.Args["lastMinutes"].(*int), fc.Args["node"].(*string), fc.Args["level"].(*string), fc.Args["logger"].(*string), fc.Args["sourceClass"].(*string), fc.Args["sourceMethod"].(*string), fc.Args["message"].(*string), fc.Args["limit"].(*int), fc.Args["orderByTime"].(*OrderDirection))
+			return ec.Resolvers.Query().SystemLogs(ctx, fc.Args["startTime"].(*string), fc.Args["endTime"].(*string), fc.Args["lastMinutes"].(*int), fc.Args["node"].(*string), fc.Args["level"].([]string), fc.Args["logger"].(*string), fc.Args["sourceClass"].(*string), fc.Args["sourceMethod"].(*string), fc.Args["message"].(*string), fc.Args["limit"].(*int), fc.Args["orderByTime"].(*OrderDirection))
 		},
 		nil,
 		ec.marshalNSystemLogEntry2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐSystemLogEntryᚄ,
@@ -7625,20 +9086,24 @@ func (ec *executionContext) fieldContext_Query_systemLogs(ctx context.Context, f
 			switch field.Name {
 			case "timestamp":
 				return ec.fieldContext_SystemLogEntry_timestamp(ctx, field)
-			case "node":
-				return ec.fieldContext_SystemLogEntry_node(ctx, field)
 			case "level":
 				return ec.fieldContext_SystemLogEntry_level(ctx, field)
 			case "logger":
 				return ec.fieldContext_SystemLogEntry_logger(ctx, field)
+			case "message":
+				return ec.fieldContext_SystemLogEntry_message(ctx, field)
+			case "thread":
+				return ec.fieldContext_SystemLogEntry_thread(ctx, field)
+			case "node":
+				return ec.fieldContext_SystemLogEntry_node(ctx, field)
 			case "sourceClass":
 				return ec.fieldContext_SystemLogEntry_sourceClass(ctx, field)
 			case "sourceMethod":
 				return ec.fieldContext_SystemLogEntry_sourceMethod(ctx, field)
-			case "thread":
-				return ec.fieldContext_SystemLogEntry_thread(ctx, field)
-			case "message":
-				return ec.fieldContext_SystemLogEntry_message(ctx, field)
+			case "parameters":
+				return ec.fieldContext_SystemLogEntry_parameters(ctx, field)
+			case "exception":
+				return ec.fieldContext_SystemLogEntry_exception(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemLogEntry", field.Name)
 		},
@@ -8348,10 +9813,16 @@ func (ec *executionContext) fieldContext_Query_mqttClients(ctx context.Context, 
 				return ec.fieldContext_MqttClient_namespace(ctx, field)
 			case "nodeId":
 				return ec.fieldContext_MqttClient_nodeId(ctx, field)
-			case "enabled":
-				return ec.fieldContext_MqttClient_enabled(ctx, field)
 			case "config":
 				return ec.fieldContext_MqttClient_config(ctx, field)
+			case "enabled":
+				return ec.fieldContext_MqttClient_enabled(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_MqttClient_createdAt(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_MqttClient_updatedAt(ctx, field)
+			case "isOnCurrentNode":
+				return ec.fieldContext_MqttClient_isOnCurrentNode(ctx, field)
 			case "metrics":
 				return ec.fieldContext_MqttClient_metrics(ctx, field)
 			case "metricsHistory":
@@ -9722,7 +11193,7 @@ func (ec *executionContext) _Subscription_systemLogs(ctx context.Context, field 
 		ec.fieldContext_Subscription_systemLogs,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Subscription().SystemLogs(ctx, fc.Args["node"].(*string), fc.Args["level"].(*string), fc.Args["logger"].(*string), fc.Args["thread"].(*string), fc.Args["sourceClass"].(*string), fc.Args["sourceMethod"].(*string), fc.Args["message"].(*string))
+			return ec.Resolvers.Subscription().SystemLogs(ctx, fc.Args["node"].(*string), fc.Args["level"].([]string), fc.Args["logger"].(*string), fc.Args["thread"].(*int64), fc.Args["sourceClass"].(*string), fc.Args["sourceMethod"].(*string), fc.Args["message"].(*string))
 		},
 		nil,
 		ec.marshalNSystemLogEntry2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐSystemLogEntry,
@@ -9741,20 +11212,24 @@ func (ec *executionContext) fieldContext_Subscription_systemLogs(ctx context.Con
 			switch field.Name {
 			case "timestamp":
 				return ec.fieldContext_SystemLogEntry_timestamp(ctx, field)
-			case "node":
-				return ec.fieldContext_SystemLogEntry_node(ctx, field)
 			case "level":
 				return ec.fieldContext_SystemLogEntry_level(ctx, field)
 			case "logger":
 				return ec.fieldContext_SystemLogEntry_logger(ctx, field)
+			case "message":
+				return ec.fieldContext_SystemLogEntry_message(ctx, field)
+			case "thread":
+				return ec.fieldContext_SystemLogEntry_thread(ctx, field)
+			case "node":
+				return ec.fieldContext_SystemLogEntry_node(ctx, field)
 			case "sourceClass":
 				return ec.fieldContext_SystemLogEntry_sourceClass(ctx, field)
 			case "sourceMethod":
 				return ec.fieldContext_SystemLogEntry_sourceMethod(ctx, field)
-			case "thread":
-				return ec.fieldContext_SystemLogEntry_thread(ctx, field)
-			case "message":
-				return ec.fieldContext_SystemLogEntry_message(ctx, field)
+			case "parameters":
+				return ec.fieldContext_SystemLogEntry_parameters(ctx, field)
+			case "exception":
+				return ec.fieldContext_SystemLogEntry_exception(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type SystemLogEntry", field.Name)
 		},
@@ -9790,35 +11265,6 @@ func (ec *executionContext) _SystemLogEntry_timestamp(ctx context.Context, field
 }
 
 func (ec *executionContext) fieldContext_SystemLogEntry_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "SystemLogEntry",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _SystemLogEntry_node(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_SystemLogEntry_node,
-		func(ctx context.Context) (any, error) {
-			return obj.Node, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_SystemLogEntry_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SystemLogEntry",
 		Field:      field,
@@ -9889,6 +11335,93 @@ func (ec *executionContext) fieldContext_SystemLogEntry_logger(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _SystemLogEntry_message(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemLogEntry_message,
+		func(ctx context.Context) (any, error) {
+			return obj.Message, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemLogEntry_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemLogEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemLogEntry_thread(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemLogEntry_thread,
+		func(ctx context.Context) (any, error) {
+			return obj.Thread, nil
+		},
+		nil,
+		ec.marshalNLong2int64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemLogEntry_thread(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemLogEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Long does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _SystemLogEntry_node(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_SystemLogEntry_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_SystemLogEntry_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "SystemLogEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _SystemLogEntry_sourceClass(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -9947,23 +11480,23 @@ func (ec *executionContext) fieldContext_SystemLogEntry_sourceMethod(_ context.C
 	return fc, nil
 }
 
-func (ec *executionContext) _SystemLogEntry_thread(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
+func (ec *executionContext) _SystemLogEntry_parameters(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SystemLogEntry_thread,
+		ec.fieldContext_SystemLogEntry_parameters,
 		func(ctx context.Context) (any, error) {
-			return obj.Thread, nil
+			return obj.Parameters, nil
 		},
 		nil,
-		ec.marshalOString2ᚖstring,
+		ec.marshalOString2ᚕstringᚄ,
 		true,
 		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_SystemLogEntry_thread(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SystemLogEntry_parameters(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SystemLogEntry",
 		Field:      field,
@@ -9976,30 +11509,38 @@ func (ec *executionContext) fieldContext_SystemLogEntry_thread(_ context.Context
 	return fc, nil
 }
 
-func (ec *executionContext) _SystemLogEntry_message(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
+func (ec *executionContext) _SystemLogEntry_exception(ctx context.Context, field graphql.CollectedField, obj *SystemLogEntry) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_SystemLogEntry_message,
+		ec.fieldContext_SystemLogEntry_exception,
 		func(ctx context.Context) (any, error) {
-			return obj.Message, nil
+			return obj.Exception, nil
 		},
 		nil,
-		ec.marshalNString2string,
+		ec.marshalOExceptionInfo2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐExceptionInfo,
 		true,
-		true,
+		false,
 	)
 }
 
-func (ec *executionContext) fieldContext_SystemLogEntry_message(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_SystemLogEntry_exception(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "SystemLogEntry",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
+			switch field.Name {
+			case "class":
+				return ec.fieldContext_ExceptionInfo_class(ctx, field)
+			case "message":
+				return ec.fieldContext_ExceptionInfo_message(ctx, field)
+			case "stackTrace":
+				return ec.fieldContext_ExceptionInfo_stackTrace(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ExceptionInfo", field.Name)
 		},
 	}
 	return fc, nil
@@ -13203,6 +14744,329 @@ func (ec *executionContext) unmarshalInputCreateUserInput(ctx context.Context, o
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputMqttClientAddressInput(ctx context.Context, obj any) (MqttClientAddressInput, error) {
+	var it MqttClientAddressInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["removePath"]; !present {
+		asMap["removePath"] = true
+	}
+	if _, present := asMap["qos"]; !present {
+		asMap["qos"] = 0
+	}
+	if _, present := asMap["noLocal"]; !present {
+		asMap["noLocal"] = false
+	}
+	if _, present := asMap["retainHandling"]; !present {
+		asMap["retainHandling"] = 0
+	}
+	if _, present := asMap["retainAsPublished"]; !present {
+		asMap["retainAsPublished"] = false
+	}
+	if _, present := asMap["payloadFormatIndicator"]; !present {
+		asMap["payloadFormatIndicator"] = false
+	}
+
+	fieldsInOrder := [...]string{"mode", "remoteTopic", "localTopic", "removePath", "qos", "noLocal", "retainHandling", "retainAsPublished", "messageExpiryInterval", "contentType", "responseTopicPattern", "payloadFormatIndicator", "userProperties"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "remoteTopic":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("remoteTopic"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RemoteTopic = data
+		case "localTopic":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("localTopic"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.LocalTopic = data
+		case "removePath":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("removePath"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RemovePath = data
+		case "qos":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("qos"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Qos = data
+		case "noLocal":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("noLocal"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.NoLocal = data
+		case "retainHandling":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("retainHandling"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RetainHandling = data
+		case "retainAsPublished":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("retainAsPublished"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RetainAsPublished = data
+		case "messageExpiryInterval":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("messageExpiryInterval"))
+			data, err := ec.unmarshalOLong2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MessageExpiryInterval = data
+		case "contentType":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contentType"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ContentType = data
+		case "responseTopicPattern":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("responseTopicPattern"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ResponseTopicPattern = data
+		case "payloadFormatIndicator":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("payloadFormatIndicator"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PayloadFormatIndicator = data
+		case "userProperties":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("userProperties"))
+			data, err := ec.unmarshalOUserPropertyInput2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.UserProperties = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputMqttClientConnectionConfigInput(ctx context.Context, obj any) (MqttClientConnectionConfigInput, error) {
+	var it MqttClientConnectionConfigInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	if _, present := asMap["clientId"]; !present {
+		asMap["clientId"] = "monstermq-client"
+	}
+	if _, present := asMap["cleanSession"]; !present {
+		asMap["cleanSession"] = true
+	}
+	if _, present := asMap["keepAlive"]; !present {
+		asMap["keepAlive"] = 60
+	}
+	if _, present := asMap["reconnectDelay"]; !present {
+		asMap["reconnectDelay"] = 5000
+	}
+	if _, present := asMap["connectionTimeout"]; !present {
+		asMap["connectionTimeout"] = 30000
+	}
+	if _, present := asMap["bufferEnabled"]; !present {
+		asMap["bufferEnabled"] = false
+	}
+	if _, present := asMap["bufferSize"]; !present {
+		asMap["bufferSize"] = 5000
+	}
+	if _, present := asMap["persistBuffer"]; !present {
+		asMap["persistBuffer"] = false
+	}
+	if _, present := asMap["deleteOldestMessages"]; !present {
+		asMap["deleteOldestMessages"] = true
+	}
+	if _, present := asMap["sslVerifyCertificate"]; !present {
+		asMap["sslVerifyCertificate"] = true
+	}
+	if _, present := asMap["protocolVersion"]; !present {
+		asMap["protocolVersion"] = 4
+	}
+
+	fieldsInOrder := [...]string{"brokerUrl", "username", "password", "clientId", "cleanSession", "keepAlive", "reconnectDelay", "connectionTimeout", "addresses", "bufferEnabled", "bufferSize", "persistBuffer", "deleteOldestMessages", "sslVerifyCertificate", "protocolVersion", "sessionExpiryInterval", "receiveMaximum", "maximumPacketSize", "topicAliasMaximum"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "brokerUrl":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("brokerUrl"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BrokerURL = data
+		case "username":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("username"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Username = data
+		case "password":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("password"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Password = data
+		case "clientId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("clientId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ClientID = data
+		case "cleanSession":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("cleanSession"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.CleanSession = data
+		case "keepAlive":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("keepAlive"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.KeepAlive = data
+		case "reconnectDelay":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("reconnectDelay"))
+			data, err := ec.unmarshalOLong2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReconnectDelay = data
+		case "connectionTimeout":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("connectionTimeout"))
+			data, err := ec.unmarshalOLong2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ConnectionTimeout = data
+		case "addresses":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("addresses"))
+			data, err := ec.unmarshalOMqttClientAddressInput2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInputᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Addresses = data
+		case "bufferEnabled":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bufferEnabled"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BufferEnabled = data
+		case "bufferSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("bufferSize"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.BufferSize = data
+		case "persistBuffer":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("persistBuffer"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PersistBuffer = data
+		case "deleteOldestMessages":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("deleteOldestMessages"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.DeleteOldestMessages = data
+		case "sslVerifyCertificate":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sslVerifyCertificate"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SslVerifyCertificate = data
+		case "protocolVersion":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("protocolVersion"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ProtocolVersion = data
+		case "sessionExpiryInterval":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionExpiryInterval"))
+			data, err := ec.unmarshalOLong2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionExpiryInterval = data
+		case "receiveMaximum":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("receiveMaximum"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ReceiveMaximum = data
+		case "maximumPacketSize":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maximumPacketSize"))
+			data, err := ec.unmarshalOLong2ᚖint64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaximumPacketSize = data
+		case "topicAliasMaximum":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("topicAliasMaximum"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TopicAliasMaximum = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputMqttClientInput(ctx context.Context, obj any) (MqttClientInput, error) {
 	var it MqttClientInput
 	if obj == nil {
@@ -13212,6 +15076,10 @@ func (ec *executionContext) unmarshalInputMqttClientInput(ctx context.Context, o
 	asMap := map[string]any{}
 	for k, v := range obj.(map[string]any) {
 		asMap[k] = v
+	}
+
+	if _, present := asMap["enabled"]; !present {
+		asMap["enabled"] = true
 	}
 
 	fieldsInOrder := [...]string{"name", "namespace", "nodeId", "enabled", "config"}
@@ -13251,7 +15119,7 @@ func (ec *executionContext) unmarshalInputMqttClientInput(ctx context.Context, o
 			it.Enabled = data
 		case "config":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("config"))
-			data, err := ec.unmarshalNJSON2map(ctx, v)
+			data, err := ec.unmarshalNMqttClientConnectionConfigInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientConnectionConfigInput(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -13574,6 +15442,43 @@ func (ec *executionContext) unmarshalInputUpdateUserInput(ctx context.Context, o
 				return it, err
 			}
 			it.IsAdmin = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputUserPropertyInput(ctx context.Context, obj any) (UserPropertyInput, error) {
+	var it UserPropertyInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"key", "value"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "key":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("key"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Key = data
+		case "value":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("value"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Value = data
 		}
 	}
 	return it, nil
@@ -14842,6 +16747,52 @@ func (ec *executionContext) _CurrentUser(ctx context.Context, sel ast.SelectionS
 	return out
 }
 
+var exceptionInfoImplementors = []string{"ExceptionInfo"}
+
+func (ec *executionContext) _ExceptionInfo(ctx context.Context, sel ast.SelectionSet, obj *ExceptionInfo) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, exceptionInfoImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ExceptionInfo")
+		case "class":
+			out.Values[i] = ec._ExceptionInfo_class(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "message":
+			out.Values[i] = ec._ExceptionInfo_message(ctx, field, obj)
+		case "stackTrace":
+			out.Values[i] = ec._ExceptionInfo_stackTrace(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var loginResultImplementors = []string{"LoginResult"}
 
 func (ec *executionContext) _LoginResult(ctx context.Context, sel ast.SelectionSet, obj *LoginResult) graphql.Marshaler {
@@ -14915,13 +16866,28 @@ func (ec *executionContext) _MqttClient(ctx context.Context, sel ast.SelectionSe
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
+		case "config":
+			out.Values[i] = ec._MqttClient_config(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		case "enabled":
 			out.Values[i] = ec._MqttClient_enabled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
-		case "config":
-			out.Values[i] = ec._MqttClient_config(ctx, field, obj)
+		case "createdAt":
+			out.Values[i] = ec._MqttClient_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "updatedAt":
+			out.Values[i] = ec._MqttClient_updatedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "isOnCurrentNode":
+			out.Values[i] = ec._MqttClient_isOnCurrentNode(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				atomic.AddUint32(&out.Invalids, 1)
 			}
@@ -14997,6 +16963,184 @@ func (ec *executionContext) _MqttClient(ctx context.Context, sel ast.SelectionSe
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mqttClientAddressImplementors = []string{"MqttClientAddress"}
+
+func (ec *executionContext) _MqttClientAddress(ctx context.Context, sel ast.SelectionSet, obj *MqttClientAddress) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mqttClientAddressImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MqttClientAddress")
+		case "mode":
+			out.Values[i] = ec._MqttClientAddress_mode(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "remoteTopic":
+			out.Values[i] = ec._MqttClientAddress_remoteTopic(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "localTopic":
+			out.Values[i] = ec._MqttClientAddress_localTopic(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "removePath":
+			out.Values[i] = ec._MqttClientAddress_removePath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "qos":
+			out.Values[i] = ec._MqttClientAddress_qos(ctx, field, obj)
+		case "noLocal":
+			out.Values[i] = ec._MqttClientAddress_noLocal(ctx, field, obj)
+		case "retainHandling":
+			out.Values[i] = ec._MqttClientAddress_retainHandling(ctx, field, obj)
+		case "retainAsPublished":
+			out.Values[i] = ec._MqttClientAddress_retainAsPublished(ctx, field, obj)
+		case "messageExpiryInterval":
+			out.Values[i] = ec._MqttClientAddress_messageExpiryInterval(ctx, field, obj)
+		case "contentType":
+			out.Values[i] = ec._MqttClientAddress_contentType(ctx, field, obj)
+		case "responseTopicPattern":
+			out.Values[i] = ec._MqttClientAddress_responseTopicPattern(ctx, field, obj)
+		case "payloadFormatIndicator":
+			out.Values[i] = ec._MqttClientAddress_payloadFormatIndicator(ctx, field, obj)
+		case "userProperties":
+			out.Values[i] = ec._MqttClientAddress_userProperties(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var mqttClientConnectionConfigImplementors = []string{"MqttClientConnectionConfig"}
+
+func (ec *executionContext) _MqttClientConnectionConfig(ctx context.Context, sel ast.SelectionSet, obj *MqttClientConnectionConfig) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, mqttClientConnectionConfigImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("MqttClientConnectionConfig")
+		case "brokerUrl":
+			out.Values[i] = ec._MqttClientConnectionConfig_brokerUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "username":
+			out.Values[i] = ec._MqttClientConnectionConfig_username(ctx, field, obj)
+		case "clientId":
+			out.Values[i] = ec._MqttClientConnectionConfig_clientId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cleanSession":
+			out.Values[i] = ec._MqttClientConnectionConfig_cleanSession(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "keepAlive":
+			out.Values[i] = ec._MqttClientConnectionConfig_keepAlive(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reconnectDelay":
+			out.Values[i] = ec._MqttClientConnectionConfig_reconnectDelay(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "connectionTimeout":
+			out.Values[i] = ec._MqttClientConnectionConfig_connectionTimeout(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "addresses":
+			out.Values[i] = ec._MqttClientConnectionConfig_addresses(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bufferEnabled":
+			out.Values[i] = ec._MqttClientConnectionConfig_bufferEnabled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bufferSize":
+			out.Values[i] = ec._MqttClientConnectionConfig_bufferSize(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "persistBuffer":
+			out.Values[i] = ec._MqttClientConnectionConfig_persistBuffer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deleteOldestMessages":
+			out.Values[i] = ec._MqttClientConnectionConfig_deleteOldestMessages(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sslVerifyCertificate":
+			out.Values[i] = ec._MqttClientConnectionConfig_sslVerifyCertificate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "protocolVersion":
+			out.Values[i] = ec._MqttClientConnectionConfig_protocolVersion(ctx, field, obj)
+		case "sessionExpiryInterval":
+			out.Values[i] = ec._MqttClientConnectionConfig_sessionExpiryInterval(ctx, field, obj)
+		case "receiveMaximum":
+			out.Values[i] = ec._MqttClientConnectionConfig_receiveMaximum(ctx, field, obj)
+		case "maximumPacketSize":
+			out.Values[i] = ec._MqttClientConnectionConfig_maximumPacketSize(ctx, field, obj)
+		case "topicAliasMaximum":
+			out.Values[i] = ec._MqttClientConnectionConfig_topicAliasMaximum(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -15332,6 +17476,21 @@ func (ec *executionContext) _MqttClientMutations(ctx context.Context, sel ast.Se
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+		case "addAddress":
+			out.Values[i] = ec._MqttClientMutations_addAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "updateAddress":
+			out.Values[i] = ec._MqttClientMutations_updateAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
+		case "deleteAddress":
+			out.Values[i] = ec._MqttClientMutations_deleteAddress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				atomic.AddUint32(&out.Invalids, 1)
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -15371,10 +17530,13 @@ func (ec *executionContext) _MqttClientResult(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "message":
-			out.Values[i] = ec._MqttClientResult_message(ctx, field, obj)
 		case "client":
 			out.Values[i] = ec._MqttClientResult_client(ctx, field, obj)
+		case "errors":
+			out.Values[i] = ec._MqttClientResult_errors(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -16635,11 +18797,6 @@ func (ec *executionContext) _SystemLogEntry(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "node":
-			out.Values[i] = ec._SystemLogEntry_node(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "level":
 			out.Values[i] = ec._SystemLogEntry_level(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -16650,17 +18807,29 @@ func (ec *executionContext) _SystemLogEntry(ctx context.Context, sel ast.Selecti
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "sourceClass":
-			out.Values[i] = ec._SystemLogEntry_sourceClass(ctx, field, obj)
-		case "sourceMethod":
-			out.Values[i] = ec._SystemLogEntry_sourceMethod(ctx, field, obj)
-		case "thread":
-			out.Values[i] = ec._SystemLogEntry_thread(ctx, field, obj)
 		case "message":
 			out.Values[i] = ec._SystemLogEntry_message(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "thread":
+			out.Values[i] = ec._SystemLogEntry_thread(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "node":
+			out.Values[i] = ec._SystemLogEntry_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sourceClass":
+			out.Values[i] = ec._SystemLogEntry_sourceClass(ctx, field, obj)
+		case "sourceMethod":
+			out.Values[i] = ec._SystemLogEntry_sourceMethod(ctx, field, obj)
+		case "parameters":
+			out.Values[i] = ec._SystemLogEntry_parameters(ctx, field, obj)
+		case "exception":
+			out.Values[i] = ec._SystemLogEntry_exception(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -18039,28 +20208,6 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
-func (ec *executionContext) unmarshalNJSON2map(ctx context.Context, v any) (map[string]any, error) {
-	res, err := graphql.UnmarshalMap(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNJSON2map(ctx context.Context, sel ast.SelectionSet, v map[string]any) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	_ = sel
-	res := graphql.MarshalMap(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-	}
-	return res
-}
-
 func (ec *executionContext) unmarshalNJSON2ᚕmap(ctx context.Context, v any) ([]map[string]any, error) {
 	var vSlice []any
 	vSlice = graphql.CoerceList(v)
@@ -18189,6 +20336,57 @@ func (ec *executionContext) marshalNMqttClient2ᚖmonstermqᚗioᚋedgeᚋintern
 		return graphql.Null
 	}
 	return ec._MqttClient(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNMqttClientAddress2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressᚄ(ctx context.Context, sel ast.SelectionSet, v []*MqttClientAddress) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNMqttClientAddress2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddress(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNMqttClientAddress2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddress(ctx context.Context, sel ast.SelectionSet, v *MqttClientAddress) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MqttClientAddress(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNMqttClientAddressInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInput(ctx context.Context, v any) (MqttClientAddressInput, error) {
+	res, err := ec.unmarshalInputMqttClientAddressInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) unmarshalNMqttClientAddressInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInput(ctx context.Context, v any) (*MqttClientAddressInput, error) {
+	res, err := ec.unmarshalInputMqttClientAddressInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNMqttClientConnectionConfig2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientConnectionConfig(ctx context.Context, sel ast.SelectionSet, v *MqttClientConnectionConfig) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._MqttClientConnectionConfig(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNMqttClientConnectionConfigInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientConnectionConfigInput(ctx context.Context, v any) (*MqttClientConnectionConfigInput, error) {
+	res, err := ec.unmarshalInputMqttClientConnectionConfigInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) unmarshalNMqttClientInput2monstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientInput(ctx context.Context, v any) (MqttClientInput, error) {
@@ -18743,6 +20941,11 @@ func (ec *executionContext) marshalNUserProperty2ᚖmonstermqᚗioᚋedgeᚋinte
 	return ec._UserProperty(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNUserPropertyInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyInput(ctx context.Context, v any) (*UserPropertyInput, error) {
+	res, err := ec.unmarshalInputUserPropertyInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) marshalN__Directive2githubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐDirective(ctx context.Context, sel ast.SelectionSet, v introspection.Directive) graphql.Marshaler {
 	return ec.___Directive(ctx, sel, &v)
 }
@@ -18958,6 +21161,13 @@ func (ec *executionContext) marshalODataFormat2ᚖmonstermqᚗioᚋedgeᚋintern
 	return v
 }
 
+func (ec *executionContext) marshalOExceptionInfo2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐExceptionInfo(ctx context.Context, sel ast.SelectionSet, v *ExceptionInfo) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ExceptionInfo(ctx, sel, v)
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -19049,6 +21259,24 @@ func (ec *executionContext) marshalOMqttClient2ᚖmonstermqᚗioᚋedgeᚋintern
 		return graphql.Null
 	}
 	return ec._MqttClient(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalOMqttClientAddressInput2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInputᚄ(ctx context.Context, v any) ([]*MqttClientAddressInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*MqttClientAddressInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNMqttClientAddressInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientAddressInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalOOrderDirection2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐOrderDirection(ctx context.Context, v any) (*OrderDirection, error) {
@@ -19182,6 +21410,24 @@ func (ec *executionContext) marshalOUserProperty2ᚕᚖmonstermqᚗioᚋedgeᚋi
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalOUserPropertyInput2ᚕᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyInputᚄ(ctx context.Context, v any) ([]*UserPropertyInput, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*UserPropertyInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNUserPropertyInput2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐUserPropertyInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) marshalO__EnumValue2ᚕgithubᚗcomᚋ99designsᚋgqlgenᚋgraphqlᚋintrospectionᚐEnumValueᚄ(ctx context.Context, sel ast.SelectionSet, v []introspection.EnumValue) graphql.Marshaler {

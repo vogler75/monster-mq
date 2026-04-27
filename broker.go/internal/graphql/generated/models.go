@@ -188,6 +188,12 @@ type CurrentUser struct {
 	IsAdmin  bool   `json:"isAdmin"`
 }
 
+type ExceptionInfo struct {
+	Class      string  `json:"class"`
+	Message    *string `json:"message,omitempty"`
+	StackTrace string  `json:"stackTrace"`
+}
+
 type LoginResult struct {
 	Success  bool    `json:"success"`
 	Message  *string `json:"message,omitempty"`
@@ -197,21 +203,99 @@ type LoginResult struct {
 }
 
 type MqttClient struct {
-	Name           string               `json:"name"`
-	Namespace      string               `json:"namespace"`
-	NodeID         string               `json:"nodeId"`
-	Enabled        bool                 `json:"enabled"`
-	Config         map[string]any       `json:"config"`
-	Metrics        []*MqttClientMetrics `json:"metrics"`
-	MetricsHistory []*MqttClientMetrics `json:"metricsHistory"`
+	Name            string                      `json:"name"`
+	Namespace       string                      `json:"namespace"`
+	NodeID          string                      `json:"nodeId"`
+	Config          *MqttClientConnectionConfig `json:"config"`
+	Enabled         bool                        `json:"enabled"`
+	CreatedAt       string                      `json:"createdAt"`
+	UpdatedAt       string                      `json:"updatedAt"`
+	IsOnCurrentNode bool                        `json:"isOnCurrentNode"`
+	Metrics         []*MqttClientMetrics        `json:"metrics"`
+	MetricsHistory  []*MqttClientMetrics        `json:"metricsHistory"`
+}
+
+type MqttClientAddress struct {
+	Mode                   string          `json:"mode"`
+	RemoteTopic            string          `json:"remoteTopic"`
+	LocalTopic             string          `json:"localTopic"`
+	RemovePath             bool            `json:"removePath"`
+	Qos                    *int            `json:"qos,omitempty"`
+	NoLocal                *bool           `json:"noLocal,omitempty"`
+	RetainHandling         *int            `json:"retainHandling,omitempty"`
+	RetainAsPublished      *bool           `json:"retainAsPublished,omitempty"`
+	MessageExpiryInterval  *int64          `json:"messageExpiryInterval,omitempty"`
+	ContentType            *string         `json:"contentType,omitempty"`
+	ResponseTopicPattern   *string         `json:"responseTopicPattern,omitempty"`
+	PayloadFormatIndicator *bool           `json:"payloadFormatIndicator,omitempty"`
+	UserProperties         []*UserProperty `json:"userProperties,omitempty"`
+}
+
+type MqttClientAddressInput struct {
+	Mode                   string               `json:"mode"`
+	RemoteTopic            string               `json:"remoteTopic"`
+	LocalTopic             string               `json:"localTopic"`
+	RemovePath             *bool                `json:"removePath,omitempty"`
+	Qos                    *int                 `json:"qos,omitempty"`
+	NoLocal                *bool                `json:"noLocal,omitempty"`
+	RetainHandling         *int                 `json:"retainHandling,omitempty"`
+	RetainAsPublished      *bool                `json:"retainAsPublished,omitempty"`
+	MessageExpiryInterval  *int64               `json:"messageExpiryInterval,omitempty"`
+	ContentType            *string              `json:"contentType,omitempty"`
+	ResponseTopicPattern   *string              `json:"responseTopicPattern,omitempty"`
+	PayloadFormatIndicator *bool                `json:"payloadFormatIndicator,omitempty"`
+	UserProperties         []*UserPropertyInput `json:"userProperties,omitempty"`
+}
+
+type MqttClientConnectionConfig struct {
+	BrokerURL             string               `json:"brokerUrl"`
+	Username              *string              `json:"username,omitempty"`
+	ClientID              string               `json:"clientId"`
+	CleanSession          bool                 `json:"cleanSession"`
+	KeepAlive             int                  `json:"keepAlive"`
+	ReconnectDelay        int64                `json:"reconnectDelay"`
+	ConnectionTimeout     int64                `json:"connectionTimeout"`
+	Addresses             []*MqttClientAddress `json:"addresses"`
+	BufferEnabled         bool                 `json:"bufferEnabled"`
+	BufferSize            int                  `json:"bufferSize"`
+	PersistBuffer         bool                 `json:"persistBuffer"`
+	DeleteOldestMessages  bool                 `json:"deleteOldestMessages"`
+	SslVerifyCertificate  bool                 `json:"sslVerifyCertificate"`
+	ProtocolVersion       *int                 `json:"protocolVersion,omitempty"`
+	SessionExpiryInterval *int64               `json:"sessionExpiryInterval,omitempty"`
+	ReceiveMaximum        *int                 `json:"receiveMaximum,omitempty"`
+	MaximumPacketSize     *int64               `json:"maximumPacketSize,omitempty"`
+	TopicAliasMaximum     *int                 `json:"topicAliasMaximum,omitempty"`
+}
+
+type MqttClientConnectionConfigInput struct {
+	BrokerURL             string                    `json:"brokerUrl"`
+	Username              *string                   `json:"username,omitempty"`
+	Password              *string                   `json:"password,omitempty"`
+	ClientID              *string                   `json:"clientId,omitempty"`
+	CleanSession          *bool                     `json:"cleanSession,omitempty"`
+	KeepAlive             *int                      `json:"keepAlive,omitempty"`
+	ReconnectDelay        *int64                    `json:"reconnectDelay,omitempty"`
+	ConnectionTimeout     *int64                    `json:"connectionTimeout,omitempty"`
+	Addresses             []*MqttClientAddressInput `json:"addresses,omitempty"`
+	BufferEnabled         *bool                     `json:"bufferEnabled,omitempty"`
+	BufferSize            *int                      `json:"bufferSize,omitempty"`
+	PersistBuffer         *bool                     `json:"persistBuffer,omitempty"`
+	DeleteOldestMessages  *bool                     `json:"deleteOldestMessages,omitempty"`
+	SslVerifyCertificate  *bool                     `json:"sslVerifyCertificate,omitempty"`
+	ProtocolVersion       *int                      `json:"protocolVersion,omitempty"`
+	SessionExpiryInterval *int64                    `json:"sessionExpiryInterval,omitempty"`
+	ReceiveMaximum        *int                      `json:"receiveMaximum,omitempty"`
+	MaximumPacketSize     *int64                    `json:"maximumPacketSize,omitempty"`
+	TopicAliasMaximum     *int                      `json:"topicAliasMaximum,omitempty"`
 }
 
 type MqttClientInput struct {
-	Name      string         `json:"name"`
-	Namespace string         `json:"namespace"`
-	NodeID    string         `json:"nodeId"`
-	Enabled   *bool          `json:"enabled,omitempty"`
-	Config    map[string]any `json:"config"`
+	Name      string                           `json:"name"`
+	Namespace string                           `json:"namespace"`
+	NodeID    string                           `json:"nodeId"`
+	Enabled   *bool                            `json:"enabled,omitempty"`
+	Config    *MqttClientConnectionConfigInput `json:"config"`
 }
 
 type MqttClientMetrics struct {
@@ -221,19 +305,22 @@ type MqttClientMetrics struct {
 }
 
 type MqttClientMutations struct {
-	Create   *MqttClientResult `json:"create"`
-	Update   *MqttClientResult `json:"update"`
-	Delete   *MqttClientResult `json:"delete"`
-	Start    *MqttClientResult `json:"start"`
-	Stop     *MqttClientResult `json:"stop"`
-	Toggle   *MqttClientResult `json:"toggle"`
-	Reassign *MqttClientResult `json:"reassign"`
+	Create        *MqttClientResult `json:"create"`
+	Update        *MqttClientResult `json:"update"`
+	Delete        bool              `json:"delete"`
+	Start         *MqttClientResult `json:"start"`
+	Stop          *MqttClientResult `json:"stop"`
+	Toggle        *MqttClientResult `json:"toggle"`
+	Reassign      *MqttClientResult `json:"reassign"`
+	AddAddress    *MqttClientResult `json:"addAddress"`
+	UpdateAddress *MqttClientResult `json:"updateAddress"`
+	DeleteAddress *MqttClientResult `json:"deleteAddress"`
 }
 
 type MqttClientResult struct {
 	Success bool        `json:"success"`
-	Message *string     `json:"message,omitempty"`
 	Client  *MqttClient `json:"client,omitempty"`
+	Errors  []string    `json:"errors"`
 }
 
 type MqttSubscription struct {
@@ -340,14 +427,16 @@ type Subscription struct {
 }
 
 type SystemLogEntry struct {
-	Timestamp    string  `json:"timestamp"`
-	Node         string  `json:"node"`
-	Level        string  `json:"level"`
-	Logger       string  `json:"logger"`
-	SourceClass  *string `json:"sourceClass,omitempty"`
-	SourceMethod *string `json:"sourceMethod,omitempty"`
-	Thread       *string `json:"thread,omitempty"`
-	Message      string  `json:"message"`
+	Timestamp    string         `json:"timestamp"`
+	Level        string         `json:"level"`
+	Logger       string         `json:"logger"`
+	Message      string         `json:"message"`
+	Thread       int64          `json:"thread"`
+	Node         string         `json:"node"`
+	SourceClass  *string        `json:"sourceClass,omitempty"`
+	SourceMethod *string        `json:"sourceMethod,omitempty"`
+	Parameters   []string       `json:"parameters,omitempty"`
+	Exception    *ExceptionInfo `json:"exception,omitempty"`
 }
 
 type Topic struct {
@@ -443,6 +532,11 @@ type UserManagementResult struct {
 }
 
 type UserProperty struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type UserPropertyInput struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }

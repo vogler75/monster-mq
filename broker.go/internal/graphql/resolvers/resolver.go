@@ -13,6 +13,7 @@ import (
 	"monstermq.io/edge/internal/auth"
 	"monstermq.io/edge/internal/config"
 	"monstermq.io/edge/internal/graphql/generated"
+	mlog "monstermq.io/edge/internal/log"
 	"monstermq.io/edge/internal/metrics"
 	"monstermq.io/edge/internal/pubsub"
 	"monstermq.io/edge/internal/stores"
@@ -28,6 +29,7 @@ type Resolver struct {
 	Archives  *archive.Manager
 	AuthCache *auth.Cache
 	Collector *metrics.Collector
+	LogBus    *mlog.Bus
 	Logger    *slog.Logger
 	NodeID    string
 	Version   string
@@ -37,7 +39,7 @@ type Resolver struct {
 }
 
 func New(cfg *config.Config, storage *stores.Storage, bus *pubsub.Bus, archives *archive.Manager,
-	authCache *auth.Cache, collector *metrics.Collector, logger *slog.Logger,
+	authCache *auth.Cache, collector *metrics.Collector, logBus *mlog.Bus, logger *slog.Logger,
 	publish func(string, []byte, bool, byte) error) *Resolver {
 	return &Resolver{
 		Cfg:       cfg,
@@ -46,6 +48,7 @@ func New(cfg *config.Config, storage *stores.Storage, bus *pubsub.Bus, archives 
 		Archives:  archives,
 		AuthCache: authCache,
 		Collector: collector,
+		LogBus:    logBus,
 		Logger:    logger,
 		NodeID:    cfg.NodeID,
 		Version:   version.Version,
@@ -744,18 +747,40 @@ func (r *queryResolver) MqttClients(ctx context.Context, name, node *string) ([]
 		if node != nil && d.NodeID != *node {
 			continue
 		}
-		var cfgMap map[string]any
-		_ = json.Unmarshal([]byte(d.Config), &cfgMap)
-		out = append(out, &generated.MqttClient{
-			Name: d.Name, Namespace: d.Namespace, NodeID: d.NodeID,
-			Enabled: d.Enabled, Config: cfgMap,
-		})
+		out = append(out, r.deviceToMqttClient(d))
 	}
 	return out, nil
 }
 
-func (r *queryResolver) SystemLogs(ctx context.Context, startTime, endTime *string, lastMinutes *int, node, level, logger, sourceClass, sourceMethod, message *string, limit *int, orderByTime *generated.OrderDirection) ([]*generated.SystemLogEntry, error) {
-	return []*generated.SystemLogEntry{}, nil
+func (r *queryResolver) SystemLogs(ctx context.Context, startTime, endTime *string, lastMinutes *int, node *string, level []string, logger, sourceClass, sourceMethod, message *string, limit *int, orderByTime *generated.OrderDirection) ([]*generated.SystemLogEntry, error) {
+	if r.LogBus == nil {
+		return []*generated.SystemLogEntry{}, nil
+	}
+	from, _ := parseTimeArg(startTime)
+	to, _ := parseTimeArg(endTime)
+	if lastMinutes != nil && *lastMinutes > 0 {
+		t := time.Now().Add(-time.Duration(*lastMinutes) * time.Minute)
+		from = &t
+	}
+	max := intPtr(limit, 1000)
+	all := r.LogBus.Snapshot()
+	out := make([]*generated.SystemLogEntry, 0, max)
+	for _, e := range all {
+		if !logEntryMatches(e, node, level, logger, nil, sourceClass, sourceMethod, message, from, to) {
+			continue
+		}
+		out = append(out, logEntryToGraphQL(e))
+	}
+	if orderByTime != nil && *orderByTime == generated.OrderDirectionDesc {
+		// Snapshot is ascending; reverse for DESC.
+		for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+			out[i], out[j] = out[j], out[i]
+		}
+	}
+	if len(out) > max {
+		out = out[:max]
+	}
+	return out, nil
 }
 
 // Subscriptions -------------------------------------------------------------
@@ -848,13 +873,107 @@ func brokerMsgToTopicUpdate(m stores.BrokerMessage, fmt *generated.DataFormat) *
 	}
 }
 
-func (r *subscriptionResolver) SystemLogs(ctx context.Context, node, level, logger, thread, sourceClass, sourceMethod, message *string) (<-chan *generated.SystemLogEntry, error) {
-	out := make(chan *generated.SystemLogEntry)
-	go func() {
-		<-ctx.Done()
+func (r *subscriptionResolver) SystemLogs(ctx context.Context, node *string, level []string, logger *string, thread *int64, sourceClass, sourceMethod, message *string) (<-chan *generated.SystemLogEntry, error) {
+	if r.LogBus == nil {
+		out := make(chan *generated.SystemLogEntry)
 		close(out)
+		return out, nil
+	}
+	id, src := r.LogBus.Subscribe(64)
+	out := make(chan *generated.SystemLogEntry, 64)
+	go func() {
+		defer r.LogBus.Unsubscribe(id)
+		defer close(out)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case e, ok := <-src:
+				if !ok {
+					return
+				}
+				if !logEntryMatches(e, node, level, logger, thread, sourceClass, sourceMethod, message, nil, nil) {
+					continue
+				}
+				out <- logEntryToGraphQL(e)
+			}
+		}
 	}()
 	return out, nil
+}
+
+func logEntryMatches(e mlog.Entry, node *string, level []string, logger *string, thread *int64, sourceClass, sourceMethod, message *string, from, to *time.Time) bool {
+	if node != nil && *node != "" && *node != "+" && e.Node != *node {
+		return false
+	}
+	if len(level) > 0 {
+		hit := false
+		for _, l := range level {
+			if l == "+" || l == "*" {
+				hit = true
+				break
+			}
+			if strings.EqualFold(l, e.Level) {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			return false
+		}
+	}
+	if logger != nil && *logger != "" && !strings.Contains(e.Logger, *logger) {
+		return false
+	}
+	if thread != nil && e.Thread != *thread {
+		return false
+	}
+	if sourceClass != nil && *sourceClass != "" && !strings.Contains(e.SourceClass, *sourceClass) {
+		return false
+	}
+	if sourceMethod != nil && *sourceMethod != "" && !strings.Contains(e.SourceMethod, *sourceMethod) {
+		return false
+	}
+	if message != nil && *message != "" && !strings.Contains(e.Message, *message) {
+		return false
+	}
+	if from != nil && e.Timestamp.Before(*from) {
+		return false
+	}
+	if to != nil && e.Timestamp.After(*to) {
+		return false
+	}
+	return true
+}
+
+func logEntryToGraphQL(e mlog.Entry) *generated.SystemLogEntry {
+	out := &generated.SystemLogEntry{
+		Timestamp: e.Timestamp.UTC().Format(time.RFC3339Nano),
+		Level:     e.Level,
+		Logger:    e.Logger,
+		Message:   e.Message,
+		Thread:    e.Thread,
+		Node:      e.Node,
+	}
+	if e.SourceClass != "" {
+		v := e.SourceClass
+		out.SourceClass = &v
+	}
+	if e.SourceMethod != "" {
+		v := e.SourceMethod
+		out.SourceMethod = &v
+	}
+	if len(e.Parameters) > 0 {
+		out.Parameters = e.Parameters
+	}
+	if e.Exception != nil {
+		out.Exception = &generated.ExceptionInfo{
+			Class:      e.Exception.Class,
+			Message:    &e.Exception.Message,
+			StackTrace: e.Exception.StackTrace,
+		}
+	}
+	return out
 }
 
 // Sub-resolvers (Broker / Session / etc.) ----------------------------------
@@ -1216,18 +1335,25 @@ func (r *mqttClientMutationsResolver) Create(ctx context.Context, _ *generated.M
 		Type: "MQTT_CLIENT", Enabled: boolPtr(input.Enabled, true), Config: string(cfgBytes),
 	}
 	if err := r.Storage.DeviceConfig.Save(ctx, d); err != nil {
-		return &generated.MqttClientResult{Success: false, Message: ptr(err.Error())}, nil
+		return &generated.MqttClientResult{Success: false, Errors: []string{err.Error()}}, nil
 	}
-	return &generated.MqttClientResult{Success: true, Client: deviceToMqttClient(d, input.Config)}, nil
+	saved, _ := r.Storage.DeviceConfig.Get(ctx, d.Name)
+	if saved == nil {
+		saved = &d
+	}
+	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*saved)}, nil
 }
-func (r *mqttClientMutationsResolver) Update(ctx context.Context, obj *generated.MqttClientMutations, input generated.MqttClientInput) (*generated.MqttClientResult, error) {
+func (r *mqttClientMutationsResolver) Update(ctx context.Context, obj *generated.MqttClientMutations, name string, input generated.MqttClientInput) (*generated.MqttClientResult, error) {
+	if name != input.Name {
+		return &generated.MqttClientResult{Success: false, Errors: []string{"name in path must match name in input"}}, nil
+	}
 	return r.Create(ctx, obj, input)
 }
-func (r *mqttClientMutationsResolver) Delete(ctx context.Context, _ *generated.MqttClientMutations, name string) (*generated.MqttClientResult, error) {
+func (r *mqttClientMutationsResolver) Delete(ctx context.Context, _ *generated.MqttClientMutations, name string) (bool, error) {
 	if err := r.Storage.DeviceConfig.Delete(ctx, name); err != nil {
-		return &generated.MqttClientResult{Success: false, Message: ptr(err.Error())}, nil
+		return false, nil
 	}
-	return &generated.MqttClientResult{Success: true}, nil
+	return true, nil
 }
 func (r *mqttClientMutationsResolver) Start(ctx context.Context, _ *generated.MqttClientMutations, name string) (*generated.MqttClientResult, error) {
 	return r.toggleDevice(ctx, name, true)
@@ -1235,35 +1361,280 @@ func (r *mqttClientMutationsResolver) Start(ctx context.Context, _ *generated.Mq
 func (r *mqttClientMutationsResolver) Stop(ctx context.Context, _ *generated.MqttClientMutations, name string) (*generated.MqttClientResult, error) {
 	return r.toggleDevice(ctx, name, false)
 }
-func (r *mqttClientMutationsResolver) Toggle(ctx context.Context, _ *generated.MqttClientMutations, name string) (*generated.MqttClientResult, error) {
-	d, err := r.Storage.DeviceConfig.Get(ctx, name)
-	if err != nil || d == nil {
-		return &generated.MqttClientResult{Success: false, Message: ptr("not found")}, nil
-	}
-	return r.toggleDevice(ctx, name, !d.Enabled)
+func (r *mqttClientMutationsResolver) Toggle(ctx context.Context, _ *generated.MqttClientMutations, name string, enabled bool) (*generated.MqttClientResult, error) {
+	return r.toggleDevice(ctx, name, enabled)
 }
 func (r *mqttClientMutationsResolver) Reassign(ctx context.Context, _ *generated.MqttClientMutations, name, nodeID string) (*generated.MqttClientResult, error) {
 	d, err := r.Storage.DeviceConfig.Reassign(ctx, name, nodeID)
 	if err != nil || d == nil {
-		return &generated.MqttClientResult{Success: false, Message: ptr("not found")}, nil
+		return &generated.MqttClientResult{Success: false, Errors: []string{"not found"}}, nil
 	}
-	var cfg map[string]any
-	_ = json.Unmarshal([]byte(d.Config), &cfg)
-	return &generated.MqttClientResult{Success: true, Client: deviceToMqttClient(*d, cfg)}, nil
+	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
 }
 func (r *mqttClientMutationsResolver) toggleDevice(ctx context.Context, name string, enabled bool) (*generated.MqttClientResult, error) {
 	d, err := r.Storage.DeviceConfig.Toggle(ctx, name, enabled)
 	if err != nil || d == nil {
-		return &generated.MqttClientResult{Success: false, Message: ptr("not found")}, nil
+		return &generated.MqttClientResult{Success: false, Errors: []string{"not found"}}, nil
+	}
+	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
+}
+
+// AddAddress / UpdateAddress / DeleteAddress mutate the addresses array
+// embedded in the device's stored JSON config.
+func (r *mqttClientMutationsResolver) AddAddress(ctx context.Context, _ *generated.MqttClientMutations, deviceName string, input generated.MqttClientAddressInput) (*generated.MqttClientResult, error) {
+	return r.mutateAddresses(ctx, deviceName, func(addrs []map[string]any) ([]map[string]any, error) {
+		return append(addrs, addressInputToMap(input)), nil
+	})
+}
+
+func (r *mqttClientMutationsResolver) UpdateAddress(ctx context.Context, _ *generated.MqttClientMutations, deviceName, remoteTopic string, input generated.MqttClientAddressInput) (*generated.MqttClientResult, error) {
+	return r.mutateAddresses(ctx, deviceName, func(addrs []map[string]any) ([]map[string]any, error) {
+		out := make([]map[string]any, 0, len(addrs))
+		replaced := false
+		for _, a := range addrs {
+			if !replaced && fmt.Sprintf("%v", a["remoteTopic"]) == remoteTopic {
+				out = append(out, addressInputToMap(input))
+				replaced = true
+				continue
+			}
+			out = append(out, a)
+		}
+		if !replaced {
+			return nil, fmt.Errorf("remoteTopic %q not found", remoteTopic)
+		}
+		return out, nil
+	})
+}
+
+func (r *mqttClientMutationsResolver) DeleteAddress(ctx context.Context, _ *generated.MqttClientMutations, deviceName, remoteTopic string) (*generated.MqttClientResult, error) {
+	return r.mutateAddresses(ctx, deviceName, func(addrs []map[string]any) ([]map[string]any, error) {
+		out := make([]map[string]any, 0, len(addrs))
+		for _, a := range addrs {
+			if fmt.Sprintf("%v", a["remoteTopic"]) == remoteTopic {
+				continue
+			}
+			out = append(out, a)
+		}
+		return out, nil
+	})
+}
+
+func (r *mqttClientMutationsResolver) mutateAddresses(ctx context.Context, deviceName string, fn func([]map[string]any) ([]map[string]any, error)) (*generated.MqttClientResult, error) {
+	d, err := r.Storage.DeviceConfig.Get(ctx, deviceName)
+	if err != nil || d == nil {
+		return &generated.MqttClientResult{Success: false, Errors: []string{"not found"}}, nil
 	}
 	var cfg map[string]any
 	_ = json.Unmarshal([]byte(d.Config), &cfg)
-	return &generated.MqttClientResult{Success: true, Client: deviceToMqttClient(*d, cfg)}, nil
+	if cfg == nil {
+		cfg = map[string]any{}
+	}
+	addrs := []map[string]any{}
+	if raw, ok := cfg["addresses"].([]any); ok {
+		for _, a := range raw {
+			if m, ok := a.(map[string]any); ok {
+				addrs = append(addrs, m)
+			}
+		}
+	}
+	updated, err := fn(addrs)
+	if err != nil {
+		return &generated.MqttClientResult{Success: false, Errors: []string{err.Error()}}, nil
+	}
+	cfg["addresses"] = updated
+	cfgBytes, _ := json.Marshal(cfg)
+	d.Config = string(cfgBytes)
+	if err := r.Storage.DeviceConfig.Save(ctx, *d); err != nil {
+		return &generated.MqttClientResult{Success: false, Errors: []string{err.Error()}}, nil
+	}
+	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
 }
 
-func deviceToMqttClient(d stores.DeviceConfig, cfg map[string]any) *generated.MqttClient {
-	return &generated.MqttClient{
-		Name: d.Name, Namespace: d.Namespace, NodeID: d.NodeID,
-		Enabled: d.Enabled, Config: cfg,
+func addressInputToMap(in generated.MqttClientAddressInput) map[string]any {
+	m := map[string]any{
+		"mode":        in.Mode,
+		"remoteTopic": in.RemoteTopic,
+		"localTopic":  in.LocalTopic,
+		"removePath":  boolPtr(in.RemovePath, true),
+		"qos":         intPtr(in.Qos, 0),
+		"noLocal":     boolPtr(in.NoLocal, false),
+		"retainHandling":   intPtr(in.RetainHandling, 0),
+		"retainAsPublished": boolPtr(in.RetainAsPublished, false),
+		"payloadFormatIndicator": boolPtr(in.PayloadFormatIndicator, false),
 	}
+	if in.MessageExpiryInterval != nil {
+		m["messageExpiryInterval"] = *in.MessageExpiryInterval
+	}
+	if in.ContentType != nil {
+		m["contentType"] = *in.ContentType
+	}
+	if in.ResponseTopicPattern != nil {
+		m["responseTopicPattern"] = *in.ResponseTopicPattern
+	}
+	if len(in.UserProperties) > 0 {
+		props := make([]map[string]any, 0, len(in.UserProperties))
+		for _, p := range in.UserProperties {
+			props = append(props, map[string]any{"key": p.Key, "value": p.Value})
+		}
+		m["userProperties"] = props
+	}
+	return m
+}
+
+func (r *Resolver) deviceToMqttClient(d stores.DeviceConfig) *generated.MqttClient {
+	cfg := map[string]any{}
+	_ = json.Unmarshal([]byte(d.Config), &cfg)
+	return &generated.MqttClient{
+		Name:            d.Name,
+		Namespace:       d.Namespace,
+		NodeID:          d.NodeID,
+		Enabled:         d.Enabled,
+		Config:          mapToConnectionConfig(cfg),
+		CreatedAt:       formatTime(d.CreatedAt),
+		UpdatedAt:       formatTime(d.UpdatedAt),
+		IsOnCurrentNode: d.NodeID == r.NodeID || d.NodeID == "*",
+	}
+}
+
+func mapToConnectionConfig(m map[string]any) *generated.MqttClientConnectionConfig {
+	c := &generated.MqttClientConnectionConfig{
+		BrokerURL:            asString(m["brokerUrl"]),
+		ClientID:             asString(m["clientId"]),
+		CleanSession:         asBool(m["cleanSession"], true),
+		KeepAlive:            asInt(m["keepAlive"], 60),
+		ReconnectDelay:       asInt64(m["reconnectDelay"], 5000),
+		ConnectionTimeout:    asInt64(m["connectionTimeout"], 30000),
+		BufferEnabled:        asBool(m["bufferEnabled"], false),
+		BufferSize:           asInt(m["bufferSize"], 5000),
+		PersistBuffer:        asBool(m["persistBuffer"], false),
+		DeleteOldestMessages: asBool(m["deleteOldestMessages"], true),
+		SslVerifyCertificate: asBool(m["sslVerifyCertificate"], true),
+	}
+	if v := asString(m["username"]); v != "" {
+		c.Username = &v
+	}
+	if v, ok := m["protocolVersion"]; ok {
+		pv := asInt(v, 4)
+		c.ProtocolVersion = &pv
+	}
+	if v, ok := m["sessionExpiryInterval"]; ok {
+		sei := asInt64(v, 0)
+		c.SessionExpiryInterval = &sei
+	}
+	if v, ok := m["receiveMaximum"]; ok {
+		rm := asInt(v, 65535)
+		c.ReceiveMaximum = &rm
+	}
+	if v, ok := m["maximumPacketSize"]; ok {
+		mp := asInt64(v, 0)
+		c.MaximumPacketSize = &mp
+	}
+	if v, ok := m["topicAliasMaximum"]; ok {
+		tam := asInt(v, 0)
+		c.TopicAliasMaximum = &tam
+	}
+	c.Addresses = []*generated.MqttClientAddress{}
+	if raw, ok := m["addresses"].([]any); ok {
+		for _, a := range raw {
+			am, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			c.Addresses = append(c.Addresses, mapToAddress(am))
+		}
+	}
+	return c
+}
+
+func mapToAddress(m map[string]any) *generated.MqttClientAddress {
+	a := &generated.MqttClientAddress{
+		Mode:        asString(m["mode"]),
+		RemoteTopic: asString(m["remoteTopic"]),
+		LocalTopic:  asString(m["localTopic"]),
+		RemovePath:  asBool(m["removePath"], true),
+	}
+	if v, ok := m["qos"]; ok {
+		q := asInt(v, 0)
+		a.Qos = &q
+	}
+	if v, ok := m["noLocal"]; ok {
+		b := asBool(v, false)
+		a.NoLocal = &b
+	}
+	if v, ok := m["retainHandling"]; ok {
+		rh := asInt(v, 0)
+		a.RetainHandling = &rh
+	}
+	if v, ok := m["retainAsPublished"]; ok {
+		b := asBool(v, false)
+		a.RetainAsPublished = &b
+	}
+	if v, ok := m["messageExpiryInterval"]; ok {
+		mei := asInt64(v, 0)
+		a.MessageExpiryInterval = &mei
+	}
+	if v := asString(m["contentType"]); v != "" {
+		a.ContentType = &v
+	}
+	if v := asString(m["responseTopicPattern"]); v != "" {
+		a.ResponseTopicPattern = &v
+	}
+	if v, ok := m["payloadFormatIndicator"]; ok {
+		b := asBool(v, false)
+		a.PayloadFormatIndicator = &b
+	}
+	if raw, ok := m["userProperties"].([]any); ok {
+		for _, p := range raw {
+			pm, ok := p.(map[string]any)
+			if !ok {
+				continue
+			}
+			a.UserProperties = append(a.UserProperties, &generated.UserProperty{
+				Key: asString(pm["key"]), Value: asString(pm["value"]),
+			})
+		}
+	}
+	return a
+}
+
+func asString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func asBool(v any, def bool) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return def
+}
+
+func asInt(v any, def int) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return def
+}
+
+func asInt64(v any, def int64) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	}
+	return def
 }

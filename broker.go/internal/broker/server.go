@@ -16,6 +16,7 @@ import (
 	"monstermq.io/edge/internal/config"
 	gql "monstermq.io/edge/internal/graphql"
 	"monstermq.io/edge/internal/graphql/resolvers"
+	mlog "monstermq.io/edge/internal/log"
 	"monstermq.io/edge/internal/metrics"
 	"monstermq.io/edge/internal/pubsub"
 	"monstermq.io/edge/internal/stores"
@@ -40,7 +41,7 @@ type Server struct {
 	metricsStop context.CancelFunc
 }
 
-func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
+func New(cfg *config.Config, logger *slog.Logger, logBus *mlog.Bus) (*Server, error) {
 	ctx := context.Background()
 
 	// 1. Storage — picks the backend based on DefaultStoreType.
@@ -82,7 +83,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	}
 
 	// 4. Mochi broker
-	server := mqtt.New(&mqtt.Options{InlineClient: true})
+	server := mqtt.New(&mqtt.Options{InlineClient: true, Logger: logger})
 
 	if cfg.UserManagement.Enabled {
 		if err := server.AddHook(NewAuthHook(authCache), nil); err != nil {
@@ -174,7 +175,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Server, error) {
 	// 8. GraphQL server (HTTP + WebSocket)
 	var gqlSrv *gql.Server
 	if cfg.GraphQL.Enabled {
-		resolver := resolvers.New(cfg, storage, bus, archives, authCache, collector, logger, publishFn)
+		resolver := resolvers.New(cfg, storage, bus, archives, authCache, collector, logBus, logger, publishFn)
 		gqlSrv = gql.NewServer(cfg, resolver, logger)
 		if cfg.Dashboard.Enabled {
 			gqlSrv.AttachDashboard(gql.DashboardHandler(cfg.Dashboard.Path))

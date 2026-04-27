@@ -33,10 +33,11 @@ func main() {
 		cfg.Logging.Level = *logLevel
 	}
 
-	logger := mlog.Setup(cfg.Logging.Level)
+	logBus := mlog.NewBus(cfg.Logging.RingBufferSize)
+	logger := mlog.Setup(cfg.Logging.Level, logBus, cfg.NodeID)
 	logger.Info("starting", "name", version.Name, "version", version.Version, "node", cfg.NodeID)
 
-	srv, err := broker.New(cfg, logger)
+	srv, err := broker.New(cfg, logger, logBus)
 	if err != nil {
 		logger.Error("broker init failed", "err", err)
 		os.Exit(1)
