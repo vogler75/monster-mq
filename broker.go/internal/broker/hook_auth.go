@@ -3,8 +3,8 @@ package broker
 import (
 	"bytes"
 
-	mqtt "github.com/mochi-mqtt/server/v2"
-	"github.com/mochi-mqtt/server/v2/packets"
+	mqtt "github.com/vogler75/mochi-mqtt-server/v2"
+	"github.com/vogler75/mochi-mqtt-server/v2/packets"
 
 	"monstermq.io/edge/internal/auth"
 )

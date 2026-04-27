@@ -9,7 +9,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.9.2
-	github.com/mochi-mqtt/server/v2 v2.7.9
 	github.com/vektah/gqlparser/v2 v2.5.33
 	go.mongodb.org/mongo-driver/v2 v2.5.1
 	golang.org/x/crypto v0.50.0
@@ -33,6 +32,7 @@ require (
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
 	github.com/urfave/cli/v3 v3.7.0 // indirect
+	github.com/vogler75/mochi-mqtt-server/v2 v2.8.0-monstermq
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
