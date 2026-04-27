@@ -76,6 +76,9 @@ type MqttClientMutationsResolver interface {
 	Stop(ctx context.Context, obj *MqttClientMutations, name string) (*MqttClientResult, error)
 	Toggle(ctx context.Context, obj *MqttClientMutations, name string, enabled bool) (*MqttClientResult, error)
 	Reassign(ctx context.Context, obj *MqttClientMutations, name string, nodeID string) (*MqttClientResult, error)
+	AddAddress(ctx context.Context, obj *MqttClientMutations, deviceName string, input MqttClientAddressInput) (*MqttClientResult, error)
+	UpdateAddress(ctx context.Context, obj *MqttClientMutations, deviceName string, remoteTopic string, input MqttClientAddressInput) (*MqttClientResult, error)
+	DeleteAddress(ctx context.Context, obj *MqttClientMutations, deviceName string, remoteTopic string) (*MqttClientResult, error)
 }
 type MutationResolver interface {
 	Login(ctx context.Context, username string, password string) (*LoginResult, error)
@@ -7580,7 +7583,8 @@ func (ec *executionContext) _MqttClientMutations_addAddress(ctx context.Context,
 		field,
 		ec.fieldContext_MqttClientMutations_addAddress,
 		func(ctx context.Context) (any, error) {
-			return obj.AddAddress, nil
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.MqttClientMutations().AddAddress(ctx, obj, fc.Args["deviceName"].(string), fc.Args["input"].(MqttClientAddressInput))
 		},
 		nil,
 		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
@@ -7593,8 +7597,8 @@ func (ec *executionContext) fieldContext_MqttClientMutations_addAddress(ctx cont
 	fc = &graphql.FieldContext{
 		Object:     "MqttClientMutations",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "success":
@@ -7628,7 +7632,8 @@ func (ec *executionContext) _MqttClientMutations_updateAddress(ctx context.Conte
 		field,
 		ec.fieldContext_MqttClientMutations_updateAddress,
 		func(ctx context.Context) (any, error) {
-			return obj.UpdateAddress, nil
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.MqttClientMutations().UpdateAddress(ctx, obj, fc.Args["deviceName"].(string), fc.Args["remoteTopic"].(string), fc.Args["input"].(MqttClientAddressInput))
 		},
 		nil,
 		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
@@ -7641,8 +7646,8 @@ func (ec *executionContext) fieldContext_MqttClientMutations_updateAddress(ctx c
 	fc = &graphql.FieldContext{
 		Object:     "MqttClientMutations",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "success":
@@ -7676,7 +7681,8 @@ func (ec *executionContext) _MqttClientMutations_deleteAddress(ctx context.Conte
 		field,
 		ec.fieldContext_MqttClientMutations_deleteAddress,
 		func(ctx context.Context) (any, error) {
-			return obj.DeleteAddress, nil
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.MqttClientMutations().DeleteAddress(ctx, obj, fc.Args["deviceName"].(string), fc.Args["remoteTopic"].(string))
 		},
 		nil,
 		ec.marshalNMqttClientResult2ᚖmonstermqᚗioᚋedgeᚋinternalᚋgraphqlᚋgeneratedᚐMqttClientResult,
@@ -7689,8 +7695,8 @@ func (ec *executionContext) fieldContext_MqttClientMutations_deleteAddress(ctx c
 	fc = &graphql.FieldContext{
 		Object:     "MqttClientMutations",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "success":
@@ -17477,20 +17483,113 @@ func (ec *executionContext) _MqttClientMutations(ctx context.Context, sel ast.Se
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "addAddress":
-			out.Values[i] = ec._MqttClientMutations_addAddress(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._MqttClientMutations_addAddress(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "updateAddress":
-			out.Values[i] = ec._MqttClientMutations_updateAddress(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._MqttClientMutations_updateAddress(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "deleteAddress":
-			out.Values[i] = ec._MqttClientMutations_deleteAddress(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				atomic.AddUint32(&out.Invalids, 1)
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._MqttClientMutations_deleteAddress(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
