@@ -964,7 +964,7 @@ func (a *ArchiveConfigStore) EnsureTable(ctx context.Context) error {
 }
 func (a *ArchiveConfigStore) GetAll(ctx context.Context) ([]stores.ArchiveGroupConfig, error) {
 	rows, err := a.db.pool.Query(ctx,
-		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM archiveconfigs ORDER BY name`)
+		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, created_at, updated_at FROM archiveconfigs ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -983,7 +983,7 @@ func (a *ArchiveConfigStore) GetAll(ctx context.Context) ([]stores.ArchiveGroupC
 }
 func (a *ArchiveConfigStore) Get(ctx context.Context, name string) (*stores.ArchiveGroupConfig, error) {
 	row := a.db.pool.QueryRow(ctx,
-		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM archiveconfigs WHERE name=$1`, name)
+		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, created_at, updated_at FROM archiveconfigs WHERE name=$1`, name)
 	return scanArchiveCfg(row)
 }
 func scanArchiveCfg(scanner pgx.Row) (*stores.ArchiveGroupConfig, error) {
@@ -992,8 +992,9 @@ func scanArchiveCfg(scanner pgx.Row) (*stores.ArchiveGroupConfig, error) {
 		enabled, retainedOnly                       int
 		topicFilter, lvType, arType                 string
 		lvRet, arRet, purgeInt, payloadFormat       *string
+		createdAt, updatedAt                        *time.Time
 	)
-	if err := scanner.Scan(&cfg.Name, &enabled, &topicFilter, &retainedOnly, &lvType, &arType, &lvRet, &arRet, &purgeInt, &payloadFormat); err != nil {
+	if err := scanner.Scan(&cfg.Name, &enabled, &topicFilter, &retainedOnly, &lvType, &arType, &lvRet, &arRet, &purgeInt, &payloadFormat, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -1016,6 +1017,12 @@ func scanArchiveCfg(scanner pgx.Row) (*stores.ArchiveGroupConfig, error) {
 	cfg.PayloadFormat = stores.PayloadDefault
 	if payloadFormat != nil {
 		cfg.PayloadFormat = stores.PayloadFormat(*payloadFormat)
+	}
+	if createdAt != nil {
+		cfg.CreatedAt = createdAt.UTC()
+	}
+	if updatedAt != nil {
+		cfg.UpdatedAt = updatedAt.UTC()
 	}
 	return &cfg, nil
 }

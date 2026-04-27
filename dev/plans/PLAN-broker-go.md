@@ -340,28 +340,16 @@ bug would only show up in production.
 
 ---
 
-### 5.8 — Track `createdAt` / `updatedAt` on archive groups (P2)
+### 5.8 — Track `createdAt` / `updatedAt` on archive groups (P2) — **DONE**
 
-**Current**: `ArchiveGroupInfo.createdAt` / `updatedAt` are always
-returned `null` because `ArchiveGroupConfig` doesn't track the columns
-even though the DB has them.
-
-**JVM**: Surfaces both as ISO strings.
-
-**Plan**:
-1. Add `CreatedAt`, `UpdatedAt time.Time` to
-   `stores.ArchiveGroupConfig`.
-2. Update SQLite/PG/Mongo `ArchiveConfigStore` row scans to populate
-   them (DB columns already exist).
-3. Resolver: format as RFC3339Nano.
-4. On Save (insert), populate via `CURRENT_TIMESTAMP` (already in DDL).
-5. On Update, set `updated_at = CURRENT_TIMESTAMP`.
-
-**Files**: `internal/stores/types.go`,
-the three `archive_config_store.go`,
-`internal/graphql/resolvers/resolver.go` (`archiveGroupInfoTo`).
-
-**LOC**: ~40 net.
+**As built**: `stores.ArchiveGroupConfig` gains two `time.Time`
+fields. SELECTs across all three backends now read the columns and
+the resolver formats them as RFC3339Nano (nil when zero, so old
+rows that predate timestamp tracking still render gracefully). DB
+DDLs already had `created_at`/`updated_at` columns and the SQL
+upserts already advanced `updated_at` on conflict — nothing to
+change there. SQLite scans use a tolerant parser that accepts both
+RFC3339 and SQLite's default `2006-01-02 15:04:05` shape.
 
 ---
 

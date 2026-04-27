@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"monstermq.io/edge/internal/stores"
 )
@@ -49,8 +50,10 @@ func rowToArchive(scanner interface{ Scan(...any) error }) (*stores.ArchiveGroup
 		arRet          sql.NullString
 		purgeInt       sql.NullString
 		payloadFormat  sql.NullString
+		createdAt      sql.NullString
+		updatedAt      sql.NullString
 	)
-	if err := scanner.Scan(&cfg.Name, &enabled, &topicFilter, &retainedOnly, &lvType, &arType, &lvRet, &arRet, &purgeInt, &payloadFormat); err != nil {
+	if err := scanner.Scan(&cfg.Name, &enabled, &topicFilter, &retainedOnly, &lvType, &arType, &lvRet, &arRet, &purgeInt, &payloadFormat, &createdAt, &updatedAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -69,7 +72,27 @@ func rowToArchive(scanner interface{ Scan(...any) error }) (*stores.ArchiveGroup
 	} else {
 		cfg.PayloadFormat = stores.PayloadDefault
 	}
+	cfg.CreatedAt = parseSqliteTimestamp(createdAt)
+	cfg.UpdatedAt = parseSqliteTimestamp(updatedAt)
 	return &cfg, nil
+}
+
+// parseSqliteTimestamp accepts the formats SQLite's CURRENT_TIMESTAMP can
+// emit. Returns the zero time if unparseable so callers can ignore the
+// field gracefully.
+func parseSqliteTimestamp(s sql.NullString) time.Time {
+	if !s.Valid || s.String == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{
+		time.RFC3339Nano, time.RFC3339,
+		"2006-01-02 15:04:05.999999999", "2006-01-02 15:04:05",
+	} {
+		if t, err := time.Parse(layout, s.String); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
 }
 
 func splitFilter(s string) []string {
@@ -87,7 +110,7 @@ func joinFilter(s []string) string { return strings.Join(s, ",") }
 
 func (a *ArchiveConfigStore) GetAll(ctx context.Context) ([]stores.ArchiveGroupConfig, error) {
 	rows, err := a.db.Conn().QueryContext(ctx,
-		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM `+archiveConfigTable+` ORDER BY name`)
+		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, created_at, updated_at FROM `+archiveConfigTable+` ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +130,7 @@ func (a *ArchiveConfigStore) GetAll(ctx context.Context) ([]stores.ArchiveGroupC
 
 func (a *ArchiveConfigStore) Get(ctx context.Context, name string) (*stores.ArchiveGroupConfig, error) {
 	row := a.db.Conn().QueryRowContext(ctx,
-		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM `+archiveConfigTable+` WHERE name = ?`, name)
+		`SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, created_at, updated_at FROM `+archiveConfigTable+` WHERE name = ?`, name)
 	return rowToArchive(row)
 }
 

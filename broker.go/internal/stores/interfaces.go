@@ -131,6 +131,8 @@ type ArchiveGroupConfig struct {
 	ArchiveRetention  string
 	PurgeInterval     string
 	PayloadFormat     PayloadFormat
+	CreatedAt         time.Time // zero when the row predates timestamp tracking
+	UpdatedAt         time.Time
 }
 
 type ArchiveConfigStore interface {

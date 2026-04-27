@@ -742,9 +742,19 @@ func (r *Resolver) archiveGroupInfoTo(c stores.ArchiveGroupConfig) *generated.Ar
 		LastValRetention: ptrIfNotEmpty(c.LastValRetention),
 		ArchiveRetention: ptrIfNotEmpty(c.ArchiveRetention),
 		PurgeInterval:    ptrIfNotEmpty(c.PurgeInterval),
-		// createdAt/updatedAt aren't tracked in ArchiveGroupConfig today;
-		// surface as nil so the dashboard renders "—".
+		CreatedAt:        formatTimePtr(c.CreatedAt),
+		UpdatedAt:        formatTimePtr(c.UpdatedAt),
 	}
+}
+
+// formatTimePtr returns a *string in RFC3339Nano for the dashboard, or nil
+// if the timestamp is zero (e.g. an old row that predates timestamp tracking).
+func formatTimePtr(t time.Time) *string {
+	if t.IsZero() {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339Nano)
+	return &s
 }
 
 func (r *queryResolver) MqttClients(ctx context.Context, name, node *string) ([]*generated.MqttClient, error) {

@@ -152,6 +152,16 @@ func getBool(d bson.M, k string) bool {
 	return false
 }
 
+func getTime(d bson.M, k string) time.Time {
+	switch v := d[k].(type) {
+	case time.Time:
+		return v.UTC()
+	case bson.DateTime:
+		return v.Time().UTC()
+	}
+	return time.Time{}
+}
+
 func (s *MessageStore) AddAll(ctx context.Context, msgs []stores.BrokerMessage) error {
 	if len(msgs) == 0 {
 		return nil
@@ -868,6 +878,8 @@ func docToArchive(doc bson.M) *stores.ArchiveGroupConfig {
 		ArchiveRetention: getStr(doc, "archive_retention"),
 		PurgeInterval:    getStr(doc, "purge_interval"),
 		PayloadFormat:    stores.PayloadFormat(getStr(doc, "payload_format")),
+		CreatedAt:        getTime(doc, "created_at"),
+		UpdatedAt:        getTime(doc, "updated_at"),
 	}
 	if c.PayloadFormat == "" {
 		c.PayloadFormat = stores.PayloadDefault
