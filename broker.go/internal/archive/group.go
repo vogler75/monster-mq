@@ -33,6 +33,11 @@ type Group struct {
 	maxBatchSize  int
 	flushInterval time.Duration
 
+	// Retention: purgeInterval=0 means "no scheduled purge" (still runs an
+	// initial purge on Start if either retention is set).
+	purgeInterval time.Duration
+	retentionDone chan struct{}
+
 	dropped atomic.Uint64
 }
 
@@ -47,6 +52,10 @@ func NewGroup(cfg stores.ArchiveGroupConfig, lastVal stores.MessageStore, archiv
 	if flushInterval <= 0 {
 		flushInterval = 250 * time.Millisecond
 	}
+	purgeInterval := parseDuration(cfg.PurgeInterval)
+	if purgeInterval <= 0 {
+		purgeInterval = time.Hour
+	}
 	return &Group{
 		cfg:           cfg,
 		lastVal:       lastVal,
@@ -58,6 +67,8 @@ func NewGroup(cfg stores.ArchiveGroupConfig, lastVal stores.MessageStore, archiv
 		bufferSize:    bufferSize,
 		maxBatchSize:  maxBatchSize,
 		flushInterval: flushInterval,
+		purgeInterval: purgeInterval,
+		retentionDone: make(chan struct{}),
 	}
 }
 
@@ -76,17 +87,23 @@ func (g *Group) PendingLen() int { return len(g.inCh) }
 // BufferSize is the configured capacity of the in-memory queue.
 func (g *Group) BufferSize() int { return g.bufferSize }
 
-// Start begins the background flush loop.
+// Start begins the background flush loop and the retention loop. Runs an
+// initial purge synchronously so stale rows are cleaned up at boot before
+// the broker starts accepting writes.
 func (g *Group) Start() {
+	g.purgeOnce(time.Now())
 	go g.run()
+	go g.retentionLoop()
 }
 
 // Stop signals the flush loop to drain remaining messages and exit. Blocks
-// until the goroutine has finished, so callers can trust that no further
-// writes to the underlying stores will happen after Stop returns.
+// until both the flush and retention goroutines have finished, so callers
+// can trust that no further writes to the underlying stores will happen
+// after Stop returns.
 func (g *Group) Stop() {
 	close(g.stopCh)
 	<-g.doneCh
+	<-g.retentionDone
 }
 
 // Matches returns true if topic should be archived by this group.
@@ -171,6 +188,39 @@ func (g *Group) flushBatch(batch []stores.BrokerMessage) {
 	if g.archive != nil {
 		if err := g.archive.AddHistory(ctx, batch); err != nil {
 			g.logger.Warn("archive history write failed", "group", g.cfg.Name, "n", len(batch), "err", err)
+		}
+	}
+}
+
+// retentionLoop fires every purgeInterval and asks the underlying stores
+// to drop rows older than the configured retention window. Errors are
+// logged at warn — a transient DB issue should not kill the goroutine.
+func (g *Group) retentionLoop() {
+	defer close(g.retentionDone)
+	t := time.NewTicker(g.purgeInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-g.stopCh:
+			return
+		case now := <-t.C:
+			g.purgeOnce(now)
+		}
+	}
+}
+
+func (g *Group) purgeOnce(now time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if d := parseDuration(g.cfg.LastValRetention); d > 0 && g.lastVal != nil {
+		if _, err := g.lastVal.PurgeOlderThan(ctx, now.Add(-d)); err != nil {
+			g.logger.Warn("retention lastval purge failed", "group", g.cfg.Name, "err", err)
+		}
+	}
+	if d := parseDuration(g.cfg.ArchiveRetention); d > 0 && g.archive != nil {
+		if _, err := g.archive.PurgeOlderThan(ctx, now.Add(-d)); err != nil {
+			g.logger.Warn("retention archive purge failed", "group", g.cfg.Name, "err", err)
 		}
 	}
 }

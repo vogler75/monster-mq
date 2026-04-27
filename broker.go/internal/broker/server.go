@@ -220,9 +220,6 @@ func (s *Server) Serve() error {
 			return
 		})
 	}
-	if s.archives != nil {
-		s.archives.RunRetention(context.Background())
-	}
 	if s.bridges != nil {
 		if err := s.bridges.Start(context.Background()); err != nil {
 			s.logger.Warn("bridges start error", "err", err)

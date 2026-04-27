@@ -174,4 +174,65 @@ func TestGroupDefaults(t *testing.T) {
 	if g.flushInterval != 250*time.Millisecond {
 		t.Fatalf("flushInterval default = %v", g.flushInterval)
 	}
+	if g.purgeInterval != time.Hour {
+		t.Fatalf("purgeInterval default = %v", g.purgeInterval)
+	}
+}
+
+// purgeRecorder is a MessageStore that just counts PurgeOlderThan calls so
+// the test can assert the per-group retention loop fired.
+type purgeRecorder struct {
+	fakeLastVal
+	purges atomic.Int32
+}
+
+func (p *purgeRecorder) PurgeOlderThan(_ context.Context, _ time.Time) (stores.PurgeResult, error) {
+	p.purges.Add(1)
+	return stores.PurgeResult{}, nil
+}
+
+// TestGroupRunsInitialPurgeOnStart: with LastValRetention set, Start must
+// trigger one purge synchronously (before the ticker has a chance to fire).
+func TestGroupRunsInitialPurgeOnStart(t *testing.T) {
+	pr := &purgeRecorder{}
+	cfg := cfgWithFilter("g6", "#")
+	cfg.LastValRetention = "1h"
+	cfg.PurgeInterval = "1h" // ticker irrelevant for this assertion
+	g := NewGroup(cfg, pr, nil, 100, 10, time.Hour, discardLogger())
+	g.Start()
+	defer g.Stop()
+	if got := pr.purges.Load(); got != 1 {
+		t.Fatalf("expected 1 initial purge, got %d", got)
+	}
+}
+
+// TestGroupRetentionTickerFires: with a 50ms purge interval and 1h
+// retention, several ticks must produce additional purge calls.
+func TestGroupRetentionTickerFires(t *testing.T) {
+	pr := &purgeRecorder{}
+	cfg := cfgWithFilter("g7", "#")
+	cfg.LastValRetention = "1h"
+	cfg.PurgeInterval = "50ms"
+	g := NewGroup(cfg, pr, nil, 100, 10, time.Hour, discardLogger())
+	g.Start()
+	time.Sleep(180 * time.Millisecond) // expect ~3 ticks plus the initial
+	g.Stop()
+	if got := pr.purges.Load(); got < 3 {
+		t.Fatalf("expected at least 3 purges (1 initial + ~3 ticked), got %d", got)
+	}
+}
+
+// TestGroupSkipsPurgeWhenRetentionUnset: with no retention configured,
+// even the initial purge must be a no-op against the underlying store.
+func TestGroupSkipsPurgeWhenRetentionUnset(t *testing.T) {
+	pr := &purgeRecorder{}
+	cfg := cfgWithFilter("g8", "#") // no Retention set
+	cfg.PurgeInterval = "20ms"
+	g := NewGroup(cfg, pr, nil, 100, 10, time.Hour, discardLogger())
+	g.Start()
+	time.Sleep(80 * time.Millisecond)
+	g.Stop()
+	if got := pr.purges.Load(); got != 0 {
+		t.Fatalf("expected 0 purges (no retention configured), got %d", got)
+	}
 }

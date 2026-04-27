@@ -167,32 +167,20 @@ fallback for zero-valued ctor args.
 
 ---
 
-### 5.2 — Honour `purgeInterval` per group (P1)
+### 5.2 — Honour `purgeInterval` per group (P1) — **DONE**
 
-**Current**: A single Manager-wide ticker fires every 15 minutes
-hard-coded and purges every group in lockstep. `cfg.PurgeInterval` is
-read from the DB config but never consulted.
-
-**JVM**: Each group schedules its own `Vertx.setPeriodic(purgeIntervalMs)`
-timer (default `1h`); separate timers for last-value and archive stores.
-
-**Plan**:
-1. Move retention scheduling into `archive.Group` (not `Manager`):
-   `Group.Start()` reads `cfg.PurgeInterval`, parses via
-   `parseDuration`, defaults to 1h. Spawns a per-group goroutine with
-   its own ticker.
-2. On each tick: if `LastValRetention` set → purge lastVal; if
-   `ArchiveRetention` set → purge archive.
-3. `Manager.Reload` already restarts the Group when config changes, so
-   the new schedule picks up automatically.
-4. Drop `Manager.RunRetention` and the old `purgeOnce`.
-5. Run an initial purge on `Group.Start()` (preserves boot cleanup).
-
-**Files**: `internal/archive/group.go`,
-`internal/archive/retention.go` (shrink to `parseDuration` only),
-`internal/broker/server.go` (drop the `archives.RunRetention(...)` call).
-
-**LOC**: ~60 net change.
+**As built**: Retention scheduling moved from a single Manager-wide
+15-minute ticker into `archive.Group`. Each group spawns its own
+goroutine that ticks every `cfg.PurgeInterval` (parsed via
+`parseDuration`, default 1h) and purges both stores when their
+retention is set. `Group.Start` runs one synchronous initial purge
+so stale rows are cleaned up at boot. `Manager.RunRetention` /
+`purgeOnce` removed; `retention.go` shrunk to just
+`parseDuration`. Reload already restarts groups on config change so
+new intervals take effect automatically. Tests:
+`group_test.go` adds three cases — initial purge fires on Start,
+ticker keeps firing, and groups with no retention skip purging
+entirely.
 
 ---
 
