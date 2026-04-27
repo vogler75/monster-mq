@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.sparkplugb.SparkplugBDecoderExtension
 import at.rocworks.stores.DeviceConfig
@@ -28,6 +29,8 @@ class SparkplugBDecoderMutations(
     fun createSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -116,6 +119,8 @@ class SparkplugBDecoderMutations(
     fun updateSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -222,6 +227,8 @@ class SparkplugBDecoderMutations(
     fun deleteSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -281,6 +288,8 @@ class SparkplugBDecoderMutations(
     fun toggleSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -358,6 +367,8 @@ class SparkplugBDecoderMutations(
     fun reassignSparkplugBDecoder(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -437,6 +448,8 @@ class SparkplugBDecoderMutations(
     fun addRule(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -539,6 +552,8 @@ class SparkplugBDecoderMutations(
     fun deleteRule(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SparkplugB))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("SparkplugB feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")

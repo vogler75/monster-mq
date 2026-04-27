@@ -592,15 +592,23 @@
         "MqttClient": { "type": "boolean", "default": true, "description": "MQTT client bridge" },
         "Kafka": { "type": "boolean", "default": true, "description": "Kafka client bridge" },
         "Nats": { "type": "boolean", "default": true, "description": "NATS client bridge" },
+        "Redis": { "type": "boolean", "default": true, "description": "Redis client bridge" },
         "Telegram": { "type": "boolean", "default": true, "description": "Telegram client bridge" },
         "WinCCOa": { "type": "boolean", "default": true, "description": "WinCC OA client bridge" },
         "WinCCUa": { "type": "boolean", "default": true, "description": "WinCC Unified client bridge" },
         "Plc4x": { "type": "boolean", "default": true, "description": "PLC4X industrial protocol bridge" },
         "Neo4j": { "type": "boolean", "default": true, "description": "Neo4j graph database bridge" },
         "JdbcLogger": { "type": "boolean", "default": true, "description": "JDBC logger device" },
+        "InfluxDBLogger": { "type": "boolean", "default": true, "description": "InfluxDB logger device" },
+        "TimeBaseLogger": { "type": "boolean", "default": true, "description": "TimeBase logger device" },
         "SparkplugB": { "type": "boolean", "default": true, "description": "SparkplugB decoder" },
         "FlowEngine": { "type": "boolean", "default": true, "description": "Flow engine for automation workflows" },
-        "Agents": { "type": "boolean", "default": true, "description": "AI agent extension" }
+        "Agents": { "type": "boolean", "default": true, "description": "AI agent extension" },
+        "GenAi": { "type": "boolean", "default": true, "description": "GenAI provider management" },
+        "Mcp": { "type": "boolean", "default": true, "description": "MCP server management" },
+        "SchemaPolicy": { "type": "boolean", "default": true, "description": "Topic schema policy management" },
+        "TopicNamespace": { "type": "boolean", "default": true, "description": "Topic namespace management" },
+        "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" }
       },
       "additionalProperties": false
     }

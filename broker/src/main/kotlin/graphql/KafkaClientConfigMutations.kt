@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.stores.DeviceConfig
@@ -28,6 +29,8 @@ class KafkaClientConfigMutations(
     fun createKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Kafka))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Input is required"))) }
@@ -77,6 +80,8 @@ class KafkaClientConfigMutations(
     fun updateKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Kafka))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -136,6 +141,8 @@ class KafkaClientConfigMutations(
     fun deleteKafkaClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Kafka))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name")
                 if (name == null) { future.complete(false); return@DataFetcher future }
@@ -161,14 +168,20 @@ class KafkaClientConfigMutations(
     }
 
     fun startKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Kafka))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleKafkaClient(name, true)
     }
     fun stopKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Kafka))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         toggleKafkaClient(name, false)
     }
     fun toggleKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Kafka))
+            return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node")))
         val name = env.getArgument<String>("name")
         val enabled = env.getArgument<Boolean>("enabled")
         toggleKafkaClient(name, enabled)
@@ -206,6 +219,8 @@ class KafkaClientConfigMutations(
     fun reassignKafkaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Kafka))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("Kafka feature is not enabled on this node"))) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")

@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.schema.JsonSchemaValidator
 import at.rocworks.schema.TopicSchemaPolicyCache
@@ -23,6 +25,8 @@ class TopicSchemaQueries(
     fun topicSchemaPolicies(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher {
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(emptyList()) }
             deviceStore.getAllDevices().onComplete { result ->
                 if (result.succeeded()) {
                     val policies = result.result()
@@ -41,6 +45,8 @@ class TopicSchemaQueries(
     fun topicSchemaPolicy(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(null) }
             val name = env.getArgument<String?>("name") ?: run {
                 future.complete(null); return@DataFetcher future
             }
@@ -64,6 +70,8 @@ class TopicSchemaQueries(
     fun topicSchemaValidate(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(validationError("", "CONFIG_ERROR", "SchemaPolicy feature is not enabled on this node")) }
             val policyName = env.getArgument<String?>("policyName") ?: run {
                 future.complete(validationError("", "CONFIG_ERROR", "policyName is required"))
                 return@DataFetcher future
@@ -112,6 +120,8 @@ class TopicSchemaQueries(
     fun topicNamespaces(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher {
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(emptyList()) }
             deviceStore.getAllDevices().onComplete { result ->
                 if (result.succeeded()) {
                     val namespaces = result.result()
@@ -130,6 +140,8 @@ class TopicSchemaQueries(
     fun topicNamespace(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(null) }
             val name = env.getArgument<String?>("name") ?: run {
                 future.complete(null); return@DataFetcher future
             }
@@ -153,6 +165,8 @@ class TopicSchemaQueries(
     fun topicNamespaceMatch(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(null) }
             val topic = env.getArgument<String?>("topic") ?: run {
                 future.complete(null); return@DataFetcher future
             }

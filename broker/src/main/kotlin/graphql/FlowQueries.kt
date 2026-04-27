@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
@@ -26,6 +27,8 @@ class FlowQueries(
     fun flowClasses(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.FlowEngine))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
                 val name = env.getArgument<String?>("name")
@@ -75,6 +78,8 @@ class FlowQueries(
     fun flowInstances(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.FlowEngine))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
                 val flowClassId = env.getArgument<String?>("flowClassId")
@@ -122,6 +127,8 @@ class FlowQueries(
     fun flowNodeTypes(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { _ ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.FlowEngine))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
                 val nodeTypes = listOf(

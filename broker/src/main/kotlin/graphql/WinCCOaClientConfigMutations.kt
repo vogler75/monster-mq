@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.stores.DeviceConfig
@@ -28,6 +29,8 @@ class WinCCOaClientConfigMutations(
     fun createWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -116,6 +119,8 @@ class WinCCOaClientConfigMutations(
     fun updateWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -224,6 +229,8 @@ class WinCCOaClientConfigMutations(
     fun deleteWinCCOaClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(false) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -274,6 +281,8 @@ class WinCCOaClientConfigMutations(
 
     fun startWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             toggleWinCCOaClient(name, true)
         }
@@ -281,6 +290,8 @@ class WinCCOaClientConfigMutations(
 
     fun stopWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             toggleWinCCOaClient(name, false)
         }
@@ -288,6 +299,8 @@ class WinCCOaClientConfigMutations(
 
     fun toggleWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher CompletableFuture.completedFuture(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node")))
             val name = env.getArgument<String>("name")
             val enabled = env.getArgument<Boolean>("enabled")
             toggleWinCCOaClient(name, enabled)
@@ -362,6 +375,8 @@ class WinCCOaClientConfigMutations(
     fun reassignWinCCOaClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -448,6 +463,8 @@ class WinCCOaClientConfigMutations(
     fun addWinCCOaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -583,6 +600,8 @@ class WinCCOaClientConfigMutations(
     fun updateWinCCOaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -721,6 +740,8 @@ class WinCCOaClientConfigMutations(
     fun deleteWinCCOaClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.WinCCOa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("WinCCOa feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")

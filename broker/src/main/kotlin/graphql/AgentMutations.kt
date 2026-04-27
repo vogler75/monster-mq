@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.AgentConfig
 import at.rocworks.agents.AgentExtension
@@ -28,6 +29,8 @@ class AgentMutations(
     fun createAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Agents feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")!!
                 val name = input["name"] as? String ?: ""
@@ -58,6 +61,8 @@ class AgentMutations(
     fun updateAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Agents feature is not enabled on this node")) }
 
             try {
                 val name = env.getArgument<String>("name")!!
@@ -93,6 +98,8 @@ class AgentMutations(
     fun deleteAgent(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(false) }
 
             try {
                 val name = env.getArgument<String>("name")!!
@@ -116,6 +123,8 @@ class AgentMutations(
     fun startAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Agents feature is not enabled on this node")) }
 
             try {
                 val name = env.getArgument<String>("name")!!
@@ -140,6 +149,8 @@ class AgentMutations(
     fun stopAgent(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Agents feature is not enabled on this node")) }
 
             try {
                 val name = env.getArgument<String>("name")!!

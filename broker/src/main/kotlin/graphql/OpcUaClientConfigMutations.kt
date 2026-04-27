@@ -2,6 +2,7 @@ package at.rocworks.graphql
 
 import at.rocworks.Utils
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.DeviceConfigRequest
 import at.rocworks.stores.IDeviceConfigStore
@@ -30,6 +31,8 @@ class OpcUaClientConfigMutations(
     fun addOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply {
@@ -118,6 +121,8 @@ class OpcUaClientConfigMutations(
     fun updateOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -232,6 +237,8 @@ class OpcUaClientConfigMutations(
     fun deleteOpcUaDevice(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(false) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -283,6 +290,8 @@ class OpcUaClientConfigMutations(
     fun toggleOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -353,6 +362,8 @@ class OpcUaClientConfigMutations(
     fun reassignOpcUaDevice(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
 
             try {
                 val name = env.getArgument<String>("name")
@@ -532,6 +543,8 @@ class OpcUaClientConfigMutations(
     fun addOpcUaAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")
@@ -665,6 +678,8 @@ class OpcUaClientConfigMutations(
     fun deleteOpcUaAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUa))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("OpcUa feature is not enabled on this node"))) }
 
             try {
                 val deviceName = env.getArgument<String>("deviceName")

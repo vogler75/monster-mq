@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.schema.JsonSchemaValidator
 import at.rocworks.schema.TopicSchemaPolicyCache
@@ -29,6 +31,8 @@ class TopicSchemaMutations(
     fun createPolicy(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(errorResult("SchemaPolicy feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
@@ -85,6 +89,8 @@ class TopicSchemaMutations(
     fun updatePolicy(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(errorResult("SchemaPolicy feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(errorResult("name is required")) }
                 val input = env.getArgument<Map<String, Any>>("input") ?: return@DataFetcher future.apply { complete(errorResult("input is required")) }
@@ -142,6 +148,8 @@ class TopicSchemaMutations(
     fun deletePolicy(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
+                return@DataFetcher future.apply { complete(false) }
             val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(false) }
 
             deviceStore.deleteDevice(name).onComplete { result ->
@@ -162,6 +170,8 @@ class TopicSchemaMutations(
     fun createNamespace(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(errorResult("TopicNamespace feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
@@ -234,6 +244,8 @@ class TopicSchemaMutations(
     fun updateNamespace(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(errorResult("TopicNamespace feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(errorResult("name is required")) }
                 val input = env.getArgument<Map<String, Any>>("input") ?: return@DataFetcher future.apply { complete(errorResult("input is required")) }
@@ -307,6 +319,8 @@ class TopicSchemaMutations(
     fun deleteNamespace(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(false) }
             val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(false) }
 
             deviceStore.deleteDevice(name).onComplete { result ->
@@ -325,6 +339,8 @@ class TopicSchemaMutations(
     fun toggleNamespace(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.TopicNamespace))
+                return@DataFetcher future.apply { complete(errorResult("TopicNamespace feature is not enabled on this node")) }
             val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(errorResult("name is required")) }
             val enabled = env.getArgument<Boolean>("enabled") ?: return@DataFetcher future.apply { complete(errorResult("enabled is required")) }
 

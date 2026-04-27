@@ -1209,18 +1209,13 @@ MORE INFO:
                     .compose {
                         // Resolve feature flags from top-level Features config block
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
-                        val allFeatures = listOf(
-                            "OpcUa", "OpcUaServer", "MqttClient", "Kafka", "Nats", "Redis", "Telegram",
-                            "WinCCOa", "WinCCUa", "Plc4x", "Neo4j", "JdbcLogger", "InfluxDBLogger", "TimeBaseLogger",
-                            "SparkplugB", "FlowEngine", "Agents"
-                        )
-                        val enabled = allFeatures.filter { featuresConfig.getBoolean(it, true) }.toSet()
+                        val enabled = Features.all.filter { featuresConfig.getBoolean(it, true) }.toSet()
                         publishEnabledFeatures(vertx, enabled)
                         logger.info("Enabled features: $enabled")
                         Future.succeededFuture<String>()
                     }
                     .compose {
-                        if (Monster.isFeatureEnabled("OpcUa")) {
+                        if (Monster.isFeatureEnabled(Features.OpcUa)) {
                             val opcUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(opcUaExtension, opcUaDeploymentOptions)
                         } else {
@@ -1229,14 +1224,14 @@ MORE INFO:
                         }
                     }
                     .compose {
-                        if (opcUaServerExtension != null && Monster.isFeatureEnabled("OpcUaServer")) {
+                        if (opcUaServerExtension != null && Monster.isFeatureEnabled(Features.OpcUaServer)) {
                             vertx.deployVerticle(opcUaServerExtension)
                         } else {
                             Future.succeededFuture<String>()
                         }
                     }
                     .compose {
-                        if (Monster.isFeatureEnabled("MqttClient")) {
+                        if (Monster.isFeatureEnabled(Features.MqttClient)) {
                             val mqttClientDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(mqttClientExtension, mqttClientDeploymentOptions)
                         } else {
@@ -1246,7 +1241,7 @@ MORE INFO:
                     }
                     .compose {
                         // Kafka Subscriber Extension
-                        if (Monster.isFeatureEnabled("Kafka")) {
+                        if (Monster.isFeatureEnabled(Features.Kafka)) {
                             val kafkaClientExtension = KafkaClientExtension()
                             val kafkaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(kafkaClientExtension, kafkaDeploymentOptions)
@@ -1257,7 +1252,7 @@ MORE INFO:
                     }
                     .compose {
                         // NATS Client Bridge Extension
-                        if (Monster.isFeatureEnabled("Nats")) {
+                        if (Monster.isFeatureEnabled(Features.Nats)) {
                             val natsClientExtension = at.rocworks.devices.natsclient.NatsClientExtension()
                             val natsDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(natsClientExtension, natsDeploymentOptions)
@@ -1268,7 +1263,7 @@ MORE INFO:
                     }
                     .compose {
                         // Redis Client Bridge Extension
-                        if (Monster.isFeatureEnabled("Redis")) {
+                        if (Monster.isFeatureEnabled(Features.Redis)) {
                             val redisClientExtension = at.rocworks.devices.redisclient.RedisClientExtension()
                             val redisDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(redisClientExtension, redisDeploymentOptions)
@@ -1279,7 +1274,7 @@ MORE INFO:
                     }
                     .compose {
                         // Telegram Client Bridge Extension
-                        if (Monster.isFeatureEnabled("Telegram")) {
+                        if (Monster.isFeatureEnabled(Features.Telegram)) {
                             val telegramClientExtension = at.rocworks.devices.telegramclient.TelegramClientExtension()
                             val telegramDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(telegramClientExtension, telegramDeploymentOptions)
@@ -1290,7 +1285,7 @@ MORE INFO:
                     }
                     .compose {
                         // WinCC OA Client Extension (GraphQL-based)
-                        if (Monster.isFeatureEnabled("WinCCOa")) {
+                        if (Monster.isFeatureEnabled(Features.WinCCOa)) {
                             val winCCOaExtension = WinCCOaExtension()
                             val winCCOaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(winCCOaExtension, winCCOaDeploymentOptions)
@@ -1327,7 +1322,7 @@ MORE INFO:
                     }
                     .compose {
                         // WinCC Unified Client Extension
-                        if (Monster.isFeatureEnabled("WinCCUa")) {
+                        if (Monster.isFeatureEnabled(Features.WinCCUa)) {
                             val winCCUaExtension = WinCCUaExtension()
                             val winCCUaDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
@@ -1338,7 +1333,7 @@ MORE INFO:
                     }
                     .compose {
                         // PLC4X Client Extension
-                        if (Monster.isFeatureEnabled("Plc4x")) {
+                        if (Monster.isFeatureEnabled(Features.Plc4x)) {
                             val plc4xExtension = Plc4xExtension()
                             val plc4xDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(plc4xExtension, plc4xDeploymentOptions)
@@ -1349,7 +1344,7 @@ MORE INFO:
                     }
                     .compose {
                         // Neo4j Client Extension
-                        if (Monster.isFeatureEnabled("Neo4j")) {
+                        if (Monster.isFeatureEnabled(Features.Neo4j)) {
                             val neo4jExtension = Neo4jExtension()
                             val neo4jDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(neo4jExtension, neo4jDeploymentOptions)
@@ -1360,7 +1355,7 @@ MORE INFO:
                     }
                     .compose {
                         // JDBC Logger Extension
-                        if (Monster.isFeatureEnabled("JdbcLogger")) {
+                        if (Monster.isFeatureEnabled(Features.JdbcLogger)) {
                             val jdbcLoggerExtension = at.rocworks.logger.JDBCLoggerExtension()
                             val jdbcLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(jdbcLoggerExtension, jdbcLoggerDeploymentOptions)
@@ -1371,7 +1366,7 @@ MORE INFO:
                     }
                     .compose {
                         // InfluxDB Logger Extension
-                        if (Monster.isFeatureEnabled("InfluxDBLogger")) {
+                        if (Monster.isFeatureEnabled(Features.InfluxDBLogger)) {
                             val influxDBLoggerExtension = at.rocworks.logger.InfluxDBLoggerExtension()
                             val influxDBLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(influxDBLoggerExtension, influxDBLoggerDeploymentOptions)
@@ -1382,7 +1377,7 @@ MORE INFO:
                     }
                     .compose {
                         // TimeBase Logger Extension
-                        if (Monster.isFeatureEnabled("TimeBaseLogger")) {
+                        if (Monster.isFeatureEnabled(Features.TimeBaseLogger)) {
                             val timeBaseLoggerExtension = at.rocworks.logger.TimeBaseLoggerExtension()
                             val timeBaseLoggerDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(timeBaseLoggerExtension, timeBaseLoggerDeploymentOptions)
@@ -1393,7 +1388,7 @@ MORE INFO:
                     }
                     .compose {
                         // SparkplugB Decoder Extension
-                        if (Monster.isFeatureEnabled("SparkplugB")) {
+                        if (Monster.isFeatureEnabled(Features.SparkplugB)) {
                             val sparkplugBDecoderExtension = SparkplugBDecoderExtension()
                             val sparkplugBDecoderDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(sparkplugBDecoderExtension, sparkplugBDecoderDeploymentOptions)
@@ -1404,7 +1399,7 @@ MORE INFO:
                     }
                     .compose {
                         // Flow Engine Extension
-                        if (Monster.isFeatureEnabled("FlowEngine")) {
+                        if (Monster.isFeatureEnabled(Features.FlowEngine)) {
                             val flowEngineExtension = FlowEngineExtension()
                             singleton?.flowEngineExtension = flowEngineExtension
                             val flowEngineDeploymentOptions = DeploymentOptions().setConfig(configJson)
@@ -1424,7 +1419,7 @@ MORE INFO:
                     .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
                     .compose {
                         // Agent Extension (must start AFTER MCP server and other servers are ready)
-                        if (Monster.isFeatureEnabled("Agents")) {
+                        if (Monster.isFeatureEnabled(Features.Agents)) {
                             val agentExtension = at.rocworks.agents.AgentExtension()
                             val agentDeploymentOptions = DeploymentOptions().setConfig(configJson)
                             vertx.deployVerticle(agentExtension, agentDeploymentOptions)

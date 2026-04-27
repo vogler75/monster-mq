@@ -175,24 +175,24 @@ class SidebarManager {
                     { href: '/pages/influxdb-loggers.html', icon: 'database', text: 'InfluxDB Loggers', feature: 'InfluxDBLogger' },
                     { href: '/pages/timebase-loggers.html', icon: 'database', text: 'TimeBase Loggers', feature: 'TimeBaseLogger' },
                     { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows', feature: 'FlowEngine' },
-                    { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export' }
+                    { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export', feature: 'DeviceImportExport' }
                 ]
             },
             {
                 section: 'Governance', sectionIcon: 'shield',
                 items: [
-                    { href: '/pages/topic-schema-policies.html', icon: 'shield-check', text: 'Schema Policies' },
-                    { href: '/pages/topic-namespaces.html', icon: 'folder', text: 'Topic Namespaces' }
+                    { href: '/pages/topic-schema-policies.html', icon: 'shield-check', text: 'Schema Policies', feature: 'SchemaPolicy' },
+                    { href: '/pages/topic-namespaces.html', icon: 'folder', text: 'Topic Namespaces', feature: 'TopicNamespace' }
                 ]
             },
             {
                 section: 'Agents', sectionIcon: 'rocket',
                 items: [
-                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor' },
-                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph' },
-                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents' },
-                    { href: '/pages/genai-providers.html', icon: 'hierarchy', text: 'AI Providers' },
-                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers' }
+                    { href: '/pages/agent-monitor.html', icon: 'capacity-filled', text: 'Agent Monitor', feature: 'Agents' },
+                    { href: '/pages/agent-online.html', icon: 'distribution', text: 'Agent Graph', feature: 'Agents' },
+                    { href: '/pages/agents.html', icon: 'rocket', text: 'AI Agents', feature: 'Agents' },
+                    { href: '/pages/genai-providers.html', icon: 'hierarchy', text: 'AI Providers', feature: 'GenAi' },
+                    { href: '/pages/mcp-servers.html', icon: 'connector', text: 'MCP Servers', feature: 'Mcp' }
                 ]
             },
             {

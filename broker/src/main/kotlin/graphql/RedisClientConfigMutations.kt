@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.redisclient.RedisClientExtension
 import at.rocworks.stores.DeviceConfig
@@ -30,6 +31,8 @@ class RedisClientConfigMutations(
     fun createRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
@@ -68,6 +71,8 @@ class RedisClientConfigMutations(
     fun updateRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -111,6 +116,8 @@ class RedisClientConfigMutations(
     fun deleteRedisClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name") ?: run { future.complete(false); return@DataFetcher future }
                 deviceStore.getDevice(name).onComplete { existingRes ->
@@ -139,14 +146,20 @@ class RedisClientConfigMutations(
     // -- Start / Stop / Toggle --
 
     fun startRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Redis))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Redis feature is not enabled on this node"))
         toggleRedisClient(env.getArgument("name"), true)
     }
 
     fun stopRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Redis))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Redis feature is not enabled on this node"))
         toggleRedisClient(env.getArgument("name"), false)
     }
 
     fun toggleRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Redis))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Redis feature is not enabled on this node"))
         toggleRedisClient(env.getArgument("name"), env.getArgument("enabled"))
     }
 
@@ -179,6 +192,8 @@ class RedisClientConfigMutations(
     fun reassignRedisClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")
@@ -220,6 +235,8 @@ class RedisClientConfigMutations(
     fun addRedisClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }
@@ -261,6 +278,8 @@ class RedisClientConfigMutations(
     fun updateRedisClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }
@@ -305,6 +324,8 @@ class RedisClientConfigMutations(
     fun deleteRedisClientAddress(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(errorResult("Redis feature is not enabled on this node")) }
             try {
                 val deviceName = env.getArgument<String>("deviceName")
                     ?: run { future.complete(errorResult("deviceName is required")); return@DataFetcher future }

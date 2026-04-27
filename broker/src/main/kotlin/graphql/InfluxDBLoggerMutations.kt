@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.logger.InfluxDBLoggerExtension
 import at.rocworks.stores.DeviceConfig
@@ -18,6 +19,8 @@ class InfluxDBLoggerMutations(private val vertx: Vertx, private val deviceStore:
     fun create(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("InfluxDBLogger feature is not enabled on this node"))) }
             val input = env.getArgument<Map<String, Any>>("input")
             if (input == null) {
                 future.complete(mapOf("success" to false, "errors" to listOf("Input is required")))
@@ -46,6 +49,8 @@ class InfluxDBLoggerMutations(private val vertx: Vertx, private val deviceStore:
     fun update(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("InfluxDBLogger feature is not enabled on this node"))) }
             val name = env.getArgument<String>("name") ?: ""
             val input = env.getArgument<Map<String, Any>>("input")
             if (input == null) {
@@ -77,8 +82,10 @@ class InfluxDBLoggerMutations(private val vertx: Vertx, private val deviceStore:
 
     fun delete(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
-            val name = env.getArgument<String>("name") ?: ""
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(false) }
+            val name = env.getArgument<String>("name") ?: ""
             deviceStore.deleteDevice(name).onComplete { res ->
                 if (res.succeeded()) {
                     notifyDeviceConfigChange("delete", name)
@@ -91,9 +98,11 @@ class InfluxDBLoggerMutations(private val vertx: Vertx, private val deviceStore:
 
     fun toggle(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
+            val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(false) }
             val name = env.getArgument<String>("name") ?: ""
             val enabled = env.getArgument<Boolean>("enabled") ?: false
-            val future = CompletableFuture<Boolean>()
             deviceStore.getDevice(name).onComplete { dr ->
                 val device = dr.result()
                 if (device != null) {
@@ -113,9 +122,11 @@ class InfluxDBLoggerMutations(private val vertx: Vertx, private val deviceStore:
 
     fun reassign(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
+            val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.InfluxDBLogger))
+                return@DataFetcher future.apply { complete(false) }
             val name = env.getArgument<String>("name") ?: ""
             val nodeId = env.getArgument<String>("nodeId") ?: ""
-            val future = CompletableFuture<Boolean>()
             deviceStore.getDevice(name).onComplete { dr ->
                 val device = dr.result()
                 if (device != null) {

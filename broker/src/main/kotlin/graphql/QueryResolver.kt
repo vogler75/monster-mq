@@ -1,6 +1,8 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Const
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
@@ -888,6 +890,8 @@ class QueryResolver(
     fun getDevices(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.DeviceImportExport))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             if (deviceStore == null) {
                 future.completeExceptionally(GraphQLException("Device store is not available"))

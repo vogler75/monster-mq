@@ -5,6 +5,7 @@ import at.rocworks.extensions.graphql.GraphQLAuthContext
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
@@ -36,6 +37,8 @@ class OpcUaServerMutations(
     fun createOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerResult(success = false, message = "OpcUaServer feature is not enabled on this node", server = null, errors = listOf("OpcUaServer feature is not enabled on this node"))) }
             try {
                 val config = env.getArgument<Map<String, Any>>("config")
                     ?: throw IllegalArgumentException("Config is required")
@@ -102,6 +105,8 @@ class OpcUaServerMutations(
     fun updateOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerResult(success = false, message = "OpcUaServer feature is not enabled on this node", server = null, errors = listOf("OpcUaServer feature is not enabled on this node"))) }
 
             try {
                 val serverName = env.getArgument<String>("name")
@@ -222,6 +227,8 @@ class OpcUaServerMutations(
     fun startOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerOperationResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerOperationResult(false, "OpcUaServer feature is not enabled on this node")) }
 
             val serverName = env.getArgument<String>("serverName")
                 ?: return@DataFetcher future.apply {
@@ -275,6 +282,8 @@ class OpcUaServerMutations(
     fun stopOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerOperationResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerOperationResult(false, "OpcUaServer feature is not enabled on this node")) }
 
             val serverName = env.getArgument<String>("serverName")
                 ?: return@DataFetcher future.apply {
@@ -311,6 +320,8 @@ class OpcUaServerMutations(
     fun deleteOpcUaServer(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerOperationResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerOperationResult(false, "OpcUaServer feature is not enabled on this node")) }
 
             val serverName = env.getArgument<String>("serverName")
                 ?: return@DataFetcher future.apply {
@@ -346,6 +357,8 @@ class OpcUaServerMutations(
     fun addOpcUaServerAddress(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerOperationResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerOperationResult(false, "OpcUaServer feature is not enabled on this node")) }
 
             val serverName = env.getArgument<String>("serverName")
                 ?: return@DataFetcher future.apply {
@@ -416,6 +429,8 @@ class OpcUaServerMutations(
     fun removeOpcUaServerAddress(): DataFetcher<CompletableFuture<OpcUaServerOperationResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<OpcUaServerOperationResult>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(OpcUaServerOperationResult(false, "OpcUaServer feature is not enabled on this node")) }
 
             val serverName = env.getArgument<String>("serverName")
                 ?: return@DataFetcher future.apply {
@@ -857,6 +872,8 @@ class OpcUaServerMutations(
     fun trustOpcUaServerCertificates(): DataFetcher<CompletableFuture<CertificateManagementResultGraphQL>> {
         return DataFetcher { env ->
             val future = CompletableFuture<CertificateManagementResultGraphQL>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(CertificateManagementResultGraphQL(false, "OpcUaServer feature is not enabled on this node", emptyList())) }
             val serverName = env.getArgument<String>("serverName")
             val fingerprints = env.getArgument<List<String>>("fingerprints")
 
@@ -919,6 +936,8 @@ class OpcUaServerMutations(
     fun deleteOpcUaServerCertificates(): DataFetcher<CompletableFuture<CertificateManagementResultGraphQL>> {
         return DataFetcher { env ->
             val future = CompletableFuture<CertificateManagementResultGraphQL>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(CertificateManagementResultGraphQL(false, "OpcUaServer feature is not enabled on this node", emptyList())) }
             val serverName = env.getArgument<String>("serverName")
             val fingerprints = env.getArgument<List<String>>("fingerprints")
 

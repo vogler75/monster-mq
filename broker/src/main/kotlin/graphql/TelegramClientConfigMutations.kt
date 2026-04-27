@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.devices.telegramclient.TelegramClientExtension
 import at.rocworks.stores.DeviceConfig
@@ -29,6 +30,8 @@ class TelegramClientConfigMutations(
     fun createTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Telegram))
+                return@DataFetcher future.apply { complete(errorResult("Telegram feature is not enabled on this node")) }
             try {
                 val input = env.getArgument<Map<String, Any>>("input")
                     ?: return@DataFetcher future.apply { complete(errorResult("Input is required")) }
@@ -67,6 +70,8 @@ class TelegramClientConfigMutations(
     fun updateTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Telegram))
+                return@DataFetcher future.apply { complete(errorResult("Telegram feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val input = env.getArgument<Map<String, Any>>("input")
@@ -110,6 +115,8 @@ class TelegramClientConfigMutations(
     fun deleteTelegramClient(): DataFetcher<CompletableFuture<Boolean>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Boolean>()
+            if (!Monster.isFeatureEnabled(Features.Telegram))
+                return@DataFetcher future.apply { complete(false) }
             try {
                 val name = env.getArgument<String>("name") ?: run { future.complete(false); return@DataFetcher future }
                 deviceStore.getDevice(name).onComplete { existingRes ->
@@ -138,14 +145,20 @@ class TelegramClientConfigMutations(
     // ── Start / Stop / Toggle ─────────────────────────────────────────────
 
     fun startTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Telegram))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Telegram feature is not enabled on this node"))
         toggleTelegramClient(env.getArgument("name"), true)
     }
 
     fun stopTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Telegram))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Telegram feature is not enabled on this node"))
         toggleTelegramClient(env.getArgument("name"), false)
     }
 
     fun toggleTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> = DataFetcher { env ->
+        if (!Monster.isFeatureEnabled(Features.Telegram))
+            return@DataFetcher CompletableFuture.completedFuture(errorResult("Telegram feature is not enabled on this node"))
         toggleTelegramClient(env.getArgument("name"), env.getArgument("enabled"))
     }
 
@@ -178,6 +191,8 @@ class TelegramClientConfigMutations(
     fun reassignTelegramClient(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Telegram))
+                return@DataFetcher future.apply { complete(errorResult("Telegram feature is not enabled on this node")) }
             try {
                 val name = env.getArgument<String>("name")
                 val nodeId = env.getArgument<String>("nodeId")

@@ -17,17 +17,37 @@ class DashboardManager {
         this.init();
     }
 
-    init() {
+    async init() {
         if (!this.isLoggedIn()) {
             window.location.href = '/pages/login.html';
             return;
         }
 
         this.setupUI();
-        this.setupCharts();
         this.setupArchiveGroupsControls();
+        await this.loadEnabledFeatures();
+        this.setupCharts();
         this.loadInitialDataWithHistory();
         this.startPolling();
+    }
+
+    async loadEnabledFeatures() {
+        try {
+            const brokers = await window.graphqlClient.getBrokers();
+            const all = new Set(brokers.flatMap(b => b.enabledFeatures || []));
+            const anyExplicit = brokers.some(b => Array.isArray(b.enabledFeatures));
+            this._enabledFeatures = anyExplicit ? all : null; // null → "all enabled (legacy)"
+        } catch (e) {
+            console.warn('Failed to load enabled features, assuming all enabled:', e);
+            this._enabledFeatures = null;
+        }
+    }
+
+    isFeatureEnabled(feature) {
+        if (!feature) return true;
+        if (!this._enabledFeatures) return true; // null means all enabled
+        if (Array.isArray(feature)) return feature.some(f => this._enabledFeatures.has(f));
+        return this._enabledFeatures.has(feature);
     }
 
     isLoggedIn() {
@@ -81,76 +101,40 @@ class DashboardManager {
         Chart.defaults.color = '#CBD5E1';
         Chart.defaults.borderColor = '#475569';
 
+        // Traffic chart datasets — each spec carries the feature flag that gates it
+        // and a `getValue(d)` that pulls the right metric from a broker metrics record.
+        // The MQTT Messages series has no feature gate (always shown).
+        this._trafficDatasetSpecs = [
+            { label: 'MQTT Messages', feature: null, color: '#22C55E', bg: 'rgba(34, 197, 94, 0.12)',
+              getValue: d => (d.messagesIn || 0) + (d.messagesOut || 0) },
+            { label: 'MQTT Bridges', feature: 'MqttClient', color: '#0EA5E9', bg: 'rgba(14, 165, 233, 0.12)',
+              getValue: d => (d.mqttClientIn || 0) + (d.mqttClientOut || 0) },
+            { label: 'Kafka', feature: 'Kafka', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)',
+              getValue: d => (d.kafkaClientIn || 0) + (d.kafkaClientOut || 0) },
+            { label: 'OPC UA', feature: ['OpcUa', 'OpcUaServer'], color: '#14B8A6', bg: 'rgba(20, 184, 166, 0.12)',
+              getValue: d => (d.opcUaClientIn || 0) + (d.opcUaClientOut || 0) },
+            { label: 'WinCC OA', feature: 'WinCCOa', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.12)',
+              getValue: d => (d.winCCOaClientIn || 0) },
+            { label: 'WinCC UA', feature: 'WinCCUa', color: '#A78BFA', bg: 'rgba(167, 139, 250, 0.12)',
+              getValue: d => (d.winCCUaClientIn || 0) },
+            { label: 'NATS', feature: 'Nats', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)',
+              getValue: d => (d.natsClientIn || 0) + (d.natsClientOut || 0) },
+            { label: 'Redis', feature: 'Redis', color: '#6366F1', bg: 'rgba(99, 102, 241, 0.12)',
+              getValue: d => (d.redisClientIn || 0) + (d.redisClientOut || 0) }
+        ].filter(spec => this.isFeatureEnabled(spec.feature));
+
         this.trafficChart = new Chart(trafficCtx, {
             type: 'line',
             data: {
                 labels: [],
-                datasets: [
-                    {   // 0 - MQTT Messages total (in+out)
-                        label: 'MQTT Messages',
-                        data: [],
-                        borderColor: '#22C55E',
-                        backgroundColor: 'rgba(34, 197, 94, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 1 - MQTT Bridges total (in+out)
-                        label: 'MQTT Bridges',
-                        data: [],
-                        borderColor: '#0EA5E9',
-                        backgroundColor: 'rgba(14, 165, 233, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 2 - Kafka total
-                        label: 'Kafka',
-                        data: [],
-                        borderColor: '#EF4444',
-                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 3 - OPC UA total (in+out)
-                        label: 'OPC UA',
-                        data: [],
-                        borderColor: '#14B8A6',
-                        backgroundColor: 'rgba(20, 184, 166, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 4 - WinCC OA
-                        label: 'WinCC OA',
-                        data: [],
-                        borderColor: '#EC4899',
-                        backgroundColor: 'rgba(236, 72, 153, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 5 - WinCC UA
-                        label: 'WinCC UA',
-                        data: [],
-                        borderColor: '#A78BFA',
-                        backgroundColor: 'rgba(167, 139, 250, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 6 - NATS total (in+out)
-                        label: 'NATS',
-                        data: [],
-                        borderColor: '#F59E0B',
-                        backgroundColor: 'rgba(245, 158, 11, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    },
-                    {   // 7 - Redis total (in+out)
-                        label: 'Redis',
-                        data: [],
-                        borderColor: '#6366F1',
-                        backgroundColor: 'rgba(99, 102, 241, 0.12)',
-                        tension: 0.35,
-                        fill: true
-                    }
-                ]
+                datasets: this._trafficDatasetSpecs.map(spec => ({
+                    label: spec.label,
+                    data: [],
+                    borderColor: spec.color,
+                    backgroundColor: spec.bg,
+                    tension: 0.35,
+                    fill: true
+                }))
             },
             options: {
                 responsive: true,
@@ -343,38 +327,16 @@ class DashboardManager {
         });
         allHistoricalData.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
+        // Sum metric records sharing the same timestamp across cluster nodes
         const aggregatedData = {};
         allHistoricalData.forEach(point => {
             const timeKey = point.timestamp;
-            if (!aggregatedData[timeKey]) {
-                aggregatedData[timeKey] = {
-                    messagesIn: 0, messagesOut: 0,
-                    messageBusIn: 0, messageBusOut: 0,
-                    mqttClientIn: 0, mqttClientOut: 0,
-                    kafkaClientIn: 0, kafkaClientOut: 0,
-                    opcUaClientIn: 0, opcUaClientOut: 0,
-                    winCCOaClientIn: 0,
-                    winCCUaClientIn: 0,
-                    natsClientIn: 0, natsClientOut: 0,
-                    redisClientIn: 0, redisClientOut: 0
-                };
+            if (!aggregatedData[timeKey]) aggregatedData[timeKey] = {};
+            const target = aggregatedData[timeKey];
+            for (const k in point) {
+                if (k === 'timestamp') continue;
+                if (typeof point[k] === 'number') target[k] = (target[k] || 0) + point[k];
             }
-            aggregatedData[timeKey].messagesIn += point.messagesIn || 0;
-            aggregatedData[timeKey].messagesOut += point.messagesOut || 0;
-            aggregatedData[timeKey].messageBusIn += point.messageBusIn || 0;
-            aggregatedData[timeKey].messageBusOut += point.messageBusOut || 0;
-            aggregatedData[timeKey].mqttClientIn += point.mqttClientIn || 0;
-            aggregatedData[timeKey].mqttClientOut += point.mqttClientOut || 0;
-            aggregatedData[timeKey].kafkaClientIn += point.kafkaClientIn || 0;
-            aggregatedData[timeKey].kafkaClientOut += point.kafkaClientOut || 0;
-            aggregatedData[timeKey].opcUaClientIn += point.opcUaClientIn || 0;
-            aggregatedData[timeKey].opcUaClientOut += point.opcUaClientOut || 0;
-            aggregatedData[timeKey].winCCOaClientIn += point.winCCOaClientIn || 0;
-            aggregatedData[timeKey].winCCUaClientIn += point.winCCUaClientIn || 0;
-            aggregatedData[timeKey].natsClientIn += point.natsClientIn || 0;
-            aggregatedData[timeKey].natsClientOut += point.natsClientOut || 0;
-            aggregatedData[timeKey].redisClientIn += point.redisClientIn || 0;
-            aggregatedData[timeKey].redisClientOut += point.redisClientOut || 0;
         });
 
         // Preserve chronological order by iterating sorted allHistoricalData sequence
@@ -384,21 +346,15 @@ class DashboardManager {
             if (!data) return; // safety guard
             const timeLabel = this.formatTimestampFor(this.currentTimeframe, timestamp);
             this.trafficChart.data.labels.push(timeLabel);
-            this.trafficChart.data.datasets[0].data.push(data.messagesIn + data.messagesOut);  // MQTT Messages
-            this.trafficChart.data.datasets[1].data.push(data.mqttClientIn + data.mqttClientOut);  // MQTT Bridges
-            this.trafficChart.data.datasets[2].data.push(data.kafkaClientIn + data.kafkaClientOut);  // Kafka
-            this.trafficChart.data.datasets[3].data.push(data.opcUaClientIn + data.opcUaClientOut);  // OPC UA
-            this.trafficChart.data.datasets[4].data.push(data.winCCOaClientIn);  // WinCC OA (in only)
-            this.trafficChart.data.datasets[5].data.push(data.winCCUaClientIn);  // WinCC UA (in only)
-            this.trafficChart.data.datasets[6].data.push(data.natsClientIn + data.natsClientOut);  // NATS
-            this.trafficChart.data.datasets[7].data.push(data.redisClientIn + data.redisClientOut);  // Redis
+            this._trafficDatasetSpecs.forEach((spec, i) => {
+                this.trafficChart.data.datasets[i].data.push(spec.getValue(data));
+            });
         });
 
         console.debug('Traffic history loaded', {
             timeframe: this.currentTimeframe,
             points: this.trafficChart.data.labels.length,
-            sampleLast5Kafka: this.trafficChart.data.datasets[2].data.slice(-5),
-            sampleLast5OpcUa: this.trafficChart.data.datasets[3].data.slice(-5)
+            datasets: this._trafficDatasetSpecs.map(s => s.label)
         });
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);
@@ -420,25 +376,12 @@ class DashboardManager {
 
         const clusterTotals = brokers.reduce((acc, broker) => {
             const metrics = broker.metrics && broker.metrics.length > 0 ? broker.metrics[0] : {};
-            return {
-                messagesIn: acc.messagesIn + (metrics.messagesIn || 0),
-                messagesOut: acc.messagesOut + (metrics.messagesOut || 0),
-                messageBusIn: acc.messageBusIn + (metrics.messageBusIn || 0),
-                messageBusOut: acc.messageBusOut + (metrics.messageBusOut || 0),
-                mqttClientIn: acc.mqttClientIn + (metrics.mqttClientIn || 0),
-                mqttClientOut: acc.mqttClientOut + (metrics.mqttClientOut || 0),
-                kafkaClientIn: acc.kafkaClientIn + (metrics.kafkaClientIn || 0),
-                kafkaClientOut: acc.kafkaClientOut + (metrics.kafkaClientOut || 0),
-                opcUaClientIn: acc.opcUaClientIn + (metrics.opcUaClientIn || 0),
-                opcUaClientOut: acc.opcUaClientOut + (metrics.opcUaClientOut || 0),
-                winCCOaClientIn: acc.winCCOaClientIn + (metrics.winCCOaClientIn || 0),
-                winCCUaClientIn: acc.winCCUaClientIn + (metrics.winCCUaClientIn || 0),
-                natsClientIn: acc.natsClientIn + (metrics.natsClientIn || 0),
-                natsClientOut: acc.natsClientOut + (metrics.natsClientOut || 0),
-                redisClientIn: acc.redisClientIn + (metrics.redisClientIn || 0),
-                redisClientOut: acc.redisClientOut + (metrics.redisClientOut || 0)
-            };
-        }, { messagesIn: 0, messagesOut: 0, messageBusIn: 0, messageBusOut: 0, mqttClientIn: 0, mqttClientOut: 0, kafkaClientIn: 0, kafkaClientOut: 0, opcUaClientIn: 0, opcUaClientOut: 0, winCCOaClientIn: 0, winCCUaClientIn: 0, natsClientIn: 0, natsClientOut: 0, redisClientIn: 0, redisClientOut: 0 });
+            for (const k in metrics) {
+                if (k === 'timestamp' || k === 'connected') continue;
+                if (typeof metrics[k] === 'number') acc[k] = (acc[k] || 0) + metrics[k];
+            }
+            return acc;
+        }, {});
 
         if (this.trafficChart.data.labels.length >= this.maxDataPoints) {
             this.trafficChart.data.labels.shift();
@@ -448,14 +391,9 @@ class DashboardManager {
         }
 
         this.trafficChart.data.labels.push(timeLabel);
-        this.trafficChart.data.datasets[0].data.push(clusterTotals.messagesIn + clusterTotals.messagesOut);  // MQTT Messages
-        this.trafficChart.data.datasets[1].data.push(clusterTotals.mqttClientIn + clusterTotals.mqttClientOut);  // MQTT Bridges
-        this.trafficChart.data.datasets[2].data.push(clusterTotals.kafkaClientIn + clusterTotals.kafkaClientOut);  // Kafka
-        this.trafficChart.data.datasets[3].data.push(clusterTotals.opcUaClientIn + clusterTotals.opcUaClientOut);  // OPC UA
-        this.trafficChart.data.datasets[4].data.push(clusterTotals.winCCOaClientIn);  // WinCC OA
-        this.trafficChart.data.datasets[5].data.push(clusterTotals.winCCUaClientIn);  // WinCC UA
-        this.trafficChart.data.datasets[6].data.push(clusterTotals.natsClientIn + clusterTotals.natsClientOut);  // NATS
-        this.trafficChart.data.datasets[7].data.push(clusterTotals.redisClientIn + clusterTotals.redisClientOut);  // Redis
+        this._trafficDatasetSpecs.forEach((spec, i) => {
+            this.trafficChart.data.datasets[i].data.push(spec.getValue(clusterTotals));
+        });
         this.trafficChart.update('none');
 
         this.messageBusChart.data.labels = brokers.map(b => b.nodeId);

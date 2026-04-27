@@ -5,6 +5,7 @@ import at.rocworks.extensions.graphql.GraphQLAuthContext
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
@@ -33,6 +34,8 @@ class OpcUaServerQueries(
     fun opcUaServers(): DataFetcher<CompletableFuture<List<OpcUaServerInfo>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<OpcUaServerInfo>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(emptyList()) }
             val name = env.getArgument<String?>("name")
             val nodeId = env.getArgument<String?>("node")
 
@@ -122,6 +125,8 @@ class OpcUaServerQueries(
     fun opcUaServerCertificates(): DataFetcher<CompletableFuture<List<OpcUaServerCertificateInfo>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<OpcUaServerCertificateInfo>>()
+            if (!Monster.isFeatureEnabled(Features.OpcUaServer))
+                return@DataFetcher future.apply { complete(emptyList()) }
             val serverName = env.getArgument<String>("serverName")
             val trusted = env.getArgument<Boolean?>("trusted")
 

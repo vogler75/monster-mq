@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.agents.AgentConfig
 import at.rocworks.stores.DeviceConfig
@@ -23,6 +25,8 @@ class AgentQueries(
     fun agents(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
                 val nodeIdFilter = env.getArgument<String?>("nodeId")
@@ -53,6 +57,8 @@ class AgentQueries(
     fun agent(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher future.apply { complete(null) }
 
             try {
                 val name = env.getArgument<String>("name")!!
@@ -81,6 +87,8 @@ class AgentQueries(
 
     fun configuredProviders(): DataFetcher<List<String>> {
         return DataFetcher {
+            if (!Monster.isFeatureEnabled(Features.Agents))
+                return@DataFetcher emptyList()
             val providers = config.getJsonObject("GenAI")?.getJsonObject("Providers")
                 ?: return@DataFetcher emptyList()
             val keyToProvider = mapOf(

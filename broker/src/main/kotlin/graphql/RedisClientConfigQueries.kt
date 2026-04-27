@@ -1,6 +1,7 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.stores.DeviceConfig
@@ -25,6 +26,8 @@ class RedisClientConfigQueries(
     fun redisClients(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(emptyList()) }
             try {
                 val name = env.getArgument<String?>("name")
                 val nodeId = env.getArgument<String?>("node")
@@ -93,6 +96,8 @@ class RedisClientConfigQueries(
     fun redisClientMetrics(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.Redis))
+                return@DataFetcher future.apply { complete(emptyList()) }
             val redisClient = env.getSource<Map<String, Any>>()
             val deviceName = redisClient?.get("name") as? String
 

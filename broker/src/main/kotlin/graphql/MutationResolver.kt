@@ -1,5 +1,7 @@
 package at.rocworks.extensions.graphql
 
+import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.Utils
 import at.rocworks.bus.IMessageBus
 import at.rocworks.data.BrokerMessage
@@ -306,6 +308,8 @@ class MutationResolver(
     fun importDevices(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>>()
+            if (!Monster.isFeatureEnabled(Features.DeviceImportExport))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "DeviceImportExport feature is not enabled on this node")) }
 
             // Check authorization - requires admin privileges
             val authResult = authContext.validateFieldAccess(env)
