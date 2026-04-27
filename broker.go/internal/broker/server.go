@@ -219,6 +219,10 @@ func (s *Server) Serve() error {
 			queued, _ = s.storage.Queue.CountAll(ctx)
 			return
 		})
+		if hours := s.cfg.Metrics.RetentionHours; hours > 0 {
+			s.collector.RunRetention(s.metricsCtx,
+				time.Duration(hours)*time.Hour, time.Hour)
+		}
 	}
 	if s.bridges != nil {
 		if err := s.bridges.Start(context.Background()); err != nil {

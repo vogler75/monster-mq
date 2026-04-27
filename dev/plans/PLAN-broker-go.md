@@ -400,18 +400,15 @@ logs over MQTT.
 
 ---
 
-### 5.11 — Honour `RetentionHours` for the broker `metrics` table (P2)
+### 5.11 — Honour `RetentionHours` for the broker `metrics` table (P2) — **DONE**
 
-**Current**: `Metrics.RetentionHours: 168` is in config but the metrics
-table grows forever — there's no scheduled purge.
-
-**Plan**: A 1 h ticker calls
-`MetricsStore.PurgeOlderThan(now - hours)`.
-
-**Files**: `internal/metrics/collector.go` (or a new `purge.go`),
-`internal/broker/server.go`.
-
-**LOC**: ~30.
+**As built**: `Collector.RunRetention(ctx, retention, interval)`
+spawns a goroutine that purges metrics rows older than `retention`
+every `interval`. Server wires it from `cfg.Metrics.RetentionHours`
+with a 1h tick. Initial purge fires synchronously so stale rows
+from a previous broker run are dropped at boot. Setting
+`RetentionHours: 0` disables retention entirely (no goroutine
+started). Tests in `internal/metrics/retention_test.go`.
 
 ---
 

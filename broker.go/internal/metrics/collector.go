@@ -113,3 +113,37 @@ func (c *Collector) Stop() {
 		close(c.stopCh)
 	}
 }
+
+// RunRetention starts a background goroutine that purges metrics rows older
+// than `retention` every `interval`. Both args must be > 0; otherwise this is
+// a no-op (e.g. user explicitly disabled retention by setting RetentionHours
+// to 0). Stops on the same stopCh as the collector loop.
+func (c *Collector) RunRetention(ctx context.Context, retention, interval time.Duration) {
+	if c.store == nil || retention <= 0 || interval <= 0 {
+		return
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		// Purge once on startup to drop stale rows from before the broker came up.
+		c.purgeOnce(ctx, retention)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.stopCh:
+				return
+			case <-t.C:
+				c.purgeOnce(ctx, retention)
+			}
+		}
+	}()
+}
+
+func (c *Collector) purgeOnce(ctx context.Context, retention time.Duration) {
+	cutoff := time.Now().Add(-retention)
+	if _, err := c.store.PurgeOlderThan(ctx, cutoff); err != nil {
+		c.logger.Warn("metrics retention purge failed",
+			"cutoff", cutoff.Format(time.RFC3339), "err", err)
+	}
+}
