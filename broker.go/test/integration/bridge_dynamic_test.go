@@ -23,7 +23,7 @@ func TestBridgeDynamicDeploy(t *testing.T) {
 
 	// Remote broker B
 	srvB := startWithDB(t, 26101, dbB, func(c *config.Config) {
-		c.Bridges.Mqtt.Enabled = false
+		f := false; c.Features.MqttClient = &f
 	})
 	defer srvB.Close()
 
@@ -35,7 +35,7 @@ func TestBridgeDynamicDeploy(t *testing.T) {
 	cfgA.GraphQL.Port = 28101
 	cfgA.Dashboard.Enabled = false
 	cfgA.SQLite.Path = dbA
-	cfgA.Bridges.Mqtt.Enabled = true
+	cfgA.Features.MqttClient = nil  // default true
 	srvA, urlA := startWithGraphQL(t, 26100, 28101, func(c *config.Config) {
 		*c = *cfgA
 	})

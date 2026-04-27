@@ -46,9 +46,12 @@ GraphQL:
 Dashboard:
   Enabled: true
 
-Bridges:
-  Mqtt:
-    Enabled: true
+# Optional features. Every key defaults to true (enabled) when omitted —
+# matches the JVM broker's Features block. Only features this broker
+# actually implements are honoured; unknown keys are accepted for parity
+# but have no effect.
+Features:
+  MqttClient: true   # MQTT-to-MQTT bridge (SUBSCRIBE / PUBLISH addresses)
 
 # QueuedMessagesEnabled: true  → messages for offline persistent (clean=false)
 # sessions are stored in the QueueStore table and survive broker restarts.

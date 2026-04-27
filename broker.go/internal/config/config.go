@@ -61,10 +61,21 @@ type DashboardConfig struct {
 	Path    string `yaml:"Path,omitempty"` // optional: path to dashboard/dist (built UI)
 }
 
-type BridgesConfig struct {
-	Mqtt struct {
-		Enabled bool `yaml:"Enabled"`
-	} `yaml:"Mqtt"`
+// FeaturesConfig matches the JVM broker's Features block. Every feature
+// defaults to enabled; explicitly set to false to disable. Only features
+// this broker actually implements are honoured — others are accepted for
+// schema parity but have no effect.
+type FeaturesConfig struct {
+	MqttClient *bool `yaml:"MqttClient,omitempty"` // MQTT-to-MQTT bridge
+}
+
+// Enabled returns the effective on/off for a feature, honoring the
+// JVM-compatible "default true unless explicitly false" rule.
+func (f FeaturesConfig) MqttClientEnabled() bool {
+	if f.MqttClient == nil {
+		return true
+	}
+	return *f.MqttClient
 }
 
 type Config struct {
@@ -89,7 +100,7 @@ type Config struct {
 	Logging        LoggingConfig        `yaml:"Logging"`
 	GraphQL        GraphQLConfig        `yaml:"GraphQL"`
 	Dashboard      DashboardConfig      `yaml:"Dashboard"`
-	Bridges        BridgesConfig        `yaml:"Bridges"`
+	Features       FeaturesConfig       `yaml:"Features"`
 
 	// QueuedMessagesEnabled selects how messages for offline persistent (clean=false)
 	// sessions are held until the client reconnects.

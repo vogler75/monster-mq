@@ -346,13 +346,25 @@ func (r *queryResolver) Brokers(ctx context.Context) ([]*generated.Broker, error
 	return []*generated.Broker{r.brokerObj()}, nil
 }
 
+// enabledFeatures returns the list of feature names this broker is currently
+// shipping with. The dashboard uses this to hide pages whose backing feature
+// is off. We only declare features we actually implement; the rest are
+// implicitly absent.
+func (r *Resolver) enabledFeatures() []string {
+	out := []string{"MqttBroker"}
+	if r.Cfg.Features.MqttClientEnabled() {
+		out = append(out, "MqttClient")
+	}
+	return out
+}
+
 func (r *Resolver) brokerObj() *generated.Broker {
 	return &generated.Broker{
 		NodeID: r.NodeID, Version: r.Version,
 		UserManagementEnabled: r.Cfg.UserManagement.Enabled,
 		AnonymousEnabled:      r.Cfg.UserManagement.AnonymousEnabled,
 		IsLeader:              true, IsCurrent: true,
-		EnabledFeatures: []string{"MqttClient"},
+		EnabledFeatures: r.enabledFeatures(),
 	}
 }
 

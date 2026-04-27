@@ -168,7 +168,7 @@ func New(cfg *config.Config, logger *slog.Logger, logBus *mlog.Bus) (*Server, er
 		return server.Publish(topic, payload, retain, qos)
 	}
 	var bridges *mqttclient.Manager
-	if cfg.Bridges.Mqtt.Enabled {
+	if cfg.Features.MqttClientEnabled() {
 		bridges = mqttclient.NewManager(storage.DeviceConfig, publishFn, &mqttclient.BusAdapter{Bus: bus}, cfg.NodeID, logger)
 	}
 
