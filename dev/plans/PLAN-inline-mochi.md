@@ -25,10 +25,19 @@ release.
 
 ## Strategy comparison
 
+> **Aside on `/v2`** — Go's "Semantic Import Versioning" rule says any
+> module at `v2.0.0` or higher must have `/v2` (or `/v3`, …) **as a
+> suffix in its module identifier inside `go.mod`**. It is **not** a
+> branch or a directory in the repo. The fork's GitHub URL is plain
+> `github.com/vogler75/mochi-mqtt-server` (no `/v2` anywhere); the
+> `/v2` only appears in `import` statements because upstream's `go.mod`
+> declares `module github.com/mochi-mqtt/server/v2`. Tags are still
+> ordinary `vX.Y.Z`.
+
 | Approach | Pro | Con |
 |---|---|---|
-| **A. `replace` to our fork's GitHub URL** — keep import path `github.com/mochi-mqtt/server/v2`, add `replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server v2.x.y` to `go.mod` | No source changes in broker.go; fork keeps upstream's module path so cherry-picks from upstream are clean. | Module-import path doesn't reflect fork ownership at a glance. `go mod tidy` will silently follow the replace. |
-| **B. Rename module to `github.com/vogler75/mochi-mqtt-server/v2`** — change one line in fork's `go.mod`, sed-rewrite `github.com/mochi-mqtt/server/v2` → `github.com/vogler75/mochi-mqtt-server/v2` across the fork's source, then update broker.go's 5 import lines | Imports clearly say "this is ours". No `replace` directive. | Every upstream cherry-pick needs the same sed pass; merges are noisier. |
+| **A. `replace` to our fork's GitHub URL** — leave fork's `go.mod` untouched (it still declares `module github.com/mochi-mqtt/server/v2`), and add `replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server vX.Y.Z` to broker.go's `go.mod`. | No source changes anywhere; fork stays a clean mirror of upstream so cherry-picks are noise-free. | Module identity stays `mochi-mqtt/server/v2` — `go list -m all` shows the replace explicitly, but linters/IDEs may still display the upstream path. |
+| **B. Rename module to `github.com/vogler75/mochi-mqtt-server/v2`** — one-line edit of the fork's `go.mod` (the `/v2` here is the SIV suffix; still no `/v2` anywhere in the repo URL), sed-rewrite `github.com/mochi-mqtt/server/v2` → `github.com/vogler75/mochi-mqtt-server/v2` in the fork's own source files, update broker.go's 5 import lines. | Imports clearly say "this is ours". No `replace` directive. | Every upstream cherry-pick needs the same sed pass against incoming files; merges are noisier. |
 | **C. Vendor the fork into `broker.go/internal/mqtt/`** | Single self-contained checkout; `internal/` enforces that nothing outside our module imports it. | ~13 kLOC carried in our tree; future upstream syncs are manual diff-and-apply. |
 
 **Pick A.** It's reversible (drop the replace and we're back on upstream),
@@ -63,23 +72,24 @@ In `broker.go/`:
 ```bash
 cd broker.go
 
-# Drop the upstream require + add the replace pointing at our fork.
-go mod edit -replace github.com/mochi-mqtt/server/v2=github.com/vogler75/mochi-mqtt-server/v2@v2.7.10-monstermq.1
+# Add the replace pointing at our fork. Note: NO /v2 in the fork URL on
+# the right-hand side — the fork's go.mod still declares
+# `module github.com/mochi-mqtt/server/v2`, and Go uses that module
+# identity, not the URL path.
+go mod edit -replace github.com/mochi-mqtt/server/v2=github.com/vogler75/mochi-mqtt-server@v2.7.10-monstermq.1
 go mod tidy
 ```
-
-Note the `/v2` suffix on the fork URL — Go module conventions require
-`/v2` for any `go.mod` whose module path ends in `/v2`. The fork's
-existing module path `github.com/mochi-mqtt/server/v2` still works on
-the require side; the replace target needs its own `/v2`.
 
 After `go mod tidy`, expect `go.mod` to contain:
 
 ```
-require github.com/mochi-mqtt/server/v2 v2.7.9   // tracks upstream's last release for the version pin
+require github.com/mochi-mqtt/server/v2 v2.7.9   // pinned upstream version (kept for the require slot)
 
-replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server/v2 v2.7.10-monstermq.1
+replace github.com/mochi-mqtt/server/v2 => github.com/vogler75/mochi-mqtt-server v2.7.10-monstermq.1
 ```
+
+`go.sum` will pin the fork commit's content hash, making the build
+reproducible.
 
 ### 3. Verify
 
@@ -95,7 +105,7 @@ Then sanity-check that the fork is in fact what's being compiled:
 ```bash
 go list -m all | grep mochi
 # expect:
-#   github.com/mochi-mqtt/server/v2 v2.7.9 => github.com/vogler75/mochi-mqtt-server/v2 v2.7.10-monstermq.1
+#   github.com/mochi-mqtt/server/v2 v2.7.9 => github.com/vogler75/mochi-mqtt-server v2.7.10-monstermq.1
 ```
 
 ### 4. Commit
@@ -128,7 +138,7 @@ git push origin main v2.7.11-monstermq.1
 Then in `broker.go/`:
 
 ```bash
-go get github.com/vogler75/mochi-mqtt-server/v2@v2.7.11-monstermq.1
+go mod edit -replace github.com/mochi-mqtt/server/v2=github.com/vogler75/mochi-mqtt-server@v2.7.11-monstermq.1
 go mod tidy
 go test ./... -count=1
 ```
