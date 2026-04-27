@@ -175,7 +175,7 @@ func New(cfg *config.Config, logger *slog.Logger, logBus *mlog.Bus) (*Server, er
 	// 8. GraphQL server (HTTP + WebSocket)
 	var gqlSrv *gql.Server
 	if cfg.GraphQL.Enabled {
-		resolver := resolvers.New(cfg, storage, bus, archives, authCache, collector, logBus, logger, publishFn)
+		resolver := resolvers.New(cfg, storage, bus, archives, bridges, authCache, collector, logBus, logger, publishFn)
 		gqlSrv = gql.NewServer(cfg, resolver, logger)
 		if cfg.Dashboard.Enabled {
 			gqlSrv.AttachDashboard(gql.DashboardHandler(cfg.Dashboard.Path))

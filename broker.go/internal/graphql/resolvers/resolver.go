@@ -11,6 +11,7 @@ import (
 
 	"monstermq.io/edge/internal/archive"
 	"monstermq.io/edge/internal/auth"
+	"monstermq.io/edge/internal/bridge/mqttclient"
 	"monstermq.io/edge/internal/config"
 	"monstermq.io/edge/internal/graphql/generated"
 	mlog "monstermq.io/edge/internal/log"
@@ -27,6 +28,7 @@ type Resolver struct {
 	Storage   *stores.Storage
 	Bus       *pubsub.Bus
 	Archives  *archive.Manager
+	Bridges   *mqttclient.Manager
 	AuthCache *auth.Cache
 	Collector *metrics.Collector
 	LogBus    *mlog.Bus
@@ -39,13 +41,15 @@ type Resolver struct {
 }
 
 func New(cfg *config.Config, storage *stores.Storage, bus *pubsub.Bus, archives *archive.Manager,
-	authCache *auth.Cache, collector *metrics.Collector, logBus *mlog.Bus, logger *slog.Logger,
+	bridges *mqttclient.Manager, authCache *auth.Cache, collector *metrics.Collector,
+	logBus *mlog.Bus, logger *slog.Logger,
 	publish func(string, []byte, bool, byte) error) *Resolver {
 	return &Resolver{
 		Cfg:       cfg,
 		Storage:   storage,
 		Bus:       bus,
 		Archives:  archives,
+		Bridges:   bridges,
 		AuthCache: authCache,
 		Collector: collector,
 		LogBus:    logBus,
@@ -1341,6 +1345,7 @@ func (r *mqttClientMutationsResolver) Create(ctx context.Context, _ *generated.M
 	if saved == nil {
 		saved = &d
 	}
+	r.reloadBridges(ctx, "create")
 	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*saved)}, nil
 }
 func (r *mqttClientMutationsResolver) Update(ctx context.Context, obj *generated.MqttClientMutations, name string, input generated.MqttClientInput) (*generated.MqttClientResult, error) {
@@ -1353,6 +1358,7 @@ func (r *mqttClientMutationsResolver) Delete(ctx context.Context, _ *generated.M
 	if err := r.Storage.DeviceConfig.Delete(ctx, name); err != nil {
 		return false, nil
 	}
+	r.reloadBridges(ctx, "delete")
 	return true, nil
 }
 func (r *mqttClientMutationsResolver) Start(ctx context.Context, _ *generated.MqttClientMutations, name string) (*generated.MqttClientResult, error) {
@@ -1369,6 +1375,7 @@ func (r *mqttClientMutationsResolver) Reassign(ctx context.Context, _ *generated
 	if err != nil || d == nil {
 		return &generated.MqttClientResult{Success: false, Errors: []string{"not found"}}, nil
 	}
+	r.reloadBridges(ctx, "reassign")
 	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
 }
 func (r *mqttClientMutationsResolver) toggleDevice(ctx context.Context, name string, enabled bool) (*generated.MqttClientResult, error) {
@@ -1376,7 +1383,20 @@ func (r *mqttClientMutationsResolver) toggleDevice(ctx context.Context, name str
 	if err != nil || d == nil {
 		return &generated.MqttClientResult{Success: false, Errors: []string{"not found"}}, nil
 	}
+	r.reloadBridges(ctx, "toggle")
 	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
+}
+
+// reloadBridges asks the bridge manager to reconcile against the persisted
+// device set. Best-effort: a failure logs at WARN but doesn't fail the
+// caller's mutation, since the config itself was already saved.
+func (r *Resolver) reloadBridges(ctx context.Context, reason string) {
+	if r.Bridges == nil {
+		return
+	}
+	if err := r.Bridges.Reload(ctx); err != nil {
+		r.Logger.Warn("bridge reload after "+reason+" failed", "err", err)
+	}
 }
 
 // AddAddress / UpdateAddress / DeleteAddress mutate the addresses array
@@ -1447,6 +1467,7 @@ func (r *mqttClientMutationsResolver) mutateAddresses(ctx context.Context, devic
 	if err := r.Storage.DeviceConfig.Save(ctx, *d); err != nil {
 		return &generated.MqttClientResult{Success: false, Errors: []string{err.Error()}}, nil
 	}
+	r.reloadBridges(ctx, "address change")
 	return &generated.MqttClientResult{Success: true, Errors: []string{}, Client: r.deviceToMqttClient(*d)}, nil
 }
 

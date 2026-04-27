@@ -12,14 +12,18 @@ import (
 	paho "github.com/eclipse/paho.mqtt.golang"
 )
 
-// Address is one inbound or outbound mapping rule.
+// Address is one inbound or outbound mapping rule. Field shapes mirror the
+// dashboard's MqttClientAddressInput.
 type Address struct {
 	Mode        string `json:"mode"`        // SUBSCRIBE | PUBLISH
 	RemoteTopic string `json:"remoteTopic"` // topic on the remote broker
 	LocalTopic  string `json:"localTopic"`  // topic on the local broker
 	QoS         int    `json:"qos"`
 	Retain      bool   `json:"retain"`
-	RemovePath  string `json:"removePath"` // optional prefix to strip from inbound topics
+	// RemovePath: when true, strip the literal prefix of the source-side topic
+	// pattern (everything before the first + or #) from the matched topic
+	// before mapping to the destination side.
+	RemovePath bool `json:"removePath"`
 }
 
 // Config is the persisted JSON config (DeviceConfig.Config) for one bridge.
@@ -157,14 +161,22 @@ func (c *Connector) subscribeInbound() {
 	}
 }
 
+// mapInboundTopic maps an incoming topic from the remote broker to the local
+// topic to publish under, respecting the address's removePath flag and the
+// LocalTopic prefix (if it has no wildcards).
 func mapInboundTopic(a Address, remoteTopic string) string {
 	t := remoteTopic
-	if a.RemovePath != "" {
-		t = strings.TrimPrefix(t, a.RemovePath)
-		t = strings.TrimPrefix(t, "/")
+	if a.RemovePath {
+		if prefix := literalPrefix(a.RemoteTopic); prefix != "" {
+			t = strings.TrimPrefix(t, prefix)
+			t = strings.TrimPrefix(t, "/")
+		}
 	}
 	if a.LocalTopic == "" || strings.ContainsAny(a.LocalTopic, "+#") {
 		return t
+	}
+	if t == "" {
+		return strings.TrimRight(a.LocalTopic, "/")
 	}
 	return strings.TrimRight(a.LocalTopic, "/") + "/" + t
 }
@@ -224,19 +236,40 @@ func pickAddress(filters map[string]Address, topic string) Address {
 	return Address{}
 }
 
+// mapOutboundTopic maps a locally-published topic to the topic to forward to
+// the remote broker.
 func mapOutboundTopic(a Address, localTopic string) string {
-	if a.RemovePath != "" {
-		t := strings.TrimPrefix(localTopic, a.RemovePath)
-		t = strings.TrimPrefix(t, "/")
-		if a.RemoteTopic == "" || strings.ContainsAny(a.RemoteTopic, "+#") {
-			return t
+	t := localTopic
+	if a.RemovePath {
+		if prefix := literalPrefix(a.LocalTopic); prefix != "" {
+			t = strings.TrimPrefix(t, prefix)
+			t = strings.TrimPrefix(t, "/")
 		}
-		return strings.TrimRight(a.RemoteTopic, "/") + "/" + t
 	}
 	if a.RemoteTopic == "" || strings.ContainsAny(a.RemoteTopic, "+#") {
-		return localTopic
+		return t
 	}
-	return a.RemoteTopic
+	if t == "" {
+		return strings.TrimRight(a.RemoteTopic, "/")
+	}
+	return strings.TrimRight(a.RemoteTopic, "/") + "/" + t
+}
+
+// literalPrefix returns the longest literal prefix of an MQTT topic pattern —
+// i.e. everything up to but not including the first wildcard segment.
+//
+//	"sensor/#"        → "sensor"
+//	"a/b/+/c"         → "a/b"
+//	"+/x"             → ""
+//	"plain/topic"     → "plain/topic"
+func literalPrefix(pattern string) string {
+	parts := strings.Split(pattern, "/")
+	for i, p := range parts {
+		if p == "+" || p == "#" {
+			return strings.Join(parts[:i], "/")
+		}
+	}
+	return pattern
 }
 
 func (c *Connector) Stop() {
