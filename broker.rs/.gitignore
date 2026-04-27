@@ -1,0 +1,27 @@
+# Rust build output
+/target/
+
+# Cargo lock — keep for binaries (this is a binary crate). Uncomment to ignore for libraries.
+# Cargo.lock
+
+# Local data / runtime artifacts
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Backup / temp
+*.bak
+*.orig
+*.rej

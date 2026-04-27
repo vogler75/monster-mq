@@ -1,0 +1,78 @@
+[package]
+name = "monstermq-edge"
+version = "0.1.0"
+edition = "2021"
+description = "MonsterMQ Edge — single-binary MQTT broker with GraphQL API (Rust port of broker.go)"
+license = "Apache-2.0"
+
+[[bin]]
+name = "monstermq-edge"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+async-stream = "0.3"
+async-trait = "0.1"
+parking_lot = "0.12"
+
+# CLI / config
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+
+# Logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
+tracing-core = "0.1"
+
+# Storage
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio", "sqlite", "macros"] }
+
+# Auth
+bcrypt = "0.15"
+
+# IDs
+uuid = { version = "1", features = ["v4"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Base64
+base64 = "0.22"
+
+# Regex
+regex = "1"
+
+# Web / GraphQL
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = "0.9"
+async-graphql = { version = "7", features = ["chrono"] }
+async-graphql-axum = "7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+
+# MQTT broker (embedded) and MQTT client (for the bridge)
+rumqttd = "0.19"
+rumqttc = "0.24"
+
+# TLS
+rustls = "0.22"
+rustls-pemfile = "2"
+tokio-rustls = "0.25"
+
+# Misc
+thiserror = "1"
+anyhow = "1"
+once_cell = "1"
+bytes = "1"
+hex = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

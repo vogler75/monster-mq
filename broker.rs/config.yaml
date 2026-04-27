@@ -1,0 +1,44 @@
+NodeId: edge-rs-01
+
+TCP:  { Enabled: true,  Port: 1883 }
+TCPS: { Enabled: false, Port: 8883, KeyStorePath: "", KeyStorePassword: "" }
+WS:   { Enabled: false, Port: 1884 }    # rumqttd ws listener — TODO
+WSS:  { Enabled: false, Port: 8884 }    # rumqttd wss listener — TODO
+MaxMessageSize: 1048576
+
+DefaultStoreType:  SQLITE          # SQLITE (POSTGRES / MONGODB are TODO in broker.rs)
+#SessionStoreType:  SQLITE
+#RetainedStoreType: SQLITE
+#ConfigStoreType:   SQLITE
+
+SQLite:   { Path: ./data/monstermq.db }
+Postgres: { Url: "postgres://192.168.1.35:5432/monster-edge", User: "", Pass: "" }
+MongoDB:  { Url:  "mongodb://192.168.1.35:27017", Database: monster-edge }
+
+UserManagement:
+  Enabled: false
+  PasswordAlgorithm: BCRYPT
+  AnonymousEnabled: true
+  AclCacheEnabled: true
+
+Metrics:
+  Enabled: true
+  CollectionIntervalSeconds: 1
+  RetentionHours: 168
+
+Logging:
+  Level: INFO
+  MqttSyslogEnabled: false
+  RingBufferSize: 1000
+
+GraphQL:   { Enabled: true, Port: 8080 }
+Dashboard: { Enabled: true, Path: "" }    # Path = optional dir to dashboard/dist
+
+# Top-level Features block — same shape as the main broker
+# (broker/src/main/kotlin/Features.kt). Each known feature defaults to true
+# when missing. broker.rs (edge profile) only acts on MqttClient; the other
+# keys are accepted for config-parity with the JVM broker but are no-ops here.
+Features:
+  MqttClient: true
+
+QueuedMessagesEnabled: true
