@@ -41,3 +41,6 @@ dashboard/src/svg
 .venv/
 __pycache__/
 .pytest_cache/
+
+### Test environment ###
+tests/.env
