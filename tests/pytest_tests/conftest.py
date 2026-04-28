@@ -1,10 +1,37 @@
 """
 Pytest configuration and shared fixtures for Monster-MQ tests.
+
+Environment variables for skipping test groups:
+  SKIP_MQTT3=1, SKIP_MQTT5=1, SKIP_GRAPHQL=1, SKIP_OPCUA=1,
+  SKIP_DATABASE=1, SKIP_FLOW=1, SKIP_REST=1, SKIP_QUEUING=1,
+  SKIP_LATENCY=1, SKIP_I3X=1
 """
 import os
 import time
 import pytest
 import paho.mqtt.client as mqtt
+
+
+# --- Test group skip logic ---
+_SKIP_DIRS = {
+    "mqtt3": os.getenv("SKIP_MQTT3", "0") == "1",
+    "mqtt5": os.getenv("SKIP_MQTT5", "0") == "1",
+    "graphql": os.getenv("SKIP_GRAPHQL", "0") == "1",
+    "opcua": os.getenv("SKIP_OPCUA", "0") == "1",
+    "database": os.getenv("SKIP_DATABASE", "0") == "1",
+    "flow": os.getenv("SKIP_FLOW", "0") == "1",
+    "rest": os.getenv("SKIP_REST", "0") == "1",
+    "queuing": os.getenv("SKIP_QUEUING", "0") == "1",
+    "latency": os.getenv("SKIP_LATENCY", "0") == "1",
+    "i3x": os.getenv("SKIP_I3X", "0") == "1",
+}
+
+
+def pytest_ignore_collect(collection_path, config):
+    """Skip entire test directories based on SKIP_<GROUP>=1 env vars."""
+    for dirname, should_skip in _SKIP_DIRS.items():
+        if should_skip and f"/{dirname}/" in str(collection_path) + "/":
+            return True
 from paho.mqtt.client import CallbackAPIVersion
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
