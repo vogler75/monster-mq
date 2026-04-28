@@ -445,20 +445,16 @@ Recorded so we don't keep re-auditing.
 
 ## 7. Suggested execution order
 
-1. **P0**: §5.1 (archive bounding) — silently dropping data under load
-   is the only currently-known data-loss path.
-2. **P1, fast wins first**: §5.2 (purgeInterval) → §5.8
-   (createdAt/updatedAt) → §5.11 (metrics retention) — small, surgical.
-3. **P1 features**: §5.3 (getAggregatedHistory) → §5.4 (per-session and
-   per-bridge metrics) — these unlock dashboard pages.
-4. **P1 security**: §5.6 (token auth) — needed before any production
-   deployment with user management on.
-5. **P2**: §5.5 (offline buffer), §5.7 (PG/Mongo tests), §5.9 (slog
-   extraction).
-6. **P3**: §5.10 (MQTT syslog), §5.12 (inline mochi).
+**Done**: §5.1 (P0), §5.2, §5.5, §5.8, §5.11.
 
-Total: ~1,500 lines of production Go + ~400 lines of tests across all
-P0–P2 items, parallelizable.
+**Remaining**:
+
+1. **P1 features**: §5.3 (getAggregatedHistory) → §5.4 (per-session and
+   per-bridge metrics) — these unlock dashboard pages.
+2. **P1 security**: §5.6 (token auth) — needed before any production
+   deployment with user management on.
+3. **P2**: §5.7 (PG/Mongo tests), §5.9 (slog extraction).
+4. **P3**: §5.10 (MQTT syslog), §5.12 (inline mochi).
 
 ---
 
