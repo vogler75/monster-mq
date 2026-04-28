@@ -2,161 +2,110 @@
 
 ## Setup
 
-1. **Install dependencies:**
+1. **Create a virtual environment and install dependencies:**
    ```bash
    cd tests
+   python -m venv .venv
+   source .venv/bin/activate
    pip install -r requirements.txt
    ```
 
-2. **Ensure broker is running:**
+2. **Configure the environment:**
+   ```bash
+   cp .env-example .env
+   # edit .env to match your broker
+   ```
+
+3. **Ensure the broker is running:**
    ```bash
    cd ../broker
-   ./run.sh  # or run.bat on Windows
+   ./run.sh
    ```
 
 ## Running Tests
 
-### Run all tests:
+Use `run.sh` which automatically loads `.env`:
+
 ```bash
-pytest
+./run.sh -h                                    # show help
+./run.sh -a                                    # run all tests
+./run.sh pytest_tests/mqtt3/                   # run one directory
+./run.sh pytest_tests/mqtt3/test_basic_pubsub.py                        # run one file
+./run.sh pytest_tests/mqtt3/test_basic_pubsub.py::test_basic_pubsub_qos0  # run one test
 ```
 
-### Run specific test file:
+### Skip test groups
+
+Set `SKIP_<GROUP>=1` in `.env` or inline:
+
 ```bash
-pytest pytest_tests/mqtt5/test_mqtt5_rap_pytest.py
+SKIP_GRAPHQL=1 ./run.sh -a
+SKIP_MQTT3=1 SKIP_MQTT5=1 ./run.sh -a
 ```
 
-### Run by category:
+Available groups: `MQTT3`, `MQTT5`, `GRAPHQL`, `REST`, `OPCUA`, `DATABASE`, `FLOW`, `QUEUING`, `LATENCY`, `I3X`.
+
+### Run tests by marker
+
 ```bash
-pytest pytest_tests/mqtt3/       # MQTT v3.1.1 tests
-pytest pytest_tests/mqtt5/       # MQTT v5 tests
-pytest pytest_tests/graphql/     # GraphQL API tests
-pytest pytest_tests/opcua/       # OPC UA tests
-pytest pytest_tests/database/    # Database backend tests
-pytest pytest_tests/rest/        # REST API tests
-pytest pytest_tests/latency/     # Latency tests
-pytest pytest_tests/queuing/     # Persistent queue tests
+./run.sh -m mqtt5
+./run.sh -m "mqtt5 and not slow"
+./run.sh -m subscription_options
 ```
 
-### Run tests by marker:
+### Useful pytest flags
+
 ```bash
-pytest -m mqtt5                    # All MQTT v5 tests
-pytest -m subscription_options     # Subscription option tests only
-pytest -m "mqtt5 and not slow"     # MQTT v5 tests excluding slow ones
+./run.sh -a -x            # stop on first failure
+./run.sh -a --maxfail=3   # stop after 3 failures
+./run.sh -a -s            # show print statements
+./run.sh -a --lf          # rerun only last failed tests
+./run.sh -a -n auto       # parallel execution (requires pytest-xdist)
 ```
 
-### Run tests with keyword matching:
-```bash
-pytest -k "rap"                    # Tests with "rap" in name
-pytest -k "retain"                 # Tests with "retain" in name
-```
+### Generate reports
 
-### Parallel execution (faster):
 ```bash
-pytest -n auto                     # Use all CPU cores
-pytest -n 4                        # Use 4 workers
-```
-
-### Verbose output:
-```bash
-pytest -v                          # Verbose
-pytest -vv                         # Extra verbose
-pytest -s                          # Show print statements
-```
-
-### Generate reports:
-```bash
-pytest --html=report.html          # HTML report
-pytest --cov=. --cov-report=html   # Coverage report
-pytest --junit-xml=results.xml     # JUnit XML (for CI/CD)
-```
-
-### Stop on first failure:
-```bash
-pytest -x                          # Stop on first failure
-pytest --maxfail=3                 # Stop after 3 failures
+./run.sh -a --junit-xml=results.xml     # JUnit XML (for CI/CD)
+./run.sh -a --html=report.html          # HTML report (requires pytest-html)
 ```
 
 ## Test Organization
 
-### Fixtures (conftest.py)
-- `broker_config` - Broker connection settings
-- `mqtt_client` - Unconfigured MQTT v5 client
-- `connected_client` - Connected client with loop started
-- `clean_topic` - Auto-cleanup for retained messages
-- `message_collector` - Helper for collecting/waiting for messages
+```
+pytest_tests/
+  mqtt3/        MQTT v3.1.1 tests
+  mqtt5/        MQTT v5 tests
+  graphql/      GraphQL HTTP and WebSocket tests
+  rest/         REST API tests
+  opcua/        OPC UA tests
+  database/     Database backend tests
+  flow/         Flow engine end-to-end tests
+  queuing/      Persistent queue tests
+  latency/      Latency tests
+  i3x/          i3X API tests
 
-### Test Files
-- `pytest_tests/mqtt5/test_mqtt5_rap_pytest.py` - Retain As Published tests
-- `pytest_tests/mqtt5/test_mqtt5_*.py` - MQTT v5 protocol tests
-- `pytest_tests/mqtt3/test_*.py` - MQTT v3.1.1 protocol tests
-- `pytest_tests/graphql/test_*.py` - GraphQL HTTP and WebSocket tests
-- `pytest_tests/rest/test_*.py` - REST API tests
-- `pytest_tests/opcua/test_*.py` - OPC UA tests
-- `pytest_tests/database/test_*.py` - Database/backend tests
-- `pytest_tests/latency/test_*.py` - Latency tests
-- `pytest_tests/queuing/test_*.py` - Persistent queue tests
-
-## Example Test Structure
-
-```python
-import pytest
-
-@pytest.mark.mqtt5
-@pytest.mark.subscription_options
-def test_my_feature(connected_client, message_collector, clean_topic):
-    topic = clean_topic("test/my/topic")
-    
-    # Setup callbacks
-    connected_client.on_message = message_collector.on_message
-    
-    # Subscribe
-    connected_client.subscribe(topic, qos=1)
-    
-    # Publish
-    connected_client.publish(topic, "test_message", qos=1)
-    
-    # Wait and verify
-    assert message_collector.wait_for_messages(1)
-    assert message_collector.messages[0]['payload'] == "test_message"
+other_tests/
+  latency-rs/   Rust-based latency test tool
+  queuing/      Standalone queue producer/consumer scripts
 ```
 
-## Comparing: Old vs New
+## Shared Fixtures (conftest.py)
 
-### Old way (standalone script):
-```bash
-python test_mqtt5_retain_as_published.py
-```
-- Manual test discovery
-- Repetitive setup code
-- All tests run even if one fails
-- No parallel execution
-
-### New way (pytest):
-```bash
-pytest pytest_tests/mqtt5/test_mqtt5_rap_pytest.py -v
-```
-- Automatic test discovery
-- Shared fixtures (less code)
-- Stop on failure with `-x`
-- Parallel execution with `-n auto`
-- Better reporting
+| Fixture            | Description                                      |
+|--------------------|--------------------------------------------------|
+| `broker_config`    | Broker connection settings from env vars         |
+| `mqtt_client`      | Unconfigured MQTT v5 client                      |
+| `connected_client` | Connected MQTT v5 client with loop started       |
+| `clean_topic`      | Auto-clears retained messages after the test     |
+| `message_collector`| Helper for collecting and waiting for messages   |
 
 ## CI/CD Integration
 
 ```yaml
-# Example GitHub Actions workflow
 - name: Run tests
   run: |
     cd tests
     pip install -r requirements.txt
-    pytest --junit-xml=results.xml --html=report.html
+    ./run.sh -a --junit-xml=results.xml
 ```
-
-## Tips
-
-- Use `-v` for verbose output to see individual test names
-- Use `--tb=short` for concise error messages
-- Use `-k` for quick test filtering during development
-- Use `--lf` to rerun only last failed tests
-- Use `--sw` to stepwise run (stop at first failure, resume from there)
