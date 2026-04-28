@@ -14,13 +14,5 @@
     "tls": true,
     "endpoint": "/graphql",
     "default": false
-  },
-  {
-    "name": "Edge",
-    "host": "localhost",
-    "port": 8080,
-    "tls": false,
-    "endpoint": "/graphql",
-    "default": false
   }
 ]

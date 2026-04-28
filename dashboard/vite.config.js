@@ -44,7 +44,7 @@ function buildProxyConfig() {
       };
     }
   } catch (e) {
-    console.warn('Could not read brokers.json:', e.message);
+    console.warn('brokers.json not found — using local broker only. Copy src/config/brokers.json.example to src/config/brokers.json to add remote brokers.');
   }
   // Local broker: proxy /graphql and /graphqlws to localhost:4000
   proxy['/graphql'] = {
