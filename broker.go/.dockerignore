@@ -1,8 +1,0 @@
-bin/
-data/
-test/
-*.db
-*.db-shm
-*.db-wal
-.git/
-.gitignore

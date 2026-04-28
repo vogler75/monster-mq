@@ -1,8 +1,0 @@
-bin/
-data/
-*.db
-*.db-shm
-*.db-wal
-.idea/
-.vscode/
-config.yaml
