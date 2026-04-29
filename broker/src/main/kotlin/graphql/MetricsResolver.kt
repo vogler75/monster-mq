@@ -1154,37 +1154,19 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            fun fetchLive() {
-                // Fallback to live event bus metrics (no history) if store missing or empty
-                val addr = at.rocworks.bus.EventBusAddresses.WinCCUaBridge.connectorMetrics(clientName)
-                vertx.eventBus().request<io.vertx.core.json.JsonObject>(addr, io.vertx.core.json.JsonObject()).onComplete { reply ->
-                    if (reply.succeeded()) {
-                        val body = reply.result().body()
-                        val inRate = body.getDouble("messagesInRate", 0.0)
-                        val connected = body.getBoolean("connected", false)
-                        future.complete(listOf(WinCCUaClientMetrics(round2(inRate), connected, TimestampConverter.currentTimeIsoString())))
-                    } else {
-                        future.complete(listOf(WinCCUaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
-                    }
+            // Always query the live event bus for the current state. The metrics store is only
+            // used for historical queries (winCCUaClientMetricsHistory). Stale store data would
+            // incorrectly show "Connected" after the connector is stopped.
+            val addr = at.rocworks.bus.EventBusAddresses.WinCCUaBridge.connectorMetrics(clientName)
+            vertx.eventBus().request<io.vertx.core.json.JsonObject>(addr, io.vertx.core.json.JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val inRate = body.getDouble("messagesInRate", 0.0)
+                    val connected = body.getBoolean("connected", false)
+                    future.complete(listOf(WinCCUaClientMetrics(round2(inRate), connected, TimestampConverter.currentTimeIsoString())))
+                } else {
+                    future.complete(listOf(WinCCUaClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
                 }
-            }
-
-            if (metricsStore != null) {
-                metricsStore.getWinCCUaClientMetricsList(clientName, null, null, 1).onComplete { result ->
-                    if (result.succeeded()) {
-                        val list = result.result()
-                        if (list.isNotEmpty()) {
-                            val m = list.first()
-                            future.complete(listOf(WinCCUaClientMetrics(round2(m.messagesIn), m.connected, m.timestamp)))
-                        } else {
-                            fetchLive()
-                        }
-                    } else {
-                        fetchLive()
-                    }
-                }
-            } else {
-                fetchLive()
             }
 
             future
