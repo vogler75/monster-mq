@@ -58,9 +58,11 @@ class WinCCUaClientManager {
                             timestamp
                         }
                         config {
+                            dataAccessMode
                             graphqlEndpoint
                             websocketEndpoint
                             username
+                            pipePath
                             reconnectDelay
                             connectionTimeout
                             messageFormat
@@ -150,16 +152,22 @@ class WinCCUaClientManager {
             const connectionClass = connected ? 'status-connected' : 'status-disconnected';
             const connectionText = connected ? 'Connected' : 'Disconnected';
 
+            const dataAccessMode = client.config.dataAccessMode || 'GRAPHQL';
+            const endpointDisplay = dataAccessMode === 'OPENPIPE'
+                ? (client.config.pipePath || 'OS-default pipe')
+                : (client.config.graphqlEndpoint || '');
+            const modeBadge = dataAccessMode === 'OPENPIPE' ? 'Open Pipe' : 'GraphQL';
+
             row.innerHTML = `
                 <td>
                     <div class="client-name">${this.escapeHtml(client.name)}</div>
                     <small class="client-namespace">${this.escapeHtml(client.namespace)}</small>
                 </td>
                 <td>
-                    <div class="endpoint-url" title="${this.escapeHtml(client.config.graphqlEndpoint)}">
-                        ${this.escapeHtml(client.config.graphqlEndpoint)}
+                    <div class="endpoint-url" title="${this.escapeHtml(endpointDisplay)}">
+                        ${this.escapeHtml(endpointDisplay)}
                     </div>
-                    <small class="message-format">Format: ${this.escapeHtml(client.config.messageFormat)}</small>
+                    <small class="message-format">${this.escapeHtml(modeBadge)} · Format: ${this.escapeHtml(client.config.messageFormat)}</small>
                 </td>
                 <td>${this.escapeHtml(client.namespace)}</td>
                 <td>

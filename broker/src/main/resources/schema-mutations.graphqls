@@ -1103,14 +1103,18 @@ input WinCCUaTransformConfigInput {
 }
 
 input WinCCUaConnectionConfigInput {
-    # GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
-    graphqlEndpoint: String!
+    # Data-access mode (GRAPHQL = HTTP+WebSocket, OPENPIPE = local named pipe). Defaults to GRAPHQL.
+    dataAccessMode: WinCCUaDataAccessMode = GRAPHQL
+    # GraphQL endpoint URL (required for GRAPHQL mode, ignored for OPENPIPE mode)
+    graphqlEndpoint: String
     # WebSocket endpoint URL (optional, defaults to graphqlEndpoint with ws:// protocol)
     websocketEndpoint: String
-    # Username for authentication (required)
-    username: String!
-    # Password for authentication (required)
-    password: String!
+    # Username for authentication (required for GRAPHQL mode)
+    username: String
+    # Password for authentication (required for GRAPHQL mode)
+    password: String
+    # Optional override for the OpenPipe path; defaults by OS when null
+    pipePath: String
     # Delay between reconnection attempts in milliseconds
     reconnectDelay: Long = 5000
     # Connection timeout in milliseconds
@@ -1138,6 +1142,8 @@ input WinCCUaAddressInput {
     systemNames: [String!]
     # Filter string for ACTIVE_ALARMS type
     filterString: String
+    # OpenPipe TAG_VALUES publish mode: SINGLE (one subscription per tag, topic/<tagName>) or BULK (all tags, full JSON to topic)
+    pipeTagMode: String = "SINGLE"
 }
 
 input WinCCUaClientInput {

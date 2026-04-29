@@ -26,9 +26,17 @@ data class WinCCUaAddress(
 
     // For ACTIVE_ALARMS type
     val systemNames: List<String>? = null,   // Optional system names filter for alarms
-    val filterString: String? = null         // Optional filter string for alarms
+    val filterString: String? = null,        // Optional filter string for alarms
+
+    // OpenPipe TAG_VALUES only — controls how tag notifications are mapped to MQTT topics.
+    // BULK    : one MQTT message per notification on address.topic; payload = full NotifySubscribeTag JSON.
+    // PER_TAG : one MQTT message per changed tag on address.topic/<transformedTagName>; payload = formatted value.
+    val pipeTagMode: String = PIPE_TAG_MODE_SINGLE
 ) {
     companion object {
+        const val PIPE_TAG_MODE_SINGLE = "SINGLE"
+        const val PIPE_TAG_MODE_BULK   = "BULK"
+
         fun fromJsonObject(json: JsonObject): WinCCUaAddress {
             val typeStr = json.getString("type", "TAG_VALUES")
             val type = try {
@@ -51,7 +59,8 @@ data class WinCCUaAddress(
                 nameFilters = nameFiltersList,
                 includeQuality = json.getBoolean("includeQuality", false),
                 systemNames = systemNamesList,
-                filterString = json.getString("filterString")
+                filterString = json.getString("filterString"),
+                pipeTagMode = json.getString("pipeTagMode", PIPE_TAG_MODE_SINGLE)
             )
         }
     }
@@ -69,6 +78,7 @@ data class WinCCUaAddress(
 
         if (type == WinCCUaAddressType.TAG_VALUES) {
             obj.put("includeQuality", includeQuality)
+            obj.put("pipeTagMode", pipeTagMode)
         }
 
         if (systemNames != null) {
@@ -203,20 +213,28 @@ enum class WinCCUaMessageFormat {
  * WinCC Unified connection configuration parameters
  */
 data class WinCCUaConnectionConfig(
-    val graphqlEndpoint: String,                            // GraphQL endpoint URL (e.g., "http://winccua:4000/graphql")
-    val websocketEndpoint: String? = null,                  // WebSocket endpoint URL (e.g., "ws://winccua:4000/graphql"), defaults to graphqlEndpoint with ws:// protocol
-    val username: String,                                   // Username for authentication (required)
-    val password: String,                                   // Password for authentication (required)
-    val reconnectDelay: Long = 5000,                        // Reconnection delay in ms
-    val connectionTimeout: Long = 10000,                    // Connection timeout in ms
-    val addresses: List<WinCCUaAddress> = emptyList(),      // Configured addresses (subscriptions)
-    val transformConfig: WinCCUaTransformConfig = WinCCUaTransformConfig(), // Topic transformation rules
-    val messageFormat: String = "JSON_ISO"                  // Message format (JSON_ISO, JSON_MS, RAW_VALUE)
+    val graphqlEndpoint: String,                            // GraphQL endpoint URL (required for GRAPHQL mode)
+    val websocketEndpoint: String? = null,                  // WebSocket endpoint URL (defaults to graphqlEndpoint with ws://)
+    val username: String,                                   // Username (required for GRAPHQL mode)
+    val password: String,                                   // Password (required for GRAPHQL mode)
+    val reconnectDelay: Long = 5000,
+    val connectionTimeout: Long = 10000,
+    val addresses: List<WinCCUaAddress> = emptyList(),
+    val transformConfig: WinCCUaTransformConfig = WinCCUaTransformConfig(),
+    val messageFormat: String = "JSON_ISO",
+    val dataAccessMode: String = "GRAPHQL",                 // "GRAPHQL" or "OPENPIPE"
+    val pipePath: String? = null                            // Optional override for OpenPipe path; OS default if null
 ) {
     companion object {
         const val FORMAT_JSON_ISO = "JSON_ISO"
         const val FORMAT_JSON_MS = "JSON_MS"
         const val FORMAT_RAW_VALUE = "RAW_VALUE"
+
+        const val MODE_GRAPHQL = "GRAPHQL"
+        const val MODE_OPENPIPE = "OPENPIPE"
+
+        const val DEFAULT_PIPE_PATH_WINDOWS = "\\\\.\\pipe\\HmiRuntime"
+        const val DEFAULT_PIPE_PATH_LINUX = "/tmp/HmiRuntime"
 
         fun fromJsonObject(json: JsonObject): WinCCUaConnectionConfig {
             try {
@@ -241,13 +259,15 @@ data class WinCCUaConnectionConfig(
                 return WinCCUaConnectionConfig(
                     graphqlEndpoint = json.getString("graphqlEndpoint", "http://winccua:4000/graphql"),
                     websocketEndpoint = json.getString("websocketEndpoint"),
-                    username = json.getString("username") ?: throw IllegalArgumentException("username is required"),
-                    password = json.getString("password") ?: throw IllegalArgumentException("password is required"),
+                    username = json.getString("username") ?: "",
+                    password = json.getString("password") ?: "",
                     reconnectDelay = json.getLong("reconnectDelay", 5000),
                     connectionTimeout = json.getLong("connectionTimeout", 10000),
                     addresses = addresses,
                     transformConfig = transformConfig,
-                    messageFormat = json.getString("messageFormat", FORMAT_JSON_ISO)
+                    messageFormat = json.getString("messageFormat", FORMAT_JSON_ISO),
+                    dataAccessMode = json.getString("dataAccessMode", MODE_GRAPHQL),
+                    pipePath = json.getString("pipePath")
                 )
             } catch (e: Exception) {
                 println("Overall error in WinCCUaConnectionConfig.fromJsonObject: ${e.message}")
@@ -266,6 +286,11 @@ data class WinCCUaConnectionConfig(
             .put("connectionTimeout", connectionTimeout)
             .put("transformConfig", transformConfig.toJsonObject())
             .put("messageFormat", messageFormat)
+            .put("dataAccessMode", dataAccessMode)
+
+        if (pipePath != null) {
+            result.put("pipePath", pipePath)
+        }
 
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {
@@ -282,20 +307,30 @@ data class WinCCUaConnectionConfig(
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
 
-        if (graphqlEndpoint.isBlank()) {
-            errors.add("graphqlEndpoint cannot be blank")
+        if (dataAccessMode !in listOf(MODE_GRAPHQL, MODE_OPENPIPE)) {
+            errors.add("dataAccessMode must be one of: $MODE_GRAPHQL, $MODE_OPENPIPE")
         }
 
-        if (!graphqlEndpoint.startsWith("http://") && !graphqlEndpoint.startsWith("https://")) {
-            errors.add("graphqlEndpoint must start with http:// or https://")
-        }
+        if (dataAccessMode == MODE_GRAPHQL) {
+            if (graphqlEndpoint.isBlank()) {
+                errors.add("graphqlEndpoint cannot be blank")
+            }
 
-        if (username.isBlank()) {
-            errors.add("username cannot be blank")
-        }
+            if (!graphqlEndpoint.startsWith("http://") && !graphqlEndpoint.startsWith("https://")) {
+                errors.add("graphqlEndpoint must start with http:// or https://")
+            }
 
-        if (password.isBlank()) {
-            errors.add("password cannot be blank")
+            if (username.isBlank()) {
+                errors.add("username cannot be blank")
+            }
+
+            if (password.isBlank()) {
+                errors.add("password cannot be blank")
+            }
+        } else if (dataAccessMode == MODE_OPENPIPE) {
+            if (pipePath != null && pipePath.isBlank()) {
+                errors.add("pipePath cannot be blank (omit it to use the OS default)")
+            }
         }
 
         if (reconnectDelay < 1000) {
@@ -342,5 +377,16 @@ data class WinCCUaConnectionConfig(
             graphqlEndpoint.startsWith("http://") -> "ws://" + graphqlEndpoint.substring(7)
             else -> graphqlEndpoint
         }
+    }
+
+    /**
+     * Resolve the OpenPipe path: explicit override if set, otherwise OS default.
+     */
+    fun resolvePipePath(): String {
+        if (!pipePath.isNullOrBlank()) {
+            return pipePath
+        }
+        val os = System.getProperty("os.name", "").lowercase()
+        return if (os.contains("win")) DEFAULT_PIPE_PATH_WINDOWS else DEFAULT_PIPE_PATH_LINUX
     }
 }

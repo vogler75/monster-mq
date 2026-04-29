@@ -506,6 +506,7 @@ class WinCCUaClientConfigMutations(
                 val includeQuality = inputMap["includeQuality"] as? Boolean ?: false
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
+                val pipeTagMode = inputMap["pipeTagMode"] as? String ?: WinCCUaAddress.PIPE_TAG_MODE_SINGLE
 
                 // Create the address object
                 val address = WinCCUaAddress(
@@ -516,7 +517,8 @@ class WinCCUaClientConfigMutations(
                     nameFilters = nameFilters,
                     includeQuality = includeQuality,
                     systemNames = systemNames,
-                    filterString = filterString
+                    filterString = filterString,
+                    pipeTagMode = pipeTagMode
                 )
 
                 val validationErrors = address.validate()
@@ -657,6 +659,7 @@ class WinCCUaClientConfigMutations(
                 val includeQuality = inputMap["includeQuality"] as? Boolean ?: false
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
+                val pipeTagMode = inputMap["pipeTagMode"] as? String ?: WinCCUaAddress.PIPE_TAG_MODE_SINGLE
 
                 // Create the address object
                 val address = WinCCUaAddress(
@@ -667,7 +670,8 @@ class WinCCUaClientConfigMutations(
                     nameFilters = nameFilters,
                     includeQuality = includeQuality,
                     systemNames = systemNames,
-                    filterString = filterString
+                    filterString = filterString,
+                    pipeTagMode = pipeTagMode
                 )
 
                 val validationErrors = address.validate()
@@ -898,13 +902,15 @@ class WinCCUaClientConfigMutations(
         val config = WinCCUaConnectionConfig(
             graphqlEndpoint = configMap["graphqlEndpoint"] as? String ?: "http://winccua:4000/graphql",
             websocketEndpoint = configMap["websocketEndpoint"] as? String,
-            username = configMap["username"] as? String ?: throw IllegalArgumentException("username is required"),
+            username = configMap["username"] as? String ?: "",
             password = configMap["password"] as? String ?: "",
             reconnectDelay = (configMap["reconnectDelay"] as? Number)?.toLong() ?: 5000L,
             connectionTimeout = (configMap["connectionTimeout"] as? Number)?.toLong() ?: 10000L,
             addresses = emptyList(), // Addresses are managed separately
             transformConfig = transformConfig,
-            messageFormat = configMap["messageFormat"] as? String ?: WinCCUaConnectionConfig.FORMAT_JSON_ISO
+            messageFormat = configMap["messageFormat"] as? String ?: WinCCUaConnectionConfig.FORMAT_JSON_ISO,
+            dataAccessMode = configMap["dataAccessMode"] as? String ?: WinCCUaConnectionConfig.MODE_GRAPHQL,
+            pipePath = configMap["pipePath"] as? String
         )
 
         return DeviceConfigRequest(
@@ -940,9 +946,11 @@ class WinCCUaClientConfigMutations(
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
+                "dataAccessMode" to config.dataAccessMode,
                 "graphqlEndpoint" to config.graphqlEndpoint,
                 "websocketEndpoint" to config.websocketEndpoint,
                 "username" to config.username,
+                "pipePath" to config.pipePath,
                 "reconnectDelay" to config.reconnectDelay,
                 "connectionTimeout" to config.connectionTimeout,
                 "messageFormat" to config.messageFormat,
@@ -964,6 +972,7 @@ class WinCCUaClientConfigMutations(
                     }
                     if (address.type == WinCCUaAddressType.TAG_VALUES) {
                         addressMap["includeQuality"] = address.includeQuality
+                        addressMap["pipeTagMode"] = address.pipeTagMode
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

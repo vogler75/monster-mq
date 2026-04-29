@@ -111,10 +111,12 @@ class WinCCUaClientConfigQueries(
             "namespace" to device.namespace,
             "nodeId" to device.nodeId,
             "config" to mapOf(
+                "dataAccessMode" to config.dataAccessMode,
                 "graphqlEndpoint" to config.graphqlEndpoint,
                 "websocketEndpoint" to (config.websocketEndpoint ?: ""),
                 "username" to config.username,
                 "password" to config.password,
+                "pipePath" to (config.pipePath ?: ""),
                 "reconnectDelay" to config.reconnectDelay,
                 "connectionTimeout" to config.connectionTimeout,
                 "messageFormat" to config.messageFormat,
@@ -136,6 +138,7 @@ class WinCCUaClientConfigQueries(
                     }
                     if (address.type == WinCCUaAddressType.TAG_VALUES) {
                         addressMap["includeQuality"] = address.includeQuality
+                        addressMap["pipeTagMode"] = address.pipeTagMode
                     }
                     if (address.systemNames != null) {
                         addressMap["systemNames"] = address.systemNames

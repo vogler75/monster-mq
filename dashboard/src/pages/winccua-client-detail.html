@@ -711,13 +711,30 @@
                                     <input type="text" id="client-namespace" required placeholder="e.g., winccua/plant1">
                                 </div>
                                 <div class="form-group">
-                                    <label for="client-graphql-endpoint">GraphQL Endpoint *</label>
-                                    <input type="text" id="client-graphql-endpoint" required placeholder="http://winccua:4000/graphql">
+                                    <label for="client-data-access-mode">Data Access Mode *</label>
+                                    <select id="client-data-access-mode" required>
+                                        <option value="GRAPHQL" selected>GraphQL (HTTP + WebSocket)</option>
+                                        <option value="OPENPIPE">Open Pipe (local named pipe)</option>
+                                    </select>
+                                    <small class="form-hint">Open Pipe requires WinCC Unified RT on the same host and the broker process to be a member of group "SIMATIC HMI" (Windows) / "industrial" (Linux)</small>
                                 </div>
-                                <div class="form-group">
-                                    <label for="client-websocket-endpoint">WebSocket Endpoint</label>
-                                    <input type="text" id="client-websocket-endpoint" placeholder="Optional (auto-derived)">
-                                    <small class="form-hint">Auto-derived from GraphQL endpoint if not specified</small>
+                                <div id="graphql-endpoint-fields">
+                                    <div class="form-group">
+                                        <label for="client-graphql-endpoint">GraphQL Endpoint *</label>
+                                        <input type="text" id="client-graphql-endpoint" required placeholder="http://winccua:4000/graphql">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="client-websocket-endpoint">WebSocket Endpoint</label>
+                                        <input type="text" id="client-websocket-endpoint" placeholder="Optional (auto-derived)">
+                                        <small class="form-hint">Auto-derived from GraphQL endpoint if not specified</small>
+                                    </div>
+                                </div>
+                                <div id="pipe-path-field" style="display: none;">
+                                    <div class="form-group">
+                                        <label for="client-pipe-path">Pipe Path</label>
+                                        <input type="text" id="client-pipe-path" placeholder="Leave empty to use OS default">
+                                        <small class="form-hint">Defaults to <code>\\.\pipe\HmiRuntime</code> on Windows, <code>/tmp/HmiRuntime</code> on Linux</small>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label for="client-node">Cluster Node *</label>
@@ -744,7 +761,7 @@
                     </div>
 
                     <!-- Authentication Section -->
-                    <div class="section-card">
+                    <div class="section-card" id="auth-section">
                         <div class="section-header">
                             <div class="section-title">
                                 <div class="section-icon">
@@ -972,6 +989,14 @@
                             <label for="address-include-quality">Include Quality Information</label>
                         </div>
                         <small class="form-hint">Include quality data in TAG_VALUES messages</small>
+                    </div>
+                    <div id="pipe-tag-mode-group" class="form-group conditional-field">
+                        <label for="address-pipe-tag-mode">OpenPipe Tag Publish Mode</label>
+                        <select id="address-pipe-tag-mode">
+                            <option value="SINGLE">Single — one subscription per tag, publishes to topic/&lt;tagName&gt;</option>
+                            <option value="BULK">Bulk — one subscription for all tags, publishes full JSON to topic</option>
+                        </select>
+                        <small class="form-hint">Only applies when Data Access Mode is OPENPIPE</small>
                     </div>
                     <div id="system-names-group" class="form-group conditional-field">
                         <label for="address-system-names">System Names (comma-separated)</label>

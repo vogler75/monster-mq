@@ -1,12 +1,10 @@
 package at.rocworks.devices.winccua
 
 import at.rocworks.Utils
-import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.WinCCUaAddress
 import at.rocworks.stores.devices.WinCCUaAddressType
 import at.rocworks.stores.devices.WinCCUaConnectionConfig
-import at.rocworks.stores.devices.WinCCUaTransformConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -17,7 +15,6 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.client.WebClient
 import io.vertx.ext.web.client.WebClientOptions
-import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
@@ -496,26 +493,11 @@ class WinCCUaConnector : AbstractVerticle() {
      */
     private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?, quality: JsonObject?) {
         try {
-            // Get or compute MQTT topic from cache
-            val mqttTopic = topicCache.computeIfAbsent(tagName) { name ->
-                val transformed = winCCUaConfig.transformConfig.transformTagNameToTopic(name)
-                "${deviceConfig.namespace}/${address.topic}/$transformed"
-            }
-
-            // Format message based on configuration
-            val payload = formatTagMessage(value, timestamp, quality)
-
-            // Publish to MQTT broker
-            val mqttMessage = BrokerMessage(
-                messageId = 0,
-                topicName = mqttTopic,
-                payload = payload,
-                qosLevel = 0,
-                isRetain = address.retained,
-                isDup = false,
-                isQueued = false,
-                clientId = "winccua-connector-${deviceConfig.name}"
+            val mqttTopic = WinCCUaPublisher.resolveTopic(
+                deviceConfig.namespace, address.topic, tagName, winCCUaConfig.transformConfig, topicCache
             )
+            val payload = WinCCUaPublisher.formatTagPayload(winCCUaConfig.messageFormat, value, timestamp, quality)
+            val mqttMessage = WinCCUaPublisher.buildTagBrokerMessage(deviceConfig.name, mqttTopic, payload, address.retained)
 
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, mqttMessage)
 
@@ -532,27 +514,9 @@ class WinCCUaConnector : AbstractVerticle() {
      */
     private fun publishAlarm(address: WinCCUaAddress, alarmData: JsonObject) {
         try {
-            // Use alarm name for topic (canonical name of the configured alarm)
-            // If name not available, use path (full hierarchical name) or fall back to "unknown"
-            val alarmName = alarmData.getString("name")
-                ?: alarmData.getString("path")
-                ?: "unknown"
-
-            val mqttTopic = "${deviceConfig.namespace}/${address.topic}/$alarmName"
-
-            // Publish alarm as JSON
-            val payload = alarmData.encode().toByteArray()
-
-            val mqttMessage = BrokerMessage(
-                messageId = 0,
-                topicName = mqttTopic,
-                payload = payload,
-                qosLevel = 0,
-                isRetain = address.retained,
-                isDup = false,
-                isQueued = false,
-                clientId = "winccua-connector-${deviceConfig.name}"
-            )
+            val alarmName = WinCCUaPublisher.resolveAlarmName(alarmData) ?: "unknown"
+            val mqttTopic = WinCCUaPublisher.buildAlarmTopic(deviceConfig.namespace, address.topic, alarmName)
+            val mqttMessage = WinCCUaPublisher.buildAlarmBrokerMessage(deviceConfig.name, mqttTopic, alarmData, address.retained)
 
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, mqttMessage)
 
@@ -561,45 +525,6 @@ class WinCCUaConnector : AbstractVerticle() {
 
         } catch (e: Exception) {
             logger.severe("Error publishing alarm: ${e.message}")
-        }
-    }
-
-    /**
-     * Format tag message according to configured format
-     */
-    private fun formatTagMessage(value: Any?, timestamp: String?, quality: JsonObject?): ByteArray {
-        return when (winCCUaConfig.messageFormat) {
-            WinCCUaConnectionConfig.FORMAT_JSON_ISO -> {
-                val json = JsonObject()
-                    .put("value", value)
-                if (timestamp != null) json.put("time", timestamp)
-                if (quality != null) json.put("quality", quality)
-                json.encode().toByteArray()
-            }
-            WinCCUaConnectionConfig.FORMAT_JSON_MS -> {
-                val timestampMs = try {
-                    if (timestamp != null) Instant.parse(timestamp).toEpochMilli() else System.currentTimeMillis()
-                } catch (e: Exception) {
-                    System.currentTimeMillis()
-                }
-                val json = JsonObject()
-                    .put("value", value)
-                    .put("time", timestampMs)
-                if (quality != null) json.put("quality", quality)
-                json.encode().toByteArray()
-            }
-            WinCCUaConnectionConfig.FORMAT_RAW_VALUE -> {
-                // Just the plain value as string
-                value.toString().toByteArray()
-            }
-            else -> {
-                // Default to JSON_ISO
-                val json = JsonObject()
-                    .put("value", value)
-                if (timestamp != null) json.put("time", timestamp)
-                if (quality != null) json.put("quality", quality)
-                json.encode().toByteArray()
-            }
         }
     }
 

@@ -54,11 +54,36 @@ class WinCCUaClientDetailManager {
         // Load data
         await this.loadClusterNodes();
 
+        // Wire up Data Access Mode toggle (works for both new and edit flows)
+        const modeSelect = document.getElementById('client-data-access-mode');
+        if (modeSelect) {
+            modeSelect.addEventListener('change', () => this.applyDataAccessMode(modeSelect.value));
+        }
+
         if (this.isNewMode) {
             this.setupNewClient();
         } else {
             await this.loadClient();
         }
+    }
+
+    applyDataAccessMode(mode) {
+        const isGraphQL = mode !== 'OPENPIPE';
+        const graphqlFields = document.getElementById('graphql-endpoint-fields');
+        const pipeField = document.getElementById('pipe-path-field');
+        const authSection = document.getElementById('auth-section');
+        const graphqlInput = document.getElementById('client-graphql-endpoint');
+        const usernameInput = document.getElementById('client-username');
+        const passwordInput = document.getElementById('client-password');
+
+        if (graphqlFields) graphqlFields.style.display = isGraphQL ? '' : 'none';
+        if (pipeField) pipeField.style.display = isGraphQL ? 'none' : '';
+        if (authSection) authSection.style.display = isGraphQL ? '' : 'none';
+
+        // Toggle "required" so hidden fields don't block form submission
+        if (graphqlInput) graphqlInput.required = isGraphQL;
+        if (usernameInput) usernameInput.required = isGraphQL;
+        if (passwordInput) passwordInput.required = isGraphQL && this.isNewMode;
     }
 
     async loadClusterNodes() {
@@ -95,7 +120,7 @@ class WinCCUaClientDetailManager {
     setupNewClient() {
         // Update page title
         document.getElementById('client-title').textContent = 'New WinCC Unified Client';
-        document.getElementById('client-subtitle').textContent = 'Configure a new WinCC Unified GraphQL connection';
+        document.getElementById('client-subtitle').textContent = 'Configure a new WinCC Unified connection';
 
         // Set default values
         document.getElementById('client-enabled').checked = true;
@@ -103,6 +128,8 @@ class WinCCUaClientDetailManager {
         document.getElementById('client-message-format').value = 'JSON_ISO';
         document.getElementById('client-reconnect-delay').value = '5000';
         document.getElementById('client-connection-timeout').value = '10000';
+        document.getElementById('client-data-access-mode').value = 'GRAPHQL';
+        this.applyDataAccessMode('GRAPHQL');
 
         // Initialize empty addresses array
         this.addresses = [];
@@ -139,9 +166,11 @@ class WinCCUaClientDetailManager {
                         createdAt
                         updatedAt
                         config {
+                            dataAccessMode
                             graphqlEndpoint
                             websocketEndpoint
                             username
+                            pipePath
                             reconnectDelay
                             connectionTimeout
                             messageFormat
@@ -157,6 +186,7 @@ class WinCCUaClientDetailManager {
                                 description
                                 nameFilters
                                 includeQuality
+                                pipeTagMode
                                 systemNames
                                 filterString
                                 retained
@@ -187,19 +217,27 @@ class WinCCUaClientDetailManager {
     renderClient() {
         if (!this.clientData) return;
 
+        const dataAccessMode = this.clientData.config.dataAccessMode || 'GRAPHQL';
+        const subtitleSource = dataAccessMode === 'OPENPIPE'
+            ? (this.clientData.config.pipePath || 'OS-default pipe')
+            : (this.clientData.config.graphqlEndpoint || '');
+
         // Update page title
         document.getElementById('client-title').textContent = `WinCC Unified Client: ${this.clientData.name}`;
-        document.getElementById('client-subtitle').textContent = `${this.clientData.namespace} - ${this.clientData.config.graphqlEndpoint}`;
+        document.getElementById('client-subtitle').textContent = `${this.clientData.namespace} - ${subtitleSource}`;
 
         // Basic information
         document.getElementById('client-name').value = this.clientData.name;
         document.getElementById('client-name').disabled = true; // Can't change name in edit mode
         document.getElementById('client-namespace').value = this.clientData.namespace;
-        document.getElementById('client-graphql-endpoint').value = this.clientData.config.graphqlEndpoint;
+        document.getElementById('client-data-access-mode').value = dataAccessMode;
+        document.getElementById('client-graphql-endpoint').value = this.clientData.config.graphqlEndpoint || '';
         document.getElementById('client-websocket-endpoint').value = this.clientData.config.websocketEndpoint || '';
+        document.getElementById('client-pipe-path').value = this.clientData.config.pipePath || '';
         document.getElementById('client-node').value = this.clientData.nodeId;
         document.getElementById('client-message-format').value = this.clientData.config.messageFormat;
         document.getElementById('client-enabled').checked = this.clientData.enabled;
+        this.applyDataAccessMode(dataAccessMode);
 
         // Authentication
         document.getElementById('client-username').value = this.clientData.config.username || '';
@@ -327,12 +365,14 @@ class WinCCUaClientDetailManager {
         const type = document.getElementById('address-type').value;
         const browseArgsGroup = document.getElementById('browse-args-group');
         const includeQualityGroup = document.getElementById('include-quality-group');
+        const pipeTagModeGroup = document.getElementById('pipe-tag-mode-group');
         const systemNamesGroup = document.getElementById('system-names-group');
         const filterStringGroup = document.getElementById('filter-string-group');
 
         // Hide all conditional fields
         browseArgsGroup.classList.remove('visible');
         includeQualityGroup.classList.remove('visible');
+        pipeTagModeGroup.classList.remove('visible');
         systemNamesGroup.classList.remove('visible');
         filterStringGroup.classList.remove('visible');
 
@@ -340,6 +380,7 @@ class WinCCUaClientDetailManager {
         if (type === 'TAG_VALUES') {
             browseArgsGroup.classList.add('visible');
             includeQualityGroup.classList.add('visible');
+            pipeTagModeGroup.classList.add('visible');
         } else if (type === 'ACTIVE_ALARMS') {
             systemNamesGroup.classList.add('visible');
             filterStringGroup.classList.add('visible');
@@ -379,6 +420,7 @@ class WinCCUaClientDetailManager {
         document.getElementById('address-description').value = address.description || '';
         document.getElementById('address-browse-arguments').value = (address.nameFilters && address.nameFilters.length > 0) ? address.nameFilters.join(', ') : '';
         document.getElementById('address-include-quality').checked = address.includeQuality || false;
+        document.getElementById('address-pipe-tag-mode').value = address.pipeTagMode || 'SINGLE';
         document.getElementById('address-system-names').value = (address.systemNames && address.systemNames.length > 0) ? address.systemNames.join(', ') : '';
         document.getElementById('address-filter-string').value = address.filterString || '';
         document.getElementById('address-retained').checked = address.retained || false;
@@ -414,6 +456,7 @@ class WinCCUaClientDetailManager {
             const nameFiltersValue = document.getElementById('address-browse-arguments').value.trim();
             addressData.nameFilters = nameFiltersValue ? nameFiltersValue.split(',').map(f => f.trim()).filter(f => f.length > 0) : null;
             addressData.includeQuality = document.getElementById('address-include-quality').checked;
+            addressData.pipeTagMode = document.getElementById('address-pipe-tag-mode').value || 'SINGLE';
         } else if (type === 'ACTIVE_ALARMS') {
             const systemNamesValue = document.getElementById('address-system-names').value.trim();
             addressData.systemNames = systemNamesValue ? systemNamesValue.split(',').map(s => s.trim()).filter(s => s.length > 0) : null;
@@ -597,25 +640,36 @@ class WinCCUaClientDetailManager {
         // Validate required fields
         const name = document.getElementById('client-name').value.trim();
         const namespace = document.getElementById('client-namespace').value.trim();
-        const graphqlEndpoint = document.getElementById('client-graphql-endpoint').value.trim();
         const nodeId = document.getElementById('client-node').value;
+        const dataAccessMode = document.getElementById('client-data-access-mode').value || 'GRAPHQL';
+        const isOpenPipe = dataAccessMode === 'OPENPIPE';
+        const graphqlEndpoint = document.getElementById('client-graphql-endpoint').value.trim();
         const username = document.getElementById('client-username').value.trim();
+        const pipePath = document.getElementById('client-pipe-path').value.trim();
 
-        if (!name || !namespace || !graphqlEndpoint || !nodeId || !username) {
+        if (!name || !namespace || !nodeId) {
             this.showError('Please fill in all required fields');
             return;
         }
 
-        // Validate password
-        try {
-            const password = this.getPasswordForSave();
-            if (this.isNewMode && !password) {
-                this.showError('Password is required for new clients');
+        if (!isOpenPipe && (!graphqlEndpoint || !username)) {
+            this.showError('GraphQL endpoint and username are required for GraphQL mode');
+            return;
+        }
+
+        // Validate password (GraphQL mode only)
+        let password = '';
+        if (!isOpenPipe) {
+            try {
+                password = this.getPasswordForSave();
+                if (this.isNewMode && !password) {
+                    this.showError('Password is required for new clients in GraphQL mode');
+                    return;
+                }
+            } catch (error) {
+                this.showError(error.message);
                 return;
             }
-        } catch (error) {
-            this.showError(error.message);
-            return;
         }
 
         // Only require at least one address in edit mode (not in new mode)
@@ -624,28 +678,36 @@ class WinCCUaClientDetailManager {
             return;
         }
 
+        const config = {
+            dataAccessMode: dataAccessMode,
+            reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
+            connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
+            messageFormat: document.getElementById('client-message-format').value,
+            transformConfig: {
+                convertDotToSlash: document.getElementById('client-convert-dot-to-slash').checked,
+                convertUnderscoreToSlash: document.getElementById('client-convert-underscore-to-slash').checked,
+                regexPattern: document.getElementById('client-regex-pattern').value.trim() || null,
+                regexReplacement: document.getElementById('client-regex-replacement').value.trim() || null
+            }
+        };
+
+        if (isOpenPipe) {
+            config.pipePath = pipePath || null;
+        } else {
+            config.graphqlEndpoint = graphqlEndpoint;
+            config.websocketEndpoint = document.getElementById('client-websocket-endpoint').value.trim() || null;
+            config.username = username;
+            config.password = password;
+        }
+
         const clientData = {
             name: name,
             namespace: namespace,
             nodeId: nodeId,
             enabled: document.getElementById('client-enabled').checked,
-            config: {
-                graphqlEndpoint: graphqlEndpoint,
-                websocketEndpoint: document.getElementById('client-websocket-endpoint').value.trim() || null,
-                username: username,
-                password: this.getPasswordForSave(),
-                reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
-                connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
-                messageFormat: document.getElementById('client-message-format').value,
-                transformConfig: {
-                    convertDotToSlash: document.getElementById('client-convert-dot-to-slash').checked,
-                    convertUnderscoreToSlash: document.getElementById('client-convert-underscore-to-slash').checked,
-                    regexPattern: document.getElementById('client-regex-pattern').value.trim() || null,
-                    regexReplacement: document.getElementById('client-regex-replacement').value.trim() || null
-                }
-                // Note: addresses are managed separately via addAddress/deleteAddress mutations
-                // and are automatically preserved during updates by the backend
-            }
+            config: config
+            // Note: addresses are managed separately via addAddress/deleteAddress mutations
+            // and are automatically preserved during updates by the backend
         };
 
         try {

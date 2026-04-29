@@ -6,6 +6,7 @@ import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.stores.devices.WinCCUaConnectionConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.DeploymentOptions
 import io.vertx.core.Future
@@ -206,9 +207,17 @@ class WinCCUaExtension : AbstractVerticle() {
             val connectorConfig = JsonObject()
                 .put("device", device.toJsonObject())
 
+            // Pick connector verticle based on the configured data-access mode.
+            val mode = device.config.getString("dataAccessMode", WinCCUaConnectionConfig.MODE_GRAPHQL)
+            val connectorVerticle = if (mode == WinCCUaConnectionConfig.MODE_OPENPIPE) {
+                WinCCUaPipeConnector()
+            } else {
+                WinCCUaConnector()
+            }
+
             // Deploy connector verticle
             val options = DeploymentOptions().setConfig(connectorConfig)
-            vertx.deployVerticle(WinCCUaConnector(), options)
+            vertx.deployVerticle(connectorVerticle, options)
                 .onComplete { result ->
                     if (result.succeeded()) {
                         val deploymentId = result.result()
@@ -216,7 +225,7 @@ class WinCCUaExtension : AbstractVerticle() {
                         activeDevices[device.name] = device
                         deviceRegistry[device.namespace] = device.name
 
-                        logger.info("Deployed WinCCUaConnector for device ${device.name} (${deploymentId})")
+                        logger.info("Deployed ${connectorVerticle::class.simpleName} for device ${device.name} (${deploymentId}, mode=$mode)")
                         promise.complete(deploymentId)
                     } else {
                         logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
