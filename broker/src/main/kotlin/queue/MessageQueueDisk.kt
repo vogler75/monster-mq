@@ -1,4 +1,4 @@
-package at.rocworks.logger.queue
+package at.rocworks.queue
 
 import at.rocworks.data.BrokerMessage
 import java.io.*
@@ -14,21 +14,22 @@ import java.util.logging.Logger
  * Messages persist across restarts, providing reliability during database outages.
  * Uses memory-mapped file for performance.
  */
-class LoggerQueueDisk(
+class MessageQueueDisk(
+    private val queueName: String,
     private val deviceName: String,
     private val logger: Logger,
     private val queueSize: Int,
     private val blockSize: Int,
     private val pollTimeout: Long,
     private val diskPath: String
-) : ILoggerQueue {
+) : IMessageQueue {
 
     private var queueFull = false
     private val outputBlock = arrayListOf<BrokerMessage>()
     private val semaphore = Semaphore(0)
 
     private val fileSize = queueSize.toLong() * 2048L // ~2KB per message estimate
-    private val fileName = "$diskPath/jdbc-logger-${deviceName}.buf"
+    private val fileName = "$diskPath/${queueName}-${deviceName}.buf"
     private val file: RandomAccessFile
     private val buffer: MappedByteBuffer
     private val lock = ReentrantLock()

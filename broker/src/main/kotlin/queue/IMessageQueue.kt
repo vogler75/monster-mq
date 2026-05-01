@@ -1,12 +1,12 @@
-package at.rocworks.logger.queue
+package at.rocworks.queue
 
 import at.rocworks.data.BrokerMessage
 
 /**
- * Queue interface for buffering MQTT messages before writing to database.
+ * Queue interface for buffering MQTT messages before forwarding or writing.
  * Supports both memory-based and disk-based implementations for reliability.
  */
-interface ILoggerQueue {
+interface IMessageQueue {
     /**
      * Check if the queue is full (cannot accept more messages)
      */

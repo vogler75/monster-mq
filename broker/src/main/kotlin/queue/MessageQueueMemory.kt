@@ -1,4 +1,4 @@
-package at.rocworks.logger.queue
+package at.rocworks.queue
 
 import at.rocworks.data.BrokerMessage
 import java.util.concurrent.ArrayBlockingQueue
@@ -9,12 +9,12 @@ import java.util.logging.Logger
  * Memory-based queue implementation for buffering MQTT messages.
  * Messages are lost on restart but provides best performance.
  */
-class LoggerQueueMemory(
+class MessageQueueMemory(
     private val logger: Logger,
     private val queueSize: Int,
     private val blockSize: Int,
     private val pollTimeout: Long  // milliseconds
-) : ILoggerQueue {
+) : IMessageQueue {
 
     private val queue = ArrayBlockingQueue<BrokerMessage>(queueSize)
     private var queueFull = false

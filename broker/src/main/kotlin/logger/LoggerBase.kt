@@ -4,9 +4,9 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
-import at.rocworks.logger.queue.ILoggerQueue
-import at.rocworks.logger.queue.LoggerQueueDisk
-import at.rocworks.logger.queue.LoggerQueueMemory
+import at.rocworks.queue.IMessageQueue
+import at.rocworks.queue.MessageQueueDisk
+import at.rocworks.queue.MessageQueueMemory
 import at.rocworks.schema.JsonSchemaValidator
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.ILoggerConfig
@@ -39,7 +39,7 @@ abstract class LoggerBase<T : ILoggerConfig> : AbstractVerticle() {
     protected var tableNameJsonPath: JsonPath? = null
 
     // Message queue (memory or disk-backed)
-    protected lateinit var queue: ILoggerQueue
+    protected lateinit var queue: IMessageQueue
 
     // Writer thread
     protected val writerThreadStop = AtomicBoolean(false)
@@ -164,11 +164,11 @@ abstract class LoggerBase<T : ILoggerConfig> : AbstractVerticle() {
 
     protected fun initializeQueue() {
         queue = when (cfg.queueType) {
-            "MEMORY" -> LoggerQueueMemory(logger, cfg.queueSize, cfg.bulkSize, 10L)
-            "DISK" -> LoggerQueueDisk(device.name, logger, cfg.queueSize, cfg.bulkSize, 10L, cfg.diskPath)
+            "MEMORY" -> MessageQueueMemory(logger, cfg.queueSize, cfg.bulkSize, 10L)
+            "DISK" -> MessageQueueDisk("jdbc-logger", device.name, logger, cfg.queueSize, cfg.bulkSize, 10L, cfg.diskPath)
             else -> {
                 logger.warning("Unknown queue type: ${cfg.queueType}, using MEMORY")
-                LoggerQueueMemory(logger, cfg.queueSize, cfg.bulkSize, 10L)
+                MessageQueueMemory(logger, cfg.queueSize, cfg.bulkSize, 10L)
             }
         }
     }

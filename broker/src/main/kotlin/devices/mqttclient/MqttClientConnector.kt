@@ -4,6 +4,9 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.queue.IMessageQueue
+import at.rocworks.queue.MessageQueueDisk
+import at.rocworks.queue.MessageQueueMemory
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.MqttClientAddress
 import at.rocworks.stores.devices.MqttClientConnectionConfig
@@ -12,7 +15,11 @@ import io.vertx.core.Promise
 import org.eclipse.paho.client.mqttv3.*
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.concurrent.Callable
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
 import java.util.logging.Logger
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
@@ -38,6 +45,8 @@ class MqttClientConnector : AbstractVerticle() {
     private val messagesInCounter = java.util.concurrent.atomic.AtomicLong(0) // remote -> local
     private val messagesOutCounter = java.util.concurrent.atomic.AtomicLong(0) // local -> remote
     private val messagesLoopSkippedCounter = java.util.concurrent.atomic.AtomicLong(0) // skipped due to loop prevention
+    private val messagesQueuedCounter = java.util.concurrent.atomic.AtomicLong(0)
+    private val bufferedPublishFailuresCounter = java.util.concurrent.atomic.AtomicLong(0)
     private var lastMetricsReset = System.currentTimeMillis()
 
 
@@ -48,12 +57,20 @@ class MqttClientConnector : AbstractVerticle() {
     private lateinit var mqttConfig: MqttClientConnectionConfig
 
     // Paho MQTT client
+    @Volatile
     private var client: MqttAsyncClient? = null
 
     // Connection state
+    @Volatile
     private var isConnected = false
+    @Volatile
     private var isReconnecting = false
     private var reconnectTimerId: Long? = null
+
+    // Optional local-to-remote bridge buffer
+    private var messageQueue: IMessageQueue? = null
+    private val queueWriterStop = AtomicBoolean(false)
+    private var queueWriterThread: Thread? = null
 
     // Track subscribed addresses
     private val subscribedAddresses = ConcurrentHashMap<String, MqttClientAddress>() // remoteTopic -> address
@@ -84,6 +101,8 @@ class MqttClientConnector : AbstractVerticle() {
 
             // Start connector successfully regardless of initial connection status
             logger.info("MqttClientConnector for device ${deviceConfig.name} started successfully")
+
+            initializeMessageBuffer()
 
             // Setup publish addresses (subscribe to local MQTT bus)
             setupPublishAddresses()
@@ -120,6 +139,9 @@ class MqttClientConnector : AbstractVerticle() {
             logger.info("Cancelled pending reconnection timer for device ${deviceConfig.name}")
         }
 
+        queueWriterStop.set(true)
+        queueWriterThread?.join(5000)
+
         // Unsubscribe from internal topics
         val sessionHandler = Monster.getSessionHandler()
         if (sessionHandler != null) {
@@ -142,8 +164,111 @@ class MqttClientConnector : AbstractVerticle() {
             }
             null
         }).onComplete {
+            try {
+                messageQueue?.close()
+            } catch (e: Exception) {
+                logger.warning("Error closing MQTT bridge buffer queue: ${e.message}")
+            }
             logger.info("MqttClientConnector for device ${deviceConfig.name} stopped")
             stopPromise.complete()
+        }
+    }
+
+    private fun initializeMessageBuffer() {
+        if (!mqttConfig.bufferEnabled) {
+            logger.info("MQTT bridge message buffering is disabled for device ${deviceConfig.name}")
+            return
+        }
+
+        val blockSize = minOf(100, maxOf(1, mqttConfig.bufferSize))
+        messageQueue = if (mqttConfig.persistBuffer) {
+            MessageQueueDisk(
+                queueName = "mqtt-bridge",
+                deviceName = deviceConfig.name,
+                logger = logger,
+                queueSize = mqttConfig.bufferSize,
+                blockSize = blockSize,
+                pollTimeout = 100L,
+                diskPath = "./buffer/mqttbridge"
+            )
+        } else {
+            MessageQueueMemory(
+                logger = logger,
+                queueSize = mqttConfig.bufferSize,
+                blockSize = blockSize,
+                pollTimeout = 100L
+            )
+        }
+
+        startQueueWriter()
+        logger.info(
+            "MQTT bridge message buffering enabled for device ${deviceConfig.name}: " +
+                "type=${if (mqttConfig.persistBuffer) "DISK" else "MEMORY"}, size=${mqttConfig.bufferSize}"
+        )
+    }
+
+    private fun startQueueWriter() {
+        queueWriterStop.set(false)
+        queueWriterThread = thread(start = true, name = "mqtt-bridge-buffer-${deviceConfig.name}") {
+            while (!queueWriterStop.get()) {
+                try {
+                    drainMessageBuffer()
+                } catch (e: Exception) {
+                    logger.warning("Error draining MQTT bridge buffer for device ${deviceConfig.name}: ${e.message}")
+                    Thread.sleep(1000)
+                }
+            }
+        }
+    }
+
+    private fun drainMessageBuffer() {
+        val queue = messageQueue ?: return
+        val messagesToPublish = mutableListOf<BrokerMessage>()
+        val blockSize = queue.pollBlock { message ->
+            messagesToPublish.add(message)
+        }
+
+        if (blockSize == 0) {
+            Thread.sleep(10)
+            return
+        }
+
+        if (!isConnected || client == null) {
+            Thread.sleep(1000)
+            return
+        }
+
+        var allPublished = true
+        publishLoop@ for (localMessage in messagesToPublish) {
+            val matches = publishAddresses.values.filter { address ->
+                MqttTopicTransformer.matchesLocalPattern(localMessage.topicName, address.localTopic)
+            }
+
+            if (matches.isEmpty()) {
+                logger.warning("Dropping buffered MQTT bridge message for ${localMessage.topicName}: no publish address matches anymore")
+                continue
+            }
+
+            for (address in matches) {
+                val remoteTopic = MqttTopicTransformer.localToRemote(localMessage.topicName, address)
+                if (remoteTopic == null) {
+                    logger.warning("Dropping buffered MQTT bridge message for ${localMessage.topicName}: cannot transform topic")
+                    continue
+                }
+
+                val published = publishToRemoteBrokerAwait(remoteTopic, localMessage, address)
+                if (!published) {
+                    allPublished = false
+                    bufferedPublishFailuresCounter.incrementAndGet()
+                    break@publishLoop
+                }
+            }
+        }
+
+        if (allPublished) {
+            queue.pollCommit()
+        } else {
+            Thread.sleep(1000)
         }
     }
 
@@ -188,18 +313,6 @@ class MqttClientConnector : AbstractVerticle() {
                         sslHostnameVerifier = HostnameVerifier { _, _ -> true }
                     }
                 }
-            }
-
-            // Configure disconnected buffer to handle messages when connection is lost
-            if (mqttConfig.bufferEnabled) {
-                val bufferOpts = org.eclipse.paho.client.mqttv3.DisconnectedBufferOptions().apply {
-                    isBufferEnabled = mqttConfig.bufferEnabled
-                    bufferSize = mqttConfig.bufferSize
-                    isPersistBuffer = mqttConfig.persistBuffer
-                    isDeleteOldestMessages = mqttConfig.deleteOldestMessages
-                }
-                client!!.setBufferOpts(bufferOpts)
-                logger.info("Configured disconnected buffer: size=${mqttConfig.bufferSize}, deleteOldest=${mqttConfig.deleteOldestMessages}")
             }
 
             // Set callback for connection events
@@ -430,6 +543,10 @@ class MqttClientConnector : AbstractVerticle() {
                     val remoteTopic = MqttTopicTransformer.localToRemote(localMessage.topicName, address)
 
                     if (remoteTopic != null) {
+                        if (mqttConfig.bufferEnabled) {
+                            enqueueLocalMessage(localMessage)
+                            return
+                        }
                         publishToRemoteBroker(remoteTopic, localMessage, address)
                     }
                 }
@@ -437,6 +554,18 @@ class MqttClientConnector : AbstractVerticle() {
         } catch (e: Exception) {
             logger.severe("Error handling local MQTT message: ${e.message}")
         }
+    }
+
+    private fun enqueueLocalMessage(localMessage: BrokerMessage) {
+        val queue = messageQueue
+        if (queue == null) {
+            logger.warning("MQTT bridge buffering enabled but queue is not initialized; dropping ${localMessage.topicName}")
+            return
+        }
+
+        queue.add(localMessage)
+        messagesQueuedCounter.incrementAndGet()
+        logger.finest { "Queued local MQTT message ${localMessage.topicName} for remote bridge ${deviceConfig.name}" }
     }
 
     private fun publishToRemoteBroker(remoteTopic: String, localMessage: BrokerMessage, address: MqttClientAddress) {
@@ -469,6 +598,38 @@ class MqttClientConnector : AbstractVerticle() {
         }
     }
 
+    private fun publishToRemoteBrokerAwait(remoteTopic: String, localMessage: BrokerMessage, address: MqttClientAddress): Boolean {
+        if (!isConnected || client == null) {
+            logger.fine { "Not connected to remote broker, retaining buffered publish to $remoteTopic" }
+            return false
+        }
+
+        return try {
+            val effectiveQos = minOf(address.qos, localMessage.qosLevel)
+            val message = PahoMqttMessage(localMessage.payload).apply {
+                qos = effectiveQos
+                isRetained = localMessage.isRetain
+            }
+            val future = CompletableFuture<Boolean>()
+            client!!.publish(remoteTopic, message, null, object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    messagesOutCounter.incrementAndGet()
+                    logger.fine { "Published buffered message to remote topic: $remoteTopic with QoS $effectiveQos" }
+                    future.complete(true)
+                }
+
+                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                    logger.warning("Failed to publish buffered message to remote topic $remoteTopic: ${exception?.message}")
+                    future.complete(false)
+                }
+            })
+            future.get(30, TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            logger.warning("Error publishing buffered message to remote broker: ${e.message}")
+            false
+        }
+    }
+
     private fun setupMetricsEndpoint() {
         val addr = EventBusAddresses.MqttBridge.connectorMetrics(deviceConfig.name)
         vertx.eventBus().consumer<io.vertx.core.json.JsonObject>(addr) { msg ->
@@ -479,12 +640,21 @@ class MqttClientConnector : AbstractVerticle() {
                 val inCount = messagesInCounter.getAndSet(0)
                 val outCount = messagesOutCounter.getAndSet(0)
                 val loopSkippedCount = messagesLoopSkippedCounter.getAndSet(0)
+                val queuedCount = messagesQueuedCounter.getAndSet(0)
+                val publishFailureCount = bufferedPublishFailuresCounter.getAndSet(0)
                 lastMetricsReset = now
                 val json = io.vertx.core.json.JsonObject()
                     .put("device", deviceConfig.name)
                     .put("messagesInRate", inCount / elapsedSec)
                     .put("messagesOutRate", outCount / elapsedSec)
                     .put("messagesLoopSkipped", loopSkippedCount)
+                    .put("messagesQueued", queuedCount)
+                    .put("bufferedPublishFailures", publishFailureCount)
+                    .put("bufferEnabled", mqttConfig.bufferEnabled)
+                    .put("bufferPersisted", mqttConfig.persistBuffer)
+                    .put("bufferSize", messageQueue?.getSize() ?: 0)
+                    .put("bufferCapacity", messageQueue?.getCapacity() ?: 0)
+                    .put("bufferFull", messageQueue?.isQueueFull() ?: false)
                     .put("elapsedMs", elapsedMs)
                 msg.reply(json)
             } catch (e: Exception) {
