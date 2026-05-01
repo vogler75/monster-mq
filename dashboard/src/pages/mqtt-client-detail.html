@@ -16,6 +16,81 @@
         .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
         .section-content { padding: 1.5rem; }
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .buffer-grid { align-items: start; gap: 1.25rem 1.5rem; }
+        .form-section {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--dark-border);
+        }
+        .buffer-section-title {
+            margin: 0 0 1rem 0;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+        .buffer-settings-grid {
+            display: grid;
+            grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+            gap: 2rem;
+            align-items: start;
+        }
+        .buffer-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        .buffer-toggle-row {
+            display: flex;
+            flex-direction: column;
+        }
+        .buffer-checkbox-stack {
+            display: grid;
+            gap: 1.25rem;
+        }
+        .buffer-implementation-options {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+        .buffer-option {
+            position: relative;
+            display: flex;
+            align-items: center;
+            min-height: 66px;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            background: rgba(15, 22, 25, 0.78);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+        .buffer-option input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .buffer-option strong {
+            display: block;
+            font-size: 0.95rem;
+            line-height: 1.25;
+            color: var(--text-primary);
+        }
+        .buffer-option span {
+            display: block;
+            margin-top: 0.2rem;
+            font-size: 0.8rem;
+            line-height: 1.25;
+            color: var(--text-muted);
+        }
+        .buffer-option:has(input:checked) {
+            border-color: var(--monster-teal);
+            background: rgba(20, 184, 166, 0.12);
+        }
+        .buffer-option:has(input:focus-visible) {
+            outline: 2px solid var(--monster-purple);
+            outline-offset: 2px;
+        }
         .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
         .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
         .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
@@ -25,7 +100,8 @@
         .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border: 1px solid rgba(239, 68, 68, 0.3); }
         .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
         .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
-        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; border: none; cursor: pointer; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; border: none; cursor: pointer; width: auto; }
+        .section-header .btn { flex: 0 0 auto; min-width: 170px; justify-content: center; }
         .btn-primary { background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color: white; }
         .btn-secondary { background: var(--dark-surface-2); border: 1px solid var(--dark-border); color: var(--text-primary); }
         .btn.btn-secondary { white-space: nowrap; }
@@ -70,7 +146,7 @@
         .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
         .checkbox-group input[type="checkbox"] { accent-color: var(--monster-purple); }
         code { background: var(--dark-bg); padding: 0.2rem 0.4rem; border-radius: 4px; font-family: 'Courier New', monospace; color: var(--monster-teal); }
-        @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 1000px) { .form-grid, .info-grid, .buffer-settings-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -226,34 +302,61 @@
                             </small>
                         </div>
 
-                        <h4 style="margin: 1.5rem 0 1rem 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; border-bottom: 1px solid var(--dark-border); padding-bottom: 0.5rem;">Disconnected Buffer</h4>
+                        <div class="form-section">
+                            <h4 class="buffer-section-title">Disconnected Buffer</h4>
 
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="client-buffer-enabled">
-                                    <label for="client-buffer-enabled">Enable Message Buffering</label>
+                            <div class="buffer-settings-grid">
+                                <div class="buffer-column">
+                                    <div class="form-group buffer-toggle-row">
+                                        <div class="checkbox-group">
+                                            <input type="checkbox" id="client-buffer-enabled">
+                                            <label for="client-buffer-enabled">Enable Message Buffering</label>
+                                        </div>
+                                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Buffer messages when connection to remote broker is lost</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="client-buffer-implementation">Buffer Implementation</label>
+                                        <div class="buffer-implementation-options" id="client-buffer-implementation">
+                                            <label class="buffer-option">
+                                                <input type="radio" name="client-buffer-implementation" value="MONSTER" checked>
+                                                <span><strong>MonsterMQ Queue</strong><span>Broker managed</span></span>
+                                            </label>
+                                            <label class="buffer-option">
+                                                <input type="radio" name="client-buffer-implementation" value="PAHO">
+                                                <span><strong>Paho MQTT Client</strong><span>Client managed</span></span>
+                                            </label>
+                                        </div>
+                                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Choose the queue used when buffering is enabled</small>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="client-buffer-size">Buffer Size (messages)</label>
+                                        <input type="number" id="client-buffer-size" value="5000" min="1" max="100000">
+                                        <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum number of messages to buffer (1-100,000)</small>
+                                    </div>
                                 </div>
-                                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Buffer messages when connection to remote broker is lost</small>
-                            </div>
-                            <div class="form-group">
-                                <label for="client-buffer-size">Buffer Size (messages)</label>
-                                <input type="number" id="client-buffer-size" value="5000" min="1" max="100000">
-                                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Maximum number of messages to buffer (1-100,000)</small>
-                            </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="client-persist-buffer">
-                                    <label for="client-persist-buffer">Persist Buffer to Disk</label>
+
+                                <div class="buffer-column">
+                                    <div class="buffer-checkbox-stack">
+                                        <div class="form-group">
+                                            <div class="checkbox-group">
+                                                <input type="checkbox" id="client-persist-buffer">
+                                                <label for="client-persist-buffer">Persist Buffer to Disk</label>
+                                            </div>
+                                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Save buffer to disk (unchecked = memory only)</small>
+                                        </div>
+                                        <div class="form-group">
+                                            <div class="checkbox-group">
+                                                <input type="checkbox" id="client-delete-oldest">
+                                                <label for="client-delete-oldest">Delete Oldest Messages When Full</label>
+                                            </div>
+                                            <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">
+                                                Honored by Paho MQTT Client buffering. MonsterMQ Queue currently rejects new messages when the buffer is full.
+                                            </small>
+                                        </div>
+                                    </div>
                                 </div>
-                                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">Save buffer to disk (unchecked = memory only)</small>
-                            </div>
-                            <div class="form-group">
-                                <div class="checkbox-group">
-                                    <input type="checkbox" id="client-delete-oldest">
-                                    <label for="client-delete-oldest">Delete Oldest Messages When Full</label>
-                                </div>
-                                <small style="color: var(--text-muted); margin-top: 0.5rem; display: block;">FIFO mode (unchecked = reject new messages when buffer is full)</small>
                             </div>
                         </div>
 
@@ -321,7 +424,7 @@
                 <form id="add-address-form">
                     <div class="form-group">
                         <label for="address-mode">Mode *</label>
-                        <select id="address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties();">
+                        <select id="address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties(); toggleQosKeepOriginOptions();">
                             <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
                             <option value="PUBLISH">PUBLISH (Local → Remote)</option>
                         </select>
@@ -351,11 +454,12 @@
                     <div class="form-group">
                         <label for="address-qos">QoS Level *</label>
                         <select id="address-qos" required>
-                            <option value="0">QoS 0 - At most once</option>
+                            <option value="0" selected>QoS 0 - At most once</option>
                             <option value="1">QoS 1 - At least once</option>
                             <option value="2">QoS 2 - Exactly once</option>
+                            <option value="-1">Keep origin QoS</option>
                         </select>
-                        <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
+                        <small style="color: var(--text-muted);">Choose a fixed QoS, or keep the QoS from the original message</small>
                     </div>
                     
                     <!-- MQTT v5 Subscription Options (only for SUBSCRIBE mode) -->
@@ -452,7 +556,7 @@
                 <form id="edit-address-form">
                     <div class="form-group">
                         <label for="edit-address-mode">Mode *</label>
-                        <select id="edit-address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties();">
+                        <select id="edit-address-mode" required onchange="toggleMqtt5SubscriptionOptions(); toggleMqtt5MessageProperties(); toggleQosKeepOriginOptions();">
                             <option value="SUBSCRIBE">SUBSCRIBE (Remote → Local)</option>
                             <option value="PUBLISH">PUBLISH (Local → Remote)</option>
                         </select>
@@ -485,8 +589,9 @@
                             <option value="0">QoS 0 - At most once</option>
                             <option value="1">QoS 1 - At least once</option>
                             <option value="2">QoS 2 - Exactly once</option>
+                            <option value="-1">Keep origin QoS</option>
                         </select>
-                        <small style="color: var(--text-muted);">Quality of Service level for MQTT messages</small>
+                        <small style="color: var(--text-muted);">Choose a fixed QoS, or keep the QoS from the original message</small>
                     </div>
                     
                     <!-- MQTT v5 Subscription Options (only for SUBSCRIBE mode) -->

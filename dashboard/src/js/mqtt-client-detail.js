@@ -66,9 +66,10 @@ class MqttClientDetailManager {
         document.getElementById('client-clean-session').checked = true;
         document.getElementById('client-ssl-verify').checked = true;
         document.getElementById('client-buffer-enabled').checked = false;
+        this.setBufferImplementation('MONSTER');
         document.getElementById('client-buffer-size').value = '5000';
         document.getElementById('client-persist-buffer').checked = false;
-        document.getElementById('client-delete-oldest').checked = true;
+        document.getElementById('client-delete-oldest').checked = false;
 
         // Update save button label
         const saveBtn = document.getElementById('save-client-btn');
@@ -123,7 +124,7 @@ class MqttClientDetailManager {
                         name namespace nodeId enabled isOnCurrentNode createdAt updatedAt
                         config {
                             brokerUrl username clientId cleanSession keepAlive reconnectDelay connectionTimeout
-                            bufferEnabled bufferSize persistBuffer deleteOldestMessages sslVerifyCertificate
+                            bufferEnabled bufferImplementation bufferSize persistBuffer deleteOldestMessages sslVerifyCertificate
                             protocolVersion sessionExpiryInterval receiveMaximum maximumPacketSize topicAliasMaximum
                             addresses { 
                                 mode remoteTopic localTopic removePath qos 
@@ -195,9 +196,10 @@ class MqttClientDetailManager {
         console.log('[DEBUG] Setting SSL Verify checkbox to:', sslVerifyFromServer, 'from server value:', cfg.sslVerifyCertificate);
         document.getElementById('client-ssl-verify').checked = sslVerifyFromServer;
         document.getElementById('client-buffer-enabled').checked = cfg.bufferEnabled || false;
+        this.setBufferImplementation(cfg.bufferImplementation || 'MONSTER');
         document.getElementById('client-buffer-size').value = cfg.bufferSize || 5000;
         document.getElementById('client-persist-buffer').checked = cfg.persistBuffer || false;
-        document.getElementById('client-delete-oldest').checked = cfg.deleteOldestMessages !== undefined ? cfg.deleteOldestMessages : true;
+        document.getElementById('client-delete-oldest').checked = cfg.deleteOldestMessages !== undefined ? cfg.deleteOldestMessages : false;
 
         // Timestamps (read-only)
         this.setText('client-created-at', new Date(d.createdAt).toLocaleString());
@@ -269,7 +271,7 @@ class MqttClientDetailManager {
                 <td><code>${this.escapeHtml(address.remoteTopic)}</code></td>
                 <td><code>${this.escapeHtml(address.localTopic)}</code></td>
                 <td>${address.removePath ? 'Yes' : 'No'}</td>
-                <td><span class="qos-badge">QoS ${address.qos ?? 0}</span></td>
+                <td><span class="qos-badge">${this.formatQos(address.qos)}</span></td>
                 <td>
                     <div class="action-buttons">
                         <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
@@ -298,6 +300,7 @@ class MqttClientDetailManager {
                 reconnectDelay: parseInt(document.getElementById('client-reconnect-delay').value),
                 connectionTimeout: parseInt(document.getElementById('client-connection-timeout').value),
                 bufferEnabled: document.getElementById('client-buffer-enabled').checked,
+                bufferImplementation: this.getBufferImplementation(),
                 bufferSize: parseInt(document.getElementById('client-buffer-size').value),
                 persistBuffer: document.getElementById('client-persist-buffer').checked,
                 deleteOldestMessages: document.getElementById('client-delete-oldest').checked,
@@ -309,6 +312,16 @@ class MqttClientDetailManager {
                 topicAliasMaximum: protocolVersion === 5 ? parseInt(document.getElementById('client-topic-alias-max').value) : null
             }
         };
+    }
+
+    getBufferImplementation() {
+        return document.querySelector('input[name="client-buffer-implementation"]:checked')?.value || 'MONSTER';
+    }
+
+    setBufferImplementation(value) {
+        const normalized = value === 'PAHO' ? 'PAHO' : 'MONSTER';
+        const input = document.querySelector(`input[name="client-buffer-implementation"][value="${normalized}"]`);
+        if (input) input.checked = true;
     }
 
     async saveClient() {
@@ -504,6 +517,10 @@ class MqttClientDetailManager {
             console.error('Error adding address:', error);
             this.showError('Failed to add address: ' + error.message);
         }
+    }
+
+    formatQos(qos) {
+        return qos === -1 ? 'QoS Origin' : `QoS ${qos ?? 0}`;
     }
 
     editAddress(remoteTopic) {
@@ -704,6 +721,7 @@ class MqttClientDetailManager {
         document.getElementById('add-address-modal').style.display = 'flex';
         document.getElementById('add-address-form').reset();
         document.getElementById('address-remove-path').checked = true;
+        toggleQosKeepOriginOptions();
         updateTopicDirection();
     }
 
@@ -879,6 +897,7 @@ function toggleMqtt5Options() {
     // Also toggle subscription options and message properties visibility
     toggleMqtt5SubscriptionOptions();
     toggleMqtt5MessageProperties();
+    toggleQosKeepOriginOptions();
 }
 
 function toggleMqtt5SubscriptionOptions() {
@@ -899,6 +918,7 @@ function toggleMqtt5SubscriptionOptions() {
 
     // Also update topic direction arrows
     updateTopicDirection();
+    toggleQosKeepOriginOptions();
 }
 
 function toggleMqtt5MessageProperties() {
@@ -919,6 +939,26 @@ function toggleMqtt5MessageProperties() {
 
     // Also update topic direction arrows
     updateTopicDirection();
+    toggleQosKeepOriginOptions();
+}
+
+function toggleQosKeepOriginOptions() {
+    updateQosKeepOriginOption('address-mode', 'address-qos');
+    updateQosKeepOriginOption('edit-address-mode', 'edit-address-qos');
+}
+
+function updateQosKeepOriginOption(modeId, qosId) {
+    const mode = document.getElementById(modeId)?.value;
+    const qosSelect = document.getElementById(qosId);
+    const keepOriginOption = qosSelect?.querySelector('option[value="-1"]');
+    if (!qosSelect || !keepOriginOption) return;
+
+    const allowKeepOrigin = mode === 'PUBLISH';
+    keepOriginOption.hidden = !allowKeepOrigin;
+    keepOriginOption.disabled = !allowKeepOrigin;
+    if (!allowKeepOrigin && qosSelect.value === '-1') {
+        qosSelect.value = '0';
+    }
 }
 
 function updateTopicDirection() {

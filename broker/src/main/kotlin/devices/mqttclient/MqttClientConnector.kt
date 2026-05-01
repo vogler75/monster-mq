@@ -13,6 +13,7 @@ import at.rocworks.stores.devices.MqttClientConnectionConfig
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import org.eclipse.paho.client.mqttv3.*
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.concurrent.Callable
 import java.util.concurrent.CompletableFuture
@@ -174,9 +175,18 @@ class MqttClientConnector : AbstractVerticle() {
         }
     }
 
+    private fun useMonsterBuffer(): Boolean =
+        mqttConfig.bufferEnabled && mqttConfig.bufferImplementation == MqttClientConnectionConfig.BUFFER_IMPLEMENTATION_MONSTER
+
+    private fun usePahoBuffer(): Boolean =
+        mqttConfig.bufferEnabled && mqttConfig.bufferImplementation == MqttClientConnectionConfig.BUFFER_IMPLEMENTATION_PAHO
+
     private fun initializeMessageBuffer() {
-        if (!mqttConfig.bufferEnabled) {
-            logger.info("MQTT bridge message buffering is disabled for device ${deviceConfig.name}")
+        if (!useMonsterBuffer()) {
+            logger.info(
+                "MQTT bridge Monster queue buffering is disabled for device ${deviceConfig.name} " +
+                    "(bufferEnabled=${mqttConfig.bufferEnabled}, implementation=${mqttConfig.bufferImplementation})"
+            )
             return
         }
 
@@ -203,7 +213,7 @@ class MqttClientConnector : AbstractVerticle() {
         startQueueWriter()
         logger.info(
             "MQTT bridge message buffering enabled for device ${deviceConfig.name}: " +
-                "type=${if (mqttConfig.persistBuffer) "DISK" else "MEMORY"}, size=${mqttConfig.bufferSize}"
+                "implementation=MONSTER, type=${if (mqttConfig.persistBuffer) "DISK" else "MEMORY"}, size=${mqttConfig.bufferSize}"
         )
     }
 
@@ -282,9 +292,15 @@ class MqttClientConnector : AbstractVerticle() {
         try {
             logger.info("Connecting to remote MQTT broker: ${mqttConfig.brokerUrl}")
 
-            // Create Paho MQTT client
-            val persistence = MemoryPersistence()
-            client = MqttAsyncClient(mqttConfig.brokerUrl, mqttConfig.clientId, persistence)
+            // Create Paho MQTT client once so built-in buffered messages survive reconnect attempts.
+            if (client == null) {
+                val persistence = if (usePahoBuffer() && mqttConfig.persistBuffer) {
+                    MqttDefaultFilePersistence("./buffer/mqttbridge/paho")
+                } else {
+                    MemoryPersistence()
+                }
+                client = MqttAsyncClient(mqttConfig.brokerUrl, mqttConfig.clientId, persistence)
+            }
 
             // Configure connection options
             val connOpts = MqttConnectOptions().apply {
@@ -313,6 +329,20 @@ class MqttClientConnector : AbstractVerticle() {
                         sslHostnameVerifier = HostnameVerifier { _, _ -> true }
                     }
                 }
+            }
+
+            if (usePahoBuffer()) {
+                val bufferOpts = DisconnectedBufferOptions().apply {
+                    isBufferEnabled = true
+                    bufferSize = mqttConfig.bufferSize
+                    isPersistBuffer = mqttConfig.persistBuffer
+                    isDeleteOldestMessages = mqttConfig.deleteOldestMessages
+                }
+                client!!.setBufferOpts(bufferOpts)
+                logger.info(
+                    "Configured Paho disconnected buffer for device ${deviceConfig.name}: " +
+                        "size=${mqttConfig.bufferSize}, persisted=${mqttConfig.persistBuffer}, deleteOldest=${mqttConfig.deleteOldestMessages}"
+                )
             }
 
             // Set callback for connection events
@@ -425,7 +455,7 @@ class MqttClientConnector : AbstractVerticle() {
         try {
             subscribeAddresses.forEach { address ->
                 val topic = address.remoteTopic
-                val qos = address.qos
+                val qos = subscriptionQos(address)
 
                 client!!.subscribe(topic, qos, null, object : IMqttActionListener {
                     override fun onSuccess(asyncActionToken: IMqttToken?) {
@@ -486,7 +516,7 @@ class MqttClientConnector : AbstractVerticle() {
         if (sessionHandler != null) {
             publishAddrs.forEach { address ->
                 val topicFilter = address.localTopic
-                val qos = address.qos
+                val qos = subscriptionQos(address)
                 logger.info("Internal subscription for MQTT client '$clientId' to local topic '$topicFilter' with QoS $qos")
 
                 sessionHandler.subscribeInternalClient(clientId, topicFilter, qos)
@@ -543,7 +573,7 @@ class MqttClientConnector : AbstractVerticle() {
                     val remoteTopic = MqttTopicTransformer.localToRemote(localMessage.topicName, address)
 
                     if (remoteTopic != null) {
-                        if (mqttConfig.bufferEnabled) {
+                        if (useMonsterBuffer()) {
                             enqueueLocalMessage(localMessage)
                             return
                         }
@@ -569,14 +599,13 @@ class MqttClientConnector : AbstractVerticle() {
     }
 
     private fun publishToRemoteBroker(remoteTopic: String, localMessage: BrokerMessage, address: MqttClientAddress) {
-        if (!isConnected || client == null) {
+        if ((!isConnected && !usePahoBuffer()) || client == null) {
             logger.fine { "Not connected to remote broker, skipping publish to $remoteTopic" }
             return
         }
 
         try {
-            // Use configured QoS from address, but respect the message QoS if it's lower
-            val effectiveQos = minOf(address.qos, localMessage.qosLevel)
+            val effectiveQos = effectivePublishQos(address, localMessage)
 
             val message = PahoMqttMessage(localMessage.payload).apply {
                 qos = effectiveQos
@@ -605,7 +634,7 @@ class MqttClientConnector : AbstractVerticle() {
         }
 
         return try {
-            val effectiveQos = minOf(address.qos, localMessage.qosLevel)
+            val effectiveQos = effectivePublishQos(address, localMessage)
             val message = PahoMqttMessage(localMessage.payload).apply {
                 qos = effectiveQos
                 isRetained = localMessage.isRetain
@@ -630,6 +659,12 @@ class MqttClientConnector : AbstractVerticle() {
         }
     }
 
+    private fun subscriptionQos(address: MqttClientAddress): Int =
+        if (address.qos == MqttClientAddress.QOS_KEEP_ORIGIN) 2 else address.qos
+
+    private fun effectivePublishQos(address: MqttClientAddress, localMessage: BrokerMessage): Int =
+        if (address.qos == MqttClientAddress.QOS_KEEP_ORIGIN) localMessage.qosLevel else minOf(address.qos, localMessage.qosLevel)
+
     private fun setupMetricsEndpoint() {
         val addr = EventBusAddresses.MqttBridge.connectorMetrics(deviceConfig.name)
         vertx.eventBus().consumer<io.vertx.core.json.JsonObject>(addr) { msg ->
@@ -651,6 +686,7 @@ class MqttClientConnector : AbstractVerticle() {
                     .put("messagesQueued", queuedCount)
                     .put("bufferedPublishFailures", publishFailureCount)
                     .put("bufferEnabled", mqttConfig.bufferEnabled)
+                    .put("bufferImplementation", mqttConfig.bufferImplementation)
                     .put("bufferPersisted", mqttConfig.persistBuffer)
                     .put("bufferSize", messageQueue?.getSize() ?: 0)
                     .put("bufferCapacity", messageQueue?.getCapacity() ?: 0)

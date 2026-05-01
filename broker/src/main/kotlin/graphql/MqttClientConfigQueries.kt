@@ -128,6 +128,7 @@ class MqttClientConfigQueries(
                     )
                 },
                 "bufferEnabled" to config.bufferEnabled,
+                "bufferImplementation" to config.bufferImplementation,
                 "bufferSize" to config.bufferSize,
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,

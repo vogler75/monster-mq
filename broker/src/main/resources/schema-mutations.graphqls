@@ -760,12 +760,14 @@ input MqttClientConnectionConfigInput {
     connectionTimeout: Long = 30000
     # Whether to enable message buffering when disconnected (default: false)
     bufferEnabled: Boolean = false
+    # Buffer implementation: MONSTER for MonsterMQ queue, PAHO for Paho MQTT client built-in buffer
+    bufferImplementation: String = "MONSTER"
     # Maximum number of messages to buffer when disconnected (default: 5000, max: 100000)
     bufferSize: Int = 5000
     # Whether to persist the buffer to disk (default: false = memory only)
     persistBuffer: Boolean = false
-    # Whether to delete oldest messages when buffer is full (default: true = FIFO, false = reject new)
-    deleteOldestMessages: Boolean = true
+    # Whether to delete oldest messages when buffer is full (default: false = reject new)
+    deleteOldestMessages: Boolean = false
     # Whether to verify SSL certificates (default: true, disable for self-signed certificates)
     sslVerifyCertificate: Boolean = true
     # MQTT protocol version: 4 for v3.1.1, 5 for v5.0 (default: 4)
@@ -790,7 +792,7 @@ input MqttClientAddressInput {
     localTopic: String!
     # Whether to remove the base path from topic names
     removePath: Boolean = true
-    # QoS level for MQTT messages (0, 1, or 2)
+    # QoS level for MQTT messages (-1=Keep origin for PUBLISH mappings only, 0, 1, or 2)
     qos: Int = 0
     # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
     # No Local: Don't receive messages you published (prevents loops)

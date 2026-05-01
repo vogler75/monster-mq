@@ -921,9 +921,10 @@ class MqttClientConfigMutations(
             connectionTimeout = (configMap["connectionTimeout"] as? Number)?.toLong() ?: 30000L,
             addresses = emptyList(), // Addresses are managed separately
             bufferEnabled = configMap["bufferEnabled"] as? Boolean ?: false,
+            bufferImplementation = configMap["bufferImplementation"] as? String ?: MqttClientConnectionConfig.BUFFER_IMPLEMENTATION_MONSTER,
             bufferSize = (configMap["bufferSize"] as? Number)?.toInt() ?: 5000,
             persistBuffer = configMap["persistBuffer"] as? Boolean ?: false,
-            deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: true,
+            deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: false,
             loopPrevention = configMap["loopPrevention"] as? Boolean ?: true,
             sslVerifyCertificate = configMap["sslVerifyCertificate"] as? Boolean ?: true,
             // MQTT v5 properties
@@ -975,6 +976,7 @@ class MqttClientConfigMutations(
                 "reconnectDelay" to config.reconnectDelay,
                 "connectionTimeout" to config.connectionTimeout,
                 "bufferEnabled" to config.bufferEnabled,
+                "bufferImplementation" to config.bufferImplementation,
                 "bufferSize" to config.bufferSize,
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,

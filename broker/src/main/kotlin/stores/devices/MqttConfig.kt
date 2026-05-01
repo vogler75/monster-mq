@@ -19,7 +19,7 @@ data class MqttClientAddress(
     val remoteTopic: String,       // Remote MQTT topic (with wildcards)
     val localTopic: String,        // Local MQTT topic destination/source
     val removePath: Boolean = true, // Remove base path before wildcard
-    val qos: Int = 0,              // QoS level (0, 1, or 2)
+    val qos: Int = 0,              // QoS level (-1 = keep origin, 0, 1, or 2)
     // MQTT v5 Subscription Options (only for SUBSCRIBE mode)
     val noLocal: Boolean = false,  // Don't receive messages you published
     val retainHandling: Int = 0,   // 0=Send retained, 1=Send retained only if new sub, 2=Never send retained
@@ -34,6 +34,7 @@ data class MqttClientAddress(
     companion object {
         const val MODE_SUBSCRIBE = "SUBSCRIBE"
         const val MODE_PUBLISH = "PUBLISH"
+        const val QOS_KEEP_ORIGIN = -1
 
         fun fromJsonObject(json: JsonObject): MqttClientAddress {
             val userProperties = try {
@@ -111,8 +112,12 @@ data class MqttClientAddress(
             errors.add("localTopic cannot be blank")
         }
 
-        if (qos !in 0..2) {
-            errors.add("qos must be 0, 1, or 2")
+        if (qos != QOS_KEEP_ORIGIN && qos !in 0..2) {
+            errors.add("qos must be -1 (keep origin), 0, 1, or 2")
+        }
+
+        if (mode == MODE_SUBSCRIBE && qos == QOS_KEEP_ORIGIN) {
+            errors.add("qos keep origin is only valid for '$MODE_PUBLISH' addresses")
         }
 
         return errors
@@ -144,9 +149,10 @@ data class MqttClientConnectionConfig(
     val addresses: List<MqttClientAddress> = emptyList(),
     // Disconnected buffer configuration (for handling messages when connection is lost)
     val bufferEnabled: Boolean = false,
+    val bufferImplementation: String = BUFFER_IMPLEMENTATION_MONSTER,
     val bufferSize: Int = 5000,
     val persistBuffer: Boolean = false,
-    val deleteOldestMessages: Boolean = true,
+    val deleteOldestMessages: Boolean = false,
     // Loop prevention (prevents bridge from republishing its own messages)
     val loopPrevention: Boolean = true,
     // SSL/TLS configuration
@@ -163,6 +169,8 @@ data class MqttClientConnectionConfig(
         const val PROTOCOL_SSL = "ssl"  // Changed from PROTOCOL_TCPS for Paho compatibility
         const val PROTOCOL_WS = "ws"
         const val PROTOCOL_WSS = "wss"
+        const val BUFFER_IMPLEMENTATION_MONSTER = "MONSTER"
+        const val BUFFER_IMPLEMENTATION_PAHO = "PAHO"
 
         fun fromJsonObject(json: JsonObject): MqttClientConnectionConfig {
             try {
@@ -186,9 +194,10 @@ data class MqttClientConnectionConfig(
                     connectionTimeout = json.getLong("connectionTimeout", 30000L),
                     addresses = addresses,
                     bufferEnabled = json.getBoolean("bufferEnabled", false),
+                    bufferImplementation = json.getString("bufferImplementation", BUFFER_IMPLEMENTATION_MONSTER),
                     bufferSize = json.getInteger("bufferSize", 5000),
                     persistBuffer = json.getBoolean("persistBuffer", false),
-                    deleteOldestMessages = json.getBoolean("deleteOldestMessages", true),
+                    deleteOldestMessages = json.getBoolean("deleteOldestMessages", false),
                     loopPrevention = json.getBoolean("loopPrevention", true),
                     // Default to true (secure by default) - can be disabled for self-signed certificates
                     sslVerifyCertificate = when (val value = json.getValue("sslVerifyCertificate")) {
@@ -220,6 +229,7 @@ data class MqttClientConnectionConfig(
             .put("reconnectDelay", reconnectDelay)
             .put("connectionTimeout", connectionTimeout)
             .put("bufferEnabled", bufferEnabled)
+            .put("bufferImplementation", bufferImplementation)
             .put("bufferSize", bufferSize)
             .put("persistBuffer", persistBuffer)
             .put("deleteOldestMessages", deleteOldestMessages)
@@ -303,6 +313,10 @@ data class MqttClientConnectionConfig(
 
         if (bufferSize < 1 || bufferSize > 100000) {
             errors.add("bufferSize must be between 1 and 100000")
+        }
+
+        if (bufferImplementation != BUFFER_IMPLEMENTATION_MONSTER && bufferImplementation != BUFFER_IMPLEMENTATION_PAHO) {
+            errors.add("bufferImplementation must be '$BUFFER_IMPLEMENTATION_MONSTER' or '$BUFFER_IMPLEMENTATION_PAHO'")
         }
 
         // Validate addresses

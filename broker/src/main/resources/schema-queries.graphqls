@@ -724,7 +724,7 @@ type MqttClientAddress {
     # Whether to remove the base path from topic names when mapping
     # Example: remoteTopic="sensor/#" with removePath=true maps "sensor/temp/1" to "temp/1"
     removePath: Boolean!
-    # QoS level for MQTT messages (0=At most once, 1=At least once, 2=Exactly once)
+    # QoS level for MQTT messages (-1=Keep origin for PUBLISH mappings only, 0=At most once, 1=At least once, 2=Exactly once)
     qos: Int
     # MQTT v5 Subscription Options (only for SUBSCRIBE mode)
     # No Local: Don't receive messages you published (prevents loops)
@@ -774,6 +774,8 @@ type MqttClientConnectionConfig {
     addresses: [MqttClientAddress!]!
     # Whether to enable message buffering when disconnected
     bufferEnabled: Boolean!
+    # Buffer implementation: MONSTER for MonsterMQ queue, PAHO for Paho MQTT client built-in buffer
+    bufferImplementation: String!
     # Maximum number of messages to buffer when disconnected (1-100000)
     bufferSize: Int!
     # Whether to persist the buffer to disk (false = memory only)
