@@ -32,10 +32,8 @@ gateway
 *.pyc
 .aitk/
 
-### Dashboard (Vite) ###
-dashboard/node_modules/
-dashboard/dist/
-dashboard/src/svg
+### Dashboard ###
+dashboard
 
 ### Python ###
 .venv/
