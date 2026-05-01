@@ -35,6 +35,12 @@ docker run \
 ### Build From Source
 
 ```bash
+git clone --recurse-submodules git@github.com:vogler75/monster-mq.git
+cd monster-mq
+
+# If you already cloned without --recurse-submodules:
+./update-dashboard-submodule.sh
+
 cd broker
 
 # Build everything (dashboard + broker) and run
