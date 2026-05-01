@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rumqttc = "0.24"
+rumqttc = { version = "0.25.1", default-features = false }
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
