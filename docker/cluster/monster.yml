@@ -14,7 +14,7 @@ Dashboard:
   Enabled: true
 
 BulkProcessing:
-  Enabled: true
+  Enabled: false
   TimeoutMS: 50
   BulkSize: 1000
   WorkerThreads: 4
@@ -77,4 +77,3 @@ GenAI:
   Assistant:
     Provider: "gemini"
     Model: "gemini-3.1-flash-lite-preview"
-

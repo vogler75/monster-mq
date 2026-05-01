@@ -233,6 +233,58 @@
         }
       }
     },
+    "BulkMessaging": {
+      "type": "object",
+      "description": "Batch message delivery to clients to reduce eventBus overhead.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable bulk message batching for client delivery."
+        },
+        "TimeoutMS": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 1,
+          "description": "Flush partial delivery batches after this many milliseconds."
+        },
+        "BulkSize": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Flush delivery batches when this many messages are collected."
+        }
+      }
+    },
+    "BulkProcessing": {
+      "type": "object",
+      "description": "Batch inbound publish processing and route messages through worker threads.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable publish bulk processing."
+        },
+        "TimeoutMS": {
+          "type": "integer",
+          "default": 50,
+          "minimum": 1,
+          "description": "Flush partial inbound publish batches after this many milliseconds."
+        },
+        "BulkSize": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Flush inbound publish batches when this many messages are collected."
+        },
+        "WorkerThreads": {
+          "type": "integer",
+          "default": 4,
+          "minimum": 1,
+          "description": "Number of parallel worker threads used when BulkProcessing is enabled."
+        }
+      }
+    },
     "ConfigStoreType": {
       "type": "string",
       "enum": [

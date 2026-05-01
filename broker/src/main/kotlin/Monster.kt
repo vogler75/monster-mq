@@ -301,7 +301,7 @@ class Monster(args: Array<String>) {
         fun getBulkMessagingBulkSize(): Int = bulkMessagingBulkSize
 
         @Volatile
-        private var publishBulkProcessingEnabled: Boolean = true
+        private var publishBulkProcessingEnabled: Boolean = false
         @JvmStatic
         fun isPublishBulkProcessingEnabled(): Boolean = publishBulkProcessingEnabled
 
@@ -751,10 +751,10 @@ MORE INFO:
                 // Read publish bulk processing configuration
                 configJson.getJsonObject("BulkProcessing", JsonObject()).let { bulkProcConfig ->
                     publishBulkProcessingEnabled = try {
-                        bulkProcConfig.getBoolean("Enabled", true)
+                        bulkProcConfig.getBoolean("Enabled", false)
                     } catch (e: Exception) {
                         logger.warning("Config: BulkProcessing.Enabled read failed: ${e.message}")
-                        true
+                        false
                     }
                     publishBulkTimeoutMs = try {
                         bulkProcConfig.getLong("TimeoutMS", 50L)

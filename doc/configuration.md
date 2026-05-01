@@ -240,7 +240,7 @@ This feature is independent and can be enabled/disabled separately from BulkProc
 
 ```yaml
 BulkProcessing:
-  Enabled: true              # Enable/disable publish bulk processing and worker threads
+  Enabled: false             # Enable/disable publish bulk processing and worker threads
   TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
   BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
   WorkerThreads: 4           # Number of parallel worker threads (2-8 recommended)
