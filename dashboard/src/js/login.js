@@ -1,250 +1,325 @@
-class LoginManager {
-    constructor() {
-        this.form = document.getElementById('login-form');
-        this.usernameInput = document.getElementById('username');
-        this.passwordInput = document.getElementById('password');
-        this.loginBtn = document.getElementById('login-btn');
-        this.loginText = document.getElementById('login-text');
-        this.loginSpinner = document.getElementById('login-spinner');
-        this.alertContainer = document.getElementById('alert-container');
-        this.brokerSelect = document.getElementById('broker-select');
+(function() {
+    class LoginManager {
+        constructor() {
+            this.form = document.getElementById('login-form');
+            this.usernameInput = document.getElementById('username');
+            this.passwordInput = document.getElementById('password');
+            this.loginBtn = document.getElementById('login-btn');
+            this.alertContainer = document.getElementById('alert-container');
+            this.brokerSelect = document.getElementById('broker-select');
+            this.guestAccess = document.getElementById('guest-access');
+            this.guestLink = document.getElementById('guest-link');
+            this.pendingLogin = false;
 
-        this.init();
-    }
-
-    async init() {
-        sessionStorage.clear();
-        safeStorage.removeItem('monstermq_guest');
-
-        await window.brokerManager.ready();
-        this.populateBrokerSelect();
-
-        var authStatus = await this.checkUserManagementEnabled();
-
-        if (authStatus?.userManagementEnabled && this.isLoggedIn()) {
-            window.location.href = '/pages/dashboard.html';
-            return;
+            this.bindEvents();
+            this.init();
         }
 
-        this.form.addEventListener('submit', (e) => this.handleLogin(e));
-        this.brokerSelect.addEventListener('change', () => this.onBrokerSelectChange());
-
-        var guestLink = document.getElementById('guest-link');
-        if (guestLink) {
-            guestLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                this.enterGuestMode();
-            });
-        }
-    }
-
-    populateBrokerSelect() {
-        var brokers = window.brokerManager.getAllBrokers();
-        var activeBroker = window.brokerManager.getActiveBroker();
-        var activeId = activeBroker ? activeBroker.name : null;
-
-        this.brokerSelect.innerHTML = '';
-
-        brokers.forEach(function(broker) {
-            var option = document.createElement('option');
-            option.value = broker.name;
-            var label = broker.name;
-            if (!broker.host) label += ' (this server)';
-            option.textContent = label;
-            if (broker.name === activeId) option.selected = true;
-            this.brokerSelect.appendChild(option);
-        }.bind(this));
-    }
-
-    onBrokerSelectChange() {
-        window.brokerManager.setActiveBroker(this.brokerSelect.value);
-        // Hide guest access until re-checked
-        var guestAccess = document.getElementById('guest-access');
-        if (guestAccess) guestAccess.style.display = 'none';
-        this.checkUserManagementEnabled();
-    }
-
-    getGraphqlEndpoint() {
-        return window.brokerManager.getEndpoint();
-    }
-
-    showBrokerStatus(state, message) {
-        var container = document.getElementById('broker-status');
-        var dot = document.getElementById('broker-status-dot');
-        var text = document.getElementById('broker-status-text');
-
-        if (state === 'hidden') {
-            container.style.display = 'none';
-            return;
-        }
-
-        container.style.display = 'flex';
-        dot.className = 'dot';
-
-        if (state === 'checking') {
-            text.textContent = 'Checking broker...';
-        } else if (state === 'connected') {
-            dot.classList.add('connected');
-            text.textContent = message || 'Broker reachable';
-        } else if (state === 'error') {
-            dot.classList.add('error');
-            text.textContent = message || 'Cannot reach broker';
-        }
-    }
-
-    async checkUserManagementEnabled() {
-        var endpoint = this.getGraphqlEndpoint();
-        this.showBrokerStatus('checking');
-
-        try {
-            var response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query: '{ broker { userManagementEnabled anonymousEnabled } }'
-                })
+        bindEvents() {
+            this.form.setAttribute('novalidate', 'novalidate');
+            this.form.addEventListener('submit', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.handleLogin();
             });
 
-            var result = await response.json();
-            var userManagementEnabled = result.data?.broker?.userManagementEnabled ?? false;
-            var anonymousEnabled = result.data?.broker?.anonymousEnabled ?? false;
+            this.loginBtn.addEventListener('click', (event) => {
+                event.preventDefault();
+                this.handleLogin();
+            });
 
-            this.showBrokerStatus('connected');
+            [this.usernameInput, this.passwordInput].forEach((input) => {
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        this.handleLogin();
+                    }
+                });
+            });
 
-            if (!userManagementEnabled) {
-                this.clearCachedAuthDisabled();
-                this.showAlert('Authentication is disabled on this broker. Submit with empty credentials to continue.', 'success');
-            } else if (anonymousEnabled) {
-                this.clearCachedAuthDisabled();
-                var guestAccess = document.getElementById('guest-access');
-                if (guestAccess) guestAccess.style.display = 'block';
-            } else {
-                this.clearCachedAuthDisabled();
+            this.brokerSelect.addEventListener('change', () => this.onBrokerSelectChange());
+
+            if (this.guestLink) {
+                this.guestLink.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    this.enterGuestMode();
+                });
+            }
+        }
+
+        async init() {
+            var loginMessage = null;
+            try {
+                loginMessage = sessionStorage.getItem('monstermq_login_message');
+                sessionStorage.removeItem('monstermq_login_message');
+            } catch (e) {
+                console.warn('Failed to read login redirect reason:', e.message);
             }
 
-            return { userManagementEnabled: userManagementEnabled, anonymousEnabled: anonymousEnabled };
-        } catch (error) {
-            console.error('Error checking user management status:', error);
-            this.showBrokerStatus('error', 'Cannot reach broker');
-            return null;
-        }
-    }
+            sessionStorage.clear();
+            safeStorage.removeItem('monstermq_guest');
 
-    clearCachedAuthDisabled() {
-        if (safeStorage.getItem('monstermq_token') === 'null') {
+            if (loginMessage) {
+                this.showAlert(loginMessage);
+            }
+
+            try {
+                await window.brokerManager.ready();
+                this.populateBrokerSelect();
+                await this.checkUserManagementEnabled();
+                if (loginMessage) {
+                    this.showAlert(loginMessage);
+                }
+            } catch (error) {
+                console.error('Login page initialization failed:', error);
+                this.showBrokerStatus('error', 'Cannot initialize broker selector');
+                this.showAlert('Cannot initialize login page: ' + error.message);
+            }
+        }
+
+        populateBrokerSelect() {
+            var brokers = window.brokerManager.getAllBrokers();
+            var activeBroker = window.brokerManager.getActiveBroker();
+            var activeId = activeBroker ? activeBroker.name : null;
+
+            this.brokerSelect.innerHTML = '';
+
+            brokers.forEach(function(broker) {
+                var option = document.createElement('option');
+                option.value = broker.name;
+                option.textContent = broker.host ? broker.name : broker.name + ' (this server)';
+                if (broker.name === activeId) option.selected = true;
+                this.brokerSelect.appendChild(option);
+            }.bind(this));
+        }
+
+        onBrokerSelectChange() {
+            window.brokerManager.switchBroker(this.brokerSelect.value);
+            this.hideGuestAccess();
+            this.clearAlert();
+            this.usernameInput.value = '';
+            this.passwordInput.value = '';
+            this.checkUserManagementEnabled();
+        }
+
+        getGraphqlEndpoint() {
+            return window.brokerManager.getEndpoint();
+        }
+
+        showBrokerStatus(state, message) {
+            var container = document.getElementById('broker-status');
+            var dot = document.getElementById('broker-status-dot');
+            var text = document.getElementById('broker-status-text');
+
+            if (state === 'hidden') {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'flex';
+            dot.className = 'dot';
+
+            if (state === 'checking') {
+                text.textContent = message || 'Checking broker...';
+            } else if (state === 'connected') {
+                dot.classList.add('connected');
+                text.textContent = message || 'Broker reachable';
+            } else if (state === 'error') {
+                dot.classList.add('error');
+                text.textContent = message || 'Cannot reach broker';
+            }
+        }
+
+        async checkUserManagementEnabled() {
+            this.showBrokerStatus('checking');
+
+            try {
+                var result = await this.graphqlRequest(
+                    '{ broker { userManagementEnabled anonymousEnabled } }',
+                    {}
+                );
+
+                var broker = result.data?.broker || {};
+                var userManagementEnabled = broker.userManagementEnabled ?? false;
+                var anonymousEnabled = broker.anonymousEnabled ?? false;
+
+                this.showBrokerStatus('connected');
+                this.clearCachedAuthDisabled();
+
+                if (!userManagementEnabled) {
+                    this.showAlert('Authentication is disabled on this broker. Sign in with empty credentials to continue.', 'success', false);
+                } else if (anonymousEnabled) {
+                    this.showGuestAccess();
+                }
+
+                return {
+                    userManagementEnabled: userManagementEnabled,
+                    anonymousEnabled: anonymousEnabled
+                };
+            } catch (error) {
+                console.error('Error checking broker authentication status:', error);
+                this.showBrokerStatus('error', 'Cannot reach broker');
+                this.showAlert('Cannot reach broker: ' + error.message);
+                return null;
+            }
+        }
+
+        async graphqlRequest(query, variables) {
+            var response = await fetch(this.getGraphqlEndpoint(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query, variables: variables || {} })
+            });
+
+            var responseText = await response.text();
+
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status + ' ' + response.statusText + this.formatResponseDetail(responseText));
+            }
+
+            var result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (error) {
+                throw new Error('Invalid JSON response from GraphQL server' + this.formatResponseDetail(responseText));
+            }
+
+            if (result.errors && result.errors.length > 0) {
+                throw new Error(result.errors[0].message || 'GraphQL request failed');
+            }
+
+            return result;
+        }
+
+        formatResponseDetail(responseText) {
+            if (!responseText) return '';
+            var trimmed = responseText.trim();
+            if (trimmed.length > 500) {
+                trimmed = trimmed.substring(0, 500) + '...';
+            }
+            return ': ' + trimmed;
+        }
+
+        clearCachedAuthDisabled() {
+            if (safeStorage.getItem('monstermq_token') === 'null') {
+                safeStorage.removeItem('monstermq_token');
+                safeStorage.removeItem('monstermq_username');
+                safeStorage.removeItem('monstermq_isAdmin');
+                safeStorage.removeItem('monstermq_userManagementEnabled');
+                window.brokerManager.saveAuthForBroker();
+            }
+        }
+
+        showGuestAccess() {
+            if (this.guestAccess) this.guestAccess.style.display = 'block';
+        }
+
+        hideGuestAccess() {
+            if (this.guestAccess) this.guestAccess.style.display = 'none';
+        }
+
+        enterGuestMode() {
             safeStorage.removeItem('monstermq_token');
             safeStorage.removeItem('monstermq_username');
             safeStorage.removeItem('monstermq_isAdmin');
-            safeStorage.removeItem('monstermq_userManagementEnabled');
+            safeStorage.setItem('monstermq_guest', 'true');
+            safeStorage.setItem('monstermq_userManagementEnabled', 'true');
             window.brokerManager.saveAuthForBroker();
+            window.location.assign('/pages/dashboard.html');
         }
-    }
 
-    enterGuestMode() {
-        safeStorage.removeItem('monstermq_token');
-        safeStorage.removeItem('monstermq_username');
-        safeStorage.removeItem('monstermq_isAdmin');
-        safeStorage.setItem('monstermq_guest', 'true');
-        safeStorage.setItem('monstermq_userManagementEnabled', 'true');
-        window.brokerManager.saveAuthForBroker();
-        window.location.href = '/pages/dashboard.html';
-    }
+        showAlert(message, type, autoDismiss) {
+            type = type || 'error';
+            autoDismiss = autoDismiss === undefined ? type === 'success' : autoDismiss;
 
-    isLoggedIn() {
-        var token = safeStorage.getItem('monstermq_token');
-        if (!token) return false;
-        if (token === 'null') return true;
-        try {
-            var decoded = JSON.parse(atob(token.split('.')[1]));
-            return decoded.exp > Date.now() / 1000;
-        } catch {
-            return false;
+            this.clearAlert();
+
+            var alert = document.createElement('div');
+            alert.className = 'alert alert-' + type;
+            alert.setAttribute('role', type === 'error' ? 'alert' : 'status');
+            alert.textContent = message;
+            this.alertContainer.appendChild(alert);
+
+            if (autoDismiss) {
+                setTimeout(function() {
+                    if (alert.parentNode === this.alertContainer) {
+                        this.clearAlert();
+                    }
+                }.bind(this), 5000);
+            }
         }
-    }
 
-    showAlert(message, type) {
-        type = type || 'error';
-        this.alertContainer.innerHTML = '<div class="alert alert-' + type + '">' + message + '</div>';
-        setTimeout(function() {
+        clearAlert() {
             this.alertContainer.innerHTML = '';
-        }.bind(this), 5000);
-    }
-
-    setLoading(loading) {
-        if (loading) {
-            this.loginBtn.setAttribute('loading', '');
-            this.loginBtn.setAttribute('disabled', '');
-        } else {
-            this.loginBtn.removeAttribute('loading');
-            this.loginBtn.removeAttribute('disabled');
-        }
-    }
-
-    async handleLogin(e) {
-        e.preventDefault();
-
-        var username = this.usernameInput.value.trim();
-        var password = this.passwordInput.value;
-
-        if ((!username && password) || (username && !password)) {
-            this.showAlert('Please enter both username and password, or leave both empty if authentication is disabled');
-            return;
         }
 
-        this.setLoading(true);
-        this.alertContainer.innerHTML = '';
+        setLoading(loading) {
+            this.pendingLogin = loading;
+            this.loginBtn.disabled = loading;
+            this.loginBtn.textContent = loading ? 'Signing in...' : 'Sign In';
+        }
 
-        var graphqlEndpoint = this.getGraphqlEndpoint();
+        async handleLogin() {
+            if (this.pendingLogin) return;
 
-        try {
-            var response = await fetch(graphqlEndpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    query: 'mutation Login($username: String!, $password: String!) { login(username: $username, password: $password) { success message token username isAdmin } }',
-                    variables: { username: username || '', password: password || '' }
-                })
-            });
+            var username = this.usernameInput.value.trim();
+            var password = this.passwordInput.value;
 
-            var graphqlResult = await response.json();
-
-            if (graphqlResult.errors) {
-                throw new Error(graphqlResult.errors[0].message);
+            if ((!username && password) || (username && !password)) {
+                this.showAlert('Enter both username and password, or leave both empty if authentication is disabled.');
+                return;
             }
 
-            var result = graphqlResult.data?.login || {};
+            this.setLoading(true);
+            this.clearAlert();
 
-            if (result.success) {
+            try {
+                try {
+                    sessionStorage.removeItem('monstermq_login_message');
+                } catch (_) {}
+
+                var graphqlResult = await this.graphqlRequest(
+                    'mutation Login($username: String!, $password: String!) { login(username: $username, password: $password) { success message token username isAdmin } }',
+                    { username: username || '', password: password || '' }
+                );
+
+                var result = graphqlResult.data?.login || {};
+
+                if (!result.success) {
+                    this.showAlert(result.message || 'Login failed.');
+                    return;
+                }
+
                 safeStorage.removeItem('monstermq_guest');
 
                 var token = result.token || 'null';
                 safeStorage.setItem('monstermq_token', token);
                 safeStorage.setItem('monstermq_username', result.token === null ? 'Anonymous' : result.username);
-                safeStorage.setItem('monstermq_isAdmin', result.token === null ? 'false' : result.isAdmin);
+                safeStorage.setItem('monstermq_isAdmin', result.token === null ? 'false' : String(result.isAdmin));
                 safeStorage.setItem('monstermq_userManagementEnabled', result.token === null ? 'false' : 'true');
                 window.brokerManager.saveAuthForBroker();
 
-                if (result.token === null) {
-                    this.showAlert('Authentication disabled - accessing dashboard...', 'success');
-                } else {
-                    this.showAlert('Login successful! Redirecting...', 'success');
-                }
-
+                this.showAlert(result.token === null ? 'Authentication disabled. Opening dashboard...' : 'Login successful. Opening dashboard...', 'success');
                 setTimeout(function() {
-                    window.location.href = '/pages/dashboard.html';
-                }, 1000);
-            } else {
-                this.showAlert(result.message || 'Login failed');
+                    window.location.assign('/pages/dashboard.html');
+                }, 500);
+            } catch (error) {
+                console.error('Login failed:', error);
+                this.showAlert('Login failed: ' + error.message);
+            } finally {
+                this.setLoading(false);
             }
-        } catch (error) {
-            console.error('Login error:', error);
-            this.showAlert('Network error. Please check if the MonsterMQ broker is running.');
-        } finally {
-            this.setLoading(false);
         }
     }
-}
 
-document.addEventListener('DOMContentLoaded', function() {
-    new LoginManager();
-});
+    function startLoginPage() {
+        new LoginManager();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startLoginPage, { once: true });
+    } else {
+        startLoginPage();
+    }
+})();

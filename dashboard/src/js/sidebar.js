@@ -80,7 +80,11 @@ class SidebarManager {
 
             if (cachedAuthDisabled && userManagementEnabled) {
                 this.clearAuthState();
-                window.location.href = '/pages/login.html';
+                if (window.redirectToLogin) {
+                    window.redirectToLogin('Authentication is enabled on this broker. Please sign in.');
+                } else {
+                    window.location.href = '/pages/login.html';
+                }
                 return false;
             }
 
@@ -96,7 +100,11 @@ class SidebarManager {
 
             if (cachedGuest && !anonymousEnabled) {
                 this.clearAuthState();
-                window.location.href = '/pages/login.html';
+                if (window.redirectToLogin) {
+                    window.redirectToLogin('Guest access is disabled on this broker. Please sign in.');
+                } else {
+                    window.location.href = '/pages/login.html';
+                }
                 return false;
             }
         } catch (e) {
@@ -823,6 +831,10 @@ async function updateAuthStatusIndicator() {
     const token = safeStorage.getItem('monstermq_token');
     const isGuest = authEnabled && !token && safeStorage.getItem('monstermq_guest') === 'true';
     const currentUser = authEnabled ? brokerAuth?.currentUser : null;
+    const storedUsername = safeStorage.getItem('monstermq_username');
+    const displayUsername = token && token !== 'null' && storedUsername
+        ? storedUsername
+        : currentUser?.username;
 
     indicator.className = 'auth-status-indicator';
 
@@ -832,8 +844,8 @@ async function updateAuthStatusIndicator() {
     } else if (isGuest) {
         indicator.textContent = 'Auth enabled - Not logged in - Read-only';
         indicator.classList.add('auth-status-readonly');
-    } else if (currentUser) {
-        indicator.textContent = 'Auth enabled - Logged in as ' + currentUser.username;
+    } else if (displayUsername) {
+        indicator.textContent = 'Auth enabled - Logged in as ' + displayUsername;
         indicator.classList.add('auth-status-logged-in');
     } else {
         indicator.textContent = 'Auth enabled - Not logged in';
@@ -853,7 +865,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.__SPA_MODE) {
         // SPA mode (index.html): check auth, then init full SPA with navigation
         if (!window.isLoggedIn || !window.isLoggedIn()) {
-            window.location.href = '/pages/login.html';
+            if (window.redirectToLogin) {
+                window.redirectToLogin('No valid dashboard session was found. Please sign in.');
+            } else {
+                window.location.href = '/pages/login.html';
+            }
             return;
         }
         window._sidebarManager = new SidebarManager();

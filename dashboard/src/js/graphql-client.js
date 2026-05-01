@@ -64,6 +64,11 @@ class GraphQLDashboardClient {
             return;
         }
 
+        // Opaque server-side session tokens are validated by the backend.
+        if (window.isJwtToken && !window.isJwtToken(token)) {
+            return;
+        }
+
         try {
             // Decode JWT payload
             const parts = token.split('.');
@@ -71,7 +76,7 @@ class GraphQLDashboardClient {
                 return;
             }
 
-            const payload = JSON.parse(atob(parts[1]));
+            const payload = window.decodeJwtPayload ? window.decodeJwtPayload(token) : JSON.parse(atob(parts[1]));
             const expiryTime = payload.exp; // Unix timestamp in seconds
             const currentTime = Math.floor(Date.now() / 1000);
             const remainingSeconds = expiryTime - currentTime;
@@ -208,7 +213,11 @@ class GraphQLDashboardClient {
 
         // Button click handler
         document.getElementById('session-expired-login-btn').addEventListener('click', () => {
-            window.location.href = '/pages/login.html';
+            if (window.redirectToLogin) {
+                window.redirectToLogin('Your session expired. Please sign in again.');
+            } else {
+                window.location.href = '/pages/login.html';
+            }
         });
 
         // Auto-redirect countdown
@@ -217,7 +226,11 @@ class GraphQLDashboardClient {
             countdown--;
             if (countdown <= 0) {
                 clearInterval(countdownInterval);
-                window.location.href = '/pages/login.html';
+                if (window.redirectToLogin) {
+                    window.redirectToLogin('Your session expired. Please sign in again.');
+                } else {
+                    window.location.href = '/pages/login.html';
+                }
             } else {
                 countdownEl.textContent = `Redirecting in ${countdown} seconds...`;
             }
@@ -301,7 +314,8 @@ class GraphQLDashboardClient {
             'Content-Type': headers['Content-Type'],
             'Authorization': headers.Authorization ? '[Token Present]' : '[No Token]'
         });
-        console.log('Token Status:', token === 'null' ? 'null (auth disabled)' : token ? `JWT token present (${token.substring(0, 20)}...)` : 'no token');
+        const tokenKind = token && token !== 'null' && window.isJwtToken && !window.isJwtToken(token) ? 'session token' : 'JWT token';
+        console.log('Token Status:', token === 'null' ? 'null (auth disabled)' : token ? `${tokenKind} present (${token.substring(0, 20)}...)` : 'no token');
 
         const requestBody = JSON.stringify({ query, variables });
         console.log('Request Body:', requestBody);
@@ -815,7 +829,7 @@ window.debugAuth = function () {
             // Try to decode JWT
             const parts = token.split('.');
             if (parts.length === 3) {
-                const decoded = JSON.parse(atob(parts[1]));
+                const decoded = window.decodeJwtPayload ? window.decodeJwtPayload(token) : JSON.parse(atob(parts[1]));
                 console.log('JWT Decoded:', decoded);
                 const now = Date.now() / 1000;
                 console.log('Token expired:', decoded.exp < now);

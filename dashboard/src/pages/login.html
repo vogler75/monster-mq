@@ -8,11 +8,15 @@
     <link rel="stylesheet" href="/assets/ix-init.css">
     <link rel="stylesheet" href="/assets/monster-theme.css">
     <style>
+        body {
+            margin: 0;
+            background: var(--theme-color-1);
+        }
         .login-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             padding: 2rem;
             box-sizing: border-box;
             background: var(--theme-color-1);
@@ -62,6 +66,9 @@
             font-size: 1rem;
             box-sizing: border-box;
         }
+        .form-control::placeholder {
+            color: var(--theme-color-soft-text);
+        }
         .form-control:focus {
             outline: none;
             border-color: var(--theme-color-primary);
@@ -107,6 +114,40 @@
         .broker-status .dot.error {
             background: var(--monster-red, #EF4444);
         }
+        .login-submit {
+            width: 100%;
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 8px;
+            background: var(--theme-color-primary);
+            color: var(--theme-color-primary--contrast, #ffffff);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .login-submit:hover:not(:disabled) {
+            filter: brightness(1.08);
+        }
+        .login-submit:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+        .guest-separator {
+            color: var(--theme-color-soft-text);
+            font-size: 0.8rem;
+            margin-bottom: 0.75rem;
+        }
+        .guest-link {
+            color: var(--theme-color-primary);
+            font-size: 0.875rem;
+            text-decoration: none;
+        }
+        .guest-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -136,26 +177,23 @@
 
             <div id="alert-container"></div>
 
-            <form id="login-form">
+            <form id="login-form" action="javascript:void(0)" method="post" autocomplete="on">
                 <div class="form-group">
                     <label for="username">Username</label>
-                    <input type="text" id="username" name="username" class="form-control" placeholder="Enter username or leave empty if auth is disabled">
+                    <input type="text" id="username" name="username" class="form-control" autocomplete="username" placeholder="Username">
                 </div>
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="form-control" placeholder="Enter password or leave empty if auth is disabled">
+                    <input type="password" id="password" name="password" class="form-control" autocomplete="current-password" placeholder="Password">
                 </div>
 
-                <ix-button type="submit" id="login-btn" style="width: 100%;">
-                    <span id="login-text">Sign In</span>
-                    <ix-spinner id="login-spinner" size="small" style="display: none;"></ix-spinner>
-                </ix-button>
+                <button type="submit" id="login-btn" class="login-submit">Sign In</button>
             </form>
 
             <div id="guest-access" style="display: none; text-align: center; margin-top: 1.5rem;">
-                <div style="color: var(--theme-color-soft-text); font-size: 0.8rem; margin-bottom: 0.75rem;">— or —</div>
-                <a id="guest-link" href="#" style="color: var(--theme-color-primary); font-size: 0.875rem; text-decoration: none;">
+                <div class="guest-separator">- or -</div>
+                <a id="guest-link" href="#" class="guest-link">
                     View dashboard (read-only)
                 </a>
             </div>

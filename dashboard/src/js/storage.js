@@ -93,6 +93,36 @@ window.spaLocation = {
     }
 };
 
+window.redirectToLogin = function(reason) {
+    if (reason) {
+        try {
+            sessionStorage.setItem('monstermq_login_message', reason);
+        } catch (e) {
+            console.warn('Failed to store login redirect reason:', e.message);
+        }
+    }
+    window.location.href = '/pages/login.html';
+};
+
+window.decodeJwtPayload = function(token) {
+    const parts = token ? token.split('.') : [];
+    if (parts.length !== 3) {
+        throw new Error('JWT must have three parts');
+    }
+
+    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padding = payload.length % 4;
+    if (padding) {
+        payload += '='.repeat(4 - padding);
+    }
+
+    return JSON.parse(atob(payload));
+};
+
+window.isJwtToken = function(token) {
+    return !!token && token.split('.').length === 3;
+};
+
 /**
  * Shared auth check used by all dashboard pages.
  * Returns true if the user has a valid JWT, auth is disabled (token === 'null'),
@@ -109,11 +139,17 @@ window.isLoggedIn = function() {
     // Auth disabled
     if (token === 'null') return true;
 
-    // Validate JWT expiry
+    // Opaque server-side session token. The backend validates it on API calls.
+    if (!window.isJwtToken(token)) return true;
+
+    // Validate JWT expiry when the broker returns a JWT.
     try {
-        const decoded = JSON.parse(atob(token.split('.')[1]));
+        const decoded = window.decodeJwtPayload(token);
         return decoded.exp > Date.now() / 1000;
-    } catch {
+    } catch (e) {
+        try {
+            sessionStorage.setItem('monstermq_login_message', 'Saved login token could not be decoded: ' + e.message);
+        } catch (_) {}
         return false;
     }
 };

@@ -19,7 +19,11 @@ class DashboardManager {
 
     async init() {
         if (!this.isLoggedIn()) {
-            window.location.href = '/pages/login.html';
+            if (window.redirectToLogin) {
+                window.redirectToLogin('No valid dashboard session was found. Please sign in.');
+            } else {
+                window.location.href = '/pages/login.html';
+            }
             return;
         }
 

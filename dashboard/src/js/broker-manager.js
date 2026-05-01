@@ -152,10 +152,11 @@ class BrokerManager {
             return safeStorage.getItem(this._brokerKey(brokerName, 'guest')) === 'true';
         }
         if (token === 'null') return true; // auth disabled
+        if (window.isJwtToken && !window.isJwtToken(token)) return true; // server-side session token
         try {
-            var decoded = JSON.parse(atob(token.split('.')[1]));
+            var decoded = window.decodeJwtPayload ? window.decodeJwtPayload(token) : JSON.parse(atob(token.split('.')[1]));
             return decoded.exp > Date.now() / 1000;
-        } catch {
+        } catch (e) {
             return false;
         }
     }
