@@ -1,6 +1,0 @@
-node_modules/
-dist/
-src/svg/
-
-# Local broker configuration - copy brokers.json.example to brokers.json and customize
-src/config/brokers.json
