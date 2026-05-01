@@ -1,3 +1,4 @@
 [submodule "dashboard"]
 	path = dashboard
 	url = git@github.com:vogler75/monster-mq-dashboard.git
+	branch = main
