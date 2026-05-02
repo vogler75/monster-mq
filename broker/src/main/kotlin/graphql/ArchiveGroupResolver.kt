@@ -22,6 +22,7 @@ class ArchiveGroupResolver(
     private val authContext: GraphQLAuthContext
 ) {
     private val logger = Utils.getLogger(this::class.java)
+    private val archiveGroupNameRegex = Regex("[A-Za-z][A-Za-z0-9_]{0,62}")
 
     private fun sanitizeUrl(url: String): String {
         return url.replace(Regex("(://[^:@/]+):([^@/]+)@"), "$1@")
@@ -113,6 +114,14 @@ class ArchiveGroupResolver(
                 connection.type != requiredTypes.first() -> "Selected database connection '$selectedName' is ${connection.type}, but ${requiredTypes.first()} is required"
                 else -> null
             }
+        }
+    }
+
+    private fun validateArchiveGroupName(name: String): String? {
+        return if (archiveGroupNameRegex.matches(name)) {
+            null
+        } else {
+            "Invalid input: invalid group name \"$name\": must match [A-Za-z][A-Za-z0-9_]{0,62}"
         }
     }
 
@@ -552,6 +561,13 @@ class ArchiveGroupResolver(
                     ))
                     return@DataFetcher future
                 }
+                validateArchiveGroupName(name)?.let { message ->
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to message
+                    ))
+                    return@DataFetcher future
+                }
                 val topicFilter = (input["topicFilter"] as? List<*>)?.map { it.toString() } ?: run {
                     future.complete(mapOf(
                         "success" to false,
@@ -726,6 +742,13 @@ class ArchiveGroupResolver(
                     future.complete(mapOf(
                         "success" to false,
                         "message" to "Invalid input: Name is required"
+                    ))
+                    return@DataFetcher future
+                }
+                validateArchiveGroupName(name)?.let { message ->
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to message
                     ))
                     return@DataFetcher future
                 }
