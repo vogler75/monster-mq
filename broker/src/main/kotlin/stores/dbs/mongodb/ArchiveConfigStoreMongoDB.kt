@@ -27,10 +27,12 @@ class ArchiveConfigStoreMongoDB(
 
     private val logger: Logger = Utils.getLogger(this::class.java)
     private val collectionName = "archiveconfigs"
+    private val connectionCollectionName = "databaseconnections"
 
     private lateinit var mongoClient: MongoClient
     private lateinit var database: MongoDatabase
     private lateinit var collection: MongoCollection<Document>
+    private lateinit var connectionCollection: MongoCollection<Document>
 
 
     override fun start(startPromise: Promise<Void>) {
@@ -38,11 +40,13 @@ class ArchiveConfigStoreMongoDB(
             mongoClient = MongoClientPool.getClient(connectionString)
             database = mongoClient.getDatabase(databaseName)
             collection = database.getCollection(collectionName)
+            connectionCollection = database.getCollection(connectionCollectionName)
 
             // Create index in background to avoid blocking the event loop
             vertx.executeBlocking(Callable {
                 try {
                     collection.createIndex(Document("name", 1))
+                    connectionCollection.createIndex(Document("name", 1))
                     logger.info("MongoDB ConfigStore indexes created successfully")
                 } catch (e: Exception) {
                     logger.warning("Failed to create indexes: ${e.message}")
@@ -176,6 +180,87 @@ class ArchiveConfigStoreMongoDB(
         return saveArchiveGroup(archiveGroup, enabled) // MongoDB upsert handles both insert and update
     }
 
+    override fun getAllDatabaseConnections(): io.vertx.core.Future<List<DatabaseConnectionConfig>> {
+        val promise = Promise.promise<List<DatabaseConnectionConfig>>()
+        vertx.executeBlocking(Callable {
+            try {
+                val results = mutableListOf<DatabaseConnectionConfig>()
+                connectionCollection.find().forEach { document ->
+                    results.add(documentToDatabaseConnection(document))
+                }
+                results.sortedBy { it.name }
+            } catch (e: Exception) {
+                logger.severe("Error retrieving database connections from MongoDB: ${e.message}")
+                emptyList()
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(emptyList())
+        }
+        return promise.future()
+    }
+
+    override fun getDatabaseConnection(name: String): io.vertx.core.Future<DatabaseConnectionConfig?> {
+        val promise = Promise.promise<DatabaseConnectionConfig?>()
+        vertx.executeBlocking(Callable {
+            try {
+                connectionCollection.find(Filters.eq("name", name)).first()?.let { documentToDatabaseConnection(it) }
+            } catch (e: Exception) {
+                logger.severe("Error retrieving database connection '$name' from MongoDB: ${e.message}")
+                null
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(null)
+        }
+        return promise.future()
+    }
+
+    override fun saveDatabaseConnection(connection: DatabaseConnectionConfig): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            try {
+                val now = Instant.now()
+                val existing = connectionCollection.find(Filters.eq("name", connection.name)).first()
+                val document = Document()
+                    .append("name", connection.name)
+                    .append("type", connection.type.name)
+                    .append("url", connection.url)
+                    .append("username", connection.username)
+                    .append("password", connection.password)
+                    .append("database", connection.database)
+                    .append("schema", connection.schema)
+                    .append("created_at", existing?.get("created_at") ?: now)
+                    .append("updated_at", now)
+                val result = connectionCollection.replaceOne(
+                    Filters.eq("name", connection.name),
+                    document,
+                    ReplaceOptions().upsert(true)
+                )
+                result.wasAcknowledged()
+            } catch (e: Exception) {
+                logger.severe("Error saving database connection '${connection.name}' to MongoDB: ${e.message}")
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
+    }
+
+    override fun deleteDatabaseConnection(name: String): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            try {
+                connectionCollection.deleteOne(Filters.eq("name", name)).deletedCount > 0
+            } catch (e: Exception) {
+                logger.severe("Error deleting database connection '$name' from MongoDB: ${e.message}")
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
+    }
+
     override fun deleteArchiveGroup(name: String): io.vertx.core.Future<Boolean> {
         val promise = Promise.promise<Boolean>()
 
@@ -243,6 +328,7 @@ class ArchiveConfigStoreMongoDB(
             lastValRetentionStr = lastValRetention,
             archiveRetentionStr = archiveRetention,
             purgeIntervalStr = purgeInterval,
+            databaseConnectionName = document.getString("database_connection_name"),
             databaseConfig = JsonObject() // Will be populated from config
         )
     }
@@ -256,6 +342,7 @@ class ArchiveConfigStoreMongoDB(
             .append("last_val_type", archiveGroup.getLastValType().name)
             .append("archive_type", archiveGroup.getArchiveType().name)
             .append("payload_format", archiveGroup.payloadFormat.name)
+            .append("database_connection_name", archiveGroup.getDatabaseConnectionName())
             .append("updated_at", Instant.now())
 
         // Add optional duration fields (preserve original string to avoid lossy roundtrip via formatDuration)
@@ -264,6 +351,20 @@ class ArchiveConfigStoreMongoDB(
         archiveGroup.getPurgeInterval()?.let { document.append("purge_interval", it) }
 
         return document
+    }
+
+    private fun documentToDatabaseConnection(document: Document): DatabaseConnectionConfig {
+        return DatabaseConnectionConfig(
+            name = document.getString("name"),
+            type = DatabaseConnectionType.valueOf(document.getString("type")),
+            url = document.getString("url"),
+            username = document.getString("username"),
+            password = document.getString("password"),
+            database = document.getString("database"),
+            schema = document.getString("schema"),
+            createdAt = document.get("created_at")?.toString(),
+            updatedAt = document.get("updated_at")?.toString()
+        )
     }
 
     override fun getType(): String = "ConfigStoreMongoDB"

@@ -22,6 +22,7 @@ class ArchiveConfigStoreCrateDB(
 
     private val logger: Logger = Utils.getLogger(this::class.java)
     private val configTableName = "archiveconfigs"
+    private val connectionTableName = "databaseconnections"
 
     private val db = object : DatabaseConnection(logger, url, username, password) {
         override fun init(connection: Connection): io.vertx.core.Future<Void> {
@@ -92,12 +93,26 @@ class ArchiveConfigStoreCrateDB(
                 purge_interval STRING,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                payload_format STRING DEFAULT 'DEFAULT'
+                payload_format STRING DEFAULT 'DEFAULT',
+                database_connection_name STRING
             )
         """.trimIndent()
 
         connection.createStatement().use { statement ->
             statement.execute(sql)
+            statement.execute("""
+                CREATE TABLE IF NOT EXISTS $connectionTableName (
+                    name STRING PRIMARY KEY,
+                    type STRING NOT NULL,
+                    url TEXT NOT NULL,
+                    username TEXT,
+                    password TEXT,
+                    database_name TEXT,
+                    schema_name TEXT,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            """.trimIndent())
         }
         logger.info("Archive config table created/verified in CrateDB")
     }
@@ -192,8 +207,8 @@ class ArchiveConfigStoreCrateDB(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -204,6 +219,7 @@ class ArchiveConfigStoreCrateDB(
                     archive_retention = EXCLUDED.archive_retention,
                     purge_interval = EXCLUDED.purge_interval,
                     payload_format = EXCLUDED.payload_format,
+                    database_connection_name = EXCLUDED.database_connection_name,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -228,6 +244,7 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setString(8, archiveRetention)
                         preparedStatement.setString(9, purgeInterval)
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
+                        preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -259,6 +276,102 @@ class ArchiveConfigStoreCrateDB(
 
     override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): io.vertx.core.Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // CrateDB UPSERT handles both insert and update
+    }
+
+    override fun getAllDatabaseConnections(): io.vertx.core.Future<List<DatabaseConnectionConfig>> {
+        val promise = Promise.promise<List<DatabaseConnectionConfig>>()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $connectionTableName ORDER BY name"
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    val rs = statement.executeQuery()
+                    val results = mutableListOf<DatabaseConnectionConfig>()
+                    while (rs.next()) results.add(resultSetToDatabaseConnection(rs))
+                    results
+                } ?: emptyList()
+            } catch (e: SQLException) {
+                logger.warning("Error fetching database connections from CrateDB: ${e.message}")
+                emptyList()
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(emptyList())
+        }
+        return promise.future()
+    }
+
+    override fun getDatabaseConnection(name: String): io.vertx.core.Future<DatabaseConnectionConfig?> {
+        val promise = Promise.promise<DatabaseConnectionConfig?>()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT * FROM $connectionTableName WHERE name = ?"
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    statement.setString(1, name)
+                    val rs = statement.executeQuery()
+                    if (rs.next()) resultSetToDatabaseConnection(rs) else null
+                }
+            } catch (e: SQLException) {
+                logger.warning("Error fetching database connection '$name' from CrateDB: ${e.message}")
+                null
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(null)
+        }
+        return promise.future()
+    }
+
+    override fun saveDatabaseConnection(connection: DatabaseConnectionConfig): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            val sql = """
+                INSERT INTO $connectionTableName
+                (name, type, url, username, password, database_name, schema_name, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    type = EXCLUDED.type,
+                    url = EXCLUDED.url,
+                    username = EXCLUDED.username,
+                    password = EXCLUDED.password,
+                    database_name = EXCLUDED.database_name,
+                    schema_name = EXCLUDED.schema_name,
+                    updated_at = CURRENT_TIMESTAMP
+            """.trimIndent()
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    statement.setString(1, connection.name)
+                    statement.setString(2, connection.type.name)
+                    statement.setString(3, connection.url)
+                    statement.setString(4, connection.username)
+                    statement.setString(5, connection.password)
+                    statement.setString(6, connection.database)
+                    statement.setString(7, connection.schema)
+                    statement.executeUpdate() > 0
+                } ?: false
+            } catch (e: SQLException) {
+                logger.warning("Error saving database connection '${connection.name}' to CrateDB: ${e.message}")
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
+    }
+
+    override fun deleteDatabaseConnection(name: String): io.vertx.core.Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            try {
+                db.connection?.prepareStatement("DELETE FROM $connectionTableName WHERE name = ?")?.use { statement ->
+                    statement.setString(1, name)
+                    statement.executeUpdate() > 0
+                } ?: false
+            } catch (e: SQLException) {
+                logger.warning("Error deleting database connection '$name' from CrateDB: ${e.message}")
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
     }
 
     override fun deleteArchiveGroup(name: String): io.vertx.core.Future<Boolean> {
@@ -338,7 +451,22 @@ class ArchiveConfigStoreCrateDB(
             lastValRetentionMs = lastValRetention?.let { Utils.parseDuration(it) },
             archiveRetentionMs = archiveRetention?.let { Utils.parseDuration(it) },
             purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
+            databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
             databaseConfig = JsonObject() // Will be populated from config
+        )
+    }
+
+    private fun resultSetToDatabaseConnection(rs: ResultSet): DatabaseConnectionConfig {
+        return DatabaseConnectionConfig(
+            name = rs.getString("name"),
+            type = DatabaseConnectionType.valueOf(rs.getString("type")),
+            url = rs.getString("url"),
+            username = rs.getString("username"),
+            password = rs.getString("password"),
+            database = rs.getString("database_name"),
+            schema = rs.getString("schema_name"),
+            createdAt = try { rs.getTimestamp("created_at")?.toInstant()?.toString() } catch (e: Exception) { null },
+            updatedAt = try { rs.getTimestamp("updated_at")?.toInstant()?.toString() } catch (e: Exception) { null }
         )
     }
 

@@ -15,6 +15,8 @@ import io.vertx.core.*
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Callable
 import java.util.logging.Logger
@@ -351,55 +353,62 @@ class ArchiveHandler(
                 configStore.getAllArchiveGroups().onComplete { getAllResult ->
                     if (getAllResult.succeeded()) {
                         val archiveGroupConfigs = getAllResult.result().filter { it.enabled }
-                        val archiveGroups = archiveGroupConfigs.map { config ->
-                            // Recreate ArchiveGroup with proper database config
+                        val resolveFutures = archiveGroupConfigs.map { config ->
                             val ag = config.archiveGroup
-ArchiveGroup(
-                                name = ag.name,
-                                topicFilter = ag.topicFilter,
-                                retainedOnly = ag.retainedOnly,
-                                lastValType = ag.getLastValType(), // Use actual store type from database
-                                archiveType = ag.getArchiveType(), // Use actual store type from database
-                                payloadFormat = ag.payloadFormat,
-                                lastValRetentionMs = ag.getLastValRetentionMs(),
-                                archiveRetentionMs = ag.getArchiveRetentionMs(),
-                                purgeIntervalMs = ag.getPurgeIntervalMs(),
-                                lastValRetentionStr = ag.getLastValRetention(),
-                                archiveRetentionStr = ag.getArchiveRetention(),
-                                purgeIntervalStr = ag.getPurgeInterval(),
-                                databaseConfig = databaseConfig
-                             )
+                            resolveDatabaseConfig(ag, configStore).map { resolvedConfig ->
+                                recreateArchiveGroup(ag, resolvedConfig)
+                            }
                         }
 
-                        if (archiveGroups.isEmpty()) {
+                        if (resolveFutures.isEmpty()) {
                             logger.fine("No enabled archive groups found in database")
                             promise.complete(emptyList())
                             return@onComplete
                         }
 
-                        // Deploy each archive group
-                        val deploymentFutures: List<Future<ArchiveGroup>> = archiveGroups.map { archiveGroup ->
-                            val archiveGroupOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-
-                            vertx.deployVerticle(archiveGroup, archiveGroupOptions).map { deploymentId ->
-                                // Track the deployment
-                                val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
-                                deployedArchiveGroups[archiveGroup.name] = archiveInfo
-
-                                logger.fine("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
-                                archiveGroup
-                            }
-                        }
-
-                        @Suppress("UNCHECKED_CAST")
-                        Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
-                            if (result.succeeded()) {
-                                val deployedGroups = deploymentFutures.mapNotNull {
-                                    if (it.succeeded()) it.result() else null
+                        Future.all<Any>(resolveFutures.map { it.recover { Future.succeededFuture(null) } }).onComplete {
+                            val archiveGroups = resolveFutures.mapNotNull { if (it.succeeded()) it.result() else null }
+                            resolveFutures.forEachIndexed { index, future ->
+                                if (future.failed()) {
+                                    logger.severe("Skipping ArchiveGroup [${archiveGroupConfigs[index].archiveGroup.name}] during startup: ${future.cause()?.message}")
                                 }
-                                promise.complete(deployedGroups)
-                            } else {
-                                promise.fail(result.cause())
+                            }
+
+                            if (archiveGroups.isEmpty()) {
+                                logger.warning("No enabled archive groups could be started")
+                                promise.complete(emptyList())
+                                return@onComplete
+                            }
+
+                            // Deploy each archive group
+                            val deploymentFutures: List<Future<ArchiveGroup?>> = archiveGroups.map { archiveGroup ->
+                                val archiveGroupOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+
+                                vertx.deployVerticle(archiveGroup, archiveGroupOptions)
+                                    .map { deploymentId ->
+                                        // Track the deployment
+                                        val archiveInfo = ArchiveGroupInfo(archiveGroup, deploymentId, true)
+                                        deployedArchiveGroups[archiveGroup.name] = archiveInfo
+
+                                        logger.fine("ArchiveGroup [${archiveGroup.name}] deployed successfully from database with ID: $deploymentId")
+                                        archiveGroup as ArchiveGroup?
+                                    }
+                                    .recover { error ->
+                                        logger.severe("Skipping ArchiveGroup [${archiveGroup.name}] during startup: ${error.message}")
+                                    Future.succeededFuture<ArchiveGroup?>(null)
+                                    }
+                            }
+
+                            @Suppress("UNCHECKED_CAST")
+                            Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
+                                if (result.succeeded()) {
+                                    val deployedGroups = deploymentFutures.mapNotNull {
+                                        if (it.succeeded()) it.result() else null
+                                    }
+                                    promise.complete(deployedGroups)
+                                } else {
+                                    promise.fail(result.cause())
+                                }
                             }
                         }
                     } else {
@@ -424,6 +433,144 @@ ArchiveGroup(
         configJson.getJsonObject("SQLite")?.let { databaseConfig.put("SQLite", it) }
         configJson.getJsonObject("Kafka")?.let { databaseConfig.put("Kafka", it) }
         return databaseConfig
+    }
+
+    private fun mongoUrlWithCredentials(url: String, username: String?, password: String?): String {
+        if (username.isNullOrBlank() || password.isNullOrBlank()) return url
+        val schemeIndex = url.indexOf("://")
+        if (schemeIndex < 0) return url
+
+        val authorityStart = schemeIndex + 3
+        val pathStart = listOf(
+            url.indexOf('/', authorityStart),
+            url.indexOf('?', authorityStart)
+        ).filter { it >= 0 }.minOrNull() ?: url.length
+
+        val authority = url.substring(authorityStart, pathStart)
+        val hostAuthority = authority.substringAfterLast("@")
+
+        val encodedUser = URLEncoder.encode(username, StandardCharsets.UTF_8)
+        val encodedPass = URLEncoder.encode(password, StandardCharsets.UTF_8)
+        return url.substring(0, authorityStart) + "$encodedUser:$encodedPass@$hostAuthority" + url.substring(pathStart)
+    }
+
+    private fun resolveDatabaseConfig(archiveGroup: ArchiveGroup, configStore: IArchiveConfigStore? = deployedConfigStore): Future<JsonObject> {
+        val selectedName = archiveGroup.getDatabaseConnectionName()
+        val baseConfig = createDatabaseConfig()
+        if (selectedName.isNullOrBlank()) {
+            return Future.succeededFuture(baseConfig)
+        }
+
+        val requiredTypes = setOfNotNull(
+            when (archiveGroup.getLastValType()) {
+                MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
+                else -> null
+            },
+            when (archiveGroup.getArchiveType()) {
+                MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
+                else -> null
+            }
+        )
+
+        fun apply(connection: DatabaseConnectionConfig?): JsonObject {
+            if (connection == null) {
+                throw IllegalArgumentException("Database connection '$selectedName' not found for archive group '${archiveGroup.name}'")
+            }
+
+            if (requiredTypes.size > 1 && connection.name != "Default") {
+                throw IllegalArgumentException("Archive group '${archiveGroup.name}' cannot use one selected database connection for mixed Postgres and MongoDB stores")
+            }
+            if (requiredTypes.isNotEmpty() && connection.type !in requiredTypes) {
+                throw IllegalArgumentException("Archive group '${archiveGroup.name}' selected ${connection.type} connection '$selectedName' but requires ${requiredTypes.first()}")
+            }
+
+            when (connection.type) {
+                DatabaseConnectionType.POSTGRES -> baseConfig.put("Postgres", JsonObject()
+                    .put("Url", connection.url)
+                    .put("User", connection.username ?: "")
+                    .put("Pass", connection.password ?: "")
+                    .put("Schema", connection.schema)
+                )
+                DatabaseConnectionType.MONGODB -> baseConfig.put("MongoDB", JsonObject()
+                    .put("Url", mongoUrlWithCredentials(connection.url, connection.username, connection.password))
+                    .put("User", connection.username)
+                    .put("Pass", connection.password)
+                    .put("Database", connection.database ?: "monstermq")
+                )
+            }
+            return baseConfig
+        }
+
+        if (selectedName == "Default") {
+            if (requiredTypes.size > 1) {
+                val missingTypes = requiredTypes.filter {
+                    when (it) {
+                        DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.getString("Url").isNullOrBlank()
+                        DatabaseConnectionType.MONGODB -> configJson.getJsonObject("MongoDB")?.getString("Url").isNullOrBlank()
+                    }
+                }
+                return if (missingTypes.isEmpty()) {
+                    Future.succeededFuture(baseConfig)
+                } else {
+                    Future.failedFuture("Default database connection is not configured for ${missingTypes.joinToString(" and ")}")
+                }
+            }
+
+            val requiredType = requiredTypes.firstOrNull()
+                ?: return Future.failedFuture("Default database connection can only be used for Postgres or MongoDB stores")
+            val connection = when (requiredType) {
+                DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.let {
+                    val url = it.getString("Url")
+                    if (url.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.POSTGRES,
+                        url = url,
+                        username = it.getString("User"),
+                        password = it.getString("Pass"),
+                        schema = it.getString("Schema"),
+                        readOnly = true
+                    )
+                }
+                DatabaseConnectionType.MONGODB -> configJson.getJsonObject("MongoDB")?.let {
+                    val url = it.getString("Url")
+                    if (url.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.MONGODB,
+                        url = url,
+                        database = it.getString("Database", "monstermq"),
+                        readOnly = true
+                    )
+                }
+            }
+            return Future.succeededFuture(apply(connection))
+        }
+
+        if (configStore == null) {
+            return Future.failedFuture("No ConfigStore available to resolve database connection '$selectedName'")
+        }
+
+        return configStore.getDatabaseConnection(selectedName).map { apply(it) }
+    }
+
+    private fun recreateArchiveGroup(ag: ArchiveGroup, databaseConfig: JsonObject): ArchiveGroup {
+        return ArchiveGroup(
+            name = ag.name,
+            topicFilter = ag.topicFilter,
+            retainedOnly = ag.retainedOnly,
+            lastValType = ag.getLastValType(),
+            archiveType = ag.getArchiveType(),
+            payloadFormat = ag.payloadFormat,
+            lastValRetentionMs = ag.getLastValRetentionMs(),
+            archiveRetentionMs = ag.getArchiveRetentionMs(),
+            purgeIntervalMs = ag.getPurgeIntervalMs(),
+            lastValRetentionStr = ag.getLastValRetention(),
+            archiveRetentionStr = ag.getArchiveRetention(),
+            purgeIntervalStr = ag.getPurgeInterval(),
+            databaseConnectionName = ag.getDatabaseConnectionName(),
+            databaseConfig = databaseConfig
+        )
     }
 
     fun getMessageArchive(
@@ -617,6 +764,7 @@ ArchiveGroup(
                 put("retainedOnly", archiveInfo.archiveGroup.retainedOnly)
                 put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
                 put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("databaseConnectionName", archiveInfo.archiveGroup.getDatabaseConnectionName())
                 put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
@@ -650,7 +798,8 @@ ArchiveGroup(
                 put("topicFilter", JsonArray(archiveInfo.archiveGroup.topicFilter))
                 put("retainedOnly", archiveInfo.archiveGroup.retainedOnly)
                 put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
-                 put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
+                put("databaseConnectionName", archiveInfo.archiveGroup.getDatabaseConnectionName())
                 put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
@@ -808,24 +957,14 @@ ArchiveGroup(
                     val archiveGroupConfig = getResult.result()
                     if (archiveGroupConfig != null) {
                         // Don't check enabled flag here - we want to load it regardless
-                        val databaseConfig = createDatabaseConfig()
                         val ag = archiveGroupConfig.archiveGroup
-val archiveGroup = ArchiveGroup(
-                            name = ag.name,
-                            topicFilter = ag.topicFilter,
-                            retainedOnly = ag.retainedOnly,
-                            lastValType = ag.getLastValType(),
-                            archiveType = ag.getArchiveType(),
-                            payloadFormat = ag.payloadFormat,
-                            lastValRetentionMs = ag.getLastValRetentionMs(),
-                            archiveRetentionMs = ag.getArchiveRetentionMs(),
-                            purgeIntervalMs = ag.getPurgeIntervalMs(),
-                            lastValRetentionStr = ag.getLastValRetention(),
-                            archiveRetentionStr = ag.getArchiveRetention(),
-                            purgeIntervalStr = ag.getPurgeInterval(),
-                            databaseConfig = databaseConfig
-                        )
-                        promise.complete(archiveGroup)
+                        resolveDatabaseConfig(ag, configStore).onComplete { resolveResult ->
+                            if (resolveResult.succeeded()) {
+                                promise.complete(recreateArchiveGroup(ag, resolveResult.result()))
+                            } else {
+                                promise.fail(resolveResult.cause())
+                            }
+                        }
                     } else {
                         promise.complete(null)
                     }
@@ -853,34 +992,24 @@ val archiveGroup = ArchiveGroup(
                         val archiveGroupConfig = getResult.result()
                         if (archiveGroupConfig != null) {
                             // Don't check enabled flag here - we want to load it regardless
-                            val databaseConfig = createDatabaseConfig()
                             val ag = archiveGroupConfig.archiveGroup
-val archiveGroup = ArchiveGroup(
-                                name = ag.name,
-                                topicFilter = ag.topicFilter,
-                                retainedOnly = ag.retainedOnly,
-                                lastValType = ag.getLastValType(),
-                                archiveType = ag.getArchiveType(),
-                                payloadFormat = ag.payloadFormat,
-                                lastValRetentionMs = ag.getLastValRetentionMs(),
-                                archiveRetentionMs = ag.getArchiveRetentionMs(),
-                                purgeIntervalMs = ag.getPurgeIntervalMs(),
-                                lastValRetentionStr = ag.getLastValRetention(),
-                                archiveRetentionStr = ag.getArchiveRetention(),
-                                purgeIntervalStr = ag.getPurgeInterval(),
-                                databaseConfig = databaseConfig
-                             )
-                            promise.complete(archiveGroup)
+                            resolveDatabaseConfig(ag, newConfigStore).onComplete { resolveResult ->
+                                if (resolveResult.succeeded()) {
+                                    promise.complete(recreateArchiveGroup(ag, resolveResult.result()))
+                                } else {
+                                    promise.fail(resolveResult.cause())
+                                }
+                                vertx.undeploy(deployResult.result())
+                            }
                         } else {
                             promise.complete(null)
+                            vertx.undeploy(deployResult.result())
                         }
                     } else {
                         logger.severe("Failed to get archive group from temporary ConfigStore: ${getResult.cause()?.message}")
                         promise.complete(null)
+                        vertx.undeploy(deployResult.result())
                     }
-
-                    // Cleanup temporary ConfigStore
-                    vertx.undeploy(deployResult.result())
                 }
             } else {
                 promise.fail(deployResult.cause())

@@ -178,6 +178,10 @@ type ArchiveGroupMutations {
         # Name of the ArchiveGroup to disable
         name: String!
     ): ArchiveGroupResult!
+
+    createDatabaseConnection(input: CreateDatabaseConnectionInput!): DatabaseConnectionResult!
+    updateDatabaseConnection(input: UpdateDatabaseConnectionInput!): DatabaseConnectionResult!
+    deleteDatabaseConnection(name: String!): DatabaseConnectionResult!
 }
 
 # Extend Mutations for archive groups
@@ -258,6 +262,7 @@ input CreateArchiveGroupInput {
     retainedOnly: Boolean = false
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    databaseConnectionName: String
     payloadFormat: PayloadFormat = DEFAULT
     lastValRetention: String
     archiveRetention: String
@@ -270,6 +275,7 @@ input UpdateArchiveGroupInput {
     retainedOnly: Boolean
     lastValType: MessageStoreType
     archiveType: MessageArchiveType
+    databaseConnectionName: String
     payloadFormat: PayloadFormat
     lastValRetention: String
     archiveRetention: String
@@ -280,6 +286,32 @@ type ArchiveGroupResult {
     success: Boolean!
     message: String
     archiveGroup: ArchiveGroupInfo
+}
+
+input CreateDatabaseConnectionInput {
+    name: String!
+    type: DatabaseConnectionType!
+    url: String!
+    username: String
+    password: String
+    database: String
+    schema: String
+}
+
+input UpdateDatabaseConnectionInput {
+    name: String!
+    type: DatabaseConnectionType
+    url: String
+    username: String
+    password: String
+    database: String
+    schema: String
+}
+
+type DatabaseConnectionResult {
+    success: Boolean!
+    message: String
+    connection: DatabaseConnectionInfo
 }
 
 # Authentication Types

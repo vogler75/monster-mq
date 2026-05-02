@@ -447,6 +447,9 @@ class GraphQLServer(
             .type("MessageArchiveType") { builder ->
                 builder.enumValues { name -> name }
             }
+            .type("DatabaseConnectionType") { builder ->
+                builder.enumValues { name -> name }
+            }
             .type("SecurityPolicy") { builder ->
                 builder.enumValues { name -> name }
             }
@@ -492,6 +495,9 @@ class GraphQLServer(
                         archiveGroupResolver?.let { resolver ->
                             dataFetcher("archiveGroups", resolver.archiveGroups())
                             dataFetcher("archiveGroup", resolver.archiveGroup())
+                            dataFetcher("databaseConnections", resolver.databaseConnections())
+                            dataFetcher("databaseConnectionNames", resolver.databaseConnectionNames())
+                            dataFetcher("databaseConnection", resolver.databaseConnection())
                         }
                     }
                     // OPC UA Client queries
@@ -1160,6 +1166,9 @@ class GraphQLServer(
                         dataFetcher("delete", resolver.deleteArchiveGroup())
                         dataFetcher("enable", resolver.enableArchiveGroup())
                         dataFetcher("disable", resolver.disableArchiveGroup())
+                        dataFetcher("createDatabaseConnection", resolver.createDatabaseConnection())
+                        dataFetcher("updateDatabaseConnection", resolver.updateDatabaseConnection())
+                        dataFetcher("deleteDatabaseConnection", resolver.deleteDatabaseConnection())
                     }
                 }
             }

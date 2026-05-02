@@ -627,6 +627,7 @@
           "RetainedOnly": { "type": "boolean", "default": false },
           "LastValType": { "type": "string", "enum": ["MEMORY","HAZELCAST","POSTGRES","CRATEDB","MONGODB","SQLITE","NONE"], "default": "MEMORY" },
           "ArchiveType": { "type": "string", "enum": ["NONE","POSTGRES","CRATEDB","MONGODB","KAFKA","SQLITE"], "default": "NONE" },
+          "DatabaseConnectionName": { "type": ["string","null"], "description": "Optional named Postgres/MongoDB connection used by both LastValType and ArchiveType when they use that database family." },
           "LastValRetention": { "type": ["string","null"], "description": "Duration like 1h, 30m" },
           "ArchiveRetention": { "type": ["string","null"], "description": "Duration like 24h, 7d" },
           "PurgeInterval": { "type": ["string","null"], "description": "Purge interval duration" },

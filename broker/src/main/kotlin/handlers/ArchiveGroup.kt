@@ -47,6 +47,7 @@ class ArchiveGroup(
     private val archiveRetentionStr: String? = null,
     private val purgeIntervalStr: String? = null,
     private val maxMemoryEntries: Long? = null,
+    private val databaseConnectionName: String? = null,
     private val databaseConfig: JsonObject
 ) : AbstractVerticle() {
 
@@ -192,6 +193,7 @@ class ArchiveGroup(
     fun getPurgeInterval(): String? = purgeIntervalStr
     fun getLastValType(): MessageStoreType = lastValType
     fun getArchiveType(): MessageArchiveType = archiveType
+    fun getDatabaseConnectionName(): String? = databaseConnectionName
 
     private fun createMessageStore(storeType: MessageStoreType, storeName: String, callback: (Boolean) -> Unit) {
         if (isStopping) {
@@ -698,6 +700,7 @@ class ArchiveGroup(
                 archiveRetentionStr = archiveRetentionStr,
                 purgeIntervalStr = purgeIntervalStr,
                 maxMemoryEntries = maxMemoryEntries,
+                databaseConnectionName = config.getString("DatabaseConnectionName"),
                 databaseConfig = databaseConfig
             )
         }

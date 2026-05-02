@@ -23,6 +23,99 @@ class ArchiveGroupResolver(
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
+    private fun sanitizeUrl(url: String): String {
+        return url.replace(Regex("(://[^:@/]+):([^@/]+)@"), "$1@")
+    }
+
+    private fun builtInConnections(): List<DatabaseConnectionConfig> {
+        val databaseConfig = archiveHandler.createDatabaseConfig()
+        val connections = mutableListOf<DatabaseConnectionConfig>()
+        databaseConfig.getJsonObject("Postgres")?.let {
+            val url = it.getString("Url")
+            if (!url.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.POSTGRES,
+                    url = url,
+                    username = it.getString("User"),
+                    schema = it.getString("Schema"),
+                    readOnly = true
+                ))
+            }
+        }
+        databaseConfig.getJsonObject("MongoDB")?.let {
+            val url = it.getString("Url")
+            if (!url.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.MONGODB,
+                    url = url,
+                    database = it.getString("Database", "monstermq"),
+                    readOnly = true
+                ))
+            }
+        }
+        return connections
+    }
+
+    private fun connectionToMap(connection: DatabaseConnectionConfig): Map<String, Any?> {
+        return mapOf(
+            "name" to connection.name,
+            "type" to connection.type.name,
+            "url" to sanitizeUrl(connection.url),
+            "username" to connection.username,
+            "database" to connection.database,
+            "schema" to connection.schema,
+            "readOnly" to connection.readOnly,
+            "createdAt" to connection.createdAt,
+            "updatedAt" to connection.updatedAt
+        )
+    }
+
+    private fun validateConnectionSelection(
+        configStore: IArchiveConfigStore,
+        selectedName: String?,
+        lastValType: MessageStoreType,
+        archiveType: MessageArchiveType
+    ): io.vertx.core.Future<String?> {
+        if (selectedName.isNullOrBlank()) return io.vertx.core.Future.succeededFuture(null)
+
+        val requiredTypes = setOfNotNull(
+            when (lastValType) {
+                MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
+                else -> null
+            },
+            when (archiveType) {
+                MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
+                else -> null
+            }
+        )
+
+        if (requiredTypes.isEmpty()) {
+            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL or MongoDB storage")
+        }
+        if (requiredTypes.size > 1) {
+            return io.vertx.core.Future.succeededFuture(
+                if (selectedName == "Default") null
+                else "Mixed PostgreSQL and MongoDB storage cannot use a named database connection; leave the selection empty to use config-file defaults"
+            )
+        }
+
+        builtInConnections().firstOrNull { it.name == selectedName && it.type == requiredTypes.first() }?.let {
+            return io.vertx.core.Future.succeededFuture(if (it.type == requiredTypes.first()) null else "Selected database connection '$selectedName' is ${it.type}, but ${requiredTypes.first()} is required")
+        }
+
+        return configStore.getDatabaseConnection(selectedName).map { connection ->
+            when {
+                connection == null -> "Database connection '$selectedName' not found"
+                connection.type != requiredTypes.first() -> "Selected database connection '$selectedName' is ${connection.type}, but ${requiredTypes.first()} is required"
+                else -> null
+            }
+        }
+    }
+
     // Query Resolvers
 
     fun archiveGroups(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
@@ -53,6 +146,7 @@ class ArchiveGroupResolver(
                             "retainedOnly" to jsonObj.getBoolean("retainedOnly"),
                             "lastValType" to jsonObj.getString("lastValType"),
                             "archiveType" to jsonObj.getString("archiveType"),
+                            "databaseConnectionName" to jsonObj.getString("databaseConnectionName"),
                             "lastValRetention" to jsonObj.getString("lastValRetention"),
                             "archiveRetention" to jsonObj.getString("archiveRetention"),
                              "purgeInterval" to jsonObj.getString("purgeInterval"),
@@ -90,6 +184,7 @@ class ArchiveGroupResolver(
                                         "retainedOnly" to config.archiveGroup.retainedOnly,
                                         "lastValType" to config.archiveGroup.getLastValType().name,
                                         "archiveType" to config.archiveGroup.getArchiveType().name,
+                                        "databaseConnectionName" to config.archiveGroup.getDatabaseConnectionName(),
                                         "lastValRetention" to config.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to config.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to config.archiveGroup.getPurgeInterval(),
@@ -149,6 +244,7 @@ class ArchiveGroupResolver(
                             "retainedOnly" to runtimeStatus.getBoolean("retainedOnly"),
                             "lastValType" to runtimeStatus.getString("lastValType"),
                             "archiveType" to runtimeStatus.getString("archiveType"),
+                            "databaseConnectionName" to runtimeStatus.getString("databaseConnectionName"),
                             "lastValRetention" to runtimeStatus.getString("lastValRetention"),
                             "archiveRetention" to runtimeStatus.getString("archiveRetention"),
                              "purgeInterval" to runtimeStatus.getString("purgeInterval"),
@@ -175,6 +271,7 @@ class ArchiveGroupResolver(
                                         "retainedOnly" to archiveGroup.archiveGroup.retainedOnly,
                                         "lastValType" to archiveGroup.archiveGroup.getLastValType().name,
                                         "archiveType" to archiveGroup.archiveGroup.getArchiveType().name,
+                                        "databaseConnectionName" to archiveGroup.archiveGroup.getDatabaseConnectionName(),
                                         "lastValRetention" to archiveGroup.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval(),
@@ -200,7 +297,233 @@ class ArchiveGroupResolver(
         }
     }
 
+    fun databaseConnections(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val typeFilter = env.getArgument<String?>("type")
+            val builtIns = builtInConnections()
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(builtIns
+                    .filter { typeFilter == null || it.type.name == typeFilter }
+                    .map { connectionToMap(it) })
+                return@DataFetcher future
+            }
+
+            configStore.getAllDatabaseConnections().onComplete { result ->
+                if (result.succeeded()) {
+                    val all = (builtIns + result.result())
+                        .filter { typeFilter == null || it.type.name == typeFilter }
+                        .sortedWith(compareBy<DatabaseConnectionConfig> { !it.readOnly }.thenBy { it.name })
+                    future.complete(all.map { connectionToMap(it) })
+                } else {
+                    future.completeExceptionally(result.cause())
+                }
+            }
+            future
+        }
+    }
+
+    fun databaseConnectionNames(): DataFetcher<CompletableFuture<List<String>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<String>>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val typeFilter = env.getArgument<String?>("type")
+            val builtIns = builtInConnections()
+                .filter { typeFilter == null || it.type.name == typeFilter }
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(builtIns.map { it.name }.distinct())
+                return@DataFetcher future
+            }
+
+            configStore.getAllDatabaseConnections().onComplete { result ->
+                if (result.succeeded()) {
+                    val names = (builtIns + result.result())
+                        .filter { typeFilter == null || it.type.name == typeFilter }
+                        .map { it.name }
+                        .distinct()
+                    future.complete(names)
+                } else {
+                    future.completeExceptionally(result.cause())
+                }
+            }
+            future
+        }
+    }
+
+    fun databaseConnection(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>?>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val name = env.getArgument<String>("name") ?: ""
+            builtInConnections().firstOrNull { it.name == name }?.let {
+                future.complete(connectionToMap(it))
+                return@DataFetcher future
+            }
+
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            configStore.getDatabaseConnection(name).onComplete { result ->
+                if (result.succeeded()) {
+                    future.complete(result.result()?.let { connectionToMap(it) })
+                } else {
+                    future.completeExceptionally(result.cause())
+                }
+            }
+            future
+        }
+    }
+
     // Mutation Resolvers
+
+    fun createDatabaseConnection(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val input = env.getArgument<Map<String, Any?>>("input") ?: emptyMap()
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(mapOf("success" to false, "message" to "No ConfigStore available - database connections require a ConfigStore"))
+                return@DataFetcher future
+            }
+
+            try {
+                val name = (input["name"] as? String)?.trim().orEmpty()
+                val type = DatabaseConnectionType.valueOf(input["type"] as? String ?: "")
+                val url = (input["url"] as? String)?.trim().orEmpty()
+                if (name.isBlank() || url.isBlank()) {
+                    future.complete(mapOf("success" to false, "message" to "Name and URL are required"))
+                    return@DataFetcher future
+                }
+                if (name == "Default") {
+                    future.complete(mapOf("success" to false, "message" to "Built-in default connections are read-only"))
+                    return@DataFetcher future
+                }
+
+                val connection = DatabaseConnectionConfig(
+                    name = name,
+                    type = type,
+                    url = url,
+                    username = input["username"] as? String,
+                    password = input["password"] as? String,
+                    database = input["database"] as? String,
+                    schema = input["schema"] as? String
+                )
+                configStore.getDatabaseConnection(name).onComplete { existingResult ->
+                    if (existingResult.succeeded() && existingResult.result() != null) {
+                        future.complete(mapOf("success" to false, "message" to "Database connection '$name' already exists"))
+                        return@onComplete
+                    }
+                    configStore.saveDatabaseConnection(connection).onComplete { result ->
+                        if (result.succeeded() && result.result()) {
+                            future.complete(mapOf("success" to true, "message" to "Database connection '$name' created", "connection" to connectionToMap(connection)))
+                        } else {
+                            future.complete(mapOf("success" to false, "message" to "Failed to save database connection '$name'"))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                future.complete(mapOf("success" to false, "message" to "Error creating database connection: ${e.message}"))
+            }
+
+            future
+        }
+    }
+
+    fun updateDatabaseConnection(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val input = env.getArgument<Map<String, Any?>>("input") ?: emptyMap()
+            val name = (input["name"] as? String)?.trim().orEmpty()
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(mapOf("success" to false, "message" to "No ConfigStore available - database connections require a ConfigStore"))
+                return@DataFetcher future
+            }
+            if (name == "Default") {
+                future.complete(mapOf("success" to false, "message" to "Built-in default connections are read-only"))
+                return@DataFetcher future
+            }
+
+            configStore.getDatabaseConnection(name).onComplete { getResult ->
+                if (getResult.failed() || getResult.result() == null) {
+                    future.complete(mapOf("success" to false, "message" to "Database connection '$name' not found"))
+                    return@onComplete
+                }
+
+                try {
+                    val existing = getResult.result()!!
+                    val type = (input["type"] as? String)?.let { DatabaseConnectionType.valueOf(it) } ?: existing.type
+                    val password = (input["password"] as? String)?.takeIf { it.isNotEmpty() } ?: existing.password
+                    val updated = DatabaseConnectionConfig(
+                        name = name,
+                        type = type,
+                        url = (input["url"] as? String)?.takeIf { it.isNotBlank() } ?: existing.url,
+                        username = input["username"] as? String ?: existing.username,
+                        password = password,
+                        database = input["database"] as? String ?: existing.database,
+                        schema = input["schema"] as? String ?: existing.schema,
+                        createdAt = existing.createdAt
+                    )
+                    configStore.saveDatabaseConnection(updated).onComplete { saveResult ->
+                        if (saveResult.succeeded() && saveResult.result()) {
+                            future.complete(mapOf("success" to true, "message" to "Database connection '$name' updated", "connection" to connectionToMap(updated)))
+                        } else {
+                            future.complete(mapOf("success" to false, "message" to "Failed to update database connection '$name'"))
+                        }
+                    }
+                } catch (e: Exception) {
+                    future.complete(mapOf("success" to false, "message" to "Error updating database connection: ${e.message}"))
+                }
+            }
+            future
+        }
+    }
+
+    fun deleteDatabaseConnection(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>>()
+            if (!checkAuthorization(env, future)) return@DataFetcher future
+
+            val name = env.getArgument<String>("name") ?: ""
+            val configStore = archiveHandler.getConfigStore()
+            if (configStore == null) {
+                future.complete(mapOf("success" to false, "message" to "No ConfigStore available - database connections require a ConfigStore"))
+                return@DataFetcher future
+            }
+            if (name == "Default") {
+                future.complete(mapOf("success" to false, "message" to "Built-in default connections are read-only"))
+                return@DataFetcher future
+            }
+
+            configStore.getAllArchiveGroups().onComplete { groupsResult ->
+                if (groupsResult.succeeded() && groupsResult.result().any { it.archiveGroup.getDatabaseConnectionName() == name }) {
+                    future.complete(mapOf("success" to false, "message" to "Database connection '$name' is used by one or more archive groups"))
+                    return@onComplete
+                }
+                configStore.deleteDatabaseConnection(name).onComplete { deleteResult ->
+                    if (deleteResult.succeeded() && deleteResult.result()) {
+                        future.complete(mapOf("success" to true, "message" to "Database connection '$name' deleted"))
+                    } else {
+                        future.complete(mapOf("success" to false, "message" to "Failed to delete database connection '$name'"))
+                    }
+                }
+            }
+            future
+        }
+    }
 
     fun createArchiveGroup(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
         return DataFetcher { env ->
@@ -252,6 +575,7 @@ class ArchiveGroupResolver(
                     return@DataFetcher future
                 }
                  val payloadFormatStr = input["payloadFormat"] as? String ?: "DEFAULT"
+                val databaseConnectionName = (input["databaseConnectionName"] as? String)?.takeIf { it.isNotBlank() }
 
                 // Parse optional durations
                 val lastValRetention = input["lastValRetention"] as? String
@@ -324,34 +648,47 @@ class ArchiveGroupResolver(
                     lastValRetentionStr = lastValRetention,
                     archiveRetentionStr = archiveRetention,
                     purgeIntervalStr = purgeInterval,
+                    databaseConnectionName = databaseConnectionName,
                     databaseConfig = JsonObject() // Will be populated from config
                 )
 
-                // Save to database (disabled by default) using async call
-                configStore.saveArchiveGroup(archiveGroup, enabled = false).onComplete { asyncResult ->
-                    if (asyncResult.succeeded() && asyncResult.result()) {
-                        future.complete(mapOf(
-                            "success" to true,
-                            "message" to "Archive group '$name' created successfully (disabled by default)",
-                                         "archiveGroup" to mapOf(
-                                             "name" to name,
-                                             "enabled" to false,
-                                             "deployed" to false,
-                                             "topicFilter" to topicFilter,
-                                             "retainedOnly" to retainedOnly,
-                                             "lastValType" to lastValType.name,
-                                             "archiveType" to archiveType.name,
-                                              "payloadFormat" to payloadFormat.name,
-                                 "lastValRetention" to lastValRetention,
-                                 "archiveRetention" to archiveRetention,
-                                 "purgeInterval" to purgeInterval
-                             )
-                        ))
-                    } else {
+                validateConnectionSelection(configStore, databaseConnectionName, lastValType, archiveType).onComplete { validation ->
+                    val validationMessage = validation.result()
+                    if (validation.failed() || validationMessage != null) {
                         future.complete(mapOf(
                             "success" to false,
-                            "message" to "Failed to save archive group to database"
+                            "message" to (validationMessage ?: validation.cause()?.message ?: "Invalid database connection selection")
                         ))
+                        return@onComplete
+                    }
+
+                    // Save to database (disabled by default) using async call
+                    configStore.saveArchiveGroup(archiveGroup, enabled = false).onComplete { asyncResult ->
+                        if (asyncResult.succeeded() && asyncResult.result()) {
+                            future.complete(mapOf(
+                                "success" to true,
+                                "message" to "Archive group '$name' created successfully (disabled by default)",
+                                "archiveGroup" to mapOf(
+                                    "name" to name,
+                                    "enabled" to false,
+                                    "deployed" to false,
+                                    "topicFilter" to topicFilter,
+                                    "retainedOnly" to retainedOnly,
+                                    "lastValType" to lastValType.name,
+                                    "archiveType" to archiveType.name,
+                                    "databaseConnectionName" to databaseConnectionName,
+                                    "payloadFormat" to payloadFormat.name,
+                                    "lastValRetention" to lastValRetention,
+                                    "archiveRetention" to archiveRetention,
+                                    "purgeInterval" to purgeInterval
+                                )
+                            ))
+                        } else {
+                            future.complete(mapOf(
+                                "success" to false,
+                                "message" to "Failed to save archive group to database"
+                            ))
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -470,6 +807,11 @@ class ArchiveGroupResolver(
                              } else {
                                  existingArchiveGroup.payloadFormat
                              }
+                             val databaseConnectionName = if (input.containsKey("databaseConnectionName")) {
+                                 (input["databaseConnectionName"] as? String)?.takeIf { it.isNotBlank() }
+                             } else {
+                                 existingArchiveGroup.getDatabaseConnectionName()
+                             }
 
                              // Parse optional durations if provided, otherwise keep existing
                             val lastValRetention = input["lastValRetention"] as? String
@@ -530,33 +872,46 @@ class ArchiveGroupResolver(
                                  lastValRetentionStr = lastValRetention ?: existingArchiveGroup.getLastValRetention(),
                                  archiveRetentionStr = archiveRetention ?: existingArchiveGroup.getArchiveRetention(),
                                  purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
+                                 databaseConnectionName = databaseConnectionName,
                                  databaseConfig = JsonObject() // Will be populated from config
                              )
 
-                            // Update in database (keep the same enabled state - false) using async call
-                            configStore.updateArchiveGroup(updatedArchiveGroup, enabled = false).onComplete { updateResult ->
-                                if (updateResult.succeeded() && updateResult.result()) {
-                                    future.complete(mapOf(
-                                        "success" to true,
-                                        "message" to "Archive group '$name' updated successfully",
-                                        "archiveGroup" to mapOf(
-                                            "name" to name,
-                                            "enabled" to false,
-                                            "deployed" to false,
-                                            "topicFilter" to topicFilter,
-                                            "retainedOnly" to retainedOnly,
-                                            "lastValType" to lastValType.name,
-                                            "archiveType" to archiveType.name,
-                                            "lastValRetention" to lastValRetention,
-                                            "archiveRetention" to archiveRetention,
-                                            "purgeInterval" to purgeInterval
-                                        )
-                                    ))
-                                } else {
+                            validateConnectionSelection(configStore, databaseConnectionName, lastValType, archiveType).onComplete { validation ->
+                                val validationMessage = validation.result()
+                                if (validation.failed() || validationMessage != null) {
                                     future.complete(mapOf(
                                         "success" to false,
-                                        "message" to "Failed to update archive group in database"
+                                        "message" to (validationMessage ?: validation.cause()?.message ?: "Invalid database connection selection")
                                     ))
+                                    return@onComplete
+                                }
+
+                                // Update in database (keep the same enabled state - false) using async call
+                                configStore.updateArchiveGroup(updatedArchiveGroup, enabled = false).onComplete { updateResult ->
+                                    if (updateResult.succeeded() && updateResult.result()) {
+                                        future.complete(mapOf(
+                                            "success" to true,
+                                            "message" to "Archive group '$name' updated successfully",
+                                            "archiveGroup" to mapOf(
+                                                "name" to name,
+                                                "enabled" to false,
+                                                "deployed" to false,
+                                                "topicFilter" to topicFilter,
+                                                "retainedOnly" to retainedOnly,
+                                                "lastValType" to lastValType.name,
+                                                "archiveType" to archiveType.name,
+                                                "databaseConnectionName" to databaseConnectionName,
+                                                "lastValRetention" to lastValRetention,
+                                                "archiveRetention" to archiveRetention,
+                                                "purgeInterval" to purgeInterval
+                                            )
+                                        ))
+                                    } else {
+                                        future.complete(mapOf(
+                                            "success" to false,
+                                            "message" to "Failed to update archive group in database"
+                                        ))
+                                    }
                                 }
                             }
                         } catch (e: Exception) {

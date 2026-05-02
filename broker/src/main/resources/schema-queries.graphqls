@@ -218,6 +218,18 @@ type Query {
         name: String!
     ): ArchiveGroupInfo
 
+    databaseConnections(
+        type: DatabaseConnectionType
+    ): [DatabaseConnectionInfo!]!
+
+    databaseConnectionNames(
+        type: DatabaseConnectionType!
+    ): [String!]!
+
+    databaseConnection(
+        name: String!
+    ): DatabaseConnectionInfo
+
     # Get devices with optional filtering
     # Returns all devices or specific devices by name
     # Use to list devices or export configurations
@@ -361,6 +373,7 @@ type ArchiveGroupInfo {
     retainedOnly: Boolean!
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
+    databaseConnectionName: String
     payloadFormat: PayloadFormat!
     lastValRetention: String
     archiveRetention: String
@@ -380,6 +393,23 @@ type ArchiveGroupInfo {
         # Alternative to from/to: get metrics from the last N minutes
         lastMinutes: Int
     ): [ArchiveGroupMetrics!]!
+}
+
+enum DatabaseConnectionType {
+    POSTGRES
+    MONGODB
+}
+
+type DatabaseConnectionInfo {
+    name: String!
+    type: DatabaseConnectionType!
+    url: String!
+    username: String
+    database: String
+    schema: String
+    readOnly: Boolean!
+    createdAt: String
+    updatedAt: String
 }
 
 # OPC UA Device Configuration Types

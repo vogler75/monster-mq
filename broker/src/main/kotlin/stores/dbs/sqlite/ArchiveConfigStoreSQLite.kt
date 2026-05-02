@@ -22,6 +22,7 @@ class ArchiveConfigStoreSQLite(
 
     private val logger: Logger = Utils.getLogger(this::class.java)
     private val configTableName = "archiveconfigs"
+    private val connectionTableName = "databaseconnections"
 
     private lateinit var sqliteClient: SQLiteClient
 
@@ -42,12 +43,30 @@ class ArchiveConfigStoreSQLite(
                 purge_interval TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                payload_format TEXT DEFAULT 'DEFAULT'
+                payload_format TEXT DEFAULT 'DEFAULT',
+                database_connection_name TEXT
             )
         """.trimIndent())
+            .add("""
+                CREATE TABLE IF NOT EXISTS $connectionTableName (
+                    name TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    username TEXT,
+                    password TEXT,
+                    database_name TEXT,
+                    schema_name TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """.trimIndent())
 
         sqliteClient.initDatabase(initSql).onComplete { result ->
             if (result.succeeded()) {
+                sqliteClient.executeUpdate(
+                    "ALTER TABLE $configTableName ADD COLUMN database_connection_name TEXT",
+                    useTransaction = false
+                ).onFailure { /* Column already exists on upgraded databases. */ }
                 logger.info("Archive config table created/verified in SQLite")
                 startPromise.complete()
             } else {
@@ -113,8 +132,8 @@ class ArchiveConfigStoreSQLite(
     override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         val sql = """
             INSERT OR REPLACE INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """.trimIndent()
 
         val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
@@ -129,6 +148,7 @@ class ArchiveConfigStoreSQLite(
             .add(archiveGroup.getArchiveRetention())
             .add(archiveGroup.getPurgeInterval())
             .add(archiveGroup.payloadFormat.name)
+            .add(archiveGroup.getDatabaseConnectionName())
 
         return sqliteClient.executeUpdate(sql, params).map { rowsAffected ->
             val success = rowsAffected > 0
@@ -144,6 +164,57 @@ class ArchiveConfigStoreSQLite(
 
     override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // SQLite UPSERT handles both insert and update
+    }
+
+    override fun getAllDatabaseConnections(): Future<List<DatabaseConnectionConfig>> {
+        return sqliteClient.executeQuery("SELECT * FROM $connectionTableName ORDER BY name").map { results ->
+            (0 until results.size()).map { i -> rowToDatabaseConnection(results.getJsonObject(i)) }
+        }.otherwise { e ->
+            logger.severe("Error retrieving database connections from SQLite: ${e.message}")
+            emptyList()
+        }
+    }
+
+    override fun getDatabaseConnection(name: String): Future<DatabaseConnectionConfig?> {
+        return sqliteClient.executeQuery(
+            "SELECT * FROM $connectionTableName WHERE name = ?",
+            JsonArray().add(name)
+        ).map { results ->
+            if (results.size() > 0) rowToDatabaseConnection(results.getJsonObject(0)) else null
+        }.otherwise { e ->
+            logger.severe("Error retrieving database connection '$name' from SQLite: ${e.message}")
+            null
+        }
+    }
+
+    override fun saveDatabaseConnection(connection: DatabaseConnectionConfig): Future<Boolean> {
+        val sql = """
+            INSERT OR REPLACE INTO $connectionTableName
+            (name, type, url, username, password, database_name, schema_name, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """.trimIndent()
+        val params = JsonArray()
+            .add(connection.name)
+            .add(connection.type.name)
+            .add(connection.url)
+            .add(connection.username)
+            .add(connection.password)
+            .add(connection.database)
+            .add(connection.schema)
+        return sqliteClient.executeUpdate(sql, params).map { it > 0 }.otherwise { e ->
+            logger.severe("Error saving database connection '${connection.name}' to SQLite: ${e.message}")
+            false
+        }
+    }
+
+    override fun deleteDatabaseConnection(name: String): Future<Boolean> {
+        return sqliteClient.executeUpdate(
+            "DELETE FROM $connectionTableName WHERE name = ?",
+            JsonArray().add(name)
+        ).map { it > 0 }.otherwise { e ->
+            logger.severe("Error deleting database connection '$name' from SQLite: ${e.message}")
+            false
+        }
     }
 
     override fun deleteArchiveGroup(name: String): Future<Boolean> {
@@ -200,7 +271,25 @@ class ArchiveConfigStoreSQLite(
             lastValRetentionMs = lastValRetention?.let { Utils.parseDuration(it) },
             archiveRetentionMs = archiveRetention?.let { Utils.parseDuration(it) },
             purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
+            lastValRetentionStr = lastValRetention,
+            archiveRetentionStr = archiveRetention,
+            purgeIntervalStr = purgeInterval,
+            databaseConnectionName = row.getString("database_connection_name"),
             databaseConfig = JsonObject() // Will be populated from config
+        )
+    }
+
+    private fun rowToDatabaseConnection(row: JsonObject): DatabaseConnectionConfig {
+        return DatabaseConnectionConfig(
+            name = row.getString("name"),
+            type = DatabaseConnectionType.valueOf(row.getString("type")),
+            url = row.getString("url"),
+            username = row.getString("username"),
+            password = row.getString("password"),
+            database = row.getString("database_name"),
+            schema = row.getString("schema_name"),
+            createdAt = row.getString("created_at"),
+            updatedAt = row.getString("updated_at")
         )
     }
 

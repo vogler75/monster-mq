@@ -5,6 +5,8 @@ import at.rocworks.Utils
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.stores.ArchiveGroupConfig
 import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.DatabaseConnectionConfig
+import at.rocworks.stores.DatabaseConnectionType
 import at.rocworks.stores.IArchiveConfigStore
 import at.rocworks.stores.MessageStoreType
 import at.rocworks.stores.MessageArchiveType
@@ -25,6 +27,7 @@ class ArchiveConfigStorePostgres(
     private val logger = Utils.getLogger(this::class.java)
 
     private val configTableName = "archiveconfigs"
+    private val connectionTableName = "databaseconnections"
 
 
     override fun getType(): String = "POSTGRES"
@@ -58,12 +61,27 @@ class ArchiveConfigStorePostgres(
                     purge_interval VARCHAR(50),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    payload_format VARCHAR(20) DEFAULT 'DEFAULT'
+                    payload_format VARCHAR(20) DEFAULT 'DEFAULT',
+                    database_connection_name VARCHAR(255)
                 );
                 """.trimIndent()
 
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(createTableSQL)
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS database_connection_name VARCHAR(255)")
+                    statement.executeUpdate("""
+                        CREATE TABLE IF NOT EXISTS $connectionTableName (
+                            name VARCHAR(255) PRIMARY KEY,
+                            type VARCHAR(50) NOT NULL,
+                            url TEXT NOT NULL,
+                            username TEXT,
+                            password TEXT,
+                            database_name TEXT,
+                            schema_name TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """.trimIndent())
                 }
                 connection.commit()
                 logger.fine("Archive config table is ready [${Utils.getCurrentFunctionName()}]")
@@ -85,7 +103,7 @@ class ArchiveConfigStorePostgres(
 
         vertx.executeBlocking(Callable {
             val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM $configTableName ORDER BY name"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name FROM $configTableName ORDER BY name"
 
             try {
                 db.connection?.let { connection ->
@@ -126,6 +144,7 @@ class ArchiveConfigStorePostgres(
                                 lastValRetentionStr = lastValRetention,
                                 archiveRetentionStr = archiveRetention,
                                 purgeIntervalStr = purgeInterval,
+                                databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
                                 databaseConfig = JsonObject()
                             )
                             archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
@@ -155,7 +174,7 @@ class ArchiveConfigStorePostgres(
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format FROM $configTableName WHERE name = ?"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name FROM $configTableName WHERE name = ?"
 
             try {
                 db.connection?.let { connection ->
@@ -196,6 +215,7 @@ class ArchiveConfigStorePostgres(
                                 lastValRetentionStr = lastValRetention,
                                 archiveRetentionStr = archiveRetention,
                                 purgeIntervalStr = purgeInterval,
+                                databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
                                 databaseConfig = JsonObject()
                             )
                             ArchiveGroupConfig(archiveGroup, enabled)
@@ -229,8 +249,8 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, updated_at)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -241,6 +261,7 @@ class ArchiveConfigStorePostgres(
                     archive_retention = EXCLUDED.archive_retention,
                     purge_interval = EXCLUDED.purge_interval,
                     payload_format = EXCLUDED.payload_format,
+                    database_connection_name = EXCLUDED.database_connection_name,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -264,6 +285,7 @@ class ArchiveConfigStorePostgres(
                         preparedStatement.setString(8, archiveRetention)
                         preparedStatement.setString(9, purgeInterval)
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
+                        preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         connection.commit()
@@ -297,6 +319,121 @@ class ArchiveConfigStorePostgres(
 
     override fun updateArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         return saveArchiveGroup(archiveGroup, enabled) // PostgreSQL UPSERT handles both insert and update
+    }
+
+    override fun getAllDatabaseConnections(): Future<List<DatabaseConnectionConfig>> {
+        val promise = Promise.promise<List<DatabaseConnectionConfig>>()
+        vertx.executeBlocking(Callable {
+            val connections = mutableListOf<DatabaseConnectionConfig>()
+            val sql = "SELECT name, type, url, username, password, database_name, schema_name, created_at, updated_at FROM $connectionTableName ORDER BY name"
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    val rs = statement.executeQuery()
+                    while (rs.next()) connections.add(resultSetToDatabaseConnection(rs))
+                }
+            } catch (e: SQLException) {
+                logger.warning("Error fetching database connections: ${e.message}")
+            }
+            connections
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(emptyList())
+        }
+        return promise.future()
+    }
+
+    override fun getDatabaseConnection(name: String): Future<DatabaseConnectionConfig?> {
+        val promise = Promise.promise<DatabaseConnectionConfig?>()
+        vertx.executeBlocking(Callable {
+            val sql = "SELECT name, type, url, username, password, database_name, schema_name, created_at, updated_at FROM $connectionTableName WHERE name = ?"
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    statement.setString(1, name)
+                    val rs = statement.executeQuery()
+                    if (rs.next()) resultSetToDatabaseConnection(rs) else null
+                }
+            } catch (e: SQLException) {
+                logger.warning("Error fetching database connection '$name': ${e.message}")
+                null
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(null)
+        }
+        return promise.future()
+    }
+
+    override fun saveDatabaseConnection(connection: DatabaseConnectionConfig): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            val sql = """
+                INSERT INTO $connectionTableName
+                (name, type, url, username, password, database_name, schema_name, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (name) DO UPDATE SET
+                    type = EXCLUDED.type,
+                    url = EXCLUDED.url,
+                    username = EXCLUDED.username,
+                    password = EXCLUDED.password,
+                    database_name = EXCLUDED.database_name,
+                    schema_name = EXCLUDED.schema_name,
+                    updated_at = CURRENT_TIMESTAMP
+            """.trimIndent()
+            try {
+                db.connection?.prepareStatement(sql)?.use { statement ->
+                    statement.setString(1, connection.name)
+                    statement.setString(2, connection.type.name)
+                    statement.setString(3, connection.url)
+                    statement.setString(4, connection.username)
+                    statement.setString(5, connection.password)
+                    statement.setString(6, connection.database)
+                    statement.setString(7, connection.schema)
+                    val rowsAffected = statement.executeUpdate()
+                    db.connection?.commit()
+                    rowsAffected > 0
+                } ?: false
+            } catch (e: SQLException) {
+                logger.warning("Error saving database connection '${connection.name}': ${e.message}")
+                try { db.connection?.rollback() } catch (_: Exception) {}
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
+    }
+
+    override fun deleteDatabaseConnection(name: String): Future<Boolean> {
+        val promise = Promise.promise<Boolean>()
+        vertx.executeBlocking(Callable {
+            try {
+                db.connection?.prepareStatement("DELETE FROM $connectionTableName WHERE name = ?")?.use { statement ->
+                    statement.setString(1, name)
+                    val rowsAffected = statement.executeUpdate()
+                    db.connection?.commit()
+                    rowsAffected > 0
+                } ?: false
+            } catch (e: SQLException) {
+                logger.warning("Error deleting database connection '$name': ${e.message}")
+                try { db.connection?.rollback() } catch (_: Exception) {}
+                false
+            }
+        }).onComplete { result ->
+            if (result.succeeded()) promise.complete(result.result()) else promise.complete(false)
+        }
+        return promise.future()
+    }
+
+    private fun resultSetToDatabaseConnection(rs: ResultSet): DatabaseConnectionConfig {
+        return DatabaseConnectionConfig(
+            name = rs.getString("name"),
+            type = DatabaseConnectionType.valueOf(rs.getString("type")),
+            url = rs.getString("url"),
+            username = rs.getString("username"),
+            password = rs.getString("password"),
+            database = rs.getString("database_name"),
+            schema = rs.getString("schema_name"),
+            createdAt = try { rs.getTimestamp("created_at")?.toInstant()?.toString() } catch (e: Exception) { null },
+            updatedAt = try { rs.getTimestamp("updated_at")?.toInstant()?.toString() } catch (e: Exception) { null }
+        )
     }
 
     override fun deleteArchiveGroup(name: String): Future<Boolean> {
