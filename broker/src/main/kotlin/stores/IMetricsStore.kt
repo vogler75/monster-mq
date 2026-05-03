@@ -7,6 +7,8 @@ import io.vertx.core.Future
 import java.time.Instant
 
 enum class MetricsStoreType {
+    MEMORY,
+    NONE,
     POSTGRES,
     CRATEDB,
     MONGODB,

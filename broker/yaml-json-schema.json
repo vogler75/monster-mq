@@ -121,6 +121,53 @@
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
     },
+    "Metrics": {
+      "type": "object",
+      "description": "Broker metrics collection and history storage configuration.",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable periodic metrics collection."
+        },
+        "StoreType": {
+          "type": "string",
+          "enum": [
+            "MEMORY",
+            "NONE",
+            "POSTGRES",
+            "CRATEDB",
+            "MONGODB",
+            "SQLITE"
+          ],
+          "description": "Metrics history backend. If unset, uses the configured persistent backend. MEMORY stores bounded history in RAM. NONE collects and publishes live snapshots without storing history."
+        },
+        "CollectionIntervalSeconds": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "description": "How often metrics samples are collected."
+        },
+        "CollectionInterval": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "description": "Deprecated alias for CollectionIntervalSeconds."
+        },
+        "RetentionHours": {
+          "type": "integer",
+          "default": 24,
+          "minimum": 1,
+          "description": "How long metrics history is retained before purge."
+        },
+        "MaxHistoryRows": {
+          "type": "integer",
+          "default": 3600,
+          "minimum": 1,
+          "description": "Maximum in-memory metrics rows retained per metric kind and identifier when StoreType is MEMORY."
+        }
+      }
+    },
     "UserManagement": {
       "type": "object",
       "description": "User management and ACL configuration",

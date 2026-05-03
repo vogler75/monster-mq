@@ -1056,18 +1056,31 @@ MORE INFO:
 
                 val (metricsStore, metricsCollector) = if (metricsEnabled) {
                     try {
-                        val storeTypeStr = getStoreType(configJson)
+                        val legacyMetricsStoreConfig = configJson.getJsonObject("MetricsStore", JsonObject())
+                        val explicitMetricsStoreType = metricsConfig.getString("StoreType") ?: legacyMetricsStoreConfig.getString("Type")
+                        val storeTypeStr = explicitMetricsStoreType ?: getStoreType(configJson)
                         val storeType = try {
                             MetricsStoreType.valueOf(storeTypeStr.uppercase())
                         } catch (e: IllegalArgumentException) {
-                            logger.warning("Invalid metrics store type: $storeTypeStr. Defaulting to POSTGRES")
-                            MetricsStoreType.POSTGRES
+                            throw IllegalArgumentException("Invalid metrics store type: $storeTypeStr. Valid types: ${MetricsStoreType.values().joinToString()}")
                         }
 
-                        val store = MetricsStoreFactory.create(storeType, configJson, "metrics")
-                        val collectionInterval = metricsConfig.getInteger("CollectionInterval", 10)
+                        if (explicitMetricsStoreType != null &&
+                            storeType !in setOf(MetricsStoreType.MEMORY, MetricsStoreType.NONE)) {
+                            val brokerStoreType = getStoreType(configJson).uppercase()
+                            if (storeType.name != brokerStoreType) {
+                                throw IllegalArgumentException("Metrics.StoreType $storeType must match configured broker StoreType $brokerStoreType")
+                            }
+                        }
+
+                        val maxHistoryRows = metricsConfig.getInteger("MaxHistoryRows", 3600)
+                        val store = MetricsStoreFactory.create(storeType, configJson, "metrics", maxHistoryRows)
+                        val collectionInterval = metricsConfig.getInteger(
+                            "CollectionIntervalSeconds",
+                            metricsConfig.getInteger("CollectionInterval", 10)
+                        )
                         val retentionHours = metricsConfig.getInteger("RetentionHours", 24)
-                        logger.fine("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention")
+                        logger.fine("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention, ${maxHistoryRows} max history rows")
                         val collector = MetricsHandler(sessionHandler, store, messageBus, messageHandler, collectionInterval, retentionHours)
                         store to collector
                     } catch (e: Exception) {

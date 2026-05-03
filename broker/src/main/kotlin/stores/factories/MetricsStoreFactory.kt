@@ -3,6 +3,8 @@ package at.rocworks.stores
 import at.rocworks.Const
 import at.rocworks.stores.postgres.MetricsStorePostgres
 import at.rocworks.stores.cratedb.MetricsStoreCrateDB
+import at.rocworks.stores.memory.MetricsStoreMemory
+import at.rocworks.stores.memory.MetricsStoreNone
 import at.rocworks.stores.mongodb.MetricsStoreMongoDB
 import at.rocworks.stores.sqlite.MetricsStoreSQLite
 import io.vertx.core.json.JsonObject
@@ -12,9 +14,17 @@ object MetricsStoreFactory {
     fun create(
         metricsStoreType: MetricsStoreType,
         config: JsonObject,
-        storeName: String = "metrics"
+        storeName: String = "metrics",
+        maxHistoryRows: Int = 3600
     ): IMetricsStoreAsync {
         return when (metricsStoreType) {
+            MetricsStoreType.MEMORY -> MetricsStoreMemory(
+                name = storeName,
+                maxHistoryRows = maxHistoryRows
+            )
+            MetricsStoreType.NONE -> MetricsStoreNone(
+                name = storeName
+            )
             MetricsStoreType.POSTGRES -> {
                 val postgresConfig = config.getJsonObject("Postgres")
                     ?: throw IllegalArgumentException("PostgreSQL configuration not found")
@@ -62,23 +72,25 @@ object MetricsStoreFactory {
         config: JsonObject,
         storeName: String = "metrics"
     ): IMetricsStoreAsync? {
-        val metricsConfig = config.getJsonObject("MetricsStore", JsonObject())
-        val typeString = metricsConfig.getString("Type")
+        val metricsConfig = config.getJsonObject("Metrics", JsonObject())
+        val legacyMetricsStoreConfig = config.getJsonObject("MetricsStore", JsonObject())
+        val typeString = metricsConfig.getString("StoreType") ?: legacyMetricsStoreConfig.getString("Type")
+        val maxHistoryRows = metricsConfig.getInteger("MaxHistoryRows", 3600)
 
         if (typeString.isNullOrEmpty()) {
             // Auto-detect based on available database configurations
             return when {
                 config.containsKey("Postgres") -> {
-                    create(MetricsStoreType.POSTGRES, config, storeName)
+                    create(MetricsStoreType.POSTGRES, config, storeName, maxHistoryRows)
                 }
                 config.containsKey("CrateDB") -> {
-                    create(MetricsStoreType.CRATEDB, config, storeName)
+                    create(MetricsStoreType.CRATEDB, config, storeName, maxHistoryRows)
                 }
                 config.containsKey("MongoDB") -> {
-                    create(MetricsStoreType.MONGODB, config, storeName)
+                    create(MetricsStoreType.MONGODB, config, storeName, maxHistoryRows)
                 }
                 config.containsKey("SQLite") -> {
-                    create(MetricsStoreType.SQLITE, config, storeName)
+                    create(MetricsStoreType.SQLITE, config, storeName, maxHistoryRows)
                 }
                 else -> null
             }
@@ -90,6 +102,6 @@ object MetricsStoreFactory {
             throw IllegalArgumentException("Invalid metrics store type: $typeString. Valid types: ${MetricsStoreType.values().joinToString()}")
         }
 
-        return create(type, config, storeName)
+        return create(type, config, storeName, maxHistoryRows)
     }
 }

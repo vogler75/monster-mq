@@ -33,6 +33,14 @@ Queues:
   MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
 
 # Metrics configuration
+Metrics:
+  Enabled: true
+  # StoreType: MEMORY      # Optional: MEMORY, NONE, or same backend as StoreType/DefaultStoreType
+  CollectionIntervalSeconds: 10
+  RetentionHours: 24
+  MaxHistoryRows: 3600
+
+# Logging configuration
 Logging:
   Memory:
     Enabled: true         # Enable in-memory log storage (circular buffer)
