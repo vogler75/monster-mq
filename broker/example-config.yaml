@@ -12,6 +12,8 @@ DefaultStoreType: POSTGRES
 #RetainedStoreType: POSTGRES     # Persistent retained messages
 #ConfigStoreType: POSTGRES       # Persistent broker configuration (users, ACL, SparkplugB decoders, etc.)
 #QueueStoreType: POSTGRES        # Persistent message queues (for QoS 1/2 messages when clients are offline)
+#SessionStoreType: MEMORY        # Volatile sessions/subscriptions; use QueueStoreType: MEMORY separately for volatile queues
+#QueueStoreType: MEMORY          # Volatile queued messages when QueuedMessagesEnabled is true
 
 # User Management configuration
 UserManagement:

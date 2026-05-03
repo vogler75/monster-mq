@@ -33,6 +33,7 @@ import at.rocworks.stores.sqlite.MessageStoreSQLite
 import at.rocworks.stores.sqlite.QueueStoreSQLiteV1
 import at.rocworks.stores.sqlite.QueueStoreSQLiteV2
 import at.rocworks.stores.sqlite.SessionStoreSQLite
+import at.rocworks.stores.sqlite.SQLiteDatabasePath
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
 import io.vertx.config.ConfigRetrieverOptions
@@ -164,8 +165,14 @@ class Monster(args: Array<String>) {
             // If QueueStoreType is explicitly set, use it
             val explicit = configJson.getString("QueueStoreType")
             if (explicit != null) return explicit
-            // Otherwise, derive from SessionStoreType for backward compatibility
-            return getSessionStoreType(configJson)
+
+            val defaultStoreType = configJson.getString("DefaultStoreType")
+            if (defaultStoreType != null) return defaultStoreType
+
+            val sessionStoreType = configJson.getString("SessionStoreType")
+            if (sessionStoreType != null && sessionStoreType != "MEMORY") return sessionStoreType
+
+            return "SQLITE"
         }
 
         fun isClustered() = getInstance().isClustered
@@ -1509,8 +1516,8 @@ MORE INFO:
             exitProcess(1)
         }
         
-        // For SQLite, ensure SQLiteVerticle is deployed first
-        val sqliteReady = if (sessionStoreType == SessionStoreType.SQLITE) {
+        // For SQLite-backed stores, ensure SQLiteVerticle is deployed first
+        val sqliteReady = if (sessionStoreType == SessionStoreType.SQLITE || sessionStoreType == SessionStoreType.MEMORY) {
             ensureSQLiteVerticleDeployed(vertx)
         } else {
             Future.succeededFuture("N/A")
@@ -1523,6 +1530,9 @@ MORE INFO:
                 }
                 SessionStoreType.MONGODB -> {
                     SessionStoreMongoDB(mongoDbConfig.url, mongoDbConfig.database)
+                }
+                SessionStoreType.MEMORY -> {
+                    SessionStoreSQLite(SQLiteDatabasePath.SESSION_MEMORY, SessionStoreType.MEMORY)
                 }
                 SessionStoreType.SQLITE -> {
                     val configDbPath = "${sqliteConfig.path}/monstermq.db"
@@ -1556,8 +1566,11 @@ MORE INFO:
             exitProcess(1)
         }
 
-        // For SQLite, ensure SQLiteVerticle is deployed first
-        val sqliteReady = if (queueStoreType == QueueStoreType.SQLITE) {
+        // For SQLite-backed stores, ensure SQLiteVerticle is deployed first
+        val sqliteReady = if (queueStoreType == QueueStoreType.SQLITE ||
+            queueStoreType == QueueStoreType.SQLITE_V1 ||
+            queueStoreType == QueueStoreType.SQLITE_V2 ||
+            queueStoreType == QueueStoreType.MEMORY) {
             ensureSQLiteVerticleDeployed(vertx)
         } else {
             Future.succeededFuture("N/A")
@@ -1565,6 +1578,10 @@ MORE INFO:
 
         sqliteReady.compose { _ ->
             val store: IQueueStoreSync = when (queueStoreType) {
+                QueueStoreType.MEMORY -> {
+                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+                    QueueStoreSQLiteV2(SQLiteDatabasePath.QUEUE_MEMORY, vtSeconds, QueueStoreType.MEMORY)
+                }
                 QueueStoreType.POSTGRES_V1 -> {
                     QueueStorePostgresV1(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
                 }
@@ -1662,17 +1679,26 @@ MORE INFO:
     }
 
     private fun validateSQLiteDirectory(configJson: JsonObject) {
-        val sessionStoreType = configJson.getString("SessionStoreType")
-        val retainedStoreType = configJson.getString("RetainedStoreType")
+        fun isSqliteType(type: String?): Boolean = type == "SQLITE" || type == "SQLITE_V1" || type == "SQLITE_V2"
+
+        val sessionStoreType = Monster.getSessionStoreType(configJson)
+        val retainedStoreType = Monster.getRetainedStoreType(configJson)
+        val queueStoreType = Monster.getQueueStoreType(configJson)
+        val configStoreType = Monster.getConfigStoreType(configJson)
         val archiveGroups = configJson.getJsonArray("ArchiveGroups")
 
         // Check if SQLite is used anywhere
-        val sqliteUsed = sessionStoreType == "SQLITE" ||
-                        retainedStoreType == "SQLITE" ||
+        val sqliteUsed = isSqliteType(sessionStoreType) ||
+                        isSqliteType(retainedStoreType) ||
+                        isSqliteType(queueStoreType) ||
+                        isSqliteType(configStoreType) ||
                         (archiveGroups?.any { group ->
                             val g = group as JsonObject
-                            g.getString("LastValType") == "SQLITE" ||
-                            g.getString("ArchiveType") == "SQLITE"
+                            isSqliteType(g.getString("LastValType")) ||
+                            isSqliteType(g.getString("LastValueStoreType")) ||
+                            isSqliteType(g.getString("RetainedStoreType")) ||
+                            isSqliteType(g.getString("ArchiveType")) ||
+                            isSqliteType(g.getString("StoreType"))
                         } ?: false)
 
         if (sqliteUsed) {

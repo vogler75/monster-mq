@@ -7,6 +7,9 @@ QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
 DefaultStoreType: SQLITE
+# For flash-light edge mode, override runtime churn stores:
+# SessionStoreType: MEMORY
+# QueueStoreType: MEMORY
 
 # User Management configuration
 UserManagement:

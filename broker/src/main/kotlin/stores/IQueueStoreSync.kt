@@ -3,6 +3,7 @@ package at.rocworks.stores
 import at.rocworks.data.BrokerMessage
 
 enum class QueueStoreType {
+    MEMORY,
     POSTGRES,
     POSTGRES_V1,
     POSTGRES_V2,

@@ -5,7 +5,6 @@ import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
-import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.Types
@@ -23,20 +22,23 @@ import java.util.concurrent.TimeUnit
 class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
     private val logger = Utils.getLogger(this::class.java)
 
-    /** Absolute path to the DB file, resolved at construction time when the working directory is correct. */
-    private val absoluteDbPath: String = File(dbPath).absolutePath
+    /** Connection path resolved at construction time when the working directory is correct. */
+    private val connectionPath: String = SQLiteDatabasePath.connectionPath(dbPath)
+    private val isMemoryDatabase: Boolean = SQLiteDatabasePath.isMemory(dbPath)
 
     /** Direct read-only JDBC connection for synchronous queries (thread-safe for reads in WAL mode) */
     private val readConnection: Connection by lazy {
-        val conn = DriverManager.getConnection("jdbc:sqlite:$absoluteDbPath", "", "")
+        val conn = DriverManager.getConnection(SQLiteDatabasePath.jdbcUrl(dbPath), "", "")
         conn.createStatement().use { stmt ->
-            stmt.executeUpdate("PRAGMA journal_mode = WAL")
+            if (!isMemoryDatabase) {
+                stmt.executeUpdate("PRAGMA journal_mode = WAL")
+            }
             stmt.executeUpdate("PRAGMA synchronous = NORMAL")
             stmt.executeUpdate("PRAGMA cache_size = -16000")
             stmt.executeUpdate("PRAGMA query_only = ON")
             stmt.executeUpdate("PRAGMA busy_timeout = 5000")
         }
-        logger.info { "Created direct read-only SQLite connection for [$absoluteDbPath]" }
+        logger.info { "Created direct read-only SQLite connection for [$connectionPath]" }
         conn
     }
     

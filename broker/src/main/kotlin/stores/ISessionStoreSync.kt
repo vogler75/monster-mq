@@ -5,6 +5,7 @@ import at.rocworks.data.MqttSubscription
 import io.vertx.core.json.JsonObject
 
 enum class SessionStoreType {
+    MEMORY,
     POSTGRES,
     MONGODB,
     SQLITE

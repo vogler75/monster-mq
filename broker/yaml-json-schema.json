@@ -75,6 +75,7 @@
     "SessionStoreType": {
       "type": "string",
       "enum": [
+        "MEMORY",
         "POSTGRES",
         "MONGODB",
         "SQLITE"
@@ -84,6 +85,7 @@
     "QueueStoreType": {
       "type": "string",
       "enum": [
+        "MEMORY",
         "POSTGRES",
         "POSTGRES_V1",
         "POSTGRES_V2",
@@ -94,7 +96,7 @@
         "SQLITE_V1",
         "SQLITE_V2"
       ],
-      "description": "Queue store backend. Defaults to matching SessionStoreType if not set."
+      "description": "Queue store backend. Defaults to DefaultStoreType if set, otherwise to an explicit persistent SessionStoreType, otherwise SQLITE."
     },
     "QueueVisibilityTimeoutSeconds": {
       "type": "integer",

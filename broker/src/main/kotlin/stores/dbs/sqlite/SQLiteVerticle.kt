@@ -78,11 +78,14 @@ class SQLiteVerticle : AbstractVerticle() {
     
     private fun getOrCreateConnection(dbPath: String): Connection {
         return connections.computeIfAbsent(dbPath) { path ->
-            val connection = DriverManager.getConnection("jdbc:sqlite:$path", "", "")
+            val isMemoryDatabase = SQLiteDatabasePath.isMemory(path)
+            val connection = DriverManager.getConnection(SQLiteDatabasePath.jdbcUrl(path), "", "")
             
             // Configure SQLite for optimal concurrent access
             connection.createStatement().use { statement ->
-                if (enableWAL) {
+                if (isMemoryDatabase) {
+                    statement.executeUpdate("PRAGMA journal_mode = MEMORY")
+                } else if (enableWAL) {
                     statement.executeUpdate("PRAGMA journal_mode = WAL")
                     statement.executeUpdate("PRAGMA wal_autocheckpoint = 1000")
                 } else {
@@ -95,8 +98,8 @@ class SQLiteVerticle : AbstractVerticle() {
                 statement.executeUpdate("PRAGMA foreign_keys = ON")
             }
             
-            val journalMode = if (enableWAL) "WAL" else "DELETE"
-            logger.fine { "Created SQLite connection for [$path] with journal mode: $journalMode" }
+            val journalMode = if (isMemoryDatabase) "MEMORY" else if (enableWAL) "WAL" else "DELETE"
+            logger.fine { "Created SQLite connection for [${SQLiteDatabasePath.connectionPath(path)}] with journal mode: $journalMode" }
             connection
         }
     }

@@ -9,20 +9,19 @@ TCPS: 0     # Disabled
 WSS: 0      # Disabled
 MaxMessageSizeKb: 8
 
-# Memory-only storage configuration
-# Note: SessionStore requires a database, so we'll use SQLite with in-memory mode
-SessionStoreType: SQLITE
+# Memory-first storage configuration
+SessionStoreType: MEMORY
 RetainedStoreType: MEMORY
+QueueStoreType: MEMORY
 ConfigStoreType: SQLITE
 
-# Enable queued messages (stored in memory via SQLite :memory:)
+# Enable queued messages (stored in a dedicated in-memory SQLite queue DB)
 QueuedMessagesEnabled: true
 
-# SQLite in-memory configuration
-# Using special :memory: path creates an in-memory SQLite database
-# Data is lost when the broker restarts
+# SQLite configuration remains file-backed for broker configuration.
+# Runtime sessions, subscriptions, retained messages, and queues are volatile.
 SQLite:
-  Path: ":memory:"
+  Path: "sqlite"
 
 # MCP Server configuration
 MCP:
@@ -30,8 +29,8 @@ MCP:
   Port: 3000
 
 # Note: When using this configuration:
-# - All data is lost on broker restart
-# - No persistence across restarts
+# - Runtime session, subscription, retained, and queued message data is lost on broker restart
+# - Broker configuration remains persisted in SQLite
 # - Fast performance (no disk I/O)
 # - Suitable for testing and development
 # - Not recommended for production use

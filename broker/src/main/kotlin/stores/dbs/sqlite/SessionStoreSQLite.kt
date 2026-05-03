@@ -17,7 +17,8 @@ import io.vertx.core.json.JsonObject
  * No SharedSQLiteConnection - uses only event bus communication
  */
 class SessionStoreSQLite(
-    private val dbPath: String
+    private val dbPath: String,
+    private val storeType: SessionStoreType = SessionStoreType.SQLITE
 ): AbstractVerticle(), ISessionStoreSync {
     private val logger = Utils.getLogger(this::class.java)
     private lateinit var sqlClient: SQLiteClient
@@ -26,7 +27,7 @@ class SessionStoreSQLite(
     private val subscriptionsTableName = "subscriptions"
 
 
-    override fun getType(): SessionStoreType = SessionStoreType.SQLITE
+    override fun getType(): SessionStoreType = storeType
 
     override fun start(startPromise: Promise<Void>) {
         // Initialize SQLiteClient - assumes SQLiteVerticle is already deployed by Monster.kt

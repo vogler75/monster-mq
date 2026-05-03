@@ -22,7 +22,8 @@ import io.vertx.core.json.JsonObject
  */
 class QueueStoreSQLiteV2(
     private val dbPath: String,
-    private val visibilityTimeoutSeconds: Int = 30
+    private val visibilityTimeoutSeconds: Int = 30,
+    private val storeType: QueueStoreType = QueueStoreType.SQLITE_V2
 ) : AbstractVerticle(), IQueueStoreSync {
     private val logger = Utils.getLogger(this::class.java)
     private lateinit var sqlClient: SQLiteClient
@@ -30,7 +31,7 @@ class QueueStoreSQLiteV2(
     private val tableName = "messagequeue"
 
 
-    override fun getType(): QueueStoreType = QueueStoreType.SQLITE_V2
+    override fun getType(): QueueStoreType = storeType
 
     override fun start(startPromise: Promise<Void>) {
         sqlClient = SQLiteClient(vertx, dbPath)
