@@ -8,7 +8,7 @@ MonsterMQ is a MQTT broker built with Kotlin on Vert.X and Hazelcast with data p
 
 ### MonsterMQ Edge Broker
 
-MonsterMQ also has an edge broker variant. The edge broker exposes the same GraphQL interface shape as the main broker where supported, but currently implements only a limited subset of the full broker functionality. More GraphQL-backed functionality will be added over time, so new dashboard and API work should consider compatibility with both the full broker and the edge broker when practical.
+MonsterMQ also has an edge broker variant implemented in Go for a lightweight footprint. The edge broker exposes the same GraphQL interface shape as the main broker where supported, but currently implements only a limited subset of the full broker functionality. More GraphQL-backed functionality will be added over time, so new dashboard and API work should consider compatibility with both the full broker and the edge broker when practical.
 
 ## Build and Run Commands
 
