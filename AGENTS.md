@@ -6,6 +6,10 @@ This file provides guidance to AI coding assistants working with code in this re
 
 MonsterMQ is a MQTT broker built with Kotlin on Vert.X and Hazelcast with data persistence through PostgreSQL, CrateDB, MongoDB, or SQLite. It features a web dashboard, GraphQL API, MCP (Model Context Protocol) Server for AI integration, REST API, Prometheus metrics, I3X API for manufacturing data, AI agents with GenAI providers, a flow engine for automation workflows, and device bridging for OPC UA, PLC4X, Kafka, NATS, Redis, Telegram, WinCC OA/Unified, Neo4j, JDBC loggers, and SparkplugB.
 
+### MonsterMQ Edge Broker
+
+MonsterMQ also has an edge broker variant. The edge broker exposes the same GraphQL interface shape as the main broker where supported, but currently implements only a limited subset of the full broker functionality. More GraphQL-backed functionality will be added over time, so new dashboard and API work should consider compatibility with both the full broker and the edge broker when practical.
+
 ## Build and Run Commands
 
 ### Building the Project
