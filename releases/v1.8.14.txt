@@ -1,0 +1,75 @@
+Release v1.8.14
+Built from commit: a7b701fe
+Date: 2026-05-06 08:13:29
+
+Changes since v1.8.13:
+---
+a7b701fe Refresh dev index for current plans
+40a03c3d Update AGENTS.md
+464247e1 Update AGENTS.md
+e7870e1f Moved plan to done
+12d5462f Removed homepage from repo
+67911db8 Add memory session and queue store modes
+5c6948da Moved plans
+0d61e7a6 Create PLAN-memory-metrics-store.md
+63f509ea Add configurable memory metrics store
+09fa6d9d Validate archive group names in mutations
+f94e1f14 Update edge archive database connection plan
+2230105f Add configurable archive database connections
+529e7ea2 Update .gitignore
+3e1a87cc Refactor dashboard submodule update script
+e78ac5fd Remove dashboard from repo
+2ab1d670 Removed dashboard and make it a git submodule
+83e7dec4 Moved dashboard to a separate repository
+3d27e5e3 Set BulkProcessing default to disabled
+79f44b5e Fix latency test Rust security alerts
+6a279f7f Add MQTT bridge queue selection and QoS origin option
+b4e8a300 Add MQTT bridge buffering
+040f863b Fix dashboard login session handling
+8f856f39 Added default config.yaml file for docker
+7f8e7ece Add a standard config file to docker with sqlite configuration
+26690e44 Fix WinCCUa connected state stale after connector stop
+c9aacf82 Remove dev OpenPipeTest utilities
+2b882fa5 Add WinCC Unified OpenPipe data access mode
+1cfd1180 Make brokers.json a local config: add .gitignore, brokers.json.example, improve missing-file hint
+2cc8c153 Reorganize tests: remove old scripts, move to other_tests, update README
+3909aa5f Add run.sh and .env-example for test environment configuration
+6854dcf7 Moved to monster-mq-edge repo
+bc81f63d Add SKIP_<GROUP> env vars to selectively skip test directories
+59192a27 Removed broker.go from this repo
+feac7e6e broker.go: bridge dynamic deploy + RemovePath as bool
+781e2a6d broker.go: register addAddress/updateAddress/deleteAddress as resolver fields
+7e28a7c1 broker.go: structured MqttClient surface, systemLogs streaming, JVM-shaped result
+7959df3c Merge branch 'develop' of github.com:vogler75/monster-mq into develop
+8af35bdf broker.go: align TopicValue/Retained/Archived/Update with JVM, fix browseTopics
+842535b5 broker.go: archive groups across all backends + dynamic deploy
+f1e6099b broker.go: split archive group input + per-store connection status
+7eab3385 broker.go: extend ArchiveGroupInfo to match JVM dashboard schema
+1013dd9b broker.go: fix dashboard login + match JVM response shape
+4a57adb3 Gate GraphQL resolvers and dashboard pages by feature flags
+85b9f898 Add broker.go: native Go MQTT broker for edge
+e61d2ad1 Clear Milo 1.x deprecation/null-check warnings
+aa8855c3 Fix GraphQL systemLogs subscription after MQTT log publish removal
+60e336f7 Upgrade Eclipse Milo from 0.6.16 to 1.1.1
+c440bc26 Consolidate netty-codec 4.1 exclusion into copy-dependencies plugin
+0a5780b7 Fix GraphQL WebSocket and serve HTTP+WS at the same path
+559a403d Cleanup plans
+8ce8acbb Register global BodyHandler and adjust route setup
+58b27853 Scope BodyHandler; update broker configs/endpoints
+cad014b3 Move sidebar collapse toggle to bottom slot
+077fdac3 Remove Linux5 broker from brokers.json
+7f0c1576 Bump Vert.x version to 5.0.10
+8b82124b Add compile-only option to run.sh
+849bee7a Show dashboard auth state
+5f9ff8d8 Use typed onSuccess lambdas instead of casts
+43d189cc Upgrade i3X server to v1 (#153)
+87d0280b Populate Flow Engine status and deliver retained to internal subs (#154)
+0448ba2f Merge remote-tracking branch 'origin/tests' into develop
+52f802fb Reorganize pytest suite and add Flow Engine end-to-end test
+36898fd5 Create I3X_SPEC.md
+50b8e21b Return parsed JSON and text payloads from getHistory (#142)
+505b2a4b Stop OPC UA client background reconnect after initial connect failure
+a42fe0c2 Bump vite to ^6.4.2 to fix GHSA-p9ff-h696-f583
+192b6c72 Require admin for all configuration-changing GraphQL mutations
+f06f382a Require authentication for unprotected GraphQL mutations
+a701beab Apply agent taskTimeout to LLM calls; switch to seconds
