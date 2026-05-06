@@ -98,7 +98,7 @@ if [ "$DOCKER_ONLY" = false ]; then
             -v "${DASHBOARD_VOLUME}:/app/node_modules" \
             -w /app \
             node:24-slim \
-            bash -c "set -e && npm ci && npm run build"
+            bash -c "set -e && npm ci && npm run build && chown -R $(id -u):$(id -g) /app/dist"
         if [ $? -ne 0 ]; then
             echo -e "${RED}✗ Dashboard build failed${NC}"
             exit 1
