@@ -110,6 +110,7 @@ The node script is executed every time the node receives input. Your script has 
 - `state` - Persistent node-level storage
 - `flow` - Flow instance variables
 - `console` - Logging functions
+- `mqtt` - Publish messages directly to MQTT topics
 - `archive` - Query last values and historical data from archive stores
 - `dbs` - Access database nodes for SQL queries
 
@@ -368,6 +369,31 @@ Logging functions:
 - `console.log(...args)` - Log informational messages
 - `console.warn(...args)` - Log warning messages
 - `console.error(...args)` - Log error messages
+
+### mqtt Object
+
+Publish directly to broker topics from within a script.
+
+#### mqtt.publish(topic, payload, qos?, retain?)
+
+Publishes a value directly to an MQTT topic. Returns `true` on success, `false` if validation or publishing fails.
+
+- **topic**: Exact MQTT topic name. Wildcards (`+`, `#`) are rejected.
+- **payload**: String, number, boolean, object, array, or `null`
+- **qos**: Optional QoS `0`, `1`, or `2` (default: `0`)
+- **retain**: Optional retained flag (default: `false`)
+
+```javascript
+// Publish a simple value
+mqtt.publish("alerts/room1/status", "OVERHEAT");
+
+// Publish structured JSON as retained state
+mqtt.publish("state/room1", {
+    temperature: inputs.temp.value,
+    threshold: flow.threshold,
+    ts: new Date().toISOString()
+}, 1, true);
+```
 
 ### archive Object
 

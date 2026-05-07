@@ -9,7 +9,9 @@ import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.*
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import org.graalvm.polyglot.Value
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
@@ -427,6 +429,10 @@ class FlowInstanceExecutor(
                     logger.fine { "[${instanceConfig.name}]   Script called outputs.send($portName, $value)" }
                     handleNodeOutput(node.id, portName, value)
                 },
+                mqttPublisher = { topic, value, qos, retain ->
+                    logger.fine { "[${instanceConfig.name}]   Script called mqtt.publish($topic, $value, qos=$qos, retain=$retain)" }
+                    publishToMqtt(topic, value, qos, retain)
+                },
                 instanceName = instanceConfig.name,
                 flowClass = flowClass
             )
@@ -700,24 +706,29 @@ class FlowInstanceExecutor(
     /**
      * Publish value to MQTT topic
      */
-    private fun publishToMqtt(topic: String, value: Any?) {
+    private fun publishToMqtt(topic: String, value: Any?, qos: Int = 0, retain: Boolean = false): Boolean {
         try {
-            val payload = when (value) {
-                is String -> value.toByteArray()
-                is JsonObject -> value.encode().toByteArray()
+            val normalizedValue = normalizeScriptValue(value)
+            val payload = when (normalizedValue) {
+                null -> ByteArray(0)
+                is ByteArray -> normalizedValue
+                is String -> normalizedValue.toByteArray()
+                is JsonObject -> normalizedValue.encode().toByteArray()
+                is JsonArray -> normalizedValue.encode().toByteArray()
                 is Map<*, *> -> {
                     @Suppress("UNCHECKED_CAST")
-                    JsonObject(value as Map<String, Any>).encode().toByteArray()
+                    JsonObject(normalizedValue as Map<String, Any>).encode().toByteArray()
                 }
-                else -> value.toString().toByteArray()
+                is List<*> -> JsonArray(normalizedValue).encode().toByteArray()
+                else -> normalizedValue.toString().toByteArray()
             }
 
             val message = BrokerMessage(
                 messageId = 0,
                 topicName = topic,
                 payload = payload,
-                qosLevel = 0,
-                isRetain = false,
+                qosLevel = qos,
+                isRetain = retain,
                 isDup = false,
                 isQueued = false,
                 clientId = instanceConfig.name,
@@ -728,14 +739,17 @@ class FlowInstanceExecutor(
             val sessionHandler = Monster.getSessionHandler()
             if (sessionHandler != null) {
                 sessionHandler.publishMessage(message)
-                logger.fine { "[${instanceConfig.name}] Published to MQTT topic $topic: $value" }
+                logger.fine { "[${instanceConfig.name}] Published to MQTT topic $topic: $normalizedValue" }
+                return true
             } else {
                 logger.severe("[${instanceConfig.name}] SessionHandler not available for publishing")
+                return false
             }
 
         } catch (e: Exception) {
             logger.severe("[${instanceConfig.name}] Error publishing to MQTT: ${e.message}")
             e.printStackTrace()
+            return false
         }
     }
 
@@ -757,6 +771,37 @@ class FlowInstanceExecutor(
 
     private fun parsePayload(payload: ByteArray): String {
         return String(payload)
+    }
+
+    private fun normalizeScriptValue(value: Any?): Any? {
+        return when (value) {
+            is Value -> normalizePolyglotValue(value)
+            else -> value
+        }
+    }
+
+    private fun normalizePolyglotValue(value: Value): Any? {
+        if (value.isNull) return null
+        if (value.isBoolean) return value.asBoolean()
+        if (value.fitsInInt()) return value.asInt()
+        if (value.fitsInLong()) return value.asLong()
+        if (value.fitsInDouble()) return value.asDouble()
+        if (value.isString) return value.asString()
+        if (value.hasArrayElements()) {
+            val array = JsonArray()
+            for (index in 0 until value.arraySize) {
+                array.add(normalizePolyglotValue(value.getArrayElement(index)))
+            }
+            return array
+        }
+        if (value.hasMembers()) {
+            val obj = JsonObject()
+            value.memberKeys.forEach { key ->
+                obj.put(key, normalizePolyglotValue(value.getMember(key)))
+            }
+            return obj
+        }
+        return if (value.isHostObject) value.asHostObject() else value.toString()
     }
 
     private fun parseNodeInput(nodeInput: String): Pair<String, String> {

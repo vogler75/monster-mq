@@ -49,6 +49,7 @@ class FlowScriptEngine {
      * @param state Mutable state object for the node
      * @param flowVariables Flow-wide variables
      * @param onOutput Callback when script calls outputs.send(portName, value)
+     * @param mqttPublisher Callback when script calls mqtt.publish(topic, payload, qos, retain)
      * @param instanceName Optional flow instance name for log prefixing
      * @param flowClass Optional flow class definition for database node access
      * @return ExecutionResult with success status and any errors
@@ -60,6 +61,7 @@ class FlowScriptEngine {
         state: MutableMap<String, Any>,
         flowVariables: Map<String, Any>,
         onOutput: (portName: String, value: Any?) -> Unit,
+        mqttPublisher: ((topic: String, payload: Any?, qos: Int, retain: Boolean) -> Boolean)? = null,
         instanceName: String? = null,
         flowClass: FlowClass? = null
     ): ExecutionResult {
@@ -114,6 +116,10 @@ class FlowScriptEngine {
             // Console helper
             val consoleProxy = ConsoleProxy(instanceName)
             bindings.putMember("console", consoleProxy)
+
+            // MQTT helper
+            val mqttProxy = MqttProxy(mqttPublisher)
+            bindings.putMember("mqtt", mqttProxy)
 
             // Database nodes helper (for accessing database nodes from scripts)
             if (flowClass != null) {
@@ -303,6 +309,53 @@ class FlowScriptEngine {
         }
 
         fun getLogs(): List<String> = logs.toList()
+    }
+
+    /**
+     * Proxy for MQTT publish operations from scripts.
+     */
+    class MqttProxy(
+        private val publisher: ((topic: String, payload: Any?, qos: Int, retain: Boolean) -> Boolean)? = null
+    ) {
+        @Suppress("unused")
+        fun publish(topic: String, payload: Any?): Boolean {
+            return publishInternal(topic, payload, 0, false)
+        }
+
+        @Suppress("unused")
+        fun publish(topic: String, payload: Any?, qos: Int): Boolean {
+            return publishInternal(topic, payload, qos, false)
+        }
+
+        @Suppress("unused")
+        fun publish(topic: String, payload: Any?, qos: Int, retain: Boolean): Boolean {
+            return publishInternal(topic, payload, qos, retain)
+        }
+
+        private fun publishInternal(topic: String, payload: Any?, qos: Int, retain: Boolean): Boolean {
+            if (topic.isBlank()) {
+                logger.warning("mqtt.publish rejected blank topic")
+                return false
+            }
+            if (Utils.isWildCardTopic(topic)) {
+                logger.warning("mqtt.publish rejected wildcard topic '$topic'")
+                return false
+            }
+            if (qos !in 0..2) {
+                logger.warning("mqtt.publish rejected invalid QoS '$qos' for topic '$topic'")
+                return false
+            }
+            if (publisher == null) {
+                logger.warning("mqtt.publish is not available in this execution context")
+                return false
+            }
+            return try {
+                publisher.invoke(topic, payload, qos, retain)
+            } catch (e: Exception) {
+                logger.warning("mqtt.publish error for topic '$topic': ${e.message}")
+                false
+            }
+        }
     }
 
     /**
