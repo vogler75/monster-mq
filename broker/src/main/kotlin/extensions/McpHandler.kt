@@ -45,7 +45,8 @@ class McpHandler(
         val name: String,
         val description: String,
         val inputSchema: JsonObject,
-        val handler: AsyncToolHandler
+        val handler: AsyncToolHandler,
+        val annotations: JsonObject
     )
 
     init {
@@ -126,6 +127,24 @@ class McpHandler(
 
     fun registerTool(tool: AsyncTool) {
         tools.put(tool.name, tool)
+    }
+
+    private fun readOnlyToolAnnotations(title: String): JsonObject {
+        return JsonObject()
+            .put("title", title)
+            .put("readOnlyHint", true)
+            .put("destructiveHint", false)
+            .put("idempotentHint", true)
+            .put("openWorldHint", false)
+    }
+
+    private fun writeToolAnnotations(title: String, destructive: Boolean): JsonObject {
+        return JsonObject()
+            .put("title", title)
+            .put("readOnlyHint", false)
+            .put("destructiveHint", destructive)
+            .put("idempotentHint", false)
+            .put("openWorldHint", false)
     }
 
     fun handleRequest(request: JsonObject): Future<JsonObject> {
@@ -215,6 +234,7 @@ class McpHandler(
                 .put("name", tool.name)
                 .put("description", tool.description)
             toolInfo.put("inputSchema", tool.inputSchema)
+            toolInfo.put("annotations", tool.annotations)
             toolsArray.add(toolInfo)
         }
 
@@ -343,7 +363,8 @@ A table with the following columns:
                 JsonObject()
                     .put("type", "object")
                     .put("properties", JsonObject()),
-                ::listArchiveGroups
+                ::listArchiveGroups,
+                readOnlyToolAnnotations("List Archive Groups")
             )
         )
         registerTool(
@@ -415,9 +436,20 @@ This tool helps locate specific data streams or topic hierarchies within a messa
                                 .put("type", "string")
                                 .put("description", "Optional archive group name (defaults to 'Default')")
                             )
+                            .put("limit", JsonObject()
+                                .put("type", "integer")
+                                .put("description", "Maximum number of topics to return (default: 10000, max: 10000)")
+                                .put("default", 10000)
+                            )
+                            .put("includePayload", JsonObject()
+                                .put("type", "boolean")
+                                .put("description", "Whether to include the current payload in the result table")
+                                .put("default", false)
+                            )
                     )
                     .put("required", JsonArray().add("name")),
-                ::findTopicsByNameTool
+                ::findTopicsByNameTool,
+                readOnlyToolAnnotations("Find Topics by Name")
             )
         )
         registerTool(
@@ -495,7 +527,8 @@ This tool helps discover relevant data streams based on their descriptive conten
                             )
                     )
                     .put("required", JsonArray().add("description")),
-                ::findTopicsByDescriptionTool
+                ::findTopicsByDescriptionTool,
+                readOnlyToolAnnotations("Find Topics by Description")
             )
         )
         registerTool(
@@ -578,7 +611,8 @@ JsonObject()
                             )
                     )
                     .put("required", JsonArray().add("topics")),
-                ::getTopicValueTool
+                ::getTopicValueTool,
+                readOnlyToolAnnotations("Get Topic Value")
             )
         )
         registerTool(
@@ -635,7 +669,8 @@ Publishes a value to an MQTT topic. This tool allows you to send data or command
                             )
                     )
                     .put("required", JsonArray().add("topic").add("payload")),
-                ::setTopicValueTool
+                ::setTopicValueTool,
+                writeToolAnnotations("Set Topic Value", destructive = false)
             )
         )
         registerTool(
@@ -748,7 +783,8 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                                 )
                         )
                         .put("required", JsonArray().add("topic")),
-                    ::queryMessageArchive
+                    ::queryMessageArchive,
+                    readOnlyToolAnnotations("Query Message Archive")
                 )
             )
         // Only register SQL tool if the default archive supports SQL queries (PostgreSQL, CrateDB, SQLite)
@@ -862,7 +898,8 @@ The $MCP_ARCHIVE_TABLE table contains the following columns:
                                     )
                             )
                             .put("required", JsonArray().add("sql")),
-                        ::queryMessageArchiveBySql
+                        ::queryMessageArchiveBySql,
+                        readOnlyToolAnnotations("Query Message Archive by SQL")
                     )
                 )
         } else {
@@ -1042,7 +1079,8 @@ A table with:
                                 )
                         )
                         .put("required", JsonArray().add("topics").add("interval")),
-                    ::queryAggregatedMessages
+                    ::queryAggregatedMessages,
+                    readOnlyToolAnnotations("Query Aggregated Messages")
                 )
             )
     }
@@ -1090,7 +1128,7 @@ A table with:
     // --------------------------------------------------------------------------------------------------------------
 
     private fun findTopicsByNameTool(args: JsonObject): Future<JsonArray> {
-        logger.info("findTopicByNameTool called with args: $args")
+        logger.fine("findTopicByNameTool called with args: $args")
         if (!args.containsKey("name")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Name parameter required"))
         }
@@ -1098,6 +1136,8 @@ A table with:
         val namespace = args.getString("namespace", "")
         val name = args.getString("name", "")
         val archiveGroupName = args.getString("archiveGroup")
+        val limit = args.getInteger("limit", 10000).coerceIn(1, 10000)
+        val includePayload = args.getBoolean("includePayload", false)
 
         val promise = Promise.promise<JsonArray>()
         vertx.executeBlocking(Callable {
@@ -1111,20 +1151,34 @@ A table with:
                         (extendedRetainedStore?.findTopicsByName(name, ignoreCase, namespace) ?: emptyList())
                 val distinctList = list.distinct()
                 val result = JsonArray()
-                result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-                distinctList.forEach {
+                val header = JsonArray().add("topic").add("description")
+                if (includePayload) header.add("payload")
+                result.add(header)
+                distinctList.take(limit).forEach {
                     val config =
                         retainedStore["$it/${Const.CONFIG_TOPIC}"] // TODO: should be optimized to do a fetch with the list of topics
-                    result.add(
-                        JsonArray()
-                            .add(it)
-                            .add(config?.payload?.toString(Charsets.UTF_8) ?: "")
-                    )
+                    val row = JsonArray()
+                        .add(it)
+                        .add(extractDescriptionFromConfig(config?.payload?.toString(Charsets.UTF_8) ?: ""))
+                    if (includePayload) {
+                        row.add(extractPayloadForTopic(it, messageStore))
+                    }
+                    result.add(row)
+                }
+                val markdown = buildString {
+                    append(convertJsonTableToMarkdown(result))
+                    if (distinctList.size > limit) {
+                        append("\nShowing ")
+                        append(limit)
+                        append(" of ")
+                        append(distinctList.size)
+                        append(" matching topics. Increase `limit` to return more rows, up to 10000.\n")
+                    }
                 }
                 val answer = JsonArray().add(
                     JsonObject()
                         .put("type", "text")
-                        .put("text", convertJsonTableToMarkdown(result))
+                        .put("text", markdown)
                 )
                 promise.complete(answer)
             } catch (e: Exception) {
@@ -1138,7 +1192,7 @@ A table with:
     // --------------------------------------------------------------------------------------------------------------
 
     private fun findTopicsByDescriptionTool(args: JsonObject): Future<JsonArray> {
-        logger.info("findTopicByDescriptionTool called with args: $args")
+        logger.fine("findTopicByDescriptionTool called with args: $args")
         if (!args.containsKey("description")) {
             return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Description parameter required"))
         }
@@ -1155,7 +1209,7 @@ A table with:
                 val list = extendedRetainedStore?.findTopicsByConfig("Description", description, ignoreCase, namespace) ?: emptyList()
                 val result = JsonArray()
                 result.add(JsonArray().add("topic").add("description")) // Header row for the result table
-                list.forEach { result.add(JsonArray().add(it.first).add(it.second)) }
+                list.forEach { result.add(JsonArray().add(it.first).add(extractDescriptionFromConfig(it.second))) }
                 val answer = JsonArray().add(
                     JsonObject()
                         .put("type", "text")
@@ -1534,11 +1588,45 @@ A table with:
         result.forEachIndexed { index, row ->
             if (index > 0) { // Skip header row
                 markdownTable.append("| ")
-                markdownTable.append((row as JsonArray).joinToString(" | "))
+                markdownTable.append((row as JsonArray).joinToString(" | ") { markdownCell(it) })
                 markdownTable.append(" |\n")
             }
         }
 
         return markdownTable.toString()
+    }
+
+    private fun extractDescriptionFromConfig(configText: String): String {
+        if (configText.isBlank()) return ""
+        return try {
+            val config = JsonObject(configText)
+            config.getString("Description")
+                ?: config.getString("description")
+                ?: compactText(configText, 500)
+        } catch (_: Exception) {
+            compactText(configText, 500)
+        }
+    }
+
+    private fun extractPayloadForTopic(topic: String, messageStore: IMessageStore?): String {
+        val message = messageStore?.get(topic) ?: retainedStore[topic] ?: return ""
+        return compactText(message.getPayloadAsString(), 500)
+    }
+
+    private fun markdownCell(value: Any?): String {
+        return (value?.toString() ?: "")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .replace("\n", "<br>")
+            .replace("|", "\\|")
+    }
+
+    private fun compactText(value: String, maxLength: Int): String {
+        val compact = value
+            .replace("\r\n", " ")
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .trim()
+        return if (compact.length <= maxLength) compact else compact.take(maxLength) + "...[truncated]"
     }
 }

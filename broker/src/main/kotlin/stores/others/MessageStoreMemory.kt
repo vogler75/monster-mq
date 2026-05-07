@@ -1,5 +1,6 @@
 package at.rocworks.stores
 
+import at.rocworks.Const
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
@@ -8,13 +9,14 @@ import at.rocworks.data.TopicTree
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import java.time.Instant
 import java.util.concurrent.Callable
 
 class MessageStoreMemory(
     private val name: String,
     private val maxMemoryEntries: Long? = null
-): AbstractVerticle(), IMessageStore {
+): AbstractVerticle(), IMessageStoreExtended {
     private val logger = Utils.getLogger(this::class.java, name)
 
     private val index = TopicTree<Void, Void>()
@@ -83,6 +85,43 @@ class MessageStoreMemory(
         // Use the efficient topic tree browsing method
         index.findBrowseTopics(topicPattern, callback)
     }
+
+    override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
+        val matcher = createNameMatcher(name, ignoreCase)
+        val namespacePrefix = namespace.takeIf { it.isNotEmpty() }?.let { "$it/" }
+
+        return store.keys.toList()
+            .asSequence()
+            .filter { topic -> !topic.endsWith("/${Const.CONFIG_TOPIC}") && topic != Const.CONFIG_TOPIC }
+            .filter { topic -> namespacePrefix == null || topic.startsWith(namespacePrefix, ignoreCase) }
+            .filter { topic -> matcher(topic) }
+            .sorted()
+            .toList()
+    }
+
+    override fun findTopicsByConfig(config: String, description: String, ignoreCase: Boolean, namespace: String): List<Pair<String, String>> {
+        val namespacePrefix = namespace.takeIf { it.isNotEmpty() }?.let { "$it/" }
+
+        return store.values.toList()
+            .asSequence()
+            .filter { message -> message.topicName.endsWith("/${Const.CONFIG_TOPIC}") }
+            .filter { message -> namespacePrefix == null || message.topicName.startsWith(namespacePrefix, ignoreCase) }
+            .mapNotNull { message ->
+                val configText = message.getPayloadAsString()
+                val configValue = try {
+                    JsonObject(configText).getString(config) ?: ""
+                } catch (_: Exception) {
+                    ""
+                }
+                if (matchesConfigValue(configValue, description, ignoreCase)) {
+                    message.topicName.removeSuffix("/${Const.CONFIG_TOPIC}") to configText
+                } else {
+                    null
+                }
+            }
+            .sortedBy { it.first }
+            .toList()
+    }
     
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         // No-op: LRU eviction in LinkedHashMap handles cleanup automatically.
@@ -109,5 +148,37 @@ class MessageStoreMemory(
     override suspend fun createTable(): Boolean {
         // Memory stores don't require table creation
         return true
+    }
+
+    private fun createNameMatcher(name: String, ignoreCase: Boolean): (String) -> Boolean {
+        val hasWildcards = name.contains("*") || name.contains("+")
+        if (!hasWildcards) {
+            return { topic -> topic.contains(name, ignoreCase) }
+        }
+
+        val regexPattern = buildString {
+            append("^")
+            name.forEach { char ->
+                when (char) {
+                    '*' -> append(".*")
+                    '+' -> append(".")
+                    else -> append(Regex.escape(char.toString()))
+                }
+            }
+            append("$")
+        }
+        val options = if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
+        val regex = Regex(regexPattern, options)
+        return { topic -> regex.matches(topic) }
+    }
+
+    private fun matchesConfigValue(value: String, pattern: String, ignoreCase: Boolean): Boolean {
+        if (pattern.isEmpty()) return true
+        return try {
+            val options = if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()
+            Regex(pattern, options).containsMatchIn(value)
+        } catch (_: Exception) {
+            value.contains(pattern, ignoreCase)
+        }
     }
 }
