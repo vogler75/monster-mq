@@ -569,6 +569,7 @@ class ArchiveHandler(
             archiveRetentionStr = ag.getArchiveRetention(),
             purgeIntervalStr = ag.getPurgeInterval(),
             databaseConnectionName = ag.getDatabaseConnectionName(),
+            redisDbNumber = ag.getRedisDbNumber(),
             databaseConfig = databaseConfig
         )
     }
@@ -765,6 +766,7 @@ class ArchiveHandler(
                 put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
                 put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
                 put("databaseConnectionName", archiveInfo.archiveGroup.getDatabaseConnectionName())
+                put("redisDbNumber", archiveInfo.archiveGroup.getRedisDbNumber())
                 put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
@@ -800,6 +802,7 @@ class ArchiveHandler(
                 put("lastValType", archiveInfo.archiveGroup.getLastValType().name)
                 put("archiveType", archiveInfo.archiveGroup.getArchiveType().name)
                 put("databaseConnectionName", archiveInfo.archiveGroup.getDatabaseConnectionName())
+                put("redisDbNumber", archiveInfo.archiveGroup.getRedisDbNumber())
                 put("payloadFormat", archiveInfo.archiveGroup.payloadFormat.name)
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())

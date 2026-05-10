@@ -62,13 +62,15 @@ class ArchiveConfigStorePostgres(
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     payload_format VARCHAR(20) DEFAULT 'DEFAULT',
-                    database_connection_name VARCHAR(255)
+                    database_connection_name VARCHAR(255),
+                    redis_db_number INTEGER
                 );
                 """.trimIndent()
 
                 connection.createStatement().use { statement ->
                     statement.executeUpdate(createTableSQL)
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS database_connection_name VARCHAR(255)")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS redis_db_number INTEGER")
                     statement.executeUpdate("""
                         CREATE TABLE IF NOT EXISTS $connectionTableName (
                             name VARCHAR(255) PRIMARY KEY,
@@ -103,7 +105,7 @@ class ArchiveConfigStorePostgres(
 
         vertx.executeBlocking(Callable {
             val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name FROM $configTableName ORDER BY name"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number FROM $configTableName ORDER BY name"
 
             try {
                 db.connection?.let { connection ->
@@ -145,6 +147,7 @@ class ArchiveConfigStorePostgres(
                                 archiveRetentionStr = archiveRetention,
                                 purgeIntervalStr = purgeInterval,
                                 databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
+                                redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
                                 databaseConfig = JsonObject()
                             )
                             archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
@@ -174,7 +177,7 @@ class ArchiveConfigStorePostgres(
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name FROM $configTableName WHERE name = ?"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number FROM $configTableName WHERE name = ?"
 
             try {
                 db.connection?.let { connection ->
@@ -216,6 +219,7 @@ class ArchiveConfigStorePostgres(
                                 archiveRetentionStr = archiveRetention,
                                 purgeIntervalStr = purgeInterval,
                                 databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
+                                redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
                                 databaseConfig = JsonObject()
                             )
                             ArchiveGroupConfig(archiveGroup, enabled)
@@ -249,8 +253,8 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -262,6 +266,7 @@ class ArchiveConfigStorePostgres(
                     purge_interval = EXCLUDED.purge_interval,
                     payload_format = EXCLUDED.payload_format,
                     database_connection_name = EXCLUDED.database_connection_name,
+                    redis_db_number = EXCLUDED.redis_db_number,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -286,6 +291,7 @@ class ArchiveConfigStorePostgres(
                         preparedStatement.setString(9, purgeInterval)
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
                         preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
+                        archiveGroup.getRedisDbNumber()?.let { preparedStatement.setInt(12, it) } ?: preparedStatement.setNull(12, Types.INTEGER)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         connection.commit()

@@ -374,6 +374,7 @@ type ArchiveGroupInfo {
     lastValType: MessageStoreType!
     archiveType: MessageArchiveType!
     databaseConnectionName: String
+    redisDbNumber: Int
     payloadFormat: PayloadFormat!
     lastValRetention: String
     archiveRetention: String

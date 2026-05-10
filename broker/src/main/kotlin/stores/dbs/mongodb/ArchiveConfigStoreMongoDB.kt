@@ -329,6 +329,7 @@ class ArchiveConfigStoreMongoDB(
             archiveRetentionStr = archiveRetention,
             purgeIntervalStr = purgeInterval,
             databaseConnectionName = document.getString("database_connection_name"),
+            redisDbNumber = document.getInteger("redis_db_number"),
             databaseConfig = JsonObject() // Will be populated from config
         )
     }
@@ -343,6 +344,7 @@ class ArchiveConfigStoreMongoDB(
             .append("archive_type", archiveGroup.getArchiveType().name)
             .append("payload_format", archiveGroup.payloadFormat.name)
             .append("database_connection_name", archiveGroup.getDatabaseConnectionName())
+            .append("redis_db_number", archiveGroup.getRedisDbNumber())
             .append("updated_at", Instant.now())
 
         // Add optional duration fields (preserve original string to avoid lossy roundtrip via formatDuration)

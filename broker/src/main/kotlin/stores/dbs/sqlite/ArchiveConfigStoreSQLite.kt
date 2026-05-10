@@ -44,7 +44,8 @@ class ArchiveConfigStoreSQLite(
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 payload_format TEXT DEFAULT 'DEFAULT',
-                database_connection_name TEXT
+                database_connection_name TEXT,
+                redis_db_number INTEGER
             )
         """.trimIndent())
             .add("""
@@ -65,6 +66,10 @@ class ArchiveConfigStoreSQLite(
             if (result.succeeded()) {
                 sqliteClient.executeUpdate(
                     "ALTER TABLE $configTableName ADD COLUMN database_connection_name TEXT",
+                    useTransaction = false
+                ).onFailure { /* Column already exists on upgraded databases. */ }
+                sqliteClient.executeUpdate(
+                    "ALTER TABLE $configTableName ADD COLUMN redis_db_number INTEGER",
                     useTransaction = false
                 ).onFailure { /* Column already exists on upgraded databases. */ }
                 logger.info("Archive config table created/verified in SQLite")
@@ -132,8 +137,8 @@ class ArchiveConfigStoreSQLite(
     override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         val sql = """
             INSERT OR REPLACE INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """.trimIndent()
 
         val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
@@ -149,6 +154,7 @@ class ArchiveConfigStoreSQLite(
             .add(archiveGroup.getPurgeInterval())
             .add(archiveGroup.payloadFormat.name)
             .add(archiveGroup.getDatabaseConnectionName())
+            .add(archiveGroup.getRedisDbNumber())
 
         return sqliteClient.executeUpdate(sql, params).map { rowsAffected ->
             val success = rowsAffected > 0
@@ -275,6 +281,7 @@ class ArchiveConfigStoreSQLite(
             archiveRetentionStr = archiveRetention,
             purgeIntervalStr = purgeInterval,
             databaseConnectionName = row.getString("database_connection_name"),
+            redisDbNumber = row.getInteger("redis_db_number"),
             databaseConfig = JsonObject() // Will be populated from config
         )
     }

@@ -48,6 +48,7 @@ class ArchiveGroup(
     private val purgeIntervalStr: String? = null,
     private val maxMemoryEntries: Long? = null,
     private val databaseConnectionName: String? = null,
+    private val redisDbNumber: Int? = null,
     private val databaseConfig: JsonObject
 ) : AbstractVerticle() {
 
@@ -194,6 +195,7 @@ class ArchiveGroup(
     fun getLastValType(): MessageStoreType = lastValType
     fun getArchiveType(): MessageArchiveType = archiveType
     fun getDatabaseConnectionName(): String? = databaseConnectionName
+    fun getRedisDbNumber(): Int? = redisDbNumber ?: if (name == "Default") 0 else null
 
     private fun createMessageStore(storeType: MessageStoreType, storeName: String, callback: (Boolean) -> Unit) {
         if (isStopping) {
@@ -701,6 +703,7 @@ class ArchiveGroup(
                 purgeIntervalStr = purgeIntervalStr,
                 maxMemoryEntries = maxMemoryEntries,
                 databaseConnectionName = config.getString("DatabaseConnectionName"),
+                redisDbNumber = config.getInteger("RedisDbNumber"),
                 databaseConfig = databaseConfig
             )
         }

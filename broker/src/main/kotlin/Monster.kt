@@ -15,6 +15,7 @@ import at.rocworks.extensions.graphql.GraphQLServer
 import at.rocworks.extensions.McpServer
 import at.rocworks.extensions.PrometheusServer
 import at.rocworks.extensions.I3xServer
+import at.rocworks.extensions.RedisServer
 import at.rocworks.handlers.*
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.ArchiveHandler
@@ -1057,6 +1058,15 @@ MORE INFO:
                     null
                 }
 
+                val redisServerConfig = configJson.getJsonObject("RedisServer", JsonObject())
+                val redisServerEnabled = redisServerConfig.getBoolean("Enabled", false)
+                val redisServer = if (redisServerEnabled) {
+                    RedisServer(configJson, archiveHandler, sessionHandler, userManager)
+                } else {
+                    logger.fine("Redis protocol server is disabled in configuration")
+                    null
+                }
+
                 // Metrics Collector and Store
                 val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
                 val metricsEnabled = metricsConfig.getBoolean("Enabled", true)
@@ -1289,6 +1299,14 @@ MORE INFO:
                             vertx.deployVerticle(redisClientExtension, redisDeploymentOptions)
                         } else {
                             logger.fine("Redis extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        if (redisServer != null && Monster.isFeatureEnabled(Features.RedisServer)) {
+                            vertx.deployVerticle(redisServer)
+                        } else {
+                            logger.fine("RedisServer extension disabled by Features config or RedisServer.Enabled=false")
                             Future.succeededFuture()
                         }
                     }

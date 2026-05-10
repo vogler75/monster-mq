@@ -677,12 +677,27 @@
           "LastValType": { "type": "string", "enum": ["MEMORY","HAZELCAST","POSTGRES","CRATEDB","MONGODB","SQLITE","NONE"], "default": "MEMORY" },
           "ArchiveType": { "type": "string", "enum": ["NONE","POSTGRES","CRATEDB","MONGODB","KAFKA","SQLITE"], "default": "NONE" },
           "DatabaseConnectionName": { "type": ["string","null"], "description": "Optional named Postgres/MongoDB connection used by both LastValType and ArchiveType when they use that database family." },
+          "RedisDbNumber": { "type": ["integer","null"], "minimum": 0, "description": "Optional Redis logical database number that exposes this archive group's last-value store through RedisServer." },
           "LastValRetention": { "type": ["string","null"], "description": "Duration like 1h, 30m" },
           "ArchiveRetention": { "type": ["string","null"], "description": "Duration like 24h, 7d" },
           "PurgeInterval": { "type": ["string","null"], "description": "Purge interval duration" },
           "PayloadFormat": { "type": "string", "enum": ["DEFAULT","JSON"], "default": "DEFAULT", "description": "Payload storage format" }
         },
         "required": ["Name","TopicFilter","LastValType","ArchiveType"]
+      }
+    },
+    "RedisServer": {
+      "type": "object",
+      "description": "Redis-compatible protocol server for topic access through archive group last-value stores",
+      "properties": {
+        "Enabled": { "type": "boolean", "default": false },
+        "Host": { "type": "string", "default": "0.0.0.0" },
+        "Port": { "type": "integer", "default": 6379, "minimum": 0, "maximum": 65535 },
+        "RequireAuth": { "type": "boolean", "default": true },
+        "DefaultDb": { "type": "integer", "default": 0, "minimum": 0 },
+        "SetRetained": { "type": "boolean", "default": false },
+        "PublishQos": { "type": "integer", "default": 0, "minimum": 0, "maximum": 2 },
+        "KeysLimit": { "type": "integer", "default": 10000, "minimum": 1 }
       }
     },
     "Features": {
@@ -695,6 +710,7 @@
         "Kafka": { "type": "boolean", "default": true, "description": "Kafka client bridge" },
         "Nats": { "type": "boolean", "default": true, "description": "NATS client bridge" },
         "Redis": { "type": "boolean", "default": true, "description": "Redis client bridge" },
+        "RedisServer": { "type": "boolean", "default": true, "description": "Redis-compatible protocol server" },
         "Telegram": { "type": "boolean", "default": true, "description": "Telegram client bridge" },
         "WinCCOa": { "type": "boolean", "default": true, "description": "WinCC OA client bridge" },
         "WinCCUa": { "type": "boolean", "default": true, "description": "WinCC Unified client bridge" },

@@ -94,7 +94,8 @@ class ArchiveConfigStoreCrateDB(
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 payload_format STRING DEFAULT 'DEFAULT',
-                database_connection_name STRING
+                database_connection_name STRING,
+                redis_db_number INTEGER
             )
         """.trimIndent()
 
@@ -207,8 +208,8 @@ class ArchiveConfigStoreCrateDB(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -220,6 +221,7 @@ class ArchiveConfigStoreCrateDB(
                     purge_interval = EXCLUDED.purge_interval,
                     payload_format = EXCLUDED.payload_format,
                     database_connection_name = EXCLUDED.database_connection_name,
+                    redis_db_number = EXCLUDED.redis_db_number,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -245,6 +247,7 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setString(9, purgeInterval)
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
                         preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
+                        archiveGroup.getRedisDbNumber()?.let { preparedStatement.setInt(12, it) } ?: preparedStatement.setNull(12, Types.INTEGER)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -452,6 +455,7 @@ class ArchiveConfigStoreCrateDB(
             archiveRetentionMs = archiveRetention?.let { Utils.parseDuration(it) },
             purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
             databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
+            redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
             databaseConfig = JsonObject() // Will be populated from config
         )
     }

@@ -7,6 +7,7 @@ object Features {
     const val Kafka = "Kafka"
     const val Nats = "Nats"
     const val Redis = "Redis"
+    const val RedisServer = "RedisServer"
     const val Telegram = "Telegram"
     const val WinCCOa = "WinCCOa"
     const val WinCCUa = "WinCCUa"
@@ -25,7 +26,7 @@ object Features {
     const val DeviceImportExport = "DeviceImportExport"
 
     val all: List<String> = listOf(
-        OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, Telegram,
+        OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, RedisServer, Telegram,
         WinCCOa, WinCCUa, Plc4x, Neo4j, JdbcLogger, InfluxDBLogger, TimeBaseLogger,
         SparkplugB, FlowEngine, Agents,
         GenAi, Mcp, SchemaPolicy, TopicNamespace, DeviceImportExport

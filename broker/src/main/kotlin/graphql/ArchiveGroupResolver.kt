@@ -156,6 +156,7 @@ class ArchiveGroupResolver(
                             "lastValType" to jsonObj.getString("lastValType"),
                             "archiveType" to jsonObj.getString("archiveType"),
                             "databaseConnectionName" to jsonObj.getString("databaseConnectionName"),
+                            "redisDbNumber" to jsonObj.getInteger("redisDbNumber"),
                             "lastValRetention" to jsonObj.getString("lastValRetention"),
                             "archiveRetention" to jsonObj.getString("archiveRetention"),
                              "purgeInterval" to jsonObj.getString("purgeInterval"),
@@ -194,6 +195,7 @@ class ArchiveGroupResolver(
                                         "lastValType" to config.archiveGroup.getLastValType().name,
                                         "archiveType" to config.archiveGroup.getArchiveType().name,
                                         "databaseConnectionName" to config.archiveGroup.getDatabaseConnectionName(),
+                                        "redisDbNumber" to config.archiveGroup.getRedisDbNumber(),
                                         "lastValRetention" to config.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to config.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to config.archiveGroup.getPurgeInterval(),
@@ -254,6 +256,7 @@ class ArchiveGroupResolver(
                             "lastValType" to runtimeStatus.getString("lastValType"),
                             "archiveType" to runtimeStatus.getString("archiveType"),
                             "databaseConnectionName" to runtimeStatus.getString("databaseConnectionName"),
+                            "redisDbNumber" to runtimeStatus.getInteger("redisDbNumber"),
                             "lastValRetention" to runtimeStatus.getString("lastValRetention"),
                             "archiveRetention" to runtimeStatus.getString("archiveRetention"),
                              "purgeInterval" to runtimeStatus.getString("purgeInterval"),
@@ -281,6 +284,7 @@ class ArchiveGroupResolver(
                                         "lastValType" to archiveGroup.archiveGroup.getLastValType().name,
                                         "archiveType" to archiveGroup.archiveGroup.getArchiveType().name,
                                         "databaseConnectionName" to archiveGroup.archiveGroup.getDatabaseConnectionName(),
+                                        "redisDbNumber" to archiveGroup.archiveGroup.getRedisDbNumber(),
                                         "lastValRetention" to archiveGroup.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval(),
@@ -590,8 +594,9 @@ class ArchiveGroupResolver(
                     ))
                     return@DataFetcher future
                 }
-                 val payloadFormatStr = input["payloadFormat"] as? String ?: "DEFAULT"
+                val payloadFormatStr = input["payloadFormat"] as? String ?: "DEFAULT"
                 val databaseConnectionName = (input["databaseConnectionName"] as? String)?.takeIf { it.isNotBlank() }
+                val redisDbNumber = (input["redisDbNumber"] as? Number)?.toInt()
 
                 // Parse optional durations
                 val lastValRetention = input["lastValRetention"] as? String
@@ -665,6 +670,7 @@ class ArchiveGroupResolver(
                     archiveRetentionStr = archiveRetention,
                     purgeIntervalStr = purgeInterval,
                     databaseConnectionName = databaseConnectionName,
+                    redisDbNumber = redisDbNumber,
                     databaseConfig = JsonObject() // Will be populated from config
                 )
 
@@ -693,6 +699,7 @@ class ArchiveGroupResolver(
                                     "lastValType" to lastValType.name,
                                     "archiveType" to archiveType.name,
                                     "databaseConnectionName" to databaseConnectionName,
+                                    "redisDbNumber" to redisDbNumber,
                                     "payloadFormat" to payloadFormat.name,
                                     "lastValRetention" to lastValRetention,
                                     "archiveRetention" to archiveRetention,
@@ -835,6 +842,11 @@ class ArchiveGroupResolver(
                              } else {
                                  existingArchiveGroup.getDatabaseConnectionName()
                              }
+                             val redisDbNumber = if (input.containsKey("redisDbNumber")) {
+                                 (input["redisDbNumber"] as? Number)?.toInt()
+                             } else {
+                                 existingArchiveGroup.getRedisDbNumber()
+                             }
 
                              // Parse optional durations if provided, otherwise keep existing
                             val lastValRetention = input["lastValRetention"] as? String
@@ -896,6 +908,7 @@ class ArchiveGroupResolver(
                                  archiveRetentionStr = archiveRetention ?: existingArchiveGroup.getArchiveRetention(),
                                  purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
                                  databaseConnectionName = databaseConnectionName,
+                                 redisDbNumber = redisDbNumber,
                                  databaseConfig = JsonObject() // Will be populated from config
                              )
 
@@ -924,6 +937,7 @@ class ArchiveGroupResolver(
                                                 "lastValType" to lastValType.name,
                                                 "archiveType" to archiveType.name,
                                                 "databaseConnectionName" to databaseConnectionName,
+                                                "redisDbNumber" to redisDbNumber,
                                                 "lastValRetention" to lastValRetention,
                                                 "archiveRetention" to archiveRetention,
                                                 "purgeInterval" to purgeInterval
