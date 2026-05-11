@@ -64,19 +64,47 @@ class ArchiveConfigStoreSQLite(
 
         sqliteClient.initDatabase(initSql).onComplete { result ->
             if (result.succeeded()) {
-                sqliteClient.executeUpdate(
-                    "ALTER TABLE $configTableName ADD COLUMN database_connection_name TEXT",
-                    useTransaction = false
-                ).onFailure { /* Column already exists on upgraded databases. */ }
-                sqliteClient.executeUpdate(
-                    "ALTER TABLE $configTableName ADD COLUMN redis_db_number INTEGER",
-                    useTransaction = false
-                ).onFailure { /* Column already exists on upgraded databases. */ }
-                logger.info("Archive config table created/verified in SQLite")
-                startPromise.complete()
+                migrateArchiveConfigTable(startPromise)
             } else {
                 logger.severe("Failed to initialize ConfigStoreSQLite: ${result.cause()?.message}")
                 startPromise.fail(result.cause())
+            }
+        }
+    }
+
+    private fun migrateArchiveConfigTable(startPromise: Promise<Void>) {
+        sqliteClient.executeQuery("PRAGMA table_info($configTableName)", JsonArray()).onComplete { queryResult ->
+            if (queryResult.succeeded()) {
+                val rows = queryResult.result()
+                val columnNames = (0 until rows.size())
+                    .map { rows.getJsonObject(it).getString("name") }
+                    .toSet()
+
+                val migrationsNeeded = JsonArray()
+                if (!columnNames.contains("database_connection_name")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN database_connection_name TEXT")
+                }
+                if (!columnNames.contains("redis_db_number")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN redis_db_number INTEGER")
+                }
+
+                if (migrationsNeeded.isEmpty) {
+                    logger.info("Archive config table created/verified in SQLite")
+                    startPromise.complete()
+                } else {
+                    sqliteClient.initDatabase(migrationsNeeded).onComplete { migrationResult ->
+                        if (migrationResult.succeeded()) {
+                            logger.info("Archive config table migrated/verified in SQLite")
+                            startPromise.complete()
+                        } else {
+                            logger.severe("Failed to migrate ConfigStoreSQLite: ${migrationResult.cause()?.message}")
+                            startPromise.fail(migrationResult.cause())
+                        }
+                    }
+                }
+            } else {
+                logger.severe("Failed to inspect ConfigStoreSQLite schema: ${queryResult.cause()?.message}")
+                startPromise.fail(queryResult.cause())
             }
         }
     }
