@@ -1,0 +1,13 @@
+Release v1.8.15
+Built from commit: 2d89f0ae
+Date: 2026-05-11 09:50:02
+
+Changes since v1.8.14:
+---
+2d89f0ae Remove backupNodeId field and related migrations
+295cfc5c Add Redis data type support; fix SQLite compose
+229e1663 Add Redis protocol server for topic access
+44a1b11a Plan for Redis Protocol Server
+c0e1365c Improve MCP topic discovery metadata
+43ffb535 Add direct MQTT publish support to flow scripts
+44f01167 Fixed root file issue on docker/build
