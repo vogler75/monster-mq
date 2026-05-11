@@ -510,7 +510,6 @@ type OpcUaDevice {
     name: String!
     namespace: String!
     nodeId: String!
-    backupNodeId: String
     config: OpcUaConnectionConfig!
     enabled: Boolean!
     createdAt: String!

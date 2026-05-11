@@ -63,11 +63,6 @@ class DeviceConfigStorePostgres(
                 IF EXISTS (SELECT 1 FROM information_schema.constraint_column_usage WHERE table_name='$TABLE_NAME' AND constraint_name LIKE '%namespace%') THEN
                     ALTER TABLE $TABLE_NAME DROP CONSTRAINT IF EXISTS deviceconfigs_namespace_key;
                 END IF;
-
-                -- Drop backup_node_id column if it exists
-                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='$TABLE_NAME' AND column_name='backup_node_id') THEN
-                    ALTER TABLE $TABLE_NAME DROP COLUMN backup_node_id;
-                END IF;
             END
             ${'$'}${'$'};
         """

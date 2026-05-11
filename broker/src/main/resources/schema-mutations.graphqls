@@ -433,7 +433,6 @@ input OpcUaDeviceInput {
     name: String!
     namespace: String!
     nodeId: String!
-    backupNodeId: String
     config: OpcUaConnectionConfigInput!
     enabled: Boolean = true
 }
