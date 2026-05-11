@@ -10,6 +10,8 @@ import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
+import io.vertx.core.json.Json
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.core.net.NetServerOptions
 import io.vertx.core.net.NetSocket
@@ -35,6 +37,12 @@ class RedisServer(
     private val keysLimit = redisConfig.getInteger("KeysLimit", 10000).coerceAtLeast(1)
 
     private val connectionSequence = AtomicLong()
+
+    companion object {
+        private const val REDIS_TYPE_FIELD = "type"
+        private const val REDIS_VALUE_FIELD = "value"
+        private const val WRONG_TYPE = "WRONGTYPE Operation against a key holding the wrong kind of value"
+    }
 
     override fun start(startPromise: Promise<Void>) {
         val mappedGroups = archiveHandler.getDeployedArchiveGroups().values.mapNotNull { group ->
@@ -120,6 +128,37 @@ class RedisServer(
                     "MGET" -> handleMget(command)
                     "SET" -> handleSet(command)
                     "MSET" -> handleMset(command)
+                    "HSET" -> handleHset(command)
+                    "HGET" -> handleHget(command)
+                    "HMGET" -> handleHmget(command)
+                    "HGETALL" -> handleHgetall(command)
+                    "HDEL" -> handleHdel(command)
+                    "HEXISTS" -> handleHexists(command)
+                    "HLEN" -> handleHlen(command)
+                    "HKEYS" -> handleHkeys(command)
+                    "HVALS" -> handleHvals(command)
+                    "HSCAN" -> handleHscan(command)
+                    "SADD" -> handleSadd(command)
+                    "SREM" -> handleSrem(command)
+                    "SMEMBERS" -> handleSmembers(command)
+                    "SISMEMBER" -> handleSismember(command)
+                    "SCARD" -> handleScard(command)
+                    "LPUSH" -> handleListPush(command, left = true)
+                    "RPUSH" -> handleListPush(command, left = false)
+                    "LPOP" -> handleListPop(command, left = true)
+                    "RPOP" -> handleListPop(command, left = false)
+                    "LRANGE" -> handleLrange(command)
+                    "LLEN" -> handleLlen(command)
+                    "LINDEX" -> handleLindex(command)
+                    "ZADD" -> handleZadd(command)
+                    "ZRANGE" -> handleZrange(command)
+                    "ZREM" -> handleZrem(command)
+                    "ZSCORE" -> handleZscore(command)
+                    "ZCARD" -> handleZcard(command)
+                    "JSON.SET" -> handleJsonSet(command)
+                    "JSON.GET" -> handleJsonGet(command)
+                    "JSON.DEL" -> handleJsonDel(command)
+                    "JSON.TYPE" -> handleJsonType(command)
                     "DEL" -> handleDel(command)
                     "EXISTS" -> handleExists(command)
                     "TTL" -> handleTtl(command)
@@ -130,7 +169,7 @@ class RedisServer(
                     "SUBSCRIBE" -> handleSubscribe(command, pattern = false)
                     "PSUBSCRIBE" -> handleSubscribe(command, pattern = true)
                     "UNSUBSCRIBE", "PUNSUBSCRIBE" -> handleUnsubscribe(command)
-                    "TYPE" -> writeSimple("string")
+                    "TYPE" -> handleType(command)
                     else -> writeError("ERR unknown command '$name'")
                 }
             } catch (e: Exception) {
@@ -383,6 +422,477 @@ class RedisServer(
                 i += 2
             }
             writeSimple("OK")
+        }
+
+        private fun handleHset(command: RespCommand) {
+            if (command.args.size < 4 || command.args.size % 2 != 0) {
+                writeError("ERR wrong number of arguments for 'hset' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
+                val hash = current as JsonObject
+                var added = 0L
+                var i = 2
+                while (i < command.args.size) {
+                    val field = command.stringArg(i)
+                    if (!hash.containsKey(field)) added++
+                    hash.put(field, command.stringArg(i + 1))
+                    i += 2
+                }
+                hash to RespValue.integer(added)
+            }
+        }
+
+        private fun handleHget(command: RespCommand) {
+            if (command.args.size != 3) {
+                writeError("ERR wrong number of arguments for 'hget' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                val hash = value as JsonObject
+                writeBulk(hash.getString(command.stringArg(2))?.toByteArray(StandardCharsets.UTF_8))
+            }
+        }
+
+        private fun handleHmget(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'hmget' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                val hash = value as JsonObject
+                writeArray(command.args.drop(2).map { field ->
+                    RespValue.bulk(hash.getString(field.toString(StandardCharsets.UTF_8))?.toByteArray(StandardCharsets.UTF_8))
+                })
+            }
+        }
+
+        private fun handleHgetall(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'hgetall' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                val hash = value as JsonObject
+                writeArray(hash.fieldNames().flatMap { field ->
+                    listOf(RespValue.bulk(field), RespValue.bulk(hash.getString(field, "")))
+                })
+            }
+        }
+
+        private fun handleHdel(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'hdel' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
+                val hash = current as JsonObject
+                var removed = 0L
+                command.args.drop(2).forEach { fieldBytes ->
+                    val field = fieldBytes.toString(StandardCharsets.UTF_8)
+                    if (hash.containsKey(field)) {
+                        hash.remove(field)
+                        removed++
+                    }
+                }
+                hash to RespValue.integer(removed)
+            }
+        }
+
+        private fun handleHexists(command: RespCommand) {
+            if (command.args.size != 3) {
+                writeError("ERR wrong number of arguments for 'hexists' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                writeInteger(if ((value as JsonObject).containsKey(command.stringArg(2))) 1 else 0)
+            }
+        }
+
+        private fun handleHlen(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'hlen' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value -> writeInteger((value as JsonObject).size().toLong()) }
+        }
+
+        private fun handleHkeys(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'hkeys' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                writeArray((value as JsonObject).fieldNames().map { RespValue.bulk(it) })
+            }
+        }
+
+        private fun handleHvals(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'hvals' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                val hash = value as JsonObject
+                writeArray(hash.fieldNames().map { RespValue.bulk(hash.getString(it, "")) })
+            }
+        }
+
+        private fun handleHscan(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'hscan' command")
+                return
+            }
+            val cursor = command.stringArg(2).toLongOrNull()
+            if (cursor == null || cursor < 0) {
+                writeError("ERR invalid cursor")
+                return
+            }
+            val match = hashScanOption(command, "MATCH")
+            val count = hashScanOption(command, "COUNT")?.toIntOrNull()?.coerceAtLeast(1) ?: Int.MAX_VALUE
+
+            readTypedValue(command.stringArg(1), "hash") { value ->
+                val hash = value as JsonObject
+                val fields = hash.fieldNames()
+                    .asSequence()
+                    .filter { field -> match == null || globMatches(match, field) }
+                    .drop(cursor.toInt())
+                    .take(count)
+                    .toList()
+
+                val nextCursor = if (cursor.toInt() + fields.size >= hash.fieldNames().count { match == null || globMatches(match, it) }) "0"
+                    else (cursor.toInt() + fields.size).toString()
+
+                writeArray(listOf(
+                    RespValue.bulk(nextCursor),
+                    RespValue.array(fields.flatMap { field ->
+                        listOf(RespValue.bulk(field), RespValue.bulk(hash.getString(field, "")))
+                    })
+                ))
+            }
+        }
+
+        private fun handleSadd(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'sadd' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
+                val set = jsonArrayToLinkedSet(current as JsonArray)
+                var added = 0L
+                command.args.drop(2).forEach { memberBytes ->
+                    if (set.add(memberBytes.toString(StandardCharsets.UTF_8))) added++
+                }
+                JsonArray(set.toList()) to RespValue.integer(added)
+            }
+        }
+
+        private fun handleSrem(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'srem' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
+                val set = jsonArrayToLinkedSet(current as JsonArray)
+                var removed = 0L
+                command.args.drop(2).forEach { memberBytes ->
+                    if (set.remove(memberBytes.toString(StandardCharsets.UTF_8))) removed++
+                }
+                JsonArray(set.toList()) to RespValue.integer(removed)
+            }
+        }
+
+        private fun handleSmembers(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'smembers' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "set") { value ->
+                writeArray((value as JsonArray).map { RespValue.bulk(it.toString()) })
+            }
+        }
+
+        private fun handleSismember(command: RespCommand) {
+            if (command.args.size != 3) {
+                writeError("ERR wrong number of arguments for 'sismember' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "set") { value ->
+                writeInteger(if (jsonArrayToLinkedSet(value as JsonArray).contains(command.stringArg(2))) 1 else 0)
+            }
+        }
+
+        private fun handleScard(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'scard' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "set") { value -> writeInteger((value as JsonArray).size().toLong()) }
+        }
+
+        private fun handleListPush(command: RespCommand, left: Boolean) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
+                val values = (current as JsonArray).map { it.toString() }.toMutableList()
+                val incoming = command.args.drop(2).map { it.toString(StandardCharsets.UTF_8) }
+                if (left) incoming.forEach { values.add(0, it) } else values.addAll(incoming)
+                JsonArray(values) to RespValue.integer(values.size.toLong())
+            }
+        }
+
+        private fun handleListPop(command: RespCommand, left: Boolean) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
+                val values = (current as JsonArray).map { it.toString() }.toMutableList()
+                val popped = if (values.isEmpty()) null else if (left) values.removeAt(0) else values.removeAt(values.lastIndex)
+                JsonArray(values) to RespValue.bulk(popped?.toByteArray(StandardCharsets.UTF_8))
+            }
+        }
+
+        private fun handleLrange(command: RespCommand) {
+            if (command.args.size != 4) {
+                writeError("ERR wrong number of arguments for 'lrange' command")
+                return
+            }
+            val start = command.stringArg(2).toLongOrNull()
+            val end = command.stringArg(3).toLongOrNull()
+            if (start == null || end == null) {
+                writeError("ERR value is not an integer or out of range")
+                return
+            }
+            readTypedValue(command.stringArg(1), "list") { value ->
+                val values = (value as JsonArray).map { it.toString() }
+                writeArray(sliceList(values, start, end).map { RespValue.bulk(it) })
+            }
+        }
+
+        private fun handleLlen(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'llen' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "list") { value -> writeInteger((value as JsonArray).size().toLong()) }
+        }
+
+        private fun handleLindex(command: RespCommand) {
+            if (command.args.size != 3) {
+                writeError("ERR wrong number of arguments for 'lindex' command")
+                return
+            }
+            val index = command.stringArg(2).toLongOrNull()
+            if (index == null) {
+                writeError("ERR value is not an integer or out of range")
+                return
+            }
+            readTypedValue(command.stringArg(1), "list") { value ->
+                val values = (value as JsonArray).map { it.toString() }
+                val normalized = if (index < 0) values.size + index else index
+                writeBulk(values.getOrNull(normalized.toInt())?.toByteArray(StandardCharsets.UTF_8))
+            }
+        }
+
+        private fun handleZadd(command: RespCommand) {
+            if (command.args.size < 4 || command.args.size % 2 != 0) {
+                writeError("ERR wrong number of arguments for 'zadd' command")
+                return
+            }
+            var validateIndex = 2
+            while (validateIndex < command.args.size) {
+                if (command.stringArg(validateIndex).toDoubleOrNull() == null) {
+                    writeError("ERR value is not a valid float")
+                    return
+                }
+                validateIndex += 2
+            }
+            mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
+                val zset = current as JsonObject
+                var added = 0L
+                var i = 2
+                while (i < command.args.size) {
+                    val score = command.stringArg(i).toDouble()
+                    val member = command.stringArg(i + 1)
+                    if (!zset.containsKey(member)) added++
+                    zset.put(member, score)
+                    i += 2
+                }
+                zset to RespValue.integer(added)
+            }
+        }
+
+        private fun handleZrange(command: RespCommand) {
+            if (command.args.size < 4) {
+                writeError("ERR wrong number of arguments for 'zrange' command")
+                return
+            }
+            val start = command.stringArg(2).toLongOrNull()
+            val end = command.stringArg(3).toLongOrNull()
+            if (start == null || end == null) {
+                writeError("ERR value is not an integer or out of range")
+                return
+            }
+            val withScores = command.args.drop(4).any { it.toString(StandardCharsets.UTF_8).equals("WITHSCORES", ignoreCase = true) }
+            readTypedValue(command.stringArg(1), "zset") { value ->
+                val entries = sortedZsetEntries(value as JsonObject)
+                val selected = sliceList(entries, start, end)
+                val response = if (withScores) {
+                    selected.flatMap { listOf(RespValue.bulk(it.first), RespValue.bulk(formatScore(it.second))) }
+                } else {
+                    selected.map { RespValue.bulk(it.first) }
+                }
+                writeArray(response)
+            }
+        }
+
+        private fun handleZrem(command: RespCommand) {
+            if (command.args.size < 3) {
+                writeError("ERR wrong number of arguments for 'zrem' command")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
+                val zset = current as JsonObject
+                var removed = 0L
+                command.args.drop(2).forEach { memberBytes ->
+                    val member = memberBytes.toString(StandardCharsets.UTF_8)
+                    if (zset.containsKey(member)) {
+                        zset.remove(member)
+                        removed++
+                    }
+                }
+                zset to RespValue.integer(removed)
+            }
+        }
+
+        private fun handleZscore(command: RespCommand) {
+            if (command.args.size != 3) {
+                writeError("ERR wrong number of arguments for 'zscore' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "zset") { value ->
+                val score = (value as JsonObject).getDouble(command.stringArg(2))
+                writeBulk(score?.let { formatScore(it).toByteArray(StandardCharsets.UTF_8) })
+            }
+        }
+
+        private fun handleZcard(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'zcard' command")
+                return
+            }
+            readTypedValue(command.stringArg(1), "zset") { value -> writeInteger((value as JsonObject).size().toLong()) }
+        }
+
+        private fun handleJsonSet(command: RespCommand) {
+            if (command.args.size != 4) {
+                writeError("ERR wrong number of arguments for 'json.set' command")
+                return
+            }
+            if (!isRootJsonPath(command.stringArg(2))) {
+                writeError("ERR only root JSON path '$' or '.' is supported")
+                return
+            }
+            val parsed = try {
+                Json.decodeValue(command.stringArg(3))
+            } catch (e: Exception) {
+                writeError("ERR invalid JSON")
+                return
+            }
+            mutateTypedValue(command.stringArg(1), "json", JsonObject()) {
+                parsed to RespValue.bulk("OK")
+            }
+        }
+
+        private fun handleJsonGet(command: RespCommand) {
+            if (command.args.size !in 2..3) {
+                writeError("ERR wrong number of arguments for 'json.get' command")
+                return
+            }
+            if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
+                writeError("ERR only root JSON path '$' or '.' is supported")
+                return
+            }
+            val topic = command.stringArg(1)
+            if (!canRead(topic)) {
+                writeError("NOPERM no permission to read topic")
+                return
+            }
+            readStored(topic) { stored ->
+                when {
+                    stored == null -> writeNullBulk()
+                    stored.type != "json" -> writeError(WRONG_TYPE)
+                    else -> writeBulk(Json.encode(stored.value))
+                }
+            }
+        }
+
+        private fun handleJsonDel(command: RespCommand) {
+            if (command.args.size !in 2..3) {
+                writeError("ERR wrong number of arguments for 'json.del' command")
+                return
+            }
+            if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
+                writeError("ERR only root JSON path '$' or '.' is supported")
+                return
+            }
+            val topic = command.stringArg(1)
+            if (!canWrite(topic)) {
+                writeError("NOPERM no permission to delete topic")
+                return
+            }
+            val group = selectedArchiveGroup() ?: return
+            val store = group.lastValStore ?: run {
+                writeInteger(0)
+                return
+            }
+            vertx.executeBlocking(Callable {
+                val stored = decodeStoredValue(store[topic]?.payload)
+                when {
+                    stored == null -> 0
+                    stored.type != "json" -> -1
+                    else -> {
+                        store.delAll(listOf(topic))
+                        1
+                    }
+                }
+            }).onComplete { result ->
+                if (result.failed()) {
+                    writeError("ERR ${result.cause()?.message ?: "json.del failed"}")
+                } else {
+                    when (result.result()) {
+                        -1 -> writeError(WRONG_TYPE)
+                        1 -> writeInteger(1)
+                        else -> writeInteger(0)
+                    }
+                }
+            }
+        }
+
+        private fun handleJsonType(command: RespCommand) {
+            if (command.args.size !in 2..3) {
+                writeError("ERR wrong number of arguments for 'json.type' command")
+                return
+            }
+            if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
+                writeError("ERR only root JSON path '$' or '.' is supported")
+                return
+            }
+            val topic = command.stringArg(1)
+            if (!canRead(topic)) {
+                writeError("NOPERM no permission to read topic")
+                return
+            }
+            readStored(topic) { stored ->
+                when {
+                    stored == null -> writeNullBulk()
+                    stored.type != "json" -> writeError(WRONG_TYPE)
+                    else -> writeBulk(jsonTypeName(stored.value).toByteArray(StandardCharsets.UTF_8))
+                }
+            }
         }
 
         private fun handleDel(command: RespCommand) {
@@ -644,10 +1154,34 @@ class RedisServer(
             return null
         }
 
+        private fun hashScanOption(command: RespCommand, option: String): String? {
+            var i = 3
+            while (i + 1 < command.args.size) {
+                if (command.stringArg(i).equals(option, ignoreCase = true)) return command.stringArg(i + 1)
+                i += 2
+            }
+            return null
+        }
+
         private fun redisPatternToMqtt(pattern: String): String {
             if (pattern == "*") return "#"
             if (pattern.contains('+') || pattern.contains('#')) return pattern
             return pattern.replace("*", "#")
+        }
+
+        private fun globMatches(pattern: String, value: String): Boolean {
+            val regex = buildString {
+                append("^")
+                pattern.forEach { ch ->
+                    when (ch) {
+                        '*' -> append(".*")
+                        '?' -> append(".")
+                        else -> append(Regex.escape(ch.toString()))
+                    }
+                }
+                append("$")
+            }
+            return Regex(regex).matches(value)
         }
 
         private fun sliceRange(payload: ByteArray?, rawStart: Long, rawEnd: Long): ByteArray {
@@ -662,6 +1196,146 @@ class RedisServer(
             if (end >= size) end = size - 1
 
             return payload.copyOfRange(start.toInt(), end.toInt() + 1)
+        }
+
+        private fun handleType(command: RespCommand) {
+            if (command.args.size != 2) {
+                writeError("ERR wrong number of arguments for 'type' command")
+                return
+            }
+            val topic = command.stringArg(1)
+            if (!canRead(topic)) {
+                writeError("NOPERM no permission to read topic")
+                return
+            }
+            readStored(topic) { stored ->
+                writeSimple(stored?.type ?: "none")
+            }
+        }
+
+        private fun readTypedValue(topic: String, expectedType: String, onSuccess: (Any?) -> Unit) {
+            if (!canRead(topic)) {
+                writeError("NOPERM no permission to read topic")
+                return
+            }
+            readStored(topic) { stored ->
+                when {
+                    stored == null -> onSuccess(defaultValueForType(expectedType))
+                    stored.type != expectedType -> writeError(WRONG_TYPE)
+                    else -> onSuccess(stored.value)
+                }
+            }
+        }
+
+        private fun mutateTypedValue(
+            topic: String,
+            expectedType: String,
+            defaultValue: Any,
+            mutation: (Any) -> Pair<Any?, RespValue>
+        ) {
+            val error = validateWrite(topic)
+            if (error != null) {
+                writeError(error)
+                return
+            }
+            readStored(topic) { stored ->
+                if (stored != null && stored.type != expectedType) {
+                    writeError(WRONG_TYPE)
+                    return@readStored
+                }
+
+                val current = stored?.value ?: defaultValue
+                val (newValue, response) = mutation(current)
+                publishTopicUnchecked(topic, encodeEnvelope(expectedType, newValue))
+                writeRespValue(response)
+            }
+        }
+
+        private fun readStored(topic: String, onResult: (RedisStoredValue?) -> Unit) {
+            val group = selectedArchiveGroup() ?: return
+            val store = group.lastValStore ?: run {
+                onResult(null)
+                return
+            }
+            vertx.executeBlocking(Callable { store[topic]?.payload }).onComplete { result ->
+                if (result.failed()) {
+                    writeError("ERR ${result.cause()?.message ?: "read failed"}")
+                } else {
+                    onResult(decodeStoredValue(result.result()))
+                }
+            }
+        }
+
+        private fun decodeStoredValue(payload: ByteArray?): RedisStoredValue? {
+            if (payload == null) return null
+            val text = payload.toString(StandardCharsets.UTF_8)
+            return try {
+                val obj = JsonObject(text)
+                val type = obj.getString(REDIS_TYPE_FIELD)
+                if (type != null && obj.containsKey(REDIS_VALUE_FIELD)) {
+                    RedisStoredValue(type, obj.getValue(REDIS_VALUE_FIELD))
+                } else {
+                    RedisStoredValue("string", payload)
+                }
+            } catch (_: Exception) {
+                RedisStoredValue("string", payload)
+            }
+        }
+
+        private fun encodeEnvelope(type: String, value: Any?): ByteArray {
+            return JsonObject()
+                .put(REDIS_TYPE_FIELD, type)
+                .put(REDIS_VALUE_FIELD, value)
+                .encode()
+                .toByteArray(StandardCharsets.UTF_8)
+        }
+
+        private fun defaultValueForType(type: String): Any? {
+            return when (type) {
+                "hash", "zset" -> JsonObject()
+                "set", "list" -> JsonArray()
+                "json" -> null
+                else -> null
+            }
+        }
+
+        private fun jsonArrayToLinkedSet(array: JsonArray): LinkedHashSet<String> {
+            return LinkedHashSet(array.map { it.toString() })
+        }
+
+        private fun <T> sliceList(values: List<T>, rawStart: Long, rawEnd: Long): List<T> {
+            if (values.isEmpty()) return emptyList()
+            val size = values.size.toLong()
+            var start = if (rawStart < 0) size + rawStart else rawStart
+            var end = if (rawEnd < 0) size + rawEnd else rawEnd
+            if (start < 0) start = 0
+            if (end < 0 || start >= size || start > end) return emptyList()
+            if (end >= size) end = size - 1
+            return values.subList(start.toInt(), end.toInt() + 1)
+        }
+
+        private fun sortedZsetEntries(zset: JsonObject): List<Pair<String, Double>> {
+            return zset.fieldNames()
+                .map { it to (zset.getDouble(it) ?: 0.0) }
+                .sortedWith(compareBy<Pair<String, Double>> { it.second }.thenBy { it.first })
+        }
+
+        private fun formatScore(score: Double): String {
+            return if (score % 1.0 == 0.0) score.toLong().toString() else score.toString()
+        }
+
+        private fun isRootJsonPath(path: String): Boolean = path == "$" || path == "."
+
+        private fun jsonTypeName(value: Any?): String {
+            return when (value) {
+                null -> "null"
+                is JsonObject, is Map<*, *> -> "object"
+                is JsonArray, is List<*> -> "array"
+                is String -> "string"
+                is Number -> "number"
+                is Boolean -> "boolean"
+                else -> "string"
+            }
         }
 
         private fun cleanup() {
@@ -694,6 +1368,12 @@ class RedisServer(
             socket.write(buffer)
         }
 
+        private fun writeRespValue(value: RespValue) {
+            val buffer = Buffer.buffer()
+            appendRespValue(buffer, value)
+            socket.write(buffer)
+        }
+
         private fun appendRespValue(buffer: Buffer, value: RespValue) {
             when (value) {
                 is RespValue.Bulk -> {
@@ -713,6 +1393,8 @@ class RedisServer(
     private data class RespCommand(val args: List<ByteArray>) {
         fun stringArg(index: Int): String = args[index].toString(StandardCharsets.UTF_8)
     }
+
+    private data class RedisStoredValue(val type: String, val value: Any?)
 
     private sealed class RespValue {
         data class Bulk(val value: ByteArray?) : RespValue()

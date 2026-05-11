@@ -187,7 +187,7 @@ class DeviceConfigStoreSQLite(
                     """
 
                     sqliteClient.executeUpdate(createNewTable, JsonArray())
-                        .compose {
+                        .compose<Int> {
                             // Copy data
                             val copyData = """
                                 INSERT INTO deviceconfigs_new (name, namespace, node_id, config, enabled, type, created_at, updated_at)
@@ -195,11 +195,11 @@ class DeviceConfigStoreSQLite(
                             """
                             sqliteClient.executeUpdate(copyData, JsonArray())
                         }
-                        .compose {
+                        .compose<Int> {
                             // Drop old table
                             sqliteClient.executeUpdate("DROP TABLE deviceconfigs", JsonArray())
                         }
-                        .compose {
+                        .compose<Int> {
                             // Rename new table
                             sqliteClient.executeUpdate("ALTER TABLE deviceconfigs_new RENAME TO deviceconfigs", JsonArray())
                         }
