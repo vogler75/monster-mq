@@ -22,7 +22,9 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage
 import dev.langchain4j.service.AiServices
 import dev.langchain4j.service.Result
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.WorkerExecutor
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import com.cronutils.model.CronType
@@ -36,6 +38,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Callable
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
@@ -58,6 +62,7 @@ class AgentExecutor(
     private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
     private var conversationLog: Logger? = null
     private var conversationLogHandler: java.util.logging.FileHandler? = null
+    private var llmWorkerExecutor: WorkerExecutor? = null
 
     private val clientId = "agent-${deviceConfig.name}"
     private val forwardingClientId = "agent-${deviceConfig.name}-fwd"
@@ -108,6 +113,7 @@ class AgentExecutor(
             logger.fine("Starting agent ${deviceConfig.name} (provider: ${agentConfig.providerName ?: agentConfig.provider}, trigger: ${agentConfig.triggerType})")
 
             globalConfig = vertx.orCreateContext.config()
+            llmWorkerExecutor = createLlmWorkerExecutor()
 
             // Initialize conversation log file if enabled
             if (agentConfig.conversationLogEnabled) {
@@ -306,6 +312,12 @@ class AgentExecutor(
             conversationLogHandler = null
             conversationLog = null
 
+            // Close dedicated LLM worker executor
+            try { llmWorkerExecutor?.close() } catch (e: Exception) {
+                logger.warning("Error closing LLM worker executor for agent ${deviceConfig.name}: ${e.message}")
+            }
+            llmWorkerExecutor = null
+
             // Publish offline status
             publishHealthStatus("stopped")
 
@@ -347,6 +359,36 @@ class AgentExecutor(
             .chatModel(chatModel)
             .chatMemory(chatMemory)
             .tools(agentTools)
+            .maxSequentialToolsInvocations(agentConfig.maxToolIterations)
+            .beforeToolExecution { execution ->
+                val request = execution.request()
+                val log = JsonObject()
+                    .put("type", "llm-tool-request")
+                    .put("timestamp", Instant.now().toString())
+                    .put("tool", request.name())
+                    .put("arguments", request.arguments())
+                publishToAgentTopic("logs/llm", log)
+                writeToConversationLog { sb ->
+                    sb.append("===== TOOL REQUEST [${Instant.now()}] ${request.name()} =====\n")
+                    sb.append(request.arguments())
+                    sb.append("\n=====\n\n")
+                }
+            }
+            .afterToolExecution { execution ->
+                val request = execution.request()
+                val log = JsonObject()
+                    .put("type", "llm-tool-result")
+                    .put("timestamp", Instant.now().toString())
+                    .put("tool", request.name())
+                    .put("failed", execution.hasFailed())
+                    .put("result", execution.result())
+                publishToAgentTopic("logs/llm", log)
+                writeToConversationLog { sb ->
+                    sb.append("===== TOOL RESULT [${Instant.now()}] ${request.name()} failed=${execution.hasFailed()} =====\n")
+                    sb.append(execution.result())
+                    sb.append("\n=====\n\n")
+                }
+            }
 
         // Add MCP tool providers if configured
         if (agentConfig.mcpServers.isNotEmpty() || agentConfig.useMonsterMqMcp) {
@@ -945,6 +987,22 @@ class AgentExecutor(
         sessionHandler.publishMessage(msg)
     }
 
+    private fun createLlmWorkerExecutor(): WorkerExecutor {
+        val maxExecuteSeconds = maxOf(agentConfig.taskTimeoutSeconds + 60, 60 * 60)
+        logger.fine("Agent ${deviceConfig.name} LLM worker max execute time: ${maxExecuteSeconds}s")
+        return vertx.createSharedWorkerExecutor(
+            "agent-llm-${deviceConfig.name}",
+            1,
+            maxExecuteSeconds,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun executeLlmBlocking(block: () -> Result<String>): Future<Result<String>> {
+        val callable = Callable { block() }
+        return llmWorkerExecutor?.executeBlocking(callable) ?: vertx.executeBlocking(callable)
+    }
+
     private fun executeAgentWithCallback(userMessage: String, source: String, callback: (String?, String?) -> Unit) {
         val service = aiService ?: run {
             callback(null, "Agent service not available")
@@ -955,7 +1013,7 @@ class AgentExecutor(
         publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing task from $source")
 
-        vertx.executeBlocking {
+        executeLlmBlocking {
             llmCalls.incrementAndGet()
             val contextData = buildContextData()
             val fullMessage = if (contextData.isNotBlank()) {
@@ -1014,7 +1072,7 @@ class AgentExecutor(
         publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing message from $source")
 
-        vertx.executeBlocking {
+        executeLlmBlocking {
             llmCalls.incrementAndGet()
             val contextData = buildContextData()
             val fullMessage = if (contextData.isNotBlank()) {
@@ -1105,18 +1163,31 @@ class AgentExecutor(
         sessionHandler.publishMessage(msg)
     }
 
+    private fun chatRequestMessagesToJson(request: ChatRequest): JsonArray {
+        return JsonArray(request.messages().map { message ->
+            JsonObject()
+                .put("type", message.type()?.name ?: "UNKNOWN")
+                .put("content", message.toString())
+        })
+    }
+
     private fun createLlmListener(): ChatModelListener {
         return object : ChatModelListener {
             override fun onRequest(requestContext: ChatModelRequestContext) {
                 val request = requestContext.chatRequest()
                 val messages = request.messages()
                 val lastMessage = messages.lastOrNull()
+                logger.info(
+                    "Agent ${deviceConfig.name} LLM request: model=${request.parameters()?.modelName() ?: "default"}, " +
+                        "messages=${messages.size}, tools=${request.parameters()?.toolSpecifications()?.size ?: 0}"
+                )
                 val log = JsonObject()
                     .put("type", "llm-request")
                     .put("timestamp", Instant.now().toString())
                     .put("model", request.parameters()?.modelName())
                     .put("messageCount", messages.size)
-                    .put("lastMessage", lastMessage?.toString()?.take(500))
+                    .put("lastMessage", lastMessage?.toString())
+                    .put("messages", chatRequestMessagesToJson(request))
                     .put("toolCount", request.parameters()?.toolSpecifications()?.size ?: 0)
                 publishToAgentTopic("logs/llm", log)
 
@@ -1145,6 +1216,11 @@ class AgentExecutor(
                     it.totalTokenCount()?.let { n -> totalTokens.addAndGet(n.toLong()) }
                 }
 
+                logger.info(
+                    "Agent ${deviceConfig.name} LLM response: model=${metadata?.modelName() ?: "default"}, " +
+                        "finish=${metadata?.finishReason()?.name ?: "unknown"}, " +
+                        "textLength=${aiMessage.text()?.length ?: 0}, toolCalls=${aiMessage.toolExecutionRequests()?.size ?: 0}"
+                )
                 val log = JsonObject()
                     .put("type", "llm-response")
                     .put("timestamp", Instant.now().toString())
@@ -1159,7 +1235,7 @@ class AgentExecutor(
                             JsonObject().put("name", tc.name()).put("arguments", tc.arguments())
                         })
                     } else null)
-                    .put("text", aiMessage.text()?.take(500))
+                    .put("text", aiMessage.text())
                 publishToAgentTopic("logs/llm", log)
 
                 // Write full response to log file
