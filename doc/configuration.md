@@ -100,7 +100,7 @@ Mqtt:
   MaximumPacketSize: 268435455       # Max packet size in bytes (default: ~256 MB)
   TopicAliasMaximum: 10              # Max topic aliases per client (0-65535)
   WildcardSubscriptionAvailable: true     # Whether wildcard subscriptions are allowed
-  SharedSubscriptionAvailable: true       # Whether shared subscriptions are supported
+  SharedSubscriptionAvailable: false      # Whether shared subscriptions are supported
 ```
 
 ### Property Details
@@ -112,7 +112,7 @@ Mqtt:
 - **MaximumPacketSize**: Maximum packet size in bytes the server accepts. Packets exceeding this are rejected. Default: 268435455 (~256 MB).
 - **TopicAliasMaximum**: Number of topic aliases the server supports per client. Topic aliases reduce bandwidth by replacing long topic names with 2-byte integers. Set to `0` to disable. Default: 10, Range: 0-65535.
 - **WildcardSubscriptionAvailable**: When `true`, clients can use `+` and `#` wildcards in subscriptions. Default: true.
-- **SharedSubscriptionAvailable**: When `true`, clients can use shared subscriptions (`$share/group/topic`). Default: true.
+- **SharedSubscriptionAvailable**: Currently advertised as `false`; shared subscriptions (`$share/group/topic`) are not implemented yet. Default: false.
 
 ### Notes
 
