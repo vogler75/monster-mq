@@ -25,7 +25,7 @@ Mqtt:
   MaximumPacketSize: 268435455
   TopicAliasMaximum: 10
   WildcardSubscriptionAvailable: true
-  SharedSubscriptionAvailable: true
+  SharedSubscriptionAvailable: false
 
 # Enhanced Authentication (optional)
 UserManagement:
@@ -71,7 +71,7 @@ The server advertises capabilities and limits to clients during connection:
 - **Topic Alias Maximum** (34) — Number of aliases server supports (10)
 - **Wildcard Subscription Available** (40) — Wildcard support (1 = yes)
 - **Subscription Identifier Available** (41) — Sub ID support (0 = no)
-- **Shared Subscription Available** (42) — Shared sub support (1 = yes)
+- **Shared Subscription Available** (42) — Shared sub support (0 = no)
 - **Server Keep Alive** (19) — Server's keep-alive preference (60s)
 
 ---

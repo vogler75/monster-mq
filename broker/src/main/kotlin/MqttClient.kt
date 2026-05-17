@@ -398,7 +398,7 @@ class MqttClient(
                     connackProps.add(MqttProperties.IntegerProperty(41, 0))  // 0 = not supported yet
                     
                     // Shared Subscription Available (42)
-                    connackProps.add(MqttProperties.IntegerProperty(42, 1))  // 1 = available
+                    connackProps.add(MqttProperties.IntegerProperty(42, 0))  // 0 = not supported yet
                     
                     endpoint.accept(present, connackProps)
                     logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties")
@@ -567,7 +567,7 @@ class MqttClient(
                 connackProps.add(MqttProperties.IntegerProperty(41, 0))  // 0 = not supported yet
                 
                 // Shared Subscription Available (42)
-                connackProps.add(MqttProperties.IntegerProperty(42, 1))  // 1 = available
+                connackProps.add(MqttProperties.IntegerProperty(42, 0))  // 0 = not supported yet
                 
                 endpoint.accept(present, connackProps)
                 logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties")

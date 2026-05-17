@@ -249,6 +249,7 @@ def test_mqtt5_server_properties():
             print(f"  ✓ Shared Subscription Available: {props.SharedSubscriptionAvailable}")
         
         assert hasattr(props, 'SharedSubscriptionAvailable'), "Shared Subscription Available not present"
+        assert props.SharedSubscriptionAvailable == 0, "Shared Subscription Available should be 0 until shared subscriptions are implemented"
         
         # Cleanup
         client.loop_stop()
