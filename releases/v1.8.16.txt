@@ -1,0 +1,10 @@
+Release v1.8.16
+Built from commit: ab31b8eb
+Date: 2026-05-17 21:42:37
+
+Changes since v1.8.15:
+---
+ab31b8eb Merge branch 'develop'
+216930e1 Advertise shared subscriptions as unsupported
+335efaf5 Improve agent LLM execution logging
+45fdc7e1 Conditionally migrate archive config table
