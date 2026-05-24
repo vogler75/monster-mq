@@ -1,0 +1,7 @@
+Release v1.8.17
+Built from commit: da6a5daa
+Date: 2026-05-24 15:17:43
+
+Changes since v1.8.16:
+---
+da6a5daa feat: restrict agent publish access with allowedPublishTopics ACLs
