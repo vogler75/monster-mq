@@ -14,6 +14,7 @@ type Agent {
     skills: [AgentSkill!]!
     inputTopics: [String!]!
     outputTopics: [String!]!
+    allowedPublishTopics: [String!]!
     triggerType: String!
     cronExpression: String
     cronIntervalMs: Long
@@ -66,6 +67,7 @@ input AgentInput {
     skills: [AgentSkillInput!]
     inputTopics: [String!]
     outputTopics: [String!]
+    allowedPublishTopics: [String!]
     triggerType: String
     cronExpression: String
     cronIntervalMs: Long

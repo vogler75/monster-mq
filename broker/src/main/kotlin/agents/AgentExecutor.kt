@@ -231,7 +231,8 @@ class AgentExecutor(
                 getCurrentTaskId = { currentTaskId },
                 registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
                 subAgentsAllowAll = agentConfig.subAgentsAllowAll,
-                subAgents = agentConfig.subAgents
+                subAgents = agentConfig.subAgents,
+                allowedPublishTopics = agentConfig.allowedPublishTopics
             )
 
             // Build AI Service with ReAct loop

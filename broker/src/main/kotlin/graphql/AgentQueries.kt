@@ -123,6 +123,7 @@ class AgentQueries(
                 },
                 "inputTopics" to agentConfig.inputTopics,
                 "outputTopics" to agentConfig.outputTopics,
+                "allowedPublishTopics" to agentConfig.allowedPublishTopics,
                 "triggerType" to agentConfig.triggerType.name,
                 "cronExpression" to agentConfig.cronExpression,
                 "cronIntervalMs" to agentConfig.cronIntervalMs,

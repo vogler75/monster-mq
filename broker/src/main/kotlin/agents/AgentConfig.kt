@@ -38,7 +38,8 @@ data class AgentConfig(
     val endpoint: String? = null,  // For Azure OpenAI: resource endpoint URL
     val serviceVersion: String? = null,  // For Azure OpenAI: API version (e.g. "2024-02-01")
     val providerName: String? = null,  // references a stored GenAiProvider by name
-    val timezone: String? = null       // null = system default, e.g. "UTC", "Europe/Vienna"
+    val timezone: String? = null,      // null = system default, e.g. "UTC", "Europe/Vienna"
+    val allowedPublishTopics: List<String> = emptyList()
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -82,7 +83,8 @@ data class AgentConfig(
                 endpoint = json.getString("endpoint"),
                 serviceVersion = json.getString("serviceVersion"),
                 providerName = json.getString("providerName"),
-                timezone = json.getString("timezone")
+                timezone = json.getString("timezone"),
+                allowedPublishTopics = json.getJsonArray("allowedPublishTopics", JsonArray()).filterIsInstance<String>().toList()
             )
         }
     }
@@ -126,6 +128,7 @@ data class AgentConfig(
             .put("serviceVersion", serviceVersion)
             .put("providerName", providerName)
             .put("timezone", timezone)
+            .put("allowedPublishTopics", JsonArray(allowedPublishTopics))
     }
 }
 

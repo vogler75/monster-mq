@@ -34,7 +34,8 @@ class AgentTools(
     private val getCurrentTaskId: (() -> String?)? = null,
     private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
     private val subAgentsAllowAll: Boolean = false,
-    private val subAgents: List<String> = emptyList()
+    private val subAgents: List<String> = emptyList(),
+    private val allowedPublishTopics: List<String> = emptyList()
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
 
@@ -61,6 +62,11 @@ class AgentTools(
         @P("The MQTT topic to publish to") topic: String,
         @P("The message payload (text or JSON)") payload: String
     ): String {
+        if (allowedPublishTopics.isNotEmpty() && !at.rocworks.data.TopicTree.anyMatch(allowedPublishTopics, topic)) {
+            val errorMsg = "Publish rejected: topic '$topic' does not match any allowed publish topics."
+            logger.warning("publishMessage error for agent $agentName: $errorMsg Allowed topics: $allowedPublishTopics")
+            return logTool("publishMessage", "topic=$topic", errorMsg)
+        }
         val result = try {
             val msg = BrokerMessage(agentClientId, topic, payload)
             val handler = Monster.getSessionHandler()
