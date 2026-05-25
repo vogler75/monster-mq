@@ -98,7 +98,7 @@ class DeviceConfigStoreMongoDB(
         val promise = Promise.promise<List<DeviceConfig>>()
 
         try {
-            val documents = deviceConfigsCollection.find(eq("node_id", nodeId)).sort(Document("name", 1))
+            val documents = deviceConfigsCollection.find(or(eq("node_id", nodeId), eq("node_id", "*"))).sort(Document("name", 1))
             val devices = mutableListOf<DeviceConfig>()
 
             for (doc in documents) {
@@ -123,7 +123,7 @@ class DeviceConfigStoreMongoDB(
         val promise = Promise.promise<List<DeviceConfig>>()
 
         try {
-            val filter = and(eq("node_id", nodeId), eq("enabled", true))
+            val filter = and(or(eq("node_id", nodeId), eq("node_id", "*")), eq("enabled", true))
             val documents = deviceConfigsCollection.find(filter).sort(Document("name", 1))
             val devices = mutableListOf<DeviceConfig>()
 

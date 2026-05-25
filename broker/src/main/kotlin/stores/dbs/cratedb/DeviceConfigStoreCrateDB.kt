@@ -52,14 +52,14 @@ class DeviceConfigStoreCrateDB(
         private const val SELECT_BY_NODE = """
             SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
-            WHERE node_id = ?
+            WHERE node_id = ? OR node_id = '*'
             ORDER BY name
         """
 
         private const val SELECT_ENABLED_BY_NODE = """
             SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
-            WHERE node_id = ? AND enabled = TRUE
+            WHERE (node_id = ? OR node_id = '*') AND enabled = TRUE
             ORDER BY name
         """
 
