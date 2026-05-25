@@ -653,7 +653,18 @@ class MqttClient(
     }
 
     private fun exceptionHandler(throwable: Throwable) {
-        logger.severe("Client [$clientId] Exception: ${throwable.message} [${Utils.getCurrentFunctionName()}]")
+        val msg = throwable.message ?: ""
+        val localizedMsg = throwable.localizedMessage ?: msg
+        val isCommonNetworkError = throwable is java.io.IOException ||
+                msg.contains("connection reset", ignoreCase = true) ||
+                msg.contains("broken pipe", ignoreCase = true) ||
+                msg.contains("connection timed out", ignoreCase = true)
+
+        if (isCommonNetworkError) {
+            logger.warning("Client [$clientId] connection disconnected abruptly: $localizedMsg")
+        } else {
+            logger.severe("Client [$clientId] Exception: $msg [${Utils.getCurrentFunctionName()}]")
+        }
         closeConnection()
     }
 

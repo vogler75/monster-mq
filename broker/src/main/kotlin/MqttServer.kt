@@ -43,9 +43,26 @@ class MqttServer(
     override fun start(startPromise: Promise<Void>) {
         val mqttServer: MqttServer = MqttServer.create(vertx, options)
 
-        mqttServer.exceptionHandler {
-            logger.severe("MQTT Server error: ${it.message} [${Utils.getCurrentFunctionName()}]")
-            //it.printStackTrace()
+        mqttServer.exceptionHandler { err ->
+            val msg = err.message ?: ""
+            val localizedMsg = err.localizedMessage ?: msg
+            val isProtocolOrSslError = err is java.io.IOException ||
+                    err.javaClass.name.contains("DecoderException") ||
+                    err.javaClass.name.contains("SSL") ||
+                    err.javaClass.name.contains("MqttUnacceptableProtocolVersionException") ||
+                    err.javaClass.name.contains("MqttIdentifierRejectedException") ||
+                    msg.contains("SSLHandshakeException", ignoreCase = true) ||
+                    msg.contains("DecoderException", ignoreCase = true) ||
+                    msg.contains("UnacceptableProtocolVersionException", ignoreCase = true) ||
+                    msg.contains("connection reset", ignoreCase = true) ||
+                    msg.contains("broken pipe", ignoreCase = true) ||
+                    msg.contains("connection timed out", ignoreCase = true)
+
+            if (isProtocolOrSslError) {
+                logger.warning("MQTT Server connection warning (possible wrong protocol, SSL issue or abrupt disconnect): $localizedMsg")
+            } else {
+                logger.severe("MQTT Server error: $msg [${Utils.getCurrentFunctionName()}]")
+            }
         }
 
         mqttServer.endpointHandler { endpoint ->

@@ -399,6 +399,7 @@ type ArchiveGroupInfo {
 enum DatabaseConnectionType {
     POSTGRES
     MONGODB
+    SQLITE
 }
 
 type DatabaseConnectionInfo {

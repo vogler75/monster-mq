@@ -465,11 +465,13 @@ class ArchiveHandler(
             when (archiveGroup.getLastValType()) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
+                MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveGroup.getArchiveType()) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
+                MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             }
         )
@@ -480,7 +482,7 @@ class ArchiveHandler(
             }
 
             if (requiredTypes.size > 1 && connection.name != "Default") {
-                throw IllegalArgumentException("Archive group '${archiveGroup.name}' cannot use one selected database connection for mixed Postgres and MongoDB stores")
+                throw IllegalArgumentException("Archive group '${archiveGroup.name}' cannot use one selected database connection for mixed database stores")
             }
             if (requiredTypes.isNotEmpty() && connection.type !in requiredTypes) {
                 throw IllegalArgumentException("Archive group '${archiveGroup.name}' selected ${connection.type} connection '$selectedName' but requires ${requiredTypes.first()}")
@@ -499,6 +501,9 @@ class ArchiveHandler(
                     .put("Pass", connection.password)
                     .put("Database", connection.database ?: "monstermq")
                 )
+                DatabaseConnectionType.SQLITE -> baseConfig.put("SQLite", JsonObject()
+                    .put("Path", connection.url)
+                )
             }
             return baseConfig
         }
@@ -509,6 +514,7 @@ class ArchiveHandler(
                     when (it) {
                         DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.getString("Url").isNullOrBlank()
                         DatabaseConnectionType.MONGODB -> configJson.getJsonObject("MongoDB")?.getString("Url").isNullOrBlank()
+                        DatabaseConnectionType.SQLITE -> configJson.getJsonObject("SQLite")?.getString("Path").isNullOrBlank()
                     }
                 }
                 return if (missingTypes.isEmpty()) {
@@ -519,7 +525,7 @@ class ArchiveHandler(
             }
 
             val requiredType = requiredTypes.firstOrNull()
-                ?: return Future.failedFuture("Default database connection can only be used for Postgres or MongoDB stores")
+                ?: return Future.failedFuture("Default database connection can only be used for Postgres, MongoDB, or SQLite stores")
             val connection = when (requiredType) {
                 DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.let {
                     val url = it.getString("Url")
@@ -540,6 +546,15 @@ class ArchiveHandler(
                         type = DatabaseConnectionType.MONGODB,
                         url = url,
                         database = it.getString("Database", "monstermq"),
+                        readOnly = true
+                    )
+                }
+                DatabaseConnectionType.SQLITE -> configJson.getJsonObject("SQLite")?.let {
+                    val path = it.getString("Path")
+                    if (path.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.SQLITE,
+                        url = path,
                         readOnly = true
                     )
                 }

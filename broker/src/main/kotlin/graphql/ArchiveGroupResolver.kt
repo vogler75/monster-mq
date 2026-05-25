@@ -56,6 +56,17 @@ class ArchiveGroupResolver(
                 ))
             }
         }
+        databaseConfig.getJsonObject("SQLite")?.let {
+            val path = it.getString("Path", "sqlite")
+            if (!path.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.SQLITE,
+                    url = path,
+                    readOnly = true
+                ))
+            }
+        }
         return connections
     }
 
@@ -85,22 +96,24 @@ class ArchiveGroupResolver(
             when (lastValType) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
+                MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveType) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
+                MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             }
         )
 
         if (requiredTypes.isEmpty()) {
-            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL or MongoDB storage")
+            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL, MongoDB, or SQLite storage")
         }
         if (requiredTypes.size > 1) {
             return io.vertx.core.Future.succeededFuture(
                 if (selectedName == "Default") null
-                else "Mixed PostgreSQL and MongoDB storage cannot use a named database connection; leave the selection empty to use config-file defaults"
+                else "Mixed database storage cannot use a named database connection; leave the selection empty to use config-file defaults"
             )
         }
 
