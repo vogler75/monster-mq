@@ -24,6 +24,7 @@ import org.apache.plc4x.java.api.types.PlcResponseCode
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
+import org.apache.plc4x.java.api.value.PlcValue
 
 /**
  * PLC4X Connector - Handles connection to a single PLC device
@@ -434,7 +435,8 @@ class Plc4xConnector : AbstractVerticle() {
      */
     private fun toJsonCompatible(value: Any): Any {
         return when (value) {
-            is Collection<*> -> JsonArray(value.toList())
+            is PlcValue -> value.getObject()?.let { toJsonCompatible(it) } ?: "null"
+            is Collection<*> -> JsonArray(value.map { it?.let { toJsonCompatible(it) } })
             is BooleanArray -> JsonArray(value.toList())
             is ByteArray -> JsonArray(value.toList())
             is ShortArray -> JsonArray(value.toList())
@@ -443,7 +445,7 @@ class Plc4xConnector : AbstractVerticle() {
             is FloatArray -> JsonArray(value.toList())
             is DoubleArray -> JsonArray(value.toList())
             is CharArray -> JsonArray(value.toList())
-            is Array<*> -> JsonArray(value.toList())
+            is Array<*> -> JsonArray(value.map { it?.let { toJsonCompatible(it) } })
             else -> value
         }
     }
