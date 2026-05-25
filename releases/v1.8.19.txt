@@ -1,0 +1,8 @@
+Release v1.8.19
+Built from commit: 52b7bea9
+Date: 2026-05-25 10:29:26
+
+Changes since v1.8.18:
+---
+52b7bea9 Merge branch 'develop'
+cda8f921 Include global '*' node configs in queries
