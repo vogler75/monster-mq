@@ -183,6 +183,7 @@ class AgentMutations(
             site = input["site"] as? String ?: "default",
             description = input["description"] as? String ?: "",
             version = input["version"] as? String ?: "1.0.0",
+            tags = parseStringList(input["tags"]),
             skills = parseSkills(input["skills"]),
             inputTopics = parseStringList(input["inputTopics"]),
             outputTopics = parseStringList(input["outputTopics"]),
@@ -214,7 +215,9 @@ class AgentMutations(
             timezone = input["timezone"] as? String,
             taskTimeoutSeconds = (input["taskTimeoutSeconds"] as? Number)?.toLong() ?: 60,
             subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: false,
-            subAgents = parseStringList(input["subAgents"])
+            subAgents = parseStringList(input["subAgents"]),
+            visibleAgentTags = parseStringList(input["visibleAgentTags"]),
+            isolatedAgent = input["isolatedAgent"] as? Boolean ?: false
         )
 
         return DeviceConfig(
@@ -237,6 +240,7 @@ class AgentMutations(
             site = input["site"] as? String ?: existingConfig.site,
             description = input["description"] as? String ?: existingConfig.description,
             version = input["version"] as? String ?: existingConfig.version,
+            tags = if (input.containsKey("tags")) parseStringList(input["tags"]) else existingConfig.tags,
             skills = if (input.containsKey("skills")) parseSkills(input["skills"]) else existingConfig.skills,
             inputTopics = if (input.containsKey("inputTopics")) parseStringList(input["inputTopics"]) else existingConfig.inputTopics,
             outputTopics = if (input.containsKey("outputTopics")) parseStringList(input["outputTopics"]) else existingConfig.outputTopics,
@@ -268,7 +272,9 @@ class AgentMutations(
             timezone = if (input.containsKey("timezone")) input["timezone"] as? String else existingConfig.timezone,
             taskTimeoutSeconds = (input["taskTimeoutSeconds"] as? Number)?.toLong() ?: existingConfig.taskTimeoutSeconds,
             subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: existingConfig.subAgentsAllowAll,
-            subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents
+            subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents,
+            visibleAgentTags = if (input.containsKey("visibleAgentTags")) parseStringList(input["visibleAgentTags"]) else existingConfig.visibleAgentTags,
+            isolatedAgent = input["isolatedAgent"] as? Boolean ?: existingConfig.isolatedAgent
         )
 
         return existing.copy(

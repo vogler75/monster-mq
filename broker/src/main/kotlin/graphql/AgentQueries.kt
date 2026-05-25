@@ -31,6 +31,13 @@ class AgentQueries(
             try {
                 val nodeIdFilter = env.getArgument<String?>("nodeId")
                 val enabledFilter = env.getArgument<Boolean?>("enabled")
+                val orgFilter = env.getArgument<String?>("org")?.trim()?.takeIf { it.isNotEmpty() }
+                val siteFilter = env.getArgument<String?>("site")?.trim()?.takeIf { it.isNotEmpty() }
+                val tagFilter = env.getArgument<List<String>?>("tags")
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() }
+                    ?: emptyList()
+                val tagFilterMode = env.getArgument<String?>("tagFilterMode")?.uppercase() ?: "OR"
 
                 deviceStore.getAllDevices().onComplete { result ->
                     if (result.succeeded()) {
@@ -38,6 +45,26 @@ class AgentQueries(
                             .filter { it.type == DeviceConfig.DEVICE_TYPE_AGENT }
                             .filter { nodeIdFilter == null || it.nodeId == nodeIdFilter }
                             .filter { enabledFilter == null || it.enabled == enabledFilter }
+                            .filter { device ->
+                                if (orgFilter == null && siteFilter == null) {
+                                    true
+                                } else {
+                                    val agentConfig = AgentConfig.fromJsonObject(device.config)
+                                    (orgFilter == null || agentConfig.org == orgFilter) &&
+                                        (siteFilter == null || agentConfig.site == siteFilter)
+                                }
+                            }
+                            .filter { device ->
+                                if (tagFilter.isEmpty()) {
+                                    true
+                                } else {
+                                    val agentTags = AgentConfig.fromJsonObject(device.config).tags.toSet()
+                                    when (tagFilterMode) {
+                                        "AND" -> tagFilter.all { it in agentTags }
+                                        else -> tagFilter.any { it in agentTags }
+                                    }
+                                }
+                            }
                             .map { agentToMap(it) }
                         future.complete(agents)
                     } else {
@@ -111,6 +138,7 @@ class AgentQueries(
                 "site" to agentConfig.site,
                 "description" to agentConfig.description,
                 "version" to agentConfig.version,
+                "tags" to agentConfig.tags,
                 "namespace" to device.namespace,
                 "nodeId" to device.nodeId,
                 "enabled" to device.enabled,
@@ -161,6 +189,8 @@ class AgentQueries(
                 "taskTimeoutSeconds" to agentConfig.taskTimeoutSeconds,
                 "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,
                 "subAgents" to agentConfig.subAgents,
+                "visibleAgentTags" to agentConfig.visibleAgentTags,
+                "isolatedAgent" to agentConfig.isolatedAgent,
                 "createdAt" to device.createdAt.toString(),
                 "updatedAt" to device.updatedAt.toString()
             )

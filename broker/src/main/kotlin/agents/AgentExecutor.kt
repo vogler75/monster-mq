@@ -232,6 +232,8 @@ class AgentExecutor(
                 registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
                 subAgentsAllowAll = agentConfig.subAgentsAllowAll,
                 subAgents = agentConfig.subAgents,
+                visibleAgentTags = agentConfig.visibleAgentTags,
+                isolatedAgent = agentConfig.isolatedAgent,
                 allowedPublishTopics = agentConfig.allowedPublishTopics
             )
 
@@ -1303,6 +1305,7 @@ class AgentExecutor(
             .put("protocolVersion", "1.0")
             .put("name", agentName)
             .put("description", agentConfig.description)
+            .put("tags", agentConfig.tags)
             .put("url", a2aInboxTopic())
             .put("preferredTransport", "MQTT")
             .put("version", agentConfig.version)

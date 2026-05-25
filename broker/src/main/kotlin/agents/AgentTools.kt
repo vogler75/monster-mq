@@ -35,6 +35,8 @@ class AgentTools(
     private val registerPendingTask: ((taskId: String, targetAgent: String, input: String) -> Unit)? = null,
     private val subAgentsAllowAll: Boolean = false,
     private val subAgents: List<String> = emptyList(),
+    private val visibleAgentTags: List<String> = emptyList(),
+    private val isolatedAgent: Boolean = false,
     private val allowedPublishTopics: List<String> = emptyList()
 ) {
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
@@ -55,6 +57,14 @@ class AgentTools(
     private fun logTool(name: String, args: String, result: String): String {
         toolLogger?.invoke(name, args, result)
         return result
+    }
+
+    private fun canAccessAgent(name: String, tags: List<String>): Boolean {
+        if (name == agentName) return false
+        if (isolatedAgent) return false
+        if (visibleAgentTags.isNotEmpty() && tags.intersect(visibleAgentTags.toSet()).isEmpty()) return false
+        if (!subAgentsAllowAll && subAgents.isNotEmpty() && name !in subAgents) return false
+        return true
     }
 
     @Tool("Publish a message to an MQTT topic. Use this to send data or commands to other systems.")
@@ -285,6 +295,7 @@ class AgentTools(
                         agents.add(JsonObject()
                             .put("name", card.getString("name"))
                             .put("description", card.getString("description"))
+                            .put("tags", card.getJsonArray("tags", JsonArray()))
                             .put("status", card.getString("status"))
                             .put("skills", card.getValue("skills"))
                             .put("triggerType", card.getString("triggerType"))
@@ -303,8 +314,8 @@ class AgentTools(
             for (i in 0 until agents.size()) {
                 val agent = agents.getJsonObject(i)
                 val name = agent.getString("name")
-                if (name == agentName) continue
-                if (!subAgentsAllowAll && (subAgents.isEmpty() || name !in subAgents)) continue
+                val tags = agent.getJsonArray("tags", JsonArray()).filterIsInstance<String>()
+                if (!canAccessAgent(name, tags)) continue
                 filtered.add(agent)
             }
             if (filtered.isEmpty) "No agents found" else filtered.encodePrettily()
@@ -317,22 +328,37 @@ class AgentTools(
 
     @Tool("Get the full Agent Card for a specific agent, including its capabilities, skills, and configuration details.")
     fun getAgentCard(
-        @P("The name of the agent to look up") agentName: String
+        @P("The name of the agent to look up") targetAgent: String
     ): String {
         val result = try {
+            if (targetAgent == agentName) {
+                return logTool("getAgentCard", "agent=$targetAgent", "Agent '$targetAgent' cannot look up itself.")
+            }
+            if (isolatedAgent) {
+                return logTool("getAgentCard", "agent=$targetAgent", "Agent '$agentName' is isolated and cannot see other agents.")
+            }
+            if (!subAgentsAllowAll && subAgents.isNotEmpty() && targetAgent !in subAgents) {
+                return logTool("getAgentCard", "agent=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: $subAgents")
+            }
             val store = Monster.getRetainedStore()
-                ?: return logTool("getAgentCard", "agent=$agentName", "No retained store available")
-            val msg = store["a2a/v1/$a2aOrg/$a2aSite/discovery/$agentName"]
+                ?: return logTool("getAgentCard", "agent=$targetAgent", "No retained store available")
+            val msg = store["a2a/v1/$a2aOrg/$a2aSite/discovery/$targetAgent"]
             if (msg != null) {
-                msg.getPayloadAsString()
+                val card = JsonObject(String(msg.payload, Charsets.UTF_8))
+                val tags = card.getJsonArray("tags", JsonArray()).filterIsInstance<String>()
+                if (visibleAgentTags.isNotEmpty() && tags.intersect(visibleAgentTags.toSet()).isEmpty()) {
+                    "Agent '$targetAgent' is not visible to this agent's tag filter. Required tags: $visibleAgentTags"
+                } else {
+                    msg.getPayloadAsString()
+                }
             } else {
-                "No agent card found for '$agentName'"
+                "No agent card found for '$targetAgent'"
             }
         } catch (e: Exception) {
             logger.warning("getAgentCard error: ${e.message}")
             "Error: ${e.message}"
         }
-        return logTool("getAgentCard", "agent=$agentName", result)
+        return logTool("getAgentCard", "agent=$targetAgent", result)
     }
 
     @Tool("Send a task to another agent. The response will arrive asynchronously at your inbox. Use listAgents() first to discover available agents.")
@@ -342,8 +368,30 @@ class AgentTools(
         @P("Optional: specific skill to invoke on the target agent") skill: String?
     ): String {
         val result = try {
-            if (!subAgentsAllowAll && (subAgents.isEmpty() || targetAgent !in subAgents)) {
-                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: ${if (subAgents.isEmpty()) "(none)" else subAgents}")
+            if (targetAgent == agentName) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' cannot invoke itself.")
+            }
+            if (isolatedAgent) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent '$agentName' is isolated and cannot invoke other agents.")
+            }
+            if (!subAgentsAllowAll && subAgents.isNotEmpty() && targetAgent !in subAgents) {
+                return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: $subAgents")
+            }
+            if (visibleAgentTags.isNotEmpty()) {
+                val store = Monster.getRetainedStore()
+                    ?: return logTool("invokeAgent", "target=$targetAgent", "No retained store available to verify agent tags")
+                val discovery = store["a2a/v1/$a2aOrg/$a2aSite/discovery/$targetAgent"]
+                    ?: return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' has no discovery card and is not visible to this agent.")
+                val targetTags = try {
+                    JsonObject(String(discovery.payload, Charsets.UTF_8))
+                        .getJsonArray("tags", JsonArray())
+                        .filterIsInstance<String>()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                if (targetTags.intersect(visibleAgentTags.toSet()).isEmpty()) {
+                    return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not visible to this agent's tag filter. Required tags: $visibleAgentTags")
+                }
             }
 
             val sessionHandler = Monster.getSessionHandler()

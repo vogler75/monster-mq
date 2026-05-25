@@ -8,6 +8,7 @@ type Agent {
     site: String!
     description: String
     version: String!
+    tags: [String!]!
     namespace: String!
     nodeId: String!
     enabled: Boolean!
@@ -42,6 +43,8 @@ type Agent {
     taskTimeoutSeconds: Long
     subAgentsAllowAll: Boolean!
     subAgents: [String!]!
+    visibleAgentTags: [String!]!
+    isolatedAgent: Boolean!
     createdAt: String!
     updatedAt: String!
 }
@@ -64,6 +67,7 @@ input AgentInput {
     nodeId: String!
     description: String
     version: String
+    tags: [String!]
     skills: [AgentSkillInput!]
     inputTopics: [String!]
     outputTopics: [String!]
@@ -96,6 +100,8 @@ input AgentInput {
     taskTimeoutSeconds: Long
     subAgentsAllowAll: Boolean
     subAgents: [String!]
+    visibleAgentTags: [String!]
+    isolatedAgent: Boolean
     enabled: Boolean
 }
 
@@ -142,7 +148,7 @@ type AgentMutations {
 # =======================
 
 extend type Query {
-    agents(nodeId: String, enabled: Boolean): [Agent!]!
+    agents(nodeId: String, enabled: Boolean, org: String, site: String, tags: [String!], tagFilterMode: String): [Agent!]!
     agent(name: String!): Agent
     configuredProviders: [String!]!
 }

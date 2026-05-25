@@ -8,6 +8,7 @@ data class AgentConfig(
     val site: String = "default",
     val description: String = "",
     val version: String = "1.0.0",
+    val tags: List<String> = emptyList(),
     val skills: List<AgentSkill> = emptyList(),
     val inputTopics: List<String> = emptyList(),
     val outputTopics: List<String> = emptyList(),
@@ -33,6 +34,8 @@ data class AgentConfig(
     val taskTimeoutSeconds: Long = 60,  // timeout for sub-agent task invocations and LLM calls (default 60s)
     val subAgentsAllowAll: Boolean = false,      // when true, agent can call any other agent
     val subAgents: List<String> = emptyList(),  // restrict which agents this orchestrator can invoke (ignored when allowAll=true)
+    val visibleAgentTags: List<String> = emptyList(),  // restrict visible/invokable agents to matching tags (empty = all)
+    val isolatedAgent: Boolean = false,  // when true, this agent cannot see or invoke any other agents
     val enableThinking: Boolean = false,
     val conversationLogEnabled: Boolean = false,  // Log full LLM conversations to log/agents/<name>.log
     val endpoint: String? = null,  // For Azure OpenAI: resource endpoint URL
@@ -48,6 +51,7 @@ data class AgentConfig(
                 site = json.getString("site", "default"),
                 description = json.getString("description", ""),
                 version = json.getString("version", "1.0.0"),
+                tags = json.getJsonArray("tags", JsonArray()).filterIsInstance<String>().toList(),
                 skills = json.getJsonArray("skills", JsonArray()).filterIsInstance<JsonObject>().map { AgentSkill.fromJsonObject(it) },
                 inputTopics = json.getJsonArray("inputTopics", JsonArray()).filterIsInstance<String>().toList(),
                 outputTopics = json.getJsonArray("outputTopics", JsonArray()).filterIsInstance<String>().toList(),
@@ -78,6 +82,8 @@ data class AgentConfig(
                 taskTimeoutSeconds = json.getLong("taskTimeoutSeconds", 60),
                 subAgentsAllowAll = json.getBoolean("subAgentsAllowAll", false),
                 subAgents = json.getJsonArray("subAgents", JsonArray()).filterIsInstance<String>().toList(),
+                visibleAgentTags = json.getJsonArray("visibleAgentTags", JsonArray()).filterIsInstance<String>().toList(),
+                isolatedAgent = json.getBoolean("isolatedAgent", false),
                 enableThinking = json.getBoolean("enableThinking", false),
                 conversationLogEnabled = json.getBoolean("conversationLogEnabled", false),
                 endpoint = json.getString("endpoint"),
@@ -95,6 +101,7 @@ data class AgentConfig(
             .put("site", site)
             .put("description", description)
             .put("version", version)
+            .put("tags", JsonArray(tags))
             .put("skills", JsonArray(skills.map { it.toJsonObject() }))
             .put("inputTopics", JsonArray(inputTopics))
             .put("outputTopics", JsonArray(outputTopics))
@@ -122,6 +129,8 @@ data class AgentConfig(
             .put("taskTimeoutSeconds", taskTimeoutSeconds)
             .put("subAgentsAllowAll", subAgentsAllowAll)
             .put("subAgents", JsonArray(subAgents))
+            .put("visibleAgentTags", JsonArray(visibleAgentTags))
+            .put("isolatedAgent", isolatedAgent)
             .put("enableThinking", enableThinking)
             .put("conversationLogEnabled", conversationLogEnabled)
             .put("endpoint", endpoint)
