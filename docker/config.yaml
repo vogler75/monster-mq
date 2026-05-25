@@ -2,6 +2,7 @@ TCP: 1883
 TCPS: 8883
 WS: 9000
 WSS: 9001
+NATS: 4222
 
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
@@ -11,6 +12,31 @@ MaxPublishRate: 10000    # Max messages per second a client can publish
 MaxSubscribeRate: 10000  # Max messages per second a client can receive
 
 DefaultStoreType: SQLITE
+
+# Batches messages for delivery to clients to reduce eventBus overhead
+BulkProcessing:
+  Enabled: false
+  TimeoutMS: 50
+  BulkSize: 1000
+  WorkerThreads: 4
+
+# Bulk Processing configuration (Topic grouping + Worker threads)
+BulkMessaging:
+  Enabled: false
+  TimeoutMS: 100
+  BulkSize: 1000
+
+# MQTT TCP Server configuration (socket-level settings)
+MqttTcpServer:
+  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
+  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
+  MaxMessageSizeKb: 512          # Maximum MQTT message size (default: 512KB)
+
+# Queue size configuration for high-load scenarios
+Queues:
+  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
 
 # User Management configuration
 UserManagement:
@@ -26,15 +52,65 @@ Metrics:
 
 # SQLite configuration
 SQLite:
-  Path: "db"
+  Path: "/cfg-data"
   EnableWAL: true  # Set to true for better performance, false for easier multi-client access
+
+Logging:
+  Memory:
+    Enabled: true
+    Entries: 1000
 
 GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
 
-Logging:
-  Memory:
-    Enabled: true
-    Entries: 1000
+RestApi:
+  Enabled: true
+
+Dashboard:
+  Enabled: true
+
+MCP:
+  Enabled: true
+  Port: 4001
+
+Prometheus:
+  Enabled: false
+  Port: 4002
+  RawQueryLimit: 10000  # RawQueryLimit: 0  # Set to 0 for unlimited
+
+I3x:
+  Enabled: false
+  Port: 4003
+  DefaultArchiveGroup: Default
+
+# Redis-compatible protocol server for Redis clients.
+RedisServer:
+  Enabled: true
+  Host: "0.0.0.0"
+  Port: 6379
+  RequireAuth: true
+  DefaultDb: 0
+  SetRetained: false
+  PublishQos: 0
+  KeysLimit: 10000
+
+# Features
+Features:
+  OpcUa: true
+  OpcUaServer: true
+  MqttClient: true
+  Kafka: true
+  Nats: true
+  Redis: true
+  RedisServer: true
+  Telegram: true
+  WinCCOa: true
+  WinCCUa: true
+  Plc4x: true
+  Neo4j: true
+  JdbcLogger: true
+  SparkplugB: true
+  FlowEngine: true
+  Agents: true

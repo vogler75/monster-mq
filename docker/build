@@ -191,6 +191,45 @@ elif [ "$PUBLISH_MODE" = "ask" ]; then
     fi
 fi
 
+# Check Docker Hub for existing version-specific tags before pushing.
+# Moving tags (latest, latest-jdk21, testing) are intentionally skipped.
+check_tag_exists() {
+    local tag="$1"
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" \
+        "https://hub.docker.com/v2/repositories/rocworks/monstermq/tags/${tag}/")
+    [ "$http_code" = "200" ]
+}
+
+if [ "$SHOULD_PUSH" = true ] && [ "$TESTING" = false ]; then
+    echo -e "${YELLOW}Checking Docker Hub for existing tags...${NC}"
+    EXISTING_TAGS=()
+    for tag in "$version" "$version-jdk21"; do
+        if check_tag_exists "$tag"; then
+            EXISTING_TAGS+=("$tag")
+        fi
+    done
+
+    if [ ${#EXISTING_TAGS[@]} -gt 0 ]; then
+        echo -e "${RED}⚠ The following tag(s) already exist on Docker Hub:${NC}"
+        for tag in "${EXISTING_TAGS[@]}"; do
+            echo -e "${RED}  - rocworks/monstermq:${tag}${NC}"
+        done
+        if [ "$PUBLISH_MODE" = "yes" ]; then
+            echo -e "${YELLOW}-y flag set, proceeding with overwrite${NC}"
+        else
+            read -p "Overwrite existing tag(s)? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${YELLOW}Aborted by user${NC}"
+                exit 0
+            fi
+        fi
+    else
+        echo -e "${GREEN}✓ No conflicting tags on Docker Hub${NC}"
+    fi
+fi
+
 # Build Docker image(s)
 if [ "$SHOULD_PUSH" = true ]; then
     # Multi-arch build + push requires buildx
