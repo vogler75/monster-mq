@@ -27,6 +27,25 @@ enum class Plc4xAddressMode {
 }
 
 /**
+ * MQTT payload format for PLC4X read publishing.
+ * - JSON: publish the current envelope with value, timestamp, device, and address
+ * - VALUE: publish only the transformed value bytes
+ */
+enum class Plc4xPublishFormat {
+    JSON,
+    VALUE;
+
+    companion object {
+        fun fromString(value: String?): Plc4xPublishFormat {
+            return when (value?.uppercase()) {
+                "VALUE", "RAW" -> VALUE
+                else -> JSON
+            }
+        }
+    }
+}
+
+/**
  * Configuration for a PLC4X connection
  *
  * @property protocol The PLC4X protocol to use (e.g., S7, MODBUS_TCP, ADS)
@@ -123,6 +142,7 @@ data class Plc4xConnectionConfig(
  * @property publishOnChange Only publish to MQTT when value changes (avoids duplicate values)
  * @property mode Operating mode (READ, WRITE, or READ_WRITE)
  * @property enabled Whether this address should be polled
+ * @property publishFormat MQTT payload format for read publishing
  */
 data class Plc4xAddress(
     val name: String,
@@ -136,7 +156,8 @@ data class Plc4xAddress(
     val publishOnChange: Boolean = true,
     val mode: Plc4xAddressMode = Plc4xAddressMode.READ,
     val enabled: Boolean = true,
-    val jsonPath: String? = null
+    val jsonPath: String? = null,
+    val publishFormat: Plc4xPublishFormat = Plc4xPublishFormat.JSON
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): Plc4xAddress {
@@ -152,7 +173,8 @@ data class Plc4xAddress(
                 publishOnChange = json.getBoolean("publishOnChange", true),
                 mode = Plc4xAddressMode.fromString(json.getString("mode")),
                 enabled = json.getBoolean("enabled", true),
-                jsonPath = json.getString("jsonPath")
+                jsonPath = json.getString("jsonPath"),
+                publishFormat = Plc4xPublishFormat.fromString(json.getString("publishFormat"))
             )
         }
     }
@@ -167,6 +189,7 @@ data class Plc4xAddress(
             .put("publishOnChange", publishOnChange)
             .put("mode", mode.name)
             .put("enabled", enabled)
+            .put("publishFormat", publishFormat.name)
 
         scalingFactor?.let { json.put("scalingFactor", it) }
         offset?.let { json.put("offset", it) }

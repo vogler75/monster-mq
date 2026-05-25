@@ -1302,6 +1302,8 @@ input Plc4xAddressInput {
     # Optional JSON path for extracting a value from a JSON MQTT payload (dot notation, e.g. "data.value")
     # When set, the MQTT payload is parsed as JSON and the value at this path is used for PLC writes
     jsonPath: String
+    # MQTT payload format for read publishing: JSON envelope or only the transformed value
+    publishFormat: Plc4xPublishFormat = JSON
 }
 
 # Input for creating or updating a PLC4X client

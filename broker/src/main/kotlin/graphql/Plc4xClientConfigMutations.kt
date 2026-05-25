@@ -9,6 +9,7 @@ import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.stores.devices.Plc4xAddress
 import at.rocworks.stores.devices.Plc4xAddressMode
 import at.rocworks.stores.devices.Plc4xConnectionConfig
+import at.rocworks.stores.devices.Plc4xPublishFormat
 import at.rocworks.devices.plc4x.Plc4xExtension
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
@@ -490,6 +491,7 @@ class Plc4xClientConfigMutations(
                 val mode = Plc4xAddressMode.fromString(modeStr)
                 val enabled = inputMap["enabled"] as? Boolean ?: true
                 val jsonPath = inputMap["jsonPath"] as? String
+                val publishFormat = Plc4xPublishFormat.fromString(inputMap["publishFormat"] as? String)
 
                 if (addressName == null || addressStr == null || topic == null) {
                     future.complete(
@@ -514,7 +516,8 @@ class Plc4xClientConfigMutations(
                     publishOnChange = publishOnChange,
                     mode = mode,
                     enabled = enabled,
-                    jsonPath = jsonPath
+                    jsonPath = jsonPath,
+                    publishFormat = publishFormat
                 )
 
                 val validationErrors = address.validate()
@@ -643,6 +646,7 @@ class Plc4xClientConfigMutations(
                 val mode = Plc4xAddressMode.fromString(modeStr)
                 val enabled = inputMap["enabled"] as? Boolean ?: true
                 val jsonPath = inputMap["jsonPath"] as? String
+                val publishFormat = Plc4xPublishFormat.fromString(inputMap["publishFormat"] as? String)
 
                 if (addressName == null || addressStr == null || topic == null) {
                     future.complete(
@@ -667,7 +671,8 @@ class Plc4xClientConfigMutations(
                     publishOnChange = publishOnChange,
                     mode = mode,
                     enabled = enabled,
-                    jsonPath = jsonPath
+                    jsonPath = jsonPath,
+                    publishFormat = publishFormat
                 )
 
                 // Get the existing device
@@ -930,7 +935,8 @@ class Plc4xClientConfigMutations(
                         "publishOnChange" to address.publishOnChange,
                         "mode" to address.mode.name,
                         "enabled" to address.enabled,
-                        "jsonPath" to address.jsonPath
+                        "jsonPath" to address.jsonPath,
+                        "publishFormat" to address.publishFormat.name
                     )
                 }
             ),

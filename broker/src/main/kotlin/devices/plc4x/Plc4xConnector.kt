@@ -499,12 +499,13 @@ class Plc4xConnector : AbstractVerticle() {
             // Convert value to JSON-compatible type (handles PLC4X arrays/collections)
             val jsonCompatibleValue = toJsonCompatible(transformedValue)
 
-            // Create MQTT message payload
-            val payload = JsonObject()
-                .put("value", jsonCompatibleValue)
-                .put("timestamp", Instant.now().toString())
-                .put("device", deviceConfig.name)
-                .put("address", address.name)
+            val payload = Plc4xPayloadFormatter.format(
+                publishFormat = address.publishFormat,
+                value = jsonCompatibleValue,
+                deviceName = deviceConfig.name,
+                addressName = address.name,
+                timestamp = Instant.now().toString()
+            )
 
             // Generate MQTT topic - use configured topic or default namespace/address pattern
             val mqttTopic = if (address.topic.isNotBlank()) {
@@ -517,7 +518,7 @@ class Plc4xConnector : AbstractVerticle() {
             val mqttMessage = BrokerMessage(
                 messageId = 0,
                 topicName = mqttTopic,
-                payload = payload.encode().toByteArray(),
+                payload = payload,
                 qosLevel = address.qos,
                 isRetain = address.retained,
                 isDup = false,

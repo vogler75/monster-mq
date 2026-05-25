@@ -128,7 +128,8 @@ class Plc4xClientConfigQueries(
                         "publishOnChange" to address.publishOnChange,
                         "mode" to address.mode.name,
                         "enabled" to address.enabled,
-                        "jsonPath" to address.jsonPath
+                        "jsonPath" to address.jsonPath,
+                        "publishFormat" to address.publishFormat.name
                     )
                 }
             ),
