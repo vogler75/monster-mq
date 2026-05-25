@@ -272,6 +272,14 @@ class KafkaClientConfigMutations(
         val configMap = input["config"] as? Map<String, Any>
             ?: throw IllegalArgumentException("Invalid or missing 'config' field")
 
+        val inboundEnabled = configMap["inboundEnabled"] as? Boolean ?: true
+        val outboundEnabled = configMap["outboundEnabled"] as? Boolean ?: false
+        val outboundTopicFilters = (configMap["outboundTopicFilters"] as? List<*>)?.map { it.toString() } ?: emptyList()
+        val outboundKafkaTopic = (configMap["outboundKafkaTopic"] as? String)?.takeIf { it.isNotBlank() }
+        val extraProducerConfig = (configMap["extraProducerConfig"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() } ?: emptyMap()
+        val outboundTopicKeyRegex = (configMap["outboundTopicKeyRegex"] as? String)?.takeIf { it.isNotBlank() }
+        val outboundTopicKeyReplacement = configMap["outboundTopicKeyReplacement"] as? String
+
         val kafkaConfig = KafkaClientConfig(
             bootstrapServers = configMap["bootstrapServers"] as? String ?: "localhost:9092",
             groupId = configMap["groupId"] as? String ?: "monstermq-subscriber",
@@ -280,7 +288,14 @@ class KafkaClientConfigMutations(
             reconnectDelayMs = (configMap["reconnectDelayMs"] as? Number)?.toLong() ?: 5000L,
             destinationTopicPrefix = (configMap["destinationTopicPrefix"] as? String)?.takeIf { it.isNotBlank() },
             topicKeyRegex = (configMap["topicKeyRegex"] as? String)?.takeIf { it.isNotBlank() },
-            topicKeyReplacement = configMap["topicKeyReplacement"] as? String
+            topicKeyReplacement = configMap["topicKeyReplacement"] as? String,
+            outboundEnabled = outboundEnabled,
+            outboundTopicFilters = outboundTopicFilters,
+            outboundKafkaTopic = outboundKafkaTopic,
+            extraProducerConfig = extraProducerConfig,
+            inboundEnabled = inboundEnabled,
+            outboundTopicKeyRegex = outboundTopicKeyRegex,
+            outboundTopicKeyReplacement = outboundTopicKeyReplacement
         )
 
         val configJson = JsonObject.mapFrom(kafkaConfig)
@@ -332,7 +347,14 @@ class KafkaClientConfigMutations(
                 "reconnectDelayMs" to config.reconnectDelayMs,
                 "destinationTopicPrefix" to config.destinationTopicPrefix,
                 "topicKeyRegex" to config.topicKeyRegex,
-                "topicKeyReplacement" to config.topicKeyReplacement
+                "topicKeyReplacement" to config.topicKeyReplacement,
+                "inboundEnabled" to config.inboundEnabled,
+                "outboundEnabled" to config.outboundEnabled,
+                "outboundTopicFilters" to config.outboundTopicFilters,
+                "outboundKafkaTopic" to config.outboundKafkaTopic,
+                "extraProducerConfig" to config.extraProducerConfig,
+                "outboundTopicKeyRegex" to config.outboundTopicKeyRegex,
+                "outboundTopicKeyReplacement" to config.outboundTopicKeyReplacement
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

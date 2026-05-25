@@ -70,7 +70,7 @@ class McpHandler(
         val defaultArchiveGroup = getArchiveGroup() ?: return false
         return when (defaultArchiveGroup.getArchiveType()) {
             MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.SQLITE -> true
-            MessageArchiveType.MONGODB, MessageArchiveType.KAFKA, MessageArchiveType.NONE -> false
+            MessageArchiveType.MONGODB, MessageArchiveType.NONE -> false
         }
     }
 
@@ -345,7 +345,7 @@ Lists all available archive groups configured in the MonsterMQ broker. This is a
 **Return Value:**
 A table with the following columns:
 - `name`: The archive group name (use this value in the `archiveGroup` parameter of other tools)
-- `archiveType`: The database backend type (POSTGRES, CRATEDB, MONGODB, SQLITE, KAFKA, or NONE)
+- `archiveType`: The database backend type (POSTGRES, CRATEDB, MONGODB, SQLITE, or NONE)
 - `lastValType`: The last value store type (MEMORY, HAZELCAST, POSTGRES, CRATEDB, MONGODB, SQLITE, or NONE)
 - `topicFilter`: The MQTT topic patterns this group archives (comma-separated)
 
@@ -788,7 +788,7 @@ Retrieves historical MQTT messages for a specific topic within a specified time 
                 )
             )
         // Only register SQL tool if the default archive supports SQL queries (PostgreSQL, CrateDB, SQLite)
-        // MongoDB and Kafka do not support SQL queries
+        // MongoDB does not support SQL queries
         if (defaultArchiveSupportsSql()) {
             registerTool(
                     AsyncTool(

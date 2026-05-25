@@ -7,7 +7,6 @@ import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import at.rocworks.stores.IMessageArchive
 import at.rocworks.stores.IMessageStore
-import at.rocworks.stores.MessageArchiveKafka
 import at.rocworks.stores.MessageArchiveNone
 import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.MessageStoreMemory
@@ -457,7 +456,7 @@ class ArchiveGroup(
                 logger.info("MessageArchive [$archiveName] set to NONE")
                 callback(true)
             }
-            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.MONGODB, MessageArchiveType.KAFKA, MessageArchiveType.SQLITE -> {
+            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.MONGODB, MessageArchiveType.SQLITE -> {
                 createDatabaseMessageArchive(archiveType, archiveName) { success ->
                     callback(success)
                 }
@@ -496,12 +495,6 @@ class ArchiveGroup(
                         mongodb.getString("Database", "monstermq"),
                         payloadFormat
                     )
-                }
-                MessageArchiveType.KAFKA -> {
-                    val kafka = databaseConfig.getJsonObject("Kafka")
-                    val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                    val kafkaConfig = kafka?.getJsonObject("Config")
-                    MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig, payloadFormat)
                 }
                 MessageArchiveType.SQLITE -> {
                     val sqlite = databaseConfig.getJsonObject("SQLite")
@@ -770,12 +763,6 @@ class ArchiveGroup(
                     val sqlite = databaseConfig.getJsonObject("SQLite")
                     if (sqlite == null || sqlite.getString("Path").isNullOrEmpty()) {
                         throw IllegalArgumentException("Archive group '$archiveName' cannot use SQLITE $storeTypeName: SQLite configuration (Path) not found or empty")
-                    }
-                }
-                MessageArchiveType.KAFKA -> {
-                    val kafka = databaseConfig.getJsonObject("Kafka")
-                    if (kafka == null || kafka.getString("Servers").isNullOrEmpty()) {
-                        throw IllegalArgumentException("Archive group '$archiveName' cannot use KAFKA $storeTypeName: Kafka configuration (Servers) not found or empty")
                     }
                 }
                 MessageArchiveType.NONE -> {

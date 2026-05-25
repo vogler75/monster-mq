@@ -9,7 +9,6 @@ import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
-import at.rocworks.stores.MessageArchiveKafka
 import at.rocworks.stores.PayloadFormat
 import io.vertx.core.*
 import io.vertx.core.eventbus.Message
@@ -636,13 +635,6 @@ class ArchiveHandler(
                 val store = MessageArchiveSQLite(name, sqlitePath)
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { promise.complete() }
-                store
-            }
-            MessageArchiveType.KAFKA -> {
-                val kafkaConfig = configJson.getJsonObject("Kafka")?.getJsonObject("Config")
-                val store = MessageArchiveKafka(name, kafkaServers, kafkaConfig, payloadFormat = PayloadFormat.DEFAULT)
-                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-                vertx.deployVerticle(store, options).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
         }

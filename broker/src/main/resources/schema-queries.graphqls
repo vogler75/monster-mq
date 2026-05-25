@@ -905,6 +905,21 @@ type KafkaClientConfig {
     # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
     topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
+
+    # Inbound bridging enabled (consume from Kafka)
+    inboundEnabled: Boolean!
+    # Outbound bridging enabled
+    outboundEnabled: Boolean!
+    # Local MQTT topics to subscribe to
+    outboundTopicFilters: [String!]!
+    # External Kafka topic to write to
+    outboundKafkaTopic: String
+    # Additional arbitrary Kafka producer properties
+    extraProducerConfig: JSON
+    # Regex pattern applied to the MQTT topic name to transform it into a Kafka record key
+    outboundTopicKeyRegex: String
+    # Replacement string used with outboundTopicKeyRegex
+    outboundTopicKeyReplacement: String
 }
 
 type KafkaClientMetrics {

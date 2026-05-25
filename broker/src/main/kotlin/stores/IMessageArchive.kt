@@ -13,7 +13,6 @@ enum class MessageArchiveType {
     POSTGRES,
     CRATEDB,
     MONGODB,
-    KAFKA,
     SQLITE
 }
 

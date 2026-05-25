@@ -16,7 +16,14 @@ data class KafkaClientConfig(
     val reconnectDelayMs: Long = 5000,
     val destinationTopicPrefix: String? = null,
     val topicKeyRegex: String? = null,
-    val topicKeyReplacement: String? = null
+    val topicKeyReplacement: String? = null,
+    val outboundEnabled: Boolean = false,
+    val outboundTopicFilters: List<String> = emptyList(),
+    val outboundKafkaTopic: String? = null,
+    val extraProducerConfig: Map<String, String> = emptyMap(),
+    val inboundEnabled: Boolean = true,
+    val outboundTopicKeyRegex: String? = null,
+    val outboundTopicKeyReplacement: String? = null
 ) {
     companion object {
         fun fromJson(obj: JsonObject): KafkaClientConfig {
@@ -35,6 +42,17 @@ data class KafkaClientConfig(
             }
             val topicKeyRegex = (obj.getString("TopicKeyRegex") ?: obj.getString("topicKeyRegex"))?.takeIf { it.isNotBlank() }
             val topicKeyReplacement = obj.getString("TopicKeyReplacement") ?: obj.getString("topicKeyReplacement")
+            val outboundTopicKeyRegex = (obj.getString("outboundTopicKeyRegex") ?: obj.getString("OutboundTopicKeyRegex"))?.takeIf { it.isNotBlank() }
+            val outboundTopicKeyReplacement = obj.getString("outboundTopicKeyReplacement") ?: obj.getString("OutboundTopicKeyReplacement")
+
+            val inboundEnabled = obj.getBoolean("inboundEnabled") ?: obj.getBoolean("InboundEnabled") ?: true
+            val outboundEnabled = obj.getBoolean("outboundEnabled") ?: obj.getBoolean("OutboundEnabled") ?: false
+            val outboundTopicFilters = obj.getJsonArray("outboundTopicFilters")?.map { it.toString() }
+                ?: obj.getJsonArray("OutboundTopicFilters")?.map { it.toString() }
+                ?: emptyList()
+            val outboundKafkaTopic = (obj.getString("outboundKafkaTopic") ?: obj.getString("OutboundKafkaTopic"))?.takeIf { it.isNotBlank() }
+            val extraProducerConfig = (obj.getJsonObject("extraProducerConfig") ?: obj.getJsonObject("ExtraProducerConfig") ?: JsonObject())
+                .let { ec -> ec.fieldNames().associateWith { k -> ec.getValue(k).toString() } }
 
             return KafkaClientConfig(
                 bootstrapServers = obj.getString("bootstrapServers", "localhost:9092"),
@@ -44,7 +62,14 @@ data class KafkaClientConfig(
                 reconnectDelayMs = obj.getLong("reconnectDelayMs", 5000),
                 destinationTopicPrefix = normalizedPrefix,
                 topicKeyRegex = topicKeyRegex,
-                topicKeyReplacement = topicKeyReplacement
+                topicKeyReplacement = topicKeyReplacement,
+                outboundEnabled = outboundEnabled,
+                outboundTopicFilters = outboundTopicFilters,
+                outboundKafkaTopic = outboundKafkaTopic,
+                extraProducerConfig = extraProducerConfig,
+                inboundEnabled = inboundEnabled,
+                outboundTopicKeyRegex = outboundTopicKeyRegex,
+                outboundTopicKeyReplacement = outboundTopicKeyReplacement
             )
         }
     }
@@ -55,6 +80,11 @@ data class KafkaClientConfig(
         if (destinationTopicPrefix != null) {
             if (destinationTopicPrefix.contains('+') || destinationTopicPrefix.contains('#')) {
                 errors.add("destinationTopicPrefix must not contain MQTT wildcards + or #")
+            }
+        }
+        if (outboundEnabled) {
+            if (outboundTopicFilters.isEmpty()) {
+                errors.add("outboundTopicFilters must not be empty when outbound is enabled")
             }
         }
         return errors

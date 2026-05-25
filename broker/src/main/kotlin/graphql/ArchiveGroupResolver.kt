@@ -1311,12 +1311,6 @@ class ArchiveGroupResolver(
                     mongodb.getString("Database", "monstermq")
                 )
             }
-            MessageArchiveType.KAFKA -> {
-                val kafka = databaseConfig.getJsonObject("Kafka")
-                val bootstrapServers = kafka?.getString("Servers") ?: "localhost:9092"
-                val kafkaConfig = kafka?.getJsonObject("Config")
-                MessageArchiveKafka(archiveName, bootstrapServers, kafkaConfig)
-            }
             MessageArchiveType.SQLITE -> {
                 val sqlite = databaseConfig.getJsonObject("SQLite")
                 val dbPath = "${sqlite.getString("Path", Const.SQLITE_DEFAULT_PATH)}/monstermq-${archiveName}-archive.db"

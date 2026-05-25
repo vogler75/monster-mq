@@ -1002,7 +1002,6 @@ class I3xServer(
 
         val writable = archives.filter {
             it.archiveStore != null &&
-                it.archiveStore!!.getType() != at.rocworks.stores.MessageArchiveType.KAFKA &&
                 it.archiveStore!!.getType() != at.rocworks.stores.MessageArchiveType.NONE
         }
 

@@ -118,7 +118,14 @@ class KafkaClientConfigQueries(
                 "reconnectDelayMs" to config.reconnectDelayMs,
                 "destinationTopicPrefix" to config.destinationTopicPrefix,
                 "topicKeyRegex" to config.topicKeyRegex,
-                "topicKeyReplacement" to config.topicKeyReplacement
+                "topicKeyReplacement" to config.topicKeyReplacement,
+                "inboundEnabled" to config.inboundEnabled,
+                "outboundEnabled" to config.outboundEnabled,
+                "outboundTopicFilters" to config.outboundTopicFilters,
+                "outboundKafkaTopic" to config.outboundKafkaTopic,
+                "extraProducerConfig" to config.extraProducerConfig,
+                "outboundTopicKeyRegex" to config.outboundTopicKeyRegex,
+                "outboundTopicKeyReplacement" to config.outboundTopicKeyReplacement
             ),
             "enabled" to device.enabled,
             "createdAt" to device.createdAt.toString(),

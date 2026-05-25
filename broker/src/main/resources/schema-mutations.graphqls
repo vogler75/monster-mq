@@ -920,6 +920,14 @@ input KafkaClientConfigInput {
     # Replacement string used with topicKeyRegex (e.g. "/" to convert dots to slashes)
     topicKeyReplacement: String
     # NOTE: Kafka topic is now derived from the device namespace
+
+    inboundEnabled: Boolean = true
+    outboundEnabled: Boolean = false
+    outboundTopicFilters: [String!] = []
+    outboundKafkaTopic: String
+    extraProducerConfig: JSON
+    outboundTopicKeyRegex: String
+    outboundTopicKeyReplacement: String
 }
 
 input KafkaClientInput {

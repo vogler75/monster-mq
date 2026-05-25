@@ -4,15 +4,22 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.KafkaClientConfig
 import at.rocworks.stores.devices.PayloadFormat
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.JsonObject
 import io.vertx.kafka.client.consumer.KafkaConsumer
+import io.vertx.kafka.client.producer.KafkaProducer
+import io.vertx.kafka.client.producer.KafkaProducerRecord
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.kafka.common.serialization.ByteArraySerializer
 import org.apache.kafka.common.serialization.StringDeserializer
+import org.apache.kafka.common.serialization.StringSerializer
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Level
@@ -21,11 +28,16 @@ import java.util.logging.Logger
 /**
  * KafkaClientConnector
  *
+ * Per-device bidirectional bridge between the local MQTT broker and a Kafka cluster.
+ *
+ * Inbound (Kafka → MQTT):
  * Consumes records from a Kafka topic and republishes them to the local MQTT broker.
- * Supports four payload formats:
- * - DEFAULT / JSON: expect internal encoded MqttMessage in record value (not implemented yet, placeholder)
- * - BINARY: raw value bytes -> MQTT payload, MQTT topic = record key (drop if key null)
- * - TEXT: UTF-8 value text -> MQTT payload bytes, MQTT topic = record key (drop if key null)
+ * Topic is derived from device.namespace.
+ * Supports four payload formats (DEFAULT, JSON, BINARY, TEXT).
+ *
+ * Outbound (MQTT → Kafka):
+ * Subscribes to local MQTT topic filters and publishes/writes them to an external Kafka topic.
+ * Dest Kafka topic defaults to device.namespace but can be overridden.
  */
 class KafkaClientConnector : AbstractVerticle() {
     private val logger: Logger = Utils.getLogger(this::class.java)
@@ -35,13 +47,18 @@ class KafkaClientConnector : AbstractVerticle() {
 
     // Metrics
     private val messagesIn = AtomicLong(0)
+    private val messagesOut = AtomicLong(0)
     private val messagesDropped = AtomicLong(0)
     private val errors = AtomicLong(0)
     private var lastRecordTs: Long = 0
     private var lastMetricsResetTime: Long = System.currentTimeMillis()
     private var lastMessagesInSnapshot: Long = 0
+    private var lastMessagesOutSnapshot: Long = 0
 
     private var kafkaConsumer: KafkaConsumer<String, Any>? = null
+    private var kafkaProducer: KafkaProducer<String, Any>? = null
+
+    private val internalClientId get() = "kafkaclient-${device.name}"
 
     override fun start(startPromise: Promise<Void>) {
         try {
@@ -57,9 +74,17 @@ class KafkaClientConnector : AbstractVerticle() {
             }
 
             val kafkaTopic = device.namespace // Derive Kafka topic from device namespace
-            logger.info("Starting KafkaClientConnector for device ${device.name} topic='${kafkaTopic}' format='${cfg.payloadFormat}'")
+            logger.info("Starting KafkaClientConnector for device ${device.name} topic='${kafkaTopic}' format='${cfg.payloadFormat}' inboundEnabled=${cfg.inboundEnabled} outboundEnabled=${cfg.outboundEnabled}")
 
-            setupKafkaConsumer()
+            if (cfg.inboundEnabled) {
+                setupKafkaConsumer()
+            }
+
+            if (cfg.outboundEnabled) {
+                setupKafkaProducer()
+                setupOutboundSubscriptions()
+            }
+
             setupMetricsEndpoint()
 
             startPromise.complete()
@@ -71,7 +96,23 @@ class KafkaClientConnector : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         try {
-            kafkaConsumer?.close()?.onComplete { stopPromise.complete() } ?: stopPromise.complete()
+            val futures = mutableListOf<Future<*>>()
+            kafkaConsumer?.let { futures.add(it.close()) }
+            kafkaProducer?.let { futures.add(it.close()) }
+
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null && cfg.outboundEnabled) {
+                cfg.outboundTopicFilters.forEach { filter ->
+                    sessionHandler.unsubscribeInternalClient(internalClientId, filter)
+                }
+                sessionHandler.unregisterInternalClient(internalClientId)
+            }
+
+            if (futures.isEmpty()) {
+                stopPromise.complete()
+            } else {
+                Future.all<Any>(futures).onComplete { stopPromise.complete() }
+            }
         } catch (_: Exception) {
             stopPromise.complete()
         }
@@ -127,13 +168,13 @@ class KafkaClientConnector : AbstractVerticle() {
                                 is ByteArray -> {
                                     // Decode using BrokerMessageCodec
                                     try {
-                                        val buffer = io.vertx.core.buffer.Buffer.buffer(value)
-                                        val decoded = at.rocworks.data.BrokerMessageCodec().decodeFromWire(0, buffer)
+                                        val buffer = Buffer.buffer(value)
+                                        val decoded = BrokerMessageCodec().decodeFromWire(0, buffer)
                                         publishDecoded(decoded)
                                     } catch (e: Exception) {
                                         logger.log(Level.WARNING, "Failed to decode binary data from topic '${device.namespace}' as BrokerMessageCodec format: ${e.message} — check the payloadFormat setting (current: ${cfg.payloadFormat}). Trying JSON fallback...")
                                         try {
-                                            val json = io.vertx.core.json.JsonObject(String(value, Charsets.UTF_8))
+                                            val json = JsonObject(String(value, Charsets.UTF_8))
                                             val topic = json.getString("topicName") ?: json.getString("topic") ?: run { messagesDropped.incrementAndGet(); return@handler }
                                             val payloadBase64 = json.getString("payloadBase64")
                                             val payloadText = json.getString("payload")
@@ -142,7 +183,7 @@ class KafkaClientConnector : AbstractVerticle() {
                                                 payloadText != null -> payloadText.toByteArray(Charsets.UTF_8)
                                                 else -> ByteArray(0)
                                             }
-                                            val decoded = at.rocworks.data.BrokerMessage(
+                                            val decoded = BrokerMessage(
                                                 messageUuid = json.getString("messageUuid") ?: Utils.getUuid(),
                                                 messageId = json.getInteger("messageId", 0),
                                                 topicName = topic,
@@ -152,7 +193,7 @@ class KafkaClientConnector : AbstractVerticle() {
                                                 isDup = json.getBoolean("isDup", false),
                                                 isQueued = json.getBoolean("isQueued", false),
                                                 clientId = json.getString("clientId") ?: "kafkaclient-${device.name}",
-                                                time = try { java.time.Instant.parse(json.getString("time")) } catch (_: Exception) { java.time.Instant.now() }
+                                                time = try { Instant.parse(json.getString("time")) } catch (_: Exception) { Instant.now() }
                                             )
                                             publishDecoded(decoded)
                                         } catch (e2: Exception) {
@@ -163,7 +204,7 @@ class KafkaClientConnector : AbstractVerticle() {
                                 }
                                 is String -> {
                                     // Treat as JSON serialized BrokerMessage
-                                    val json = io.vertx.core.json.JsonObject(value)
+                                    val json = JsonObject(value)
                                     val topic = json.getString("topicName") ?: json.getString("topic") ?: run { messagesDropped.incrementAndGet(); return@handler }
                                     val payloadBase64 = json.getString("payloadBase64")
                                     val payloadText = json.getString("payload")
@@ -172,7 +213,7 @@ class KafkaClientConnector : AbstractVerticle() {
                                         payloadText != null -> payloadText.toByteArray(Charsets.UTF_8)
                                         else -> ByteArray(0)
                                     }
-                                    val decoded = at.rocworks.data.BrokerMessage(
+                                    val decoded = BrokerMessage(
                                         messageUuid = json.getString("messageUuid") ?: Utils.getUuid(),
                                         messageId = json.getInteger("messageId", 0),
                                         topicName = topic,
@@ -182,7 +223,7 @@ class KafkaClientConnector : AbstractVerticle() {
                                         isDup = json.getBoolean("isDup", false),
                                         isQueued = json.getBoolean("isQueued", false),
                                         clientId = json.getString("clientId") ?: "kafkaclient-${device.name}",
-                                        time = try { java.time.Instant.parse(json.getString("time")) } catch (_: Exception) { java.time.Instant.now() }
+                                        time = try { Instant.parse(json.getString("time")) } catch (_: Exception) { Instant.now() }
                                     )
                                     publishDecoded(decoded)
                                 }
@@ -219,6 +260,118 @@ class KafkaClientConnector : AbstractVerticle() {
             } else {
                 logger.severe("Failed to subscribe to $kafkaTopic: ${ar.cause().message}")
             }
+        }
+    }
+
+    private fun setupKafkaProducer() {
+        val producerConfig = mutableMapOf<String, String>()
+        producerConfig["bootstrap.servers"] = cfg.bootstrapServers
+        producerConfig["client.id"] = "kafkaclient-producer-${device.name}"
+        producerConfig["key.serializer"] = StringSerializer::class.java.name
+
+        // Value serializer based on payload format
+        val useStringValue = cfg.payloadFormat == PayloadFormat.TEXT || cfg.payloadFormat == PayloadFormat.JSON
+        producerConfig["value.serializer"] = if (useStringValue) StringSerializer::class.java.name else ByteArraySerializer::class.java.name
+
+        // Merge extra config (override defaults)
+        producerConfig.putAll(cfg.extraProducerConfig)
+
+        kafkaProducer = KafkaProducer.create(vertx, producerConfig)
+
+        kafkaProducer!!.exceptionHandler { ex ->
+            errors.incrementAndGet()
+            logger.log(Level.WARNING, "Kafka producer error for device ${device.name}: ${ex.message}", ex)
+        }
+    }
+
+    private fun setupOutboundSubscriptions() {
+        if (cfg.outboundTopicFilters.isEmpty()) return
+
+        // Consume local MQTT messages via EventBus
+        vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(internalClientId)) { busMsg ->
+            try {
+                when (val body = busMsg.body()) {
+                    is BrokerMessage -> handleOutboundMessage(body)
+                    is at.rocworks.data.BulkClientMessage -> body.messages.forEach { handleOutboundMessage(it) }
+                    else -> logger.warning("Unknown message type from EventBus: ${body?.javaClass?.simpleName}")
+                }
+            } catch (e: Exception) {
+                errors.incrementAndGet()
+                logger.warning("Error processing outbound message for '${device.name}': ${e.message}")
+            }
+        }
+
+        // Register internal subscriptions with the broker session handler
+        val sessionHandler = Monster.getSessionHandler()
+        if (sessionHandler != null) {
+            cfg.outboundTopicFilters.forEach { filter ->
+                logger.info("Internal MQTT subscription for outbound Kafka bridge '$internalClientId' -> topic '$filter'")
+                sessionHandler.subscribeInternalClient(internalClientId, filter, 0)
+            }
+        } else {
+            logger.severe("SessionHandler not available for outbound Kafka subscriptions")
+        }
+    }
+
+    private fun applyOutboundTopicKeyRegex(key: String): String {
+        val pattern = cfg.outboundTopicKeyRegex ?: return key
+        val replacement = cfg.outboundTopicKeyReplacement ?: return key
+        return Regex(pattern).replace(key, replacement)
+    }
+
+    private fun handleOutboundMessage(msg: BrokerMessage) {
+        logger.finer { "Outbound message for '${device.name}': topic='${msg.topicName}' sender='${msg.senderId}' client='${msg.clientId}'" }
+
+        // Loop prevention: skip messages we published ourselves
+        if (msg.senderId == internalClientId || msg.clientId == internalClientId) return
+
+        val producer = kafkaProducer ?: return
+        val destTopic = cfg.outboundKafkaTopic?.takeIf { it.isNotBlank() } ?: device.namespace
+        val recordKey = applyOutboundTopicKeyRegex(msg.topicName)
+
+        try {
+            when (cfg.payloadFormat) {
+                PayloadFormat.DEFAULT -> {
+                    // Encode entire BrokerMessage using BrokerMessageCodec
+                    val codec = BrokerMessageCodec()
+                    val buffer = Buffer.buffer()
+                    codec.encodeToWire(buffer, msg)
+                    val record = KafkaProducerRecord.create<String, Any>(destTopic, recordKey, buffer.bytes)
+                    producer.send(record)
+                }
+                PayloadFormat.JSON -> {
+                    // Serialize BrokerMessage to JSON
+                    val json = JsonObject()
+                        .put("messageUuid", msg.messageUuid)
+                        .put("messageId", msg.messageId)
+                        .put("topic", msg.topicName)
+                        .put("payloadBase64", java.util.Base64.getEncoder().encodeToString(msg.payload))
+                        .put("qosLevel", msg.qosLevel)
+                        .put("isRetain", msg.isRetain)
+                        .put("isDup", msg.isDup)
+                        .put("isQueued", msg.isQueued)
+                        .put("clientId", msg.clientId)
+                        .put("time", msg.time.toString())
+                    val record = KafkaProducerRecord.create<String, Any>(destTopic, recordKey, json.encode())
+                    producer.send(record)
+                }
+                PayloadFormat.BINARY -> {
+                    // Raw payload bytes -> Kafka record value
+                    val record = KafkaProducerRecord.create<String, Any>(destTopic, recordKey, msg.payload)
+                    producer.send(record)
+                }
+                PayloadFormat.TEXT -> {
+                    // Plain string -> Kafka record value
+                    val text = String(msg.payload, Charsets.UTF_8)
+                    val record = KafkaProducerRecord.create<String, Any>(destTopic, recordKey, text)
+                    producer.send(record)
+                }
+            }
+            messagesOut.incrementAndGet()
+            lastRecordTs = System.currentTimeMillis()
+        } catch (e: Exception) {
+            errors.incrementAndGet()
+            logger.log(Level.WARNING, "Failed to publish outbound message to Kafka for device ${device.name}: ${e.message}", e)
         }
     }
 
@@ -294,14 +447,17 @@ class KafkaClientConnector : AbstractVerticle() {
             try {
                 val now = System.currentTimeMillis()
                 val totalIn = messagesIn.get()
+                val totalOut = messagesOut.get()
                 val deltaIn = totalIn - lastMessagesInSnapshot
+                val deltaOut = totalOut - lastMessagesOutSnapshot
                 val elapsedSec = (now - lastMetricsResetTime) / 1000.0
                 val inRate = if (elapsedSec > 0) deltaIn / elapsedSec else 0.0
-                val outRate = 0.0 // Currently no outbound path implemented
+                val outRate = if (elapsedSec > 0) deltaOut / elapsedSec else 0.0
                 val obj = JsonObject()
                     .put("device", device.name)
                     // Cumulative counters (backward compatibility / diagnostics)
                     .put("messagesIn", totalIn)
+                    .put("messagesOut", totalOut)
                     .put("messagesDropped", messagesDropped.get())
                     .put("errors", errors.get())
                     .put("lastRecordTs", lastRecordTs)
@@ -313,6 +469,7 @@ class KafkaClientConnector : AbstractVerticle() {
                 msg.reply(obj)
                 // Reset snapshot each metrics call
                 lastMessagesInSnapshot = totalIn
+                lastMessagesOutSnapshot = totalOut
                 lastMetricsResetTime = now
             } catch (e: Exception) {
                 msg.fail(500, e.message)
