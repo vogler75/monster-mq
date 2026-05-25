@@ -1,0 +1,8 @@
+Release v1.8.20
+Built from commit: 9757344f
+Date: 2026-05-25 13:09:29
+
+Changes since v1.8.19:
+---
+9757344f Add agent tag visibility and filtering
+1526cf3c Add PLC4X raw value publish format
