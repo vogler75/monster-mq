@@ -1,0 +1,9 @@
+Release v1.8.18
+Built from commit: 1a68044a
+Date: 2026-05-25 08:46:22
+
+Changes since v1.8.17:
+---
+1a68044a Dockerfile changes for SIEMENS Edge App
+5e91d87b Support '*' wildcard in node assignment
+60f66be8 Fix PlcValue JSON serialization crash in PLC4X connector
