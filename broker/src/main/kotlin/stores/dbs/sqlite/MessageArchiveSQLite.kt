@@ -421,6 +421,58 @@ class MessageArchiveSQLite(
         }
     }
 
+    override fun getArchiveStats(startTime: java.time.Instant?, endTime: java.time.Instant?): JsonObject {
+        val stats = JsonObject().put("minTimestamp", null as String?).put("dailyCounts", JsonArray())
+        try {
+            val connection = DriverManager.getConnection("jdbc:sqlite:$dbPath", "", "")
+            connection.use { conn ->
+                // 1. Get min timestamp
+                var minTimestampStr: String? = null
+                var minSql = "SELECT MIN(time) FROM $tableName WHERE 1=1"
+                if (startTime != null) minSql += " AND time >= ?"
+                if (endTime != null) minSql += " AND time <= ?"
+                
+                conn.prepareStatement(minSql).use { stmt ->
+                    var idx = 1
+                    if (startTime != null) stmt.setString(idx++, startTime.toString())
+                    if (endTime != null) stmt.setString(idx++, endTime.toString())
+                    
+                    val rs = stmt.executeQuery()
+                    if (rs.next()) {
+                        minTimestampStr = rs.getString(1)
+                    }
+                }
+                stats.put("minTimestamp", minTimestampStr)
+
+                // 2. Get daily counts
+                val dailyCounts = JsonArray()
+                var countsSql = "SELECT substr(time, 1, 10) AS day, COUNT(*) AS count FROM $tableName WHERE 1=1"
+                if (startTime != null) countsSql += " AND time >= ?"
+                if (endTime != null) countsSql += " AND time <= ?"
+                countsSql += " GROUP BY 1 ORDER BY 1 ASC"
+
+                conn.prepareStatement(countsSql).use { stmt ->
+                    var idx = 1
+                    if (startTime != null) stmt.setString(idx++, startTime.toString())
+                    if (endTime != null) stmt.setString(idx++, endTime.toString())
+
+                    val rs = stmt.executeQuery()
+                    while (rs.next()) {
+                        val dayStr = rs.getString("day") ?: ""
+                        val count = rs.getLong("count")
+                        if (dayStr.isNotEmpty()) {
+                            dailyCounts.add(JsonObject().put("date", dayStr).put("count", count))
+                        }
+                    }
+                }
+                stats.put("dailyCounts", dailyCounts)
+            }
+        } catch (e: Exception) {
+            logger.severe("Error getting SQLite archive stats: ${e.message}")
+        }
+        return stats
+    }
+
     override fun dropStorage(): Boolean {
         return try {
             val sql = "DROP TABLE IF EXISTS $tableName"

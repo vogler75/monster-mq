@@ -479,6 +479,7 @@ class GraphQLServer(
                     .dataFetcher("systemLogs", queryResolver.systemLogs())
                     .dataFetcher("searchTopics", queryResolver.searchTopics())
                     .dataFetcher("browseTopics", queryResolver.browseTopics())
+                    .dataFetcher("archiveStats", queryResolver.archiveStats())
                     // Device config queries
                     .dataFetcher("getDevices", queryResolver.getDevices())
                     // Metrics queries

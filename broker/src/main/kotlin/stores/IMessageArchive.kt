@@ -94,4 +94,21 @@ interface IMessageArchiveExtended: IMessageArchive {
             .put("columns", JsonArray().add("timestamp"))
             .put("rows", JsonArray())
     }
+
+    /**
+     * Get statistics for this archive, including the minimum timestamp and count of values per day.
+     * Performs database-level aggregation for efficiency.
+     *
+     * @return JsonObject containing:
+     *   - "minTimestamp": Earliest recorded message time (ISO-8601 String) or null if empty
+     *   - "dailyCounts": JsonArray of JsonObjects with "date" (YYYY-MM-DD) and "count" (Long)
+     */
+    fun getArchiveStats(
+        startTime: java.time.Instant? = null,
+        endTime: java.time.Instant? = null
+    ): JsonObject {
+        return JsonObject()
+            .put("minTimestamp", null as String?)
+            .put("dailyCounts", JsonArray())
+    }
 }

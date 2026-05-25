@@ -445,6 +445,59 @@ class MessageArchivePostgres (
         return result
     }
 
+    override fun getArchiveStats(startTime: java.time.Instant?, endTime: java.time.Instant?): JsonObject {
+        val stats = JsonObject().put("minTimestamp", null as String?).put("dailyCounts", JsonArray())
+        db.connection?.let { connection ->
+            try {
+                // 1. Get min timestamp
+                var minTimestampStr: String? = null
+                var minSql = "SELECT MIN(time) FROM ${tableName} WHERE 1=1"
+                if (startTime != null) minSql += " AND time >= ?"
+                if (endTime != null) minSql += " AND time <= ?"
+                
+                connection.prepareStatement(minSql).use { stmt ->
+                    var idx = 1
+                    if (startTime != null) stmt.setTimestamp(idx++, java.sql.Timestamp.from(startTime))
+                    if (endTime != null) stmt.setTimestamp(idx++, java.sql.Timestamp.from(endTime))
+                    
+                    val rs = stmt.executeQuery()
+                    if (rs.next()) {
+                        val minTs = rs.getTimestamp(1)
+                        if (minTs != null) {
+                            minTimestampStr = minTs.toInstant().toString()
+                        }
+                    }
+                }
+                stats.put("minTimestamp", minTimestampStr)
+
+                // 2. Get daily counts
+                val dailyCounts = JsonArray()
+                var countsSql = "SELECT DATE_TRUNC('day', time) AS day, COUNT(*) AS count FROM ${tableName} WHERE 1=1"
+                if (startTime != null) countsSql += " AND time >= ?"
+                if (endTime != null) countsSql += " AND time <= ?"
+                countsSql += " GROUP BY 1 ORDER BY 1 ASC"
+
+                connection.prepareStatement(countsSql).use { stmt ->
+                    var idx = 1
+                    if (startTime != null) stmt.setTimestamp(idx++, java.sql.Timestamp.from(startTime))
+                    if (endTime != null) stmt.setTimestamp(idx++, java.sql.Timestamp.from(endTime))
+
+                    val rs = stmt.executeQuery()
+                    while (rs.next()) {
+                        val dayTs = rs.getTimestamp("day")
+                        val dayStr = if (dayTs != null) dayTs.toLocalDateTime().toLocalDate().toString() else ""
+                        val count = rs.getLong("count")
+                        dailyCounts.add(JsonObject().put("date", dayStr).put("count", count))
+                    }
+                }
+                stats.put("dailyCounts", dailyCounts)
+            } catch (e: SQLException) {
+                logger.severe("Error getting Postgres archive stats: ${e.message}")
+            }
+        }
+        return stats
+    }
+
     override suspend fun createTable(): Boolean {
         return try {
             db.connection?.let { connection ->

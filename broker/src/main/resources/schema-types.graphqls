@@ -295,3 +295,17 @@ type MqttSubscription {
     # MQTT v5: Retain As Published option (preserve retain flag)
     retainAsPublished: Boolean
 }
+
+type ArchiveStats {
+    # The earliest recorded timestamp in ISO-8601 format, or null if archive is empty
+    minTimestamp: String
+    # Historical message counts aggregated per calendar day
+    dailyCounts: [DailyCount!]!
+}
+
+type DailyCount {
+    # The date in YYYY-MM-DD format
+    date: String!
+    # Number of archived values on this date
+    count: Long!
+}

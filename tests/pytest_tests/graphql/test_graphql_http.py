@@ -282,3 +282,75 @@ def test_current_value_and_archive_queries_are_well_formed(auth_headers):
 
     archived = result["data"]["archivedMessages"]
     assert isinstance(archived, list)
+
+
+def test_archive_stats_queries_are_well_formed(auth_headers):
+    result = _graphql(
+        """
+        query GetArchiveStats($archiveGroup: String!) {
+            archiveStats(archiveGroup: $archiveGroup) {
+                minTimestamp
+                dailyCounts {
+                    date
+                    count
+                }
+            }
+        }
+        """,
+        {"archiveGroup": "Default"},
+        headers=auth_headers,
+        allow_errors=True,
+    )
+
+    assert "data" in result
+    if "errors" in result:
+        messages = " ".join(error.get("message", "") for error in result["errors"])
+        # If stats/archiving is disabled or not configured, it's allowed to return an error, otherwise it must succeed.
+        assert "archive" in messages.lower() or "not configured" in messages.lower()
+        return
+
+    stats = result["data"]["archiveStats"]
+    if stats is not None:
+        assert "minTimestamp" in stats
+        assert "dailyCounts" in stats
+        assert isinstance(stats["dailyCounts"], list)
+        for entry in stats["dailyCounts"]:
+            assert "date" in entry
+            assert "count" in entry
+            assert isinstance(entry["date"], str)
+            assert isinstance(entry["count"], int)
+
+
+def test_archive_stats_range_filtering(auth_headers):
+    result = _graphql(
+        """
+        query GetArchiveStats($archiveGroup: String!, $startTime: String, $endTime: String) {
+            archiveStats(archiveGroup: $archiveGroup, startTime: $startTime, endTime: $endTime) {
+                minTimestamp
+                dailyCounts {
+                    date
+                    count
+                }
+            }
+        }
+        """,
+        {
+            "archiveGroup": "Default",
+            "startTime": "2050-01-01T00:00:00Z",
+            "endTime": "2050-01-07T23:59:59Z"
+        },
+        headers=auth_headers,
+        allow_errors=True,
+    )
+
+    assert "data" in result
+    if "errors" in result:
+        messages = " ".join(error.get("message", "") for error in result["errors"])
+        assert "archive" in messages.lower() or "not configured" in messages.lower()
+        return
+
+    stats = result["data"]["archiveStats"]
+    if stats is not None:
+        assert stats["minTimestamp"] is None
+        assert len(stats["dailyCounts"]) == 0
+

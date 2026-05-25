@@ -218,6 +218,16 @@ type Query {
         name: String!
     ): ArchiveGroupInfo
 
+    # Fetch statistics for a specific archive group, including value counts per day and the min timestamp
+    archiveStats(
+        # Name of the ArchiveGroup to query
+        archiveGroup: String!
+        # Optional start time in ISO-8601 format
+        startTime: String
+        # Optional end time in ISO-8601 format
+        endTime: String
+    ): ArchiveStats
+
     databaseConnections(
         type: DatabaseConnectionType
     ): [DatabaseConnectionInfo!]!

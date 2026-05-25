@@ -887,6 +887,70 @@ class QueryResolver(
         }
     }
 
+    fun archiveStats(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>?>()
+            val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+            val startTimeStr = env.getArgument<String?>("startTime")
+            val endTimeStr = env.getArgument<String?>("endTime")
+
+            val startTime = startTimeStr?.let {
+                try {
+                    Instant.parse(it)
+                } catch (e: DateTimeParseException) {
+                    logger.warning("Invalid startTime format: $it, expected ISO-8601")
+                    future.completeExceptionally(IllegalArgumentException("Invalid startTime format: expected ISO-8601"))
+                    return@DataFetcher future
+                }
+            }
+
+            val endTime = endTimeStr?.let {
+                try {
+                    Instant.parse(it)
+                } catch (e: DateTimeParseException) {
+                    logger.warning("Invalid endTime format: $it, expected ISO-8601")
+                    future.completeExceptionally(IllegalArgumentException("Invalid endTime format: expected ISO-8601"))
+                    return@DataFetcher future
+                }
+            }
+
+            // Get archive store
+            val archiveStore = getCurrentArchiveGroups()[archiveGroupName]?.archiveStore as? IMessageArchiveExtended
+            if (archiveStore == null) {
+                logger.warning("No extended archive store configured for archive group '$archiveGroupName'")
+                future.complete(mapOf(
+                    "minTimestamp" to null,
+                    "dailyCounts" to emptyList<Map<String, Any>>()
+                ))
+                return@DataFetcher future
+            }
+
+            // Execute database query on worker thread to avoid blocking the event loop
+            vertx.executeBlocking<JsonObject>(Callable {
+                archiveStore.getArchiveStats(startTime, endTime)
+            }).onSuccess { result: JsonObject ->
+                val minTimestamp = result.getString("minTimestamp")
+                val dailyCountsArray = result.getJsonArray("dailyCounts") ?: io.vertx.core.json.JsonArray()
+                val dailyCounts = (0 until dailyCountsArray.size()).map { i ->
+                    val obj = dailyCountsArray.getJsonObject(i)
+                    mapOf(
+                        "date" to (obj.getString("date") ?: ""),
+                        "count" to (obj.getLong("count") ?: 0L)
+                    )
+                }
+                future.complete(mapOf(
+                    "minTimestamp" to minTimestamp,
+                    "dailyCounts" to dailyCounts
+                ))
+            }.onFailure {
+                logger.severe("Error fetching archive stats: ${it.message}")
+                future.completeExceptionally(GraphQLException("Error fetching archive stats: ${it.message}"))
+            }
+
+            future
+        }
+    }
+
     fun getDevices(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()

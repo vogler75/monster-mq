@@ -604,6 +604,54 @@ class MessageArchiveMongoDB(
         return if (isConnected) collection else null
     }
 
+    override fun getArchiveStats(startTime: java.time.Instant?, endTime: java.time.Instant?): JsonObject {
+        val stats = JsonObject().put("minTimestamp", null as String?).put("dailyCounts", JsonArray())
+        val activeCollection = getActiveCollection() ?: return stats
+        
+        try {
+            // Build range filter
+            val filter = Document()
+            if (startTime != null || endTime != null) {
+                val timeRange = Document()
+                if (startTime != null) timeRange["${'$'}gte"] = java.util.Date.from(startTime)
+                if (endTime != null) timeRange["${'$'}lte"] = java.util.Date.from(endTime)
+                filter["time"] = timeRange
+            }
+
+            // 1. Get min timestamp
+            val minDoc = activeCollection.find(filter).sort(Sorts.ascending("time")).limit(1).first()
+            val minTimestampStr = minDoc?.getDate("time")?.toInstant()?.toString()
+            stats.put("minTimestamp", minTimestampStr)
+
+            // 2. Get daily counts
+            val dailyCounts = JsonArray()
+            val pipeline = mutableListOf<Document>()
+            if (startTime != null || endTime != null) {
+                pipeline.add(Document("${'$'}match", Document("time", filter["time"])))
+            }
+            pipeline.add(Document("${'$'}group", Document(mapOf(
+                "_id" to Document("${'$'}dateToString", Document(mapOf(
+                    "format" to "%Y-%m-%d",
+                    "date" to "${'$'}time"
+                ))),
+                "count" to Document("${'$'}sum", 1)
+            ))))
+            pipeline.add(Document("${'$'}sort", Document("_id", 1)))
+            
+            activeCollection.aggregate(pipeline).forEach { doc ->
+                val dayStr = doc.getString("_id") ?: ""
+                val count = doc.getInteger("count")?.toLong() ?: 0L
+                if (dayStr.isNotEmpty()) {
+                    dailyCounts.add(JsonObject().put("date", dayStr).put("count", count))
+                }
+            }
+            stats.put("dailyCounts", dailyCounts)
+        } catch (e: Exception) {
+            logger.severe("Error getting MongoDB archive stats: ${e.message}")
+        }
+        return stats
+    }
+
     override fun purgeOldMessages(olderThan: Instant): PurgeResult {
         val startTime = System.currentTimeMillis()
         var deletedCount = 0
