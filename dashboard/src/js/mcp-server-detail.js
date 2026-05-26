@@ -160,6 +160,12 @@ class McpServerDetailManager {
             this.showError('Server name is required');
             return;
         }
+
+        const nameError = window.validateNameInput(data.name, 'Server');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
         if (!data.url) {
             this.showError('Server URL is required');
             return;

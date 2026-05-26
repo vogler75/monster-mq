@@ -213,6 +213,12 @@ class Neo4jClientDetailManager {
 
         const input = this.collectFormData();
 
+        const nameError = window.validateNameInput(input.name, 'Client');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `

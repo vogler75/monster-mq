@@ -489,13 +489,18 @@ const FlowEdit = (() => {
     const namespace = qs('#fc-namespace').value.trim();
     const version = qs('#fc-version').value.trim()||'1.0.0';
     if(!name || !namespace){ notify('Name & namespace required','error'); return; }
+    const isUpdate = !!state.name && state.name===name;
+    const nameError = window.validateNameInput(name, 'Workflow class');
+    if (!isUpdate && nameError) {
+      notify(nameError, 'error');
+      return;
+    }
     const input = {
       name, namespace, version,
       description: qs('#fc-description').value.trim()||null,
       nodes: state.nodes.map(n=>({ id:n.id, type:n.type, name:n.name, config:{ script:n.config.script }, inputs:n.inputs, outputs:n.outputs, language:n.language, position: n.position })),
       connections: state.connections.map(c=>({ fromNode:c.fromNode, fromOutput:c.fromOutput, toNode:c.toNode, toInput:c.toInput }))
     };
-    const isUpdate = !!state.name && state.name===name;
     const mutation = isUpdate ? `mutation($name:String!,$input:FlowClassInput!){ flow { updateClass(name:$name,input:$input){ name } } }` : `mutation($input:FlowClassInput!){ flow { createClass(input:$input){ name } } }`;
     const vars = isUpdate? { name, input } : { input };
     await graphql(mutation, vars);
@@ -510,13 +515,18 @@ const FlowEdit = (() => {
     const flowClassId = qs('#fi-flowClass').value;
     const enabled = qs('#fi-enabled').checked;
     if(!name || !namespace || !nodeId || !flowClassId){ notify('All fields required','error'); return; }
+    const isUpdate = !!state.name && state.name===name;
+    const nameError = window.validateNameInput(name, 'Workflow instance');
+    if (!isUpdate && nameError) {
+      notify(nameError, 'error');
+      return;
+    }
     const input = {
       name, namespace, nodeId, flowClassId, enabled,
       inputMappings: state.inputMappings.map(m=>({ nodeInput:m.nodeInput, type:m.type, value:m.value })),
       outputMappings: state.outputMappings.map(m=>({ nodeOutput:m.nodeOutput, topic:m.topic })),
       variables: state.variables
     };
-    const isUpdate = !!state.name && state.name===name;
     const mutation = isUpdate ? `mutation($name:String!,$input:FlowInstanceInput!){ flow { updateInstance(name:$name,input:$input){ name } } }` : `mutation($input:FlowInstanceInput!){ flow { createInstance(input:$input){ name } } }`;
     const vars = isUpdate? { name, input } : { input };
     await graphql(mutation, vars);

@@ -564,8 +564,9 @@ async function saveScript() {
     }
 
     // Name must be alphanumeric/dash
-    if (!/^[a-zA-Z0-9_-]+$/.test(displayName)) {
-        showNotification('Script Name must only contain letters, numbers, dashes, and underscores.', 'error');
+    const nameError = window.validateNameInput(displayName, 'Script');
+    if (nameError) {
+        showNotification(nameError, 'error');
         document.getElementById('sc-name').focus();
         return;
     }

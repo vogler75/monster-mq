@@ -324,6 +324,11 @@ class ArchiveGroupDetailManager {
             this.showError('Name is required.');
             return false;
         }
+        const nameError = window.validateNameInput(data.name, 'Archive group');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return false;
+        }
         if (data.topicFilter.length === 0) {
             this.showError('At least one topic filter is required.');
             return false;

@@ -241,3 +241,10 @@ window.isLoggedIn = function() {
         return false;
     }
 };
+
+window.validateNameInput = function(name, type) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+        return `${type} name must only contain letters, numbers, dashes, and underscores.`;
+    }
+    return null;
+};

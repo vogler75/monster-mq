@@ -790,8 +790,9 @@ class AgentDetailManager {
 
         const data = this.collectFormData();
 
-        if (this.isNew && !/^[a-zA-Z0-9_-]+$/.test(data.name)) {
-            this.showError('Invalid name: only letters, digits, underscores, and hyphens are allowed (no spaces).');
+        const nameError = window.validateNameInput(data.name, 'Agent');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
             return;
         }
 

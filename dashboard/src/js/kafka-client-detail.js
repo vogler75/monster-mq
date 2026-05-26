@@ -259,6 +259,12 @@ class KafkaClientDetailManager {
         const data = this.collectFormData();
         if (data.error) { this.showError(data.error); return; }
 
+        const nameError = window.validateNameInput(data.name, 'Client');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `mutation CreateKafkaClient($input: KafkaClientInput!) { kafkaClient { create(input: $input) { success errors client { name } } } }`;

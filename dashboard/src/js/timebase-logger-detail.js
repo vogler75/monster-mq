@@ -72,6 +72,12 @@ class TimeBaseLoggerDetail {
     }
 
     async save() {
+        const nameVal = document.getElementById('name').value.trim();
+        const nameError = window.validateNameInput(nameVal, 'Logger');
+        if (this.isNew && nameError) {
+            alert(nameError);
+            return;
+        }
         try {
             const input = {
                 name: document.getElementById('name').value,

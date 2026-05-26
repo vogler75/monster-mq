@@ -360,6 +360,12 @@ class MqttClientDetailManager {
 
         const data = this.collectFormData();
 
+        const nameError = window.validateNameInput(data.name, 'Bridge');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `

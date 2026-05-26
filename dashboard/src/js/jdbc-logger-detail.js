@@ -458,6 +458,12 @@ class JDBCLoggerDetailManager {
             return false;
         }
 
+        const nameError = window.validateNameInput(name, 'Logger');
+        if (this.isNewLogger && nameError) {
+            this.showError(nameError);
+            return false;
+        }
+
         if (!databaseType || !jdbcUrl || !username) {
             this.showError('Please fill in all database configuration fields');
             return false;

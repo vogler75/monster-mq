@@ -497,6 +497,12 @@ const VisualFlow = (() => {
       notify('Name & namespace required','error');
       return;
     }
+    const isUpdate = !!state.flowClass && state.flowClass.name === name;
+    const nameError = window.validateNameInput(name, 'Workflow class');
+    if (!isUpdate && nameError) {
+      notify(nameError, 'error');
+      return;
+    }
     const input={
       name, namespace, version,
       description: qs('#fc-description').value.trim()||null,
@@ -518,7 +524,6 @@ const VisualFlow = (() => {
         toNode:c.toNode, toInput:c.toInput
       }))
     };
-    const isUpdate = !!state.flowClass && state.flowClass.name === name;
     const mutation=isUpdate?
       `mutation($name:String!,$input:FlowClassInput!){ flow { updateClass(name:$name,input:$input){ name } } }`:
       `mutation($input:FlowClassInput!){ flow { createClass(input:$input){ name } } }`;

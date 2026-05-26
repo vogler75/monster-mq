@@ -508,6 +508,12 @@ class WinCCOaClientDetailManager {
             return;
         }
 
+        const nameError = window.validateNameInput(name, 'Client');
+        if (this.isNewMode && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         // Only require at least one query in edit mode (not in new mode)
         if (!this.isNewMode && this.queries.length === 0) {
             this.showError('Please add at least one query');

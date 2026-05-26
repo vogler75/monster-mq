@@ -155,8 +155,9 @@ class GenAiProviderDetailManager {
         const name = document.getElementById('provider-name').value.trim();
 
         if (this.isNew) {
-            if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
-                this.showAlert('Invalid name: only letters, digits, underscores and hyphens are allowed.', 'error');
+            const nameError = window.validateNameInput(name, 'Provider');
+            if (nameError) {
+                this.showAlert(nameError, 'error');
                 return;
             }
         }

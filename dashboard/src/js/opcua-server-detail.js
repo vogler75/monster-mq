@@ -256,6 +256,12 @@ class OpcUaServerDetailManager {
             bufferSize: parseInt(document.getElementById('server-buffer-size').value)
         };
 
+        const nameError = window.validateNameInput(serverInput.name, 'Server');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `

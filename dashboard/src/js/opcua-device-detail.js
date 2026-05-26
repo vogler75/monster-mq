@@ -733,6 +733,12 @@ class OpcUaDeviceDetailManager {
             }
         };
 
+        const nameError = window.validateNameInput(deviceData.name, 'Device');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `

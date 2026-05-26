@@ -418,6 +418,12 @@ class Plc4xClientDetailManager {
             return;
         }
 
+        const nameError = window.validateNameInput(name, 'Client');
+        if (this.isNewMode && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         const clientData = {
             name: name,
             namespace: namespace,

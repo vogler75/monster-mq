@@ -437,6 +437,12 @@ class RedisClientDetailManager {
 
         const data = this.collectFormData();
 
+        const nameError = window.validateNameInput(data.name, 'Client');
+        if (this.isNew && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (this.isNew) {
             try {
                 const mutation = `

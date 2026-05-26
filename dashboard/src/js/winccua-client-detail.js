@@ -652,6 +652,12 @@ class WinCCUaClientDetailManager {
             return;
         }
 
+        const nameError = window.validateNameInput(name, 'Client');
+        if (this.isNewMode && nameError) {
+            this.showError(nameError);
+            return;
+        }
+
         if (!isOpenPipe && (!graphqlEndpoint || !username)) {
             this.showError('GraphQL endpoint and username are required for GraphQL mode');
             return;

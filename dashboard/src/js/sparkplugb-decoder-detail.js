@@ -356,6 +356,12 @@ async function saveDecoder(event) {
         return;
     }
 
+    const nameError = window.validateNameInput(name, 'Decoder');
+    if (!isEditMode && nameError) {
+        showError(nameError);
+        return;
+    }
+
     if (rules.length === 0) {
         showError('Please add at least one decoder rule');
         return;
