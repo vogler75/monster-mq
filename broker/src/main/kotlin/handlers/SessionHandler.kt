@@ -150,7 +150,9 @@ open class SessionHandler(
     data class SessionMetrics(
         val messagesIn: AtomicLong = AtomicLong(0),
         val messagesOut: AtomicLong = AtomicLong(0),
-        var lastResetTime: Long = System.currentTimeMillis()
+        var lastResetTime: Long = System.currentTimeMillis(),
+        val inFlightMessagesRcv: AtomicLong = AtomicLong(0),
+        val inFlightMessagesSnd: AtomicLong = AtomicLong(0)
     )
 
     data class ClientDetails(
@@ -678,6 +680,13 @@ open class SessionHandler(
         clientMetrics[clientId]?.messagesOut?.incrementAndGet()
     }
 
+    fun updateInFlightCounts(clientId: String, sndSize: Int, rcvSize: Int) {
+        clientMetrics[clientId]?.let { metrics ->
+            metrics.inFlightMessagesSnd.set(sndSize.toLong())
+            metrics.inFlightMessagesRcv.set(rcvSize.toLong())
+        }
+    }
+
     fun getClientMetrics(clientId: String): SessionMetrics? = clientMetrics[clientId]
 
     fun getAllClientMetrics(): Map<String, SessionMetrics> = clientMetrics.toMap()
@@ -757,8 +766,8 @@ open class SessionHandler(
                     timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString(),
                     connected = stats.getBoolean("connected", false),
                     lastPing = stats.getString("lastPing", ""),
-                    inFlightMessagesRcv = stats.getInteger("inFlightMessagesRcv", 0),
-                    inFlightMessagesSnd = stats.getInteger("inFlightMessagesSnd", 0)
+                    inFlightMessagesRcv = metrics.inFlightMessagesRcv.get().toInt(),
+                    inFlightMessagesSnd = metrics.inFlightMessagesSnd.get().toInt()
                 ))
             } else {
                 val isOnline = getClientStatus(clientId) == ClientStatus.ONLINE
@@ -768,8 +777,8 @@ open class SessionHandler(
                     timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString(),
                     connected = isOnline,
                     lastPing = null,
-                    inFlightMessagesRcv = 0,
-                    inFlightMessagesSnd = 0
+                    inFlightMessagesRcv = metrics.inFlightMessagesRcv.get().toInt(),
+                    inFlightMessagesSnd = metrics.inFlightMessagesSnd.get().toInt()
                 ))
             }
         }

@@ -88,6 +88,7 @@ object EventBusAddresses {
         const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
         fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+        fun connectorAction(deviceName: String) = "$BRIDGE_NS.action.$deviceName"
     }
 
     // Kafka Subscriber Bridge (inbound Kafka -> MQTT)

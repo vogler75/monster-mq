@@ -2000,3 +2000,44 @@ extend type Query {
         node: String
     ): [TelegramClient!]!
 }
+
+# OPC UA Browser Types
+type OPCUAServer {
+    id: String!
+    name: String!
+    endpoint: String!
+    enabled: Boolean!
+    connected: Boolean!
+}
+
+type OPCUANode {
+    nodeId: String!
+    browseName: String!
+    displayName: String!
+    nodeClass: String!
+    description: String
+    dataType: String
+    value: String
+    hasChildren: Boolean!
+    writable: Boolean!
+    timestamp: String
+}
+
+type OPCUANodeDetail {
+    nodeId: String!
+    browseName: String!
+    displayName: String!
+    nodeClass: String!
+    description: String
+    dataType: String
+    value: String
+    hasChildren: Boolean!
+    writable: Boolean!
+    timestamp: String
+}
+
+extend type Query {
+    opcuaServers: [OPCUAServer!]!
+    opcuaNodeBrowse(serverId: String!, nodeId: String!): [OPCUANode!]!
+    opcuaNodeRead(serverId: String!, nodeId: String!): OPCUANodeDetail!
+}

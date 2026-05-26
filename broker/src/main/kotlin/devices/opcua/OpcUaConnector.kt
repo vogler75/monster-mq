@@ -15,6 +15,7 @@ import org.eclipse.milo.opcua.sdk.client.identity.IdentityProvider
 import org.eclipse.milo.opcua.sdk.client.identity.UsernameProvider
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription
+import org.eclipse.milo.opcua.stack.core.AttributeId
 import org.eclipse.milo.opcua.stack.core.NodeIds0
 import org.eclipse.milo.opcua.stack.core.security.CertificateValidator
 import org.eclipse.milo.opcua.stack.core.security.DefaultClientCertificateValidator
@@ -34,6 +35,7 @@ import org.eclipse.milo.opcua.stack.core.util.EndpointUtil
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.security.cert.X509Certificate
+import java.util.concurrent.Callable
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.devices.OpcUaAddress
 import at.rocworks.stores.devices.OpcUaConnectionConfig
@@ -91,6 +93,7 @@ class OpcUaConnector : AbstractVerticle() {
 
     // Write support
     private var writeConsumer: MessageConsumer<Any>? = null
+    private var actionConsumer: MessageConsumer<JsonObject>? = null
     private val opcUaMonitoredItems = ConcurrentHashMap<String, OpcUaMonitoredItem>() // address -> item
 
     data class AddressSubscription(
@@ -152,6 +155,9 @@ class OpcUaConnector : AbstractVerticle() {
             // Register metrics endpoint
             setupMetricsEndpoint()
 
+            // Register action endpoint
+            setupActionEndpoint()
+
             startPromise.complete()
 
             // Attempt initial connection in the background - if it fails, reconnection will be scheduled
@@ -178,6 +184,10 @@ class OpcUaConnector : AbstractVerticle() {
 
         // Teardown write subscriptions
         teardownWriteSubscriptions()
+
+        // Teardown action consumer
+        actionConsumer?.unregister()
+        actionConsumer = null
 
         // Cancel any pending reconnection timer
         reconnectTimerId?.let { timerId ->
@@ -219,6 +229,246 @@ class OpcUaConnector : AbstractVerticle() {
             }
         }
         logger.info("Registered OPC UA metrics endpoint for device ${deviceConfig.name} at address $addr")
+    }
+
+    private fun setupActionEndpoint() {
+        val addr = EventBusAddresses.OpcUaBridge.connectorAction(deviceConfig.name)
+        actionConsumer = vertx.eventBus().consumer<JsonObject>(addr) { msg ->
+            try {
+                val body = msg.body()
+                val action = body.getString("action")
+                when (action) {
+                    "browse" -> {
+                        val nodeIdStr = body.getString("nodeId") ?: "ns=0;i=84"
+                        handleLiveBrowse(nodeIdStr, msg)
+                    }
+                    "read" -> {
+                        val nodeIdStr = body.getString("nodeId") ?: ""
+                        handleLiveRead(nodeIdStr, msg)
+                    }
+                    "status" -> {
+                        msg.reply(JsonObject().put("connected", isConnected))
+                    }
+                    else -> {
+                        msg.fail(400, "Unknown action: $action")
+                    }
+                }
+            } catch (e: Exception) {
+                msg.fail(500, e.message)
+            }
+        }
+        logger.info("Registered OPC UA action endpoint for device ${deviceConfig.name} at address $addr")
+    }
+
+    private fun handleLiveBrowse(nodeIdStr: String, msg: io.vertx.core.eventbus.Message<JsonObject>) {
+        val c = client
+        if (c == null || !isConnected) {
+            msg.fail(503, "OPC UA client not connected")
+            return
+        }
+
+        vertx.executeBlocking(Callable {
+            val nodeId = NodeId.parseOrNull(nodeIdStr)
+                ?: throw IllegalArgumentException("Invalid NodeId: $nodeIdStr")
+
+            val browseResult = c.browseAsync(
+                BrowseDescription(
+                    nodeId,
+                    BrowseDirection.Forward,
+                    NodeId.NULL_VALUE,
+                    true,
+                    Unsigned.uint(0),
+                    Unsigned.uint(BrowseResultMask.All.value)
+                )
+            ).get()
+
+            val references = browseResult.references ?: emptyArray()
+            val jsonArr = JsonArray()
+
+            if (references.isNotEmpty()) {
+                val readValueIds = mutableListOf<ReadValueId>()
+                
+                references.forEach { ref ->
+                    val childNodeId = toLocalNodeId(ref.nodeId)
+                    if (childNodeId != null) {
+                        readValueIds.add(ReadValueId(childNodeId, AttributeId.Description.uid(), null, QualifiedName.NULL_VALUE))
+                        if (ref.nodeClass == NodeClass.Variable) {
+                            readValueIds.add(ReadValueId(childNodeId, AttributeId.DataType.uid(), null, QualifiedName.NULL_VALUE))
+                            readValueIds.add(ReadValueId(childNodeId, AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE))
+                            readValueIds.add(ReadValueId(childNodeId, AttributeId.UserAccessLevel.uid(), null, QualifiedName.NULL_VALUE))
+                        }
+                    }
+                }
+
+                val dataValues = if (readValueIds.isNotEmpty()) {
+                    c.readAsync(0.0, TimestampsToReturn.Both, readValueIds).get().results?.toList() ?: emptyList()
+                } else {
+                    emptyList()
+                }
+
+                var dvIdx = 0
+                references.forEach { ref ->
+                    val childNodeId = toLocalNodeId(ref.nodeId)
+                    if (childNodeId != null) {
+                        val nodeJson = JsonObject()
+                            .put("nodeId", childNodeId.toParseableString())
+                            .put("browseName", ref.browseName?.name ?: "")
+                            .put("displayName", ref.displayName?.text ?: "")
+                            .put("nodeClass", ref.nodeClass?.name ?: "")
+                            .put("hasChildren", ref.nodeClass == NodeClass.Object || ref.nodeClass == NodeClass.ObjectType)
+                        
+                        val descValue = dataValues.getOrNull(dvIdx++)
+                        val description = descValue?.value?.value as? LocalizedText
+                        nodeJson.put("description", description?.text ?: "")
+                        
+                        if (ref.nodeClass == NodeClass.Variable) {
+                            val dtValue = dataValues.getOrNull(dvIdx++)
+                            val dataTypeNodeId = dtValue?.value?.value as? NodeId
+                            val dataTypeStr = dataTypeNodeId?.let { resolveDataTypeName(it) } ?: "Unknown"
+                            nodeJson.put("dataType", dataTypeStr)
+
+                            val valValue = dataValues.getOrNull(dvIdx++)
+                            if (valValue != null && valValue.value != null) {
+                                nodeJson.put("value", valValue.value.value?.toString() ?: "")
+                                val timestamp = valValue.sourceTime ?: valValue.serverTime ?: DateTime.now()
+                                nodeJson.put("timestamp", timestamp.javaInstant.toString())
+                            } else {
+                                nodeJson.put("value", "")
+                                nodeJson.put("timestamp", "")
+                            }
+
+                            val alValue = dataValues.getOrNull(dvIdx++)
+                            val accessLevel = alValue?.value?.value as? UByte ?: UByte.valueOf(0)
+                            val writable = (accessLevel.toInt() and 2) != 0
+                            nodeJson.put("writable", writable)
+                        } else {
+                            nodeJson.put("dataType", "")
+                            nodeJson.put("value", "")
+                            nodeJson.put("writable", false)
+                            nodeJson.put("timestamp", "")
+                        }
+
+                        jsonArr.add(nodeJson)
+                    }
+                }
+            }
+            jsonArr
+        }).onComplete { res ->
+            if (res.succeeded()) {
+                msg.reply(JsonObject().put("nodes", res.result()))
+            } else {
+                msg.fail(500, res.cause()?.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun handleLiveRead(nodeIdStr: String, msg: io.vertx.core.eventbus.Message<JsonObject>) {
+        val c = client
+        if (c == null || !isConnected) {
+            msg.fail(503, "OPC UA client not connected")
+            return
+        }
+
+        vertx.executeBlocking(Callable {
+            val nodeId = NodeId.parseOrNull(nodeIdStr)
+                ?: throw IllegalArgumentException("Invalid NodeId: $nodeIdStr")
+
+            val readValueIds = listOf(
+                ReadValueId(nodeId, AttributeId.DisplayName.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.BrowseName.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.NodeClass.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.Description.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.DataType.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE),
+                ReadValueId(nodeId, AttributeId.UserAccessLevel.uid(), null, QualifiedName.NULL_VALUE)
+            )
+
+            val dataValues: List<DataValue> = c.readAsync(0.0, TimestampsToReturn.Both, readValueIds).get().results?.toList() ?: emptyList()
+
+            val displayName = (dataValues.getOrNull(0)?.value?.value as? LocalizedText)?.text ?: ""
+            val browseName = (dataValues.getOrNull(1)?.value?.value as? QualifiedName)?.name ?: ""
+            val nodeClassInt = dataValues.getOrNull(2)?.value?.value as? Int ?: 0
+            val nodeClassName = NodeClass.from(nodeClassInt)?.name ?: "Unknown"
+            val description = (dataValues.getOrNull(3)?.value?.value as? LocalizedText)?.text ?: ""
+            val dataTypeNodeId = dataValues.getOrNull(4)?.value?.value as? NodeId
+            val dataTypeStr = dataTypeNodeId?.let { resolveDataTypeName(it) } ?: "Unknown"
+            
+            val valValue = dataValues.getOrNull(5)
+            val valueStr = valValue?.value?.value?.toString() ?: ""
+            val timestamp = valValue?.sourceTime ?: valValue?.serverTime ?: DateTime.now()
+            
+            val accessLevel = dataValues.getOrNull(6)?.value?.value as? UByte ?: UByte.valueOf(0)
+            val writable = (accessLevel.toInt() and 2) != 0
+
+            JsonObject()
+                .put("nodeId", nodeIdStr)
+                .put("browseName", browseName)
+                .put("displayName", displayName)
+                .put("nodeClass", nodeClassName)
+                .put("description", description)
+                .put("dataType", dataTypeStr)
+                .put("value", valueStr)
+                .put("hasChildren", nodeClassName == "Object" || nodeClassName == "ObjectType")
+                .put("writable", writable)
+                .put("timestamp", timestamp.javaInstant.toString())
+        }).onComplete { res ->
+            if (res.succeeded()) {
+                msg.reply(res.result())
+            } else {
+                msg.fail(500, res.cause()?.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun resolveDataTypeName(nodeId: NodeId): String {
+        if (nodeId.namespaceIndex.toInt() == 0) {
+            val id = nodeId.identifier
+            if (id is UInteger) {
+                return when (id.toLong()) {
+                    1L -> "Boolean"
+                    2L -> "SByte"
+                    3L -> "Byte"
+                    4L -> "Int16"
+                    5L -> "UInt16"
+                    6L -> "Int32"
+                    7L -> "UInt32"
+                    8L -> "Int64"
+                    9L -> "UInt64"
+                    10L -> "Float"
+                    11L -> "Double"
+                    12L -> "String"
+                    13L -> "DateTime"
+                    14L -> "Guid"
+                    15L -> "ByteString"
+                    16L -> "XmlElement"
+                    17L -> "NodeId"
+                    18L -> "ExpandedNodeId"
+                    19L -> "StatusCode"
+                    20L -> "QualifiedName"
+                    21L -> "LocalizedText"
+                    22L -> "Structure"
+                    23L -> "DataValue"
+                    24L -> "BaseDataType"
+                    25L -> "DiagnosticInfo"
+                    else -> "ns=0;i=$id"
+                }
+            }
+        }
+        return nodeId.toParseableString()
+    }
+
+    private fun toLocalNodeId(expandedNodeId: ExpandedNodeId?): NodeId? {
+        if (expandedNodeId == null) return null
+        val ns = expandedNodeId.namespaceIndex
+        val id = expandedNodeId.identifier
+        return when (id) {
+            is UInteger -> NodeId(ns, id)
+            is String -> NodeId(ns, id)
+            is java.util.UUID -> NodeId(ns, id)
+            is ByteString -> NodeId(ns, id)
+            is Number -> NodeId(ns, Unsigned.uint(id.toLong()))
+            else -> null
+        }
     }
 
     private fun setupStaticSubscriptions(): Future<Void> {

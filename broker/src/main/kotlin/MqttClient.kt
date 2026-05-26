@@ -853,6 +853,10 @@ class MqttClient(
         }
     }
 
+    private fun updateSessionHandlerInFlight() {
+        sessionHandler.updateInFlightCounts(clientId, inFlightMessagesSnd.size, inFlightMessagesRcv.size)
+    }
+
     /**
      * Get connection statistics for this client
      * Used by SessionHandler for unified metrics publishing
@@ -1033,6 +1037,7 @@ class MqttClient(
                 logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
                 endpoint.publishReceived(message.messageId())
                 inFlightMessagesRcv[message.messageId()] = InFlightMessage(BrokerMessage(clientId, message, topicName))
+                updateSessionHandlerInFlight()
             }
             else -> {
                 logger.warning { "Client [$clientId] Publish: unknown QoS level [${message.qosLevel()}] [${Utils.getCurrentFunctionName()}]" }
@@ -1046,6 +1051,7 @@ class MqttClient(
             endpoint.publishComplete(id)
             sessionHandler.publishMessage(inFlightMessage.message)
             inFlightMessagesRcv.remove(id)
+            updateSessionHandlerInFlight()
         } ?: run {
             logger.warning { "Client [$clientId] Publish: got publish release for unknown id [$id] [${Utils.getCurrentFunctionName()}]"}
         }
@@ -1063,6 +1069,7 @@ class MqttClient(
             } else {
                 logger.warning { "Client [$clientId] Publish: Message [${id}] for topic [${inFlightMessage.message.topicName}] not delivered  [${Utils.getCurrentFunctionName()}]" }
                 inFlightMessagesRcv.remove(id)
+                updateSessionHandlerInFlight()
             }
         }
     }
@@ -1210,6 +1217,7 @@ class MqttClient(
                     checkReceiveMaximumRecovery(maxInFlight)
 
                     inFlightMessagesSnd.addLast(InFlightMessage(message))
+                    updateSessionHandlerInFlight()
                     if (inFlightMessagesSnd.size == 1) {
                         sessionHandler.incrementMessagesOut(clientId)
                         message.publishToEndpoint(endpoint)
@@ -1254,6 +1262,7 @@ class MqttClient(
 
     private fun publishMessageCompleted(message: BrokerMessage) {
         inFlightMessagesSnd.removeFirst()
+        updateSessionHandlerInFlight()
 
         val maxInFlight = if (endpoint.protocolVersion() == 5) {
             clientReceiveMaximum
@@ -1366,6 +1375,7 @@ class MqttClient(
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: Message [${inFlightMessage.message.messageId}] for topic [${inFlightMessage.message.topicName}] not delivered [${Utils.getCurrentFunctionName()}]" }
                     inFlightMessagesSnd.removeLast()
+                    updateSessionHandlerInFlight()
 
                     val maxInFlight = if (endpoint.protocolVersion() == 5) {
                         clientReceiveMaximum
@@ -1442,5 +1452,6 @@ class MqttClient(
             endpoint.close()
         }
         stopEndpoint()
+        sessionHandler.updateInFlightCounts(clientId, 0, 0)
     }
 }

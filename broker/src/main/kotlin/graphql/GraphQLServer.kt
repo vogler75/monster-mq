@@ -15,6 +15,7 @@ import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
+import at.rocworks.graphql.OPCUABrowserResolver
 import at.rocworks.graphql.OpcUaServerQueries
 import at.rocworks.graphql.OpcUaServerMutations
 import at.rocworks.graphql.OpcUaServerInfo
@@ -353,6 +354,7 @@ class GraphQLServer(
 
         val opcUaQueries = deviceStore?.let { OpcUaClientConfigQueries(vertx, it) }
         val opcUaMutations = deviceStore?.let { OpcUaClientConfigMutations(vertx, it) }
+        val opcuaBrowserResolver = deviceStore?.let { OPCUABrowserResolver(vertx, it) }
 
         // Initialize OPC UA Server resolvers
         val opcUaServerQueries = deviceStore?.let { OpcUaServerQueries(vertx, it) }
@@ -512,6 +514,14 @@ class GraphQLServer(
                     .apply {
                         opcUaQueries?.let { resolver ->
                             dataFetcher("opcUaDevices", resolver.opcUaDevices())
+                        }
+                    }
+                    // OPC UA Client browser queries
+                    .apply {
+                        opcuaBrowserResolver?.let { resolver ->
+                            dataFetcher("opcuaServers", resolver.opcuaServers())
+                            dataFetcher("opcuaNodeBrowse", resolver.opcuaNodeBrowse())
+                            dataFetcher("opcuaNodeRead", resolver.opcuaNodeRead())
                         }
                     }
                     // OPC UA Server queries

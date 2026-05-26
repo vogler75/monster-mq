@@ -213,6 +213,7 @@ class SidebarManager {
                 section: 'Bridging', sectionIcon: 'link',
                 items: [
                     { href: '/pages/opcua-devices.html', icon: 'screen', text: 'OPC UA Clients', feature: 'OpcUa' },
+                    { href: '/pages/opcua-browser.html', icon: 'search', text: 'OPC UA Browser', feature: 'OpcUa' },
                     { href: '/pages/opcua-servers.html', icon: 'project-server', text: 'OPC UA Servers', feature: 'OpcUaServer' },
                     { href: '/pages/mqtt-clients.html', icon: 'link', text: 'MQTT Clients', feature: 'MqttClient' },
                     { href: '/pages/kafka-clients.html', icon: 'link', text: 'Kafka Clients', feature: 'Kafka' },
