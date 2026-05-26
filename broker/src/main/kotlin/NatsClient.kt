@@ -81,6 +81,18 @@ class NatsClient(
                 handleBusMessage(busMessage.body())
             }
         )
+
+        // Register EventBus consumer for command execution (e.g. disconnect from dashboard)
+        busConsumers.add(
+            vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Client.commands(clientId)) { message ->
+                val command = message.body()
+                if (command.getString(Const.COMMAND_KEY) == Const.COMMAND_DISCONNECT) {
+                    logger.info { "NATS client [$clientId] disconnect command received via EventBus" }
+                    socket.close()
+                    message.reply(JsonObject().put("Connected", false))
+                }
+            }
+        )
     }
 
     override fun stop() {
