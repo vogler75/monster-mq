@@ -1240,7 +1240,7 @@ class MqttClient(
     }
 
     private fun checkReceiveMaximumRecovery(maxInFlight: Int) {
-        if (receiveMaximumWarningActive && inFlightMessagesSnd.size < maxInFlight) {
+        if (receiveMaximumWarningActive && inFlightMessagesSnd.size == 0) {
             val since = receiveMaximumWarningSince
             val durationStr = if (since != null) {
                 val duration = java.time.Duration.between(since, Instant.now())
@@ -1248,7 +1248,7 @@ class MqttClient(
             } else {
                 "unknown"
             }
-            logger.info { "Client [$clientId] Receive Maximum limit recovered. Saturated for $durationStr. Suppressed $receiveMaximumSuppressedWarnings warnings. Last blocked topic: $receiveMaximumLastSampledTopic (QoS $receiveMaximumLastSampledQos, MsgId $receiveMaximumLastSampledMessageId)." }
+            logger.info { "Client [$clientId] Receive Maximum limit recovered (queue size is 0). Saturated for $durationStr. Suppressed $receiveMaximumSuppressedWarnings warnings. Last blocked topic: $receiveMaximumLastSampledTopic (QoS $receiveMaximumLastSampledQos, MsgId $receiveMaximumLastSampledMessageId)." }
             
             receiveMaximumWarningActive = false
             receiveMaximumWarningSince = null
