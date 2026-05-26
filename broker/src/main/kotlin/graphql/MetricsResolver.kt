@@ -216,7 +216,7 @@ class MetricsResolver(
                         clientAddress = clientDetails.clientAddress,
                         connected = sessionHandler.getClientStatus(clientId) == at.rocworks.handlers.SessionHandler.ClientStatus.ONLINE,
                         information = clientDetails.information,
-                        protocolVersion = sessionHandler.getProtocolVersion(clientId) ?: 4,
+                        protocolVersion = sessionHandler.getProtocolVersion(clientId) ?: (if (clientId.startsWith("nats-") || clientId.startsWith("mcp-") || clientId.startsWith("redis-")) null else 4),
                         receiveMaximum = v5Props?.first,
                         maximumPacketSize = v5Props?.second,
                         topicAliasMaximum = v5Props?.third
@@ -273,7 +273,7 @@ class MetricsResolver(
                                         clientAddress = response.getString("clientAddress"),
                                         connected = response.getBoolean("connected", sessionConnected),
                                         information = response.getString("information"),
-                                        protocolVersion = response.getInteger("protocolVersion", 4),
+                                        protocolVersion = response.getInteger("protocolVersion") ?: (if (clientId.startsWith("nats-") || clientId.startsWith("mcp-") || clientId.startsWith("redis-")) null else 4),
                                         receiveMaximum = response.getInteger("receiveMaximum"),
                                         maximumPacketSize = response.getInteger("maximumPacketSize"),
                                         topicAliasMaximum = response.getInteger("topicAliasMaximum")
@@ -337,8 +337,8 @@ class MetricsResolver(
                             } else null
                             
                             val protocolVersion = if (nodeId == Monster.getClusterNodeId(vertx)) {
-                                sessionHandler.getProtocolVersion(clientId) ?: 4
-                            } else 4  // Default to v3.1.1 for remote nodes (would need event bus query to get actual version)
+                                sessionHandler.getProtocolVersion(clientId) ?: (if (clientId.startsWith("nats-") || clientId.startsWith("mcp-") || clientId.startsWith("redis-")) null else 4)
+                            } else (if (clientId.startsWith("nats-") || clientId.startsWith("mcp-") || clientId.startsWith("redis-")) null else 4)
                             
                             val session = Session(
                                 clientId = clientId,
@@ -1543,21 +1543,24 @@ class MetricsResolver(
                 try {
                     // Iterate all sessions to count protocol versions
                     sessionStore.iterateAllSessions { clientId, nodeId, connected, cleanSession ->
-                        totalSessions++
-                        
-                        // Get protocol version for this client
-                        val protocolVersion = if (nodeId == Monster.getClusterNodeId(vertx)) {
-                            // Local session - get from sessionHandler
-                            sessionHandler.getProtocolVersion(clientId) ?: 4
-                        } else {
-                            // Remote session - would need to query via event bus, default to v3 for now
-                            4  // Default to v3 for remote sessions 
-                        }
-                        
-                        if (protocolVersion == 5) {
-                            mqtt5Sessions++
-                        } else {
-                            mqtt3Sessions++
+                        val isMqtt = !clientId.startsWith("nats-") && !clientId.startsWith("mcp-") && !clientId.startsWith("redis-")
+                        if (isMqtt) {
+                            totalSessions++
+                            
+                            // Get protocol version for this client
+                            val protocolVersion = if (nodeId == Monster.getClusterNodeId(vertx)) {
+                                // Local session - get from sessionHandler
+                                sessionHandler.getProtocolVersion(clientId) ?: 4
+                            } else {
+                                // Remote session - would need to query via event bus, default to v3 for now
+                                4  // Default to v3 for remote sessions 
+                            }
+                            
+                            if (protocolVersion == 5) {
+                                mqtt5Sessions++
+                            } else {
+                                mqtt3Sessions++
+                            }
                         }
                     }.result()
                     

@@ -5,6 +5,7 @@ import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import at.rocworks.extensions.graphql.JwtService
 import at.rocworks.handlers.ArchiveHandler
+import at.rocworks.handlers.SessionHandler
 import at.rocworks.stores.IMessageStore
 
 import io.vertx.core.*
@@ -24,6 +25,7 @@ class McpServer(
     private val port: Int,
     private val retainedStore: IMessageStore,
     private val archiveHandler: ArchiveHandler,
+    private val sessionHandler: SessionHandler,
     private val userManager: UserManager
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
@@ -120,6 +122,36 @@ class McpServer(
             val connection = Connection(connectionId, response)
             connections[connectionId] = connection
 
+            // Register session in SessionHandler
+            val clientId = "mcp-$connectionId"
+            val information = JsonObject()
+            information.put("RemoteAddress", ctx.request().remoteAddress()?.toString() ?: "")
+            information.put("LocalAddress", ctx.request().localAddress()?.toString() ?: "")
+            information.put("ProtocolVersion", "MCP")
+            information.put("SSL", ctx.request().isSSL)
+
+            // Extract authenticated username from token context if validated earlier
+            val authHeader = ctx.request().getHeader("Authorization")
+            val token = JwtService.extractTokenFromHeader(authHeader)
+            val username = token?.let { JwtService.extractUsername(it) } ?: if (userManager.isUserManagementEnabled() && userManager.isAnonymousEnabled()) "Anonymous" else null
+            username?.let { information.put("User", it) }
+
+            sessionHandler.setClient(clientId, true, information).onComplete { ar ->
+                if (ar.succeeded()) {
+                    sessionHandler.onlineClient(clientId)
+                }
+            }
+
+            // Register EventBus consumer for command execution (e.g. disconnect from dashboard)
+            val commandConsumer = vertx.eventBus().consumer<JsonObject>(at.rocworks.bus.EventBusAddresses.Client.commands(clientId)) { msg ->
+                val command = msg.body()
+                if (command.getString(Const.COMMAND_KEY) == Const.COMMAND_DISCONNECT) {
+                    logger.info("MCP client [$clientId] disconnect command received via EventBus")
+                    response.end()
+                    msg.reply(JsonObject().put("Connected", false))
+                }
+            }
+
             // Send initial connection event
             sendMessage(
                 connection, "connected", JsonObject().put("connectionId", connectionId)
@@ -139,6 +171,8 @@ class McpServer(
             response.closeHandler { _ ->
                 vertx.cancelTimer(timerId)
                 connections.remove(connectionId)
+                commandConsumer.unregister()
+                sessionHandler.delClient(clientId)
                 logger.fine("Connection closed: $connectionId")
             }
 
@@ -146,6 +180,8 @@ class McpServer(
             response.exceptionHandler { throwable: Throwable? ->
                 vertx.cancelTimer(timerId)
                 connections.remove(connectionId)
+                commandConsumer.unregister()
+                sessionHandler.delClient(clientId)
                 logger.severe("Connection error: " + connectionId + " - " + throwable!!.message)
             }
         }

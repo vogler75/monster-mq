@@ -322,7 +322,7 @@ data class Session(
     val connected: Boolean,
     val information: String?,
     // MQTT v5 Connection Properties
-    val protocolVersion: Int = 4,  // 4 = MQTT v3.1.1, 5 = MQTT v5.0
+    val protocolVersion: Int? = 4,  // 4 = MQTT v3.1.1, 5 = MQTT v5.0
     val receiveMaximum: Int? = null,  // null for v3.1.1 clients
     val maximumPacketSize: Int? = null,  // null for v3.1.1 clients
     val topicAliasMaximum: Int? = null  // null for v3.1.1 clients

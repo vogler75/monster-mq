@@ -1052,7 +1052,7 @@ MORE INFO:
                 val mcpEnabled = mcpConfig.getBoolean("Enabled", false)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpServer = if (mcpEnabled) {
-                    McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, userManager)
+                    McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, sessionHandler, userManager)
                 } else {
                     logger.fine("MCP server is disabled in configuration")
                     null

@@ -81,12 +81,72 @@ class RedisServer(
         private var selectedDb = defaultDb
         private var clientName: String? = null
 
+        private val clientId = "redis-$id"
+        private var sessionRegistered = false
+        private var commandConsumer: io.vertx.core.eventbus.MessageConsumer<JsonObject>? = null
+
+        private val commandQueue = java.util.ArrayDeque<RespCommand>()
+        private var processingCommand = false
+
+        private fun queueCommand(command: RespCommand) {
+            commandQueue.add(command)
+            processQueue()
+        }
+
+        private fun processQueue() {
+            if (processingCommand || closed) return
+            val command = commandQueue.poll() ?: return
+            processingCommand = true
+
+            val promise = io.vertx.core.Promise.promise<Void>()
+            promise.future().onComplete {
+                processingCommand = false
+                processQueue()
+            }
+
+            handle(command, promise)
+        }
+
+        private fun registerSession() {
+            if (sessionRegistered) return
+            sessionRegistered = true
+
+            val information = JsonObject()
+            information.put("RemoteAddress", socket.remoteAddress()?.toString() ?: "")
+            information.put("LocalAddress", socket.localAddress()?.toString() ?: "")
+            information.put("ProtocolVersion", "REDIS")
+            information.put("SSL", false)
+            username?.let { information.put("User", it) }
+            clientName?.let { information.put("ClientName", it) }
+            information.put("SelectedDb", selectedDb)
+
+            sessionHandler.setClient(clientId, true, information).onComplete { ar ->
+                if (ar.succeeded()) {
+                    sessionHandler.onlineClient(clientId)
+                }
+            }
+        }
+
+        private fun updateSessionInfo() {
+            if (!sessionRegistered) return
+            val information = JsonObject()
+            information.put("RemoteAddress", socket.remoteAddress()?.toString() ?: "")
+            information.put("LocalAddress", socket.localAddress()?.toString() ?: "")
+            information.put("ProtocolVersion", "REDIS")
+            information.put("SSL", false)
+            username?.let { information.put("User", it) }
+            clientName?.let { information.put("ClientName", it) }
+            information.put("SelectedDb", selectedDb)
+
+            sessionHandler.setClient(clientId, true, information)
+        }
+
         fun start() {
             socket.handler { buffer ->
                 parser.append(buffer)
                 while (!closed) {
                     val command = parser.next() ?: break
-                    handle(command)
+                    queueCommand(command)
                 }
             }
             socket.closeHandler { cleanup() }
@@ -94,87 +154,125 @@ class RedisServer(
                 logger.fine("Redis client [$id] socket error: ${it.message}")
                 close()
             }
+
+            if (authenticated) {
+                registerSession()
+            }
+
+            commandConsumer = vertx.eventBus().consumer<JsonObject>(at.rocworks.bus.EventBusAddresses.Client.commands(clientId)) { msg ->
+                val command = msg.body()
+                if (command.getString(at.rocworks.Const.COMMAND_KEY) == at.rocworks.Const.COMMAND_DISCONNECT) {
+                    logger.info("Redis client [$clientId] disconnect command received via EventBus")
+                    close()
+                    msg.reply(JsonObject().put("Connected", false))
+                }
+            }
         }
 
-        private fun handle(command: RespCommand) {
+        private fun handle(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
             if (command.args.isEmpty()) {
                 writeError("ERR empty command")
+                promise.complete()
                 return
             }
 
             val name = command.stringArg(0).uppercase()
+            val argsStr = if (name == "AUTH") {
+                if (command.args.size == 2) "[REDACTED_PASSWORD]"
+                else "${command.stringArg(1)} [REDACTED_PASSWORD]"
+            } else if (name == "HELLO") {
+                val authIndex = command.args.indices.firstOrNull { command.stringArg(it).equals("AUTH", ignoreCase = true) }
+                if (authIndex != null && authIndex + 2 < command.args.size) {
+                    val authUser = command.stringArg(authIndex + 1)
+                    "AUTH $authUser [REDACTED_PASSWORD]"
+                } else {
+                    (1 until command.args.size).map { command.stringArg(it) }.joinToString(" ")
+                }
+            } else {
+                (1 until command.args.size).map { command.stringArg(it) }.joinToString(" ")
+            }
+
+            logger.fine("Redis client [$clientId] executing command: $name $argsStr")
+
             val allowedBeforeAuth = setOf("AUTH", "HELLO", "PING", "QUIT", "CLIENT")
             if (!authenticated && name !in allowedBeforeAuth) {
                 writeError("NOAUTH Authentication required.")
+                promise.complete()
                 return
             }
 
             try {
                 when (name) {
-                    "PING" -> handlePing(command)
-                    "ECHO" -> if (command.args.size == 2) writeBulk(command.args[1]) else writeError("ERR wrong number of arguments for 'echo' command")
-                    "QUIT" -> {
-                        writeSimple("OK")
-                        close()
+                    "AUTH" -> handleAuth(command, promise)
+                    "HELLO" -> handleHello(command, promise)
+                    else -> {
+                        when (name) {
+                            "PING" -> handlePing(command)
+                            "ECHO" -> if (command.args.size == 2) writeBulk(command.args[1]) else writeError("ERR wrong number of arguments for 'echo' command")
+                            "QUIT" -> {
+                                writeSimple("OK")
+                                close()
+                            }
+                            "SELECT" -> handleSelect(command)
+                            "CLIENT" -> handleClient(command)
+                            "COMMAND" -> handleCommand(command)
+                            "INFO" -> handleInfo()
+                            "GET" -> handleGet(command)
+                            "GETRANGE", "SUBSTR" -> handleGetRange(command)
+                            "MGET" -> handleMget(command)
+                            "SET" -> handleSet(command)
+                            "MSET" -> handleMset(command)
+                            "HSET" -> handleHset(command)
+                            "HGET" -> handleHget(command)
+                            "HMGET" -> handleHmget(command)
+                            "HGETALL" -> handleHgetall(command)
+                            "HDEL" -> handleHdel(command)
+                            "HEXISTS" -> handleHexists(command)
+                            "HLEN" -> handleHlen(command)
+                            "HKEYS" -> handleHkeys(command)
+                            "HVALS" -> handleHvals(command)
+                            "HSCAN" -> handleHscan(command)
+                            "SADD" -> handleSadd(command)
+                            "SREM" -> handleSrem(command)
+                            "SMEMBERS" -> handleSmembers(command)
+                            "SISMEMBER" -> handleSismember(command)
+                            "SCARD" -> handleScard(command)
+                            "LPUSH" -> handleListPush(command, left = true)
+                            "RPUSH" -> handleListPush(command, left = false)
+                            "LPOP" -> handleListPop(command, left = true)
+                            "RPOP" -> handleListPop(command, left = false)
+                            "LRANGE" -> handleLrange(command)
+                            "LLEN" -> handleLlen(command)
+                            "LINDEX" -> handleLindex(command)
+                            "ZADD" -> handleZadd(command)
+                            "ZRANGE" -> handleZrange(command)
+                            "ZREM" -> handleZrem(command)
+                            "ZSCORE" -> handleZscore(command)
+                            "ZCARD" -> handleZcard(command)
+                            "JSON.SET" -> handleJsonSet(command)
+                            "JSON.GET" -> handleJsonGet(command)
+                            "JSON.DEL" -> handleJsonDel(command)
+                            "JSON.TYPE" -> handleJsonType(command)
+                            "DEL" -> handleDel(command)
+                            "EXISTS" -> handleExists(command)
+                            "TTL" -> handleTtl(command)
+                            "PTTL" -> handleTtl(command)
+                            "SCAN" -> handleScan(command)
+                            "KEYS" -> handleKeys(command)
+                            "PUBLISH" -> handlePublish(command)
+                            "SUBSCRIBE" -> handleSubscribe(command, pattern = false)
+                            "PSUBSCRIBE" -> handleSubscribe(command, pattern = true)
+                            "UNSUBSCRIBE", "PUNSUBSCRIBE" -> handleUnsubscribe(command)
+                            "TYPE" -> handleType(command)
+                            else -> writeError("ERR unknown command '$name'")
+                        }
+                        promise.complete()
                     }
-                    "AUTH" -> handleAuth(command)
-                    "HELLO" -> handleHello(command)
-                    "SELECT" -> handleSelect(command)
-                    "CLIENT" -> handleClient(command)
-                    "COMMAND" -> handleCommand(command)
-                    "INFO" -> handleInfo()
-                    "GET" -> handleGet(command)
-                    "GETRANGE", "SUBSTR" -> handleGetRange(command)
-                    "MGET" -> handleMget(command)
-                    "SET" -> handleSet(command)
-                    "MSET" -> handleMset(command)
-                    "HSET" -> handleHset(command)
-                    "HGET" -> handleHget(command)
-                    "HMGET" -> handleHmget(command)
-                    "HGETALL" -> handleHgetall(command)
-                    "HDEL" -> handleHdel(command)
-                    "HEXISTS" -> handleHexists(command)
-                    "HLEN" -> handleHlen(command)
-                    "HKEYS" -> handleHkeys(command)
-                    "HVALS" -> handleHvals(command)
-                    "HSCAN" -> handleHscan(command)
-                    "SADD" -> handleSadd(command)
-                    "SREM" -> handleSrem(command)
-                    "SMEMBERS" -> handleSmembers(command)
-                    "SISMEMBER" -> handleSismember(command)
-                    "SCARD" -> handleScard(command)
-                    "LPUSH" -> handleListPush(command, left = true)
-                    "RPUSH" -> handleListPush(command, left = false)
-                    "LPOP" -> handleListPop(command, left = true)
-                    "RPOP" -> handleListPop(command, left = false)
-                    "LRANGE" -> handleLrange(command)
-                    "LLEN" -> handleLlen(command)
-                    "LINDEX" -> handleLindex(command)
-                    "ZADD" -> handleZadd(command)
-                    "ZRANGE" -> handleZrange(command)
-                    "ZREM" -> handleZrem(command)
-                    "ZSCORE" -> handleZscore(command)
-                    "ZCARD" -> handleZcard(command)
-                    "JSON.SET" -> handleJsonSet(command)
-                    "JSON.GET" -> handleJsonGet(command)
-                    "JSON.DEL" -> handleJsonDel(command)
-                    "JSON.TYPE" -> handleJsonType(command)
-                    "DEL" -> handleDel(command)
-                    "EXISTS" -> handleExists(command)
-                    "TTL" -> handleTtl(command)
-                    "PTTL" -> handleTtl(command)
-                    "SCAN" -> handleScan(command)
-                    "KEYS" -> handleKeys(command)
-                    "PUBLISH" -> handlePublish(command)
-                    "SUBSCRIBE" -> handleSubscribe(command, pattern = false)
-                    "PSUBSCRIBE" -> handleSubscribe(command, pattern = true)
-                    "UNSUBSCRIBE", "PUNSUBSCRIBE" -> handleUnsubscribe(command)
-                    "TYPE" -> handleType(command)
-                    else -> writeError("ERR unknown command '$name'")
                 }
             } catch (e: Exception) {
                 logger.warning("Redis command [$name] failed: ${e.message}")
                 writeError("ERR ${e.message ?: "command failed"}")
+                promise.complete()
             }
         }
 
@@ -188,51 +286,158 @@ class RedisServer(
             }
         }
 
-        private fun handleAuth(command: RespCommand) {
+        private fun handleAuth(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
             val credentials = when (command.args.size) {
                 2 -> "default" to command.stringArg(1)
                 3 -> command.stringArg(1) to command.stringArg(2)
                 else -> {
                     writeError("ERR wrong number of arguments for 'auth' command")
+                    promise.complete()
                     return
                 }
             }
 
+            logger.info("Redis client [$clientId] attempting to authenticate as user [${credentials.first}]")
+
             userManager.authenticate(credentials.first, credentials.second).onComplete { result ->
-                val user = if (result.succeeded()) result.result() else null
-                if (user != null && user.enabled) {
-                    username = user.username
-                    authenticated = true
-                    writeSimple("OK")
+                if (result.succeeded()) {
+                    val user = result.result()
+                    if (user != null) {
+                        if (user.enabled) {
+                            logger.info("Redis client [$clientId] successfully authenticated as user [${user.username}]")
+                            username = user.username
+                            authenticated = true
+                            writeSimple("OK")
+                            registerSession()
+                            promise.complete()
+                        } else {
+                            logger.warning("Redis client [$clientId] authentication failed: user [${user.username}] is disabled")
+                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                            promise.complete()
+                        }
+                    } else {
+                        logger.warning("Redis client [$clientId] authentication failed: invalid credentials for user [${credentials.first}]")
+                        if (credentials.first == "default") {
+                            logger.info("Redis client [$clientId] attempting fallback authentication as default 'Admin' user")
+                            userManager.authenticate("Admin", credentials.second).onComplete { fallbackResult ->
+                                if (fallbackResult.succeeded()) {
+                                    val fallbackUser = fallbackResult.result()
+                                    if (fallbackUser != null) {
+                                        if (fallbackUser.enabled) {
+                                            logger.info("Redis client [$clientId] successfully authenticated via fallback as user [${fallbackUser.username}]")
+                                            username = fallbackUser.username
+                                            authenticated = true
+                                            writeSimple("OK")
+                                            registerSession()
+                                            promise.complete()
+                                        } else {
+                                            logger.warning("Redis client [$clientId] fallback authentication failed: user [${fallbackUser.username}] is disabled")
+                                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                            promise.complete()
+                                        }
+                                    } else {
+                                        logger.warning("Redis client [$clientId] fallback authentication failed: invalid credentials for user [Admin]")
+                                        writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                        promise.complete()
+                                    }
+                                } else {
+                                    logger.severe("Redis client [$clientId] fallback authentication failed with error: ${fallbackResult.cause()?.message}")
+                                    writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                    promise.complete()
+                                }
+                            }
+                        } else {
+                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                            promise.complete()
+                        }
+                    }
                 } else {
+                    logger.severe("Redis client [$clientId] authentication failed with error: ${result.cause()?.message}")
                     writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                    promise.complete()
                 }
             }
         }
 
-        private fun handleHello(command: RespCommand) {
+        private fun handleHello(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
             if (command.args.size >= 2) {
                 val proto = command.stringArg(1).toIntOrNull()
                 if (proto != null && proto > 2) {
                     writeError("NOPROTO sorry, this protocol version is not supported.")
+                    promise.complete()
                     return
                 }
             }
 
             val authIndex = command.args.indices.firstOrNull { command.stringArg(it).equals("AUTH", ignoreCase = true) }
             if (authIndex != null && authIndex + 2 < command.args.size) {
-                userManager.authenticate(command.stringArg(authIndex + 1), command.stringArg(authIndex + 2)).onComplete { result ->
-                    val user = if (result.succeeded()) result.result() else null
-                    if (user != null && user.enabled) {
-                        username = user.username
-                        authenticated = true
-                        writeHello()
+                val authUser = command.stringArg(authIndex + 1)
+                val authPass = command.stringArg(authIndex + 2)
+                logger.info("Redis client [$clientId] HELLO attempting to authenticate as user [$authUser]")
+                userManager.authenticate(authUser, authPass).onComplete { result ->
+                    if (result.succeeded()) {
+                        val user = result.result()
+                        if (user != null) {
+                            if (user.enabled) {
+                                logger.info("Redis client [$clientId] HELLO successfully authenticated as user [${user.username}]")
+                                username = user.username
+                                authenticated = true
+                                writeHello()
+                                registerSession()
+                                promise.complete()
+                            } else {
+                                logger.warning("Redis client [$clientId] HELLO authentication failed: user [${user.username}] is disabled")
+                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                promise.complete()
+                            }
+                        } else {
+                            logger.warning("Redis client [$clientId] HELLO authentication failed: invalid credentials for user [$authUser]")
+                            if (authUser == "default") {
+                                logger.info("Redis client [$clientId] HELLO attempting fallback authentication as default 'Admin' user")
+                                userManager.authenticate("Admin", authPass).onComplete { fallbackResult ->
+                                    if (fallbackResult.succeeded()) {
+                                        val fallbackUser = fallbackResult.result()
+                                        if (fallbackUser != null) {
+                                            if (fallbackUser.enabled) {
+                                                logger.info("Redis client [$clientId] HELLO successfully authenticated via fallback as user [${fallbackUser.username}]")
+                                                username = fallbackUser.username
+                                                authenticated = true
+                                                writeHello()
+                                                registerSession()
+                                                promise.complete()
+                                            } else {
+                                                logger.warning("Redis client [$clientId] HELLO fallback authentication failed: user [${fallbackUser.username}] is disabled")
+                                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                                promise.complete()
+                                            }
+                                        } else {
+                                            logger.warning("Redis client [$clientId] HELLO fallback authentication failed: invalid credentials for user [Admin]")
+                                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                            promise.complete()
+                                        }
+                                    } else {
+                                        logger.severe("Redis client [$clientId] HELLO fallback authentication failed with error: ${fallbackResult.cause()?.message}")
+                                        writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                        promise.complete()
+                                    }
+                                }
+                            } else {
+                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                                promise.complete()
+                            }
+                        }
                     } else {
+                        logger.severe("Redis client [$clientId] HELLO authentication failed with error: ${result.cause()?.message}")
                         writeError("WRONGPASS invalid username-password pair or user is disabled.")
+                        promise.complete()
                     }
                 }
             } else {
                 writeHello()
+                if (authenticated) {
+                    registerSession()
+                }
+                promise.complete()
             }
         }
 
@@ -273,6 +478,7 @@ class RedisServer(
             }
             selectedDb = db
             writeSimple("OK")
+            updateSessionInfo()
         }
 
         private fun handleClient(command: RespCommand) {
@@ -284,6 +490,7 @@ class RedisServer(
                 "SETNAME" -> {
                     clientName = command.args.getOrNull(2)?.toString(StandardCharsets.UTF_8)
                     writeSimple("OK")
+                    updateSessionInfo()
                 }
                 "GETNAME" -> writeBulk(clientName?.toByteArray(StandardCharsets.UTF_8))
                 "SETINFO" -> writeSimple("OK")
@@ -1340,8 +1547,13 @@ class RedisServer(
 
         private fun cleanup() {
             closed = true
+            commandQueue.clear()
             listenerIds.toList().forEach { sessionHandler.unregisterMessageListener(it) }
             listenerIds.clear()
+            if (sessionRegistered) {
+                sessionHandler.delClient(clientId)
+            }
+            commandConsumer?.unregister()
         }
 
         private fun close() {
