@@ -621,7 +621,6 @@ class MetricsResolver(
             future
         }
     }
-
     fun sessionMetrics(): DataFetcher<CompletableFuture<List<SessionMetrics>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<SessionMetrics>>()
@@ -640,8 +639,13 @@ class MetricsResolver(
 
             if (nodeId == currentNodeId) {
                 // Local node - get directly from session handler with rate calculation
-                val metrics = sessionHandler.getClientMetricsWithRate(clientId) ?: SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())
-                future.complete(listOf(metrics))
+                sessionHandler.getClientMetricsWithStats(clientId).onComplete { res ->
+                    if (res.succeeded()) {
+                        future.complete(listOf(res.result()))
+                    } else {
+                        future.complete(listOf(SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())))
+                    }
+                }
             } else {
                 // Remote node - request via message bus
                 val sessionMetricsAddress = EventBusAddresses.Node.sessionMetrics(nodeId, "*")
@@ -657,7 +661,11 @@ class MetricsResolver(
                             SessionMetrics(
                                 messagesIn = response.getDouble("messagesIn", 0.0),
                                 messagesOut = response.getDouble("messagesOut", 0.0),
-                                timestamp = TimestampConverter.currentTimeIsoString()
+                                timestamp = TimestampConverter.currentTimeIsoString(),
+                                connected = response.getBoolean("connected"),
+                                lastPing = response.getString("lastPing"),
+                                inFlightMessagesRcv = response.getInteger("inFlightMessagesRcv"),
+                                inFlightMessagesSnd = response.getInteger("inFlightMessagesSnd")
                             )
                         } else {
                             SessionMetrics(0.0, 0.0, TimestampConverter.currentTimeIsoString())

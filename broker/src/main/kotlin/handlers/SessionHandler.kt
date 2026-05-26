@@ -379,12 +379,28 @@ open class SessionHandler(
             if (requestedClientId != null) {
                 val sessionMetrics = clientMetrics[requestedClientId]
                 if (sessionMetrics != null) {
-                    val response = JsonObject()
-                        .put("clientId", requestedClientId)
-                        .put("messagesIn", sessionMetrics.messagesIn.get())
-                        .put("messagesOut", sessionMetrics.messagesOut.get())
-                        .put("found", true)
-                    message.reply(response)
+                    getClientMetricsWithStats(requestedClientId).onComplete { statsResult ->
+                        if (statsResult.succeeded()) {
+                            val metrics = statsResult.result()
+                            val response = JsonObject()
+                                .put("clientId", requestedClientId)
+                                .put("messagesIn", metrics.messagesIn)
+                                .put("messagesOut", metrics.messagesOut)
+                                .put("connected", metrics.connected ?: false)
+                                .put("lastPing", metrics.lastPing ?: "")
+                                .put("inFlightMessagesRcv", metrics.inFlightMessagesRcv ?: 0)
+                                .put("inFlightMessagesSnd", metrics.inFlightMessagesSnd ?: 0)
+                                .put("found", true)
+                            message.reply(response)
+                        } else {
+                            val response = JsonObject()
+                                .put("clientId", requestedClientId)
+                                .put("messagesIn", sessionMetrics.messagesIn.get().toDouble())
+                                .put("messagesOut", sessionMetrics.messagesOut.get().toDouble())
+                                .put("found", true)
+                            message.reply(response)
+                        }
+                    }
                 } else {
                     message.reply(JsonObject().put("found", false))
                 }
@@ -709,6 +725,55 @@ open class SessionHandler(
             messagesOut = outRate,
             timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()
         )
+    }
+
+    fun getClientMetricsWithStats(clientId: String): Future<at.rocworks.extensions.graphql.SessionMetrics> {
+        val promise = Promise.promise<at.rocworks.extensions.graphql.SessionMetrics>()
+        val metrics = clientMetrics[clientId]
+        if (metrics == null) {
+            promise.complete(at.rocworks.extensions.graphql.SessionMetrics(0.0, 0.0, at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString()))
+            return promise.future()
+        }
+        
+        val currentTime = System.currentTimeMillis()
+        val inCount = metrics.messagesIn.get()
+        val outCount = metrics.messagesOut.get()
+        
+        val duration = (currentTime - metrics.lastResetTime) / 1000.0 // seconds
+        val inRate = if (duration > 0) kotlin.math.round(inCount / duration) else 0.0
+        val outRate = if (duration > 0) kotlin.math.round(outCount / duration) else 0.0
+        
+        val statsRequest = JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_STATISTICS)
+        vertx.eventBus().request<JsonObject>(
+            MqttClient.getCommandAddress(clientId),
+            statsRequest,
+            io.vertx.core.eventbus.DeliveryOptions().setSendTimeout(100)
+        ).onComplete { statsResult ->
+            if (statsResult.succeeded()) {
+                val stats = statsResult.result().body()
+                promise.complete(at.rocworks.extensions.graphql.SessionMetrics(
+                    messagesIn = inRate,
+                    messagesOut = outRate,
+                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString(),
+                    connected = stats.getBoolean("connected", false),
+                    lastPing = stats.getString("lastPing", ""),
+                    inFlightMessagesRcv = stats.getInteger("inFlightMessagesRcv", 0),
+                    inFlightMessagesSnd = stats.getInteger("inFlightMessagesSnd", 0)
+                ))
+            } else {
+                val isOnline = getClientStatus(clientId) == ClientStatus.ONLINE
+                promise.complete(at.rocworks.extensions.graphql.SessionMetrics(
+                    messagesIn = inRate,
+                    messagesOut = outRate,
+                    timestamp = at.rocworks.extensions.graphql.TimestampConverter.currentTimeIsoString(),
+                    connected = isOnline,
+                    lastPing = null,
+                    inFlightMessagesRcv = 0,
+                    inFlightMessagesSnd = 0
+                ))
+            }
+        }
+        return promise.future()
     }
 
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]

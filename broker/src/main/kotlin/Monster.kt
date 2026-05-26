@@ -328,6 +328,16 @@ class Monster(args: Array<String>) {
         @JvmStatic
         fun getPublishWorkerThreads(): Int = publishWorkerThreads
 
+        @Volatile
+        private var maxInFlightMessages: Int = 10_000
+        @JvmStatic
+        fun getMaxInFlightMessages(): Int = maxInFlightMessages
+
+        @Volatile
+        private var serverReceiveMaximum: Int = 100
+        @JvmStatic
+        fun getServerReceiveMaximum(): Int = serverReceiveMaximum
+
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
                 val promise = Promise.promise<String>()
@@ -921,8 +931,23 @@ MORE INFO:
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
 
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
+
+        maxInFlightMessages = try {
+            tcpServerConfig.getInteger("MaxInFlightMessages", 10_000)
+        } catch (e: Exception) {
+            logger.warning("Config: MqttTcpServer.MaxInFlightMessages read failed: ${e.message}")
+            10_000
+        }
+
+        serverReceiveMaximum = try {
+            tcpServerConfig.getInteger("ServerReceiveMaximum", 100)
+        } catch (e: Exception) {
+            logger.warning("Config: MqttTcpServer.ServerReceiveMaximum read failed: ${e.message}")
+            100
+        }
+
         logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] NATS [$useNats] QME [$queuedMessagesEnabled]")
-        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB]")
+        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB] MaxInFlightMessages [$maxInFlightMessages] ServerReceiveMaximum [$serverReceiveMaximum]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.fine("RetainedMessageStoreType [${retainedStoreType}]")

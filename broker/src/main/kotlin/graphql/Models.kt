@@ -223,7 +223,11 @@ data class BrokerMetrics(
 data class SessionMetrics(
     val messagesIn: Double,
     val messagesOut: Double,
-    val timestamp: String
+    val timestamp: String,
+    val connected: Boolean? = null,
+    val lastPing: String? = null,
+    val inFlightMessagesRcv: Int? = null,
+    val inFlightMessagesSnd: Int? = null
 )
 
 data class Mqtt5Statistics(

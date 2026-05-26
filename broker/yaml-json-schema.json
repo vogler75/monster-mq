@@ -255,6 +255,16 @@
           "description": "Socket send buffer size in kilobytes. Should match receive buffer size. Recommended: 512KB for normal load, 1-2MB for high-load scenarios.",
           "minimum": 8,
           "maximum": 65536
+        },
+        "MaxInFlightMessages": {
+          "type": "integer",
+          "default": 10000,
+          "description": "Maximum number of outstanding QoS 1 and QoS 2 messages in flight for non-MQTT v5.0 clients (where limit is not negotiated via CONNECT/CONNACK)."
+        },
+        "ServerReceiveMaximum": {
+          "type": "integer",
+          "default": 100,
+          "description": "Server inbound Receive Maximum advertised in CONNACK for MQTT v5.0 clients. Controls how many outstanding QoS 1 and QoS 2 messages the server is willing to receive concurrently."
         }
       }
     },

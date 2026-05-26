@@ -93,6 +93,15 @@ class MqttClient(
     // For MQTT v3.1.1: uses endpoint.isCleanSession
     private var effectiveCleanSession: Boolean = true
 
+    // Outbound Receive Maximum saturation tracking
+    private var receiveMaximumWarningActive: Boolean = false
+    private var receiveMaximumWarningSince: Instant? = null
+    private var receiveMaximumSuppressedWarnings: Long = 0L
+    private var receiveMaximumLastSampledMessageId: Int? = null
+    private var receiveMaximumLastSampledTopic: String? = null
+    private var receiveMaximumLastSampledQos: Int? = null
+    private var receiveMaximumLastSampledInFlightObserved: Int? = null
+
 
     // create a getter for the client id
     val clientId: String
@@ -100,8 +109,6 @@ class MqttClient(
 
 
     companion object {
-        const val MAX_IN_FLIGHT_MESSAGES = 100_000 // TODO make this configurable
-
         private val logger = Utils.getLogger(this::class.java)
 
 
@@ -377,7 +384,7 @@ class MqttClient(
                     }
                     
                     // Receive Maximum (33) - Server's limit for outstanding QoS 1/2 messages
-                    connackProps.add(MqttProperties.IntegerProperty(33, 100))
+                    connackProps.add(MqttProperties.IntegerProperty(33, Monster.getServerReceiveMaximum()))
                     
                     // Maximum QoS (36) - Omitted: per MQTT 5.0 §3.2.2.3.4, valid values are 0 or 1 only.
                     // When absent, the client may use QoS 2. Including value 2 is a protocol error.
@@ -546,7 +553,7 @@ class MqttClient(
                 }
                 
                 // Receive Maximum (33) - Server's limit for outstanding QoS 1/2 messages
-                connackProps.add(MqttProperties.IntegerProperty(33, 100))
+                connackProps.add(MqttProperties.IntegerProperty(33, Monster.getServerReceiveMaximum()))
                 
                 // Maximum QoS (36) - Omitted: per MQTT 5.0 §3.2.2.3.4, valid values are 0 or 1 only.
                 // When absent, the client may use QoS 2. Including value 2 is a protocol error.
@@ -633,6 +640,17 @@ class MqttClient(
         isProcessingQueue = false
         triggerPending = false
         clearMessageCache()
+
+        if (receiveMaximumWarningActive) {
+            val since = receiveMaximumWarningSince
+            val durationStr = if (since != null) {
+                val duration = java.time.Duration.between(since, Instant.now())
+                "${duration.toMillis() / 1000.0}s"
+            } else {
+                "unknown"
+            }
+            logger.warning { "Client [$clientId] Disconnected while saturated at Receive Maximum limit. Saturation duration: $durationStr. Suppressed $receiveMaximumSuppressedWarnings warnings. Last blocked topic: $receiveMaximumLastSampledTopic (QoS $receiveMaximumLastSampledQos, MsgId $receiveMaximumLastSampledMessageId)." }
+        }
 
         // Clear topic aliases (MQTT v5.0 Phase 4)
         // Topic aliases are session-specific but NOT persistent across disconnects
@@ -1169,13 +1187,28 @@ class MqttClient(
                 val maxInFlight = if (endpoint.protocolVersion() == 5) {
                     clientReceiveMaximum
                 } else {
-                    MAX_IN_FLIGHT_MESSAGES
+                    Monster.getMaxInFlightMessages()
                 }
                 
                 if (inFlightMessagesSnd.size >= maxInFlight) {
-                    logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, Receive Maximum limit reached (${inFlightMessagesSnd.size}/$maxInFlight) [${Utils.getCurrentFunctionName()}]" }
+                    receiveMaximumLastSampledMessageId = message.messageId
+                    receiveMaximumLastSampledTopic = message.topicName
+                    receiveMaximumLastSampledQos = message.qosLevel
+                    receiveMaximumLastSampledInFlightObserved = inFlightMessagesSnd.size
+
+                    if (!receiveMaximumWarningActive) {
+                        receiveMaximumWarningActive = true
+                        receiveMaximumWarningSince = Instant.now()
+                        receiveMaximumSuppressedWarnings = 0L
+                        logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, Receive Maximum limit reached (${inFlightMessagesSnd.size}/$maxInFlight) [${Utils.getCurrentFunctionName()}]" }
+                    } else {
+                        receiveMaximumSuppressedWarnings++
+                    }
                     // TODO: message must be removed from message store (queued messages)
                 } else {
+                    // Check if we were previously in a saturated state and have recovered
+                    checkReceiveMaximumRecovery(maxInFlight)
+
                     inFlightMessagesSnd.addLast(InFlightMessage(message))
                     if (inFlightMessagesSnd.size == 1) {
                         sessionHandler.incrementMessagesOut(clientId)
@@ -1198,8 +1231,37 @@ class MqttClient(
         }
     }
 
+    private fun checkReceiveMaximumRecovery(maxInFlight: Int) {
+        if (receiveMaximumWarningActive && inFlightMessagesSnd.size < maxInFlight) {
+            val since = receiveMaximumWarningSince
+            val durationStr = if (since != null) {
+                val duration = java.time.Duration.between(since, Instant.now())
+                "${duration.toMillis() / 1000.0}s"
+            } else {
+                "unknown"
+            }
+            logger.info { "Client [$clientId] Receive Maximum limit recovered. Saturated for $durationStr. Suppressed $receiveMaximumSuppressedWarnings warnings. Last blocked topic: $receiveMaximumLastSampledTopic (QoS $receiveMaximumLastSampledQos, MsgId $receiveMaximumLastSampledMessageId)." }
+            
+            receiveMaximumWarningActive = false
+            receiveMaximumWarningSince = null
+            receiveMaximumSuppressedWarnings = 0L
+            receiveMaximumLastSampledMessageId = null
+            receiveMaximumLastSampledTopic = null
+            receiveMaximumLastSampledQos = null
+            receiveMaximumLastSampledInFlightObserved = null
+        }
+    }
+
     private fun publishMessageCompleted(message: BrokerMessage) {
         inFlightMessagesSnd.removeFirst()
+
+        val maxInFlight = if (endpoint.protocolVersion() == 5) {
+            clientReceiveMaximum
+        } else {
+            Monster.getMaxInFlightMessages()
+        }
+        checkReceiveMaximumRecovery(maxInFlight)
+
         if (message.isQueued) sessionHandler.markMessageDelivered(clientId, message.messageUuid)
     }
 
@@ -1304,6 +1366,13 @@ class MqttClient(
                 } else {
                     logger.warning { "Client [$clientId] Subscribe: Message [${inFlightMessage.message.messageId}] for topic [${inFlightMessage.message.topicName}] not delivered [${Utils.getCurrentFunctionName()}]" }
                     inFlightMessagesSnd.removeLast()
+
+                    val maxInFlight = if (endpoint.protocolVersion() == 5) {
+                        clientReceiveMaximum
+                    } else {
+                        Monster.getMaxInFlightMessages()
+                    }
+                    checkReceiveMaximumRecovery(maxInFlight)
                 }
             }
         } catch (e: NoSuchElementException) {
