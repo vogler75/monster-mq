@@ -25,6 +25,7 @@ class NatsClient(
     private var authenticated = false
     private var username: String? = null
     private var verbose = false
+    private var closed = false
 
     // SID -> MQTT topic filter
     private val sidToTopic = mutableMapOf<String, String>()
@@ -116,6 +117,19 @@ class NatsClient(
         }
     }
 
+    private fun registerSession() {
+        val information = JsonObject()
+        information.put("RemoteAddress", socket.remoteAddress().toString())
+        information.put("LocalAddress", socket.localAddress().toString())
+        information.put("ProtocolVersion", "NATS")
+        information.put("SSL", false)
+        sessionHandler.setClient(clientId, true, information).onComplete { ar ->
+            if (ar.succeeded()) {
+                sessionHandler.onlineClient(clientId)
+            }
+        }
+    }
+
     private fun handleConnect(args: String) {
         val json = try {
             JsonObject(args)
@@ -129,6 +143,7 @@ class NatsClient(
         if (!userManager.isUserManagementEnabled()) {
             authenticated = true
             if (verbose) writeLine("+OK")
+            registerSession()
             return
         }
 
@@ -142,6 +157,7 @@ class NatsClient(
                 authenticated = true
                 username = "Anonymous"
                 if (verbose) writeLine("+OK")
+                registerSession()
             } else {
                 writeError("Authorization Violation")
                 socket.close()
@@ -154,6 +170,7 @@ class NatsClient(
                 authenticated = true
                 username = user
                 if (verbose) writeLine("+OK")
+                registerSession()
             } else {
                 writeError("Authorization Violation")
                 socket.close()
@@ -304,6 +321,9 @@ class NatsClient(
     }
 
     private fun cleanup() {
+        if (closed) return
+        closed = true
+
         // Unsubscribe all topics
         for (mqttTopic in topicToSids.keys.toList()) {
             sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
@@ -312,6 +332,7 @@ class NatsClient(
         topicToSids.clear()
 
         sessionHandler.unregisterInternalClient(clientId)
+        sessionHandler.delClient(clientId)
 
         // Undeploy this verticle
         vertx.undeploy(deploymentID())
