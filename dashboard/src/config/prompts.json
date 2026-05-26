@@ -1,0 +1,23 @@
+{
+  "systemPrompt": "You are an MQTT topic tree analyst helping users understand their IoT data.\nThe data below shows MQTT topics and their current values in a hierarchical tree format using ASCII art (├── └── │).\n\n**Output format:** Use Markdown formatting in your responses:\n- Use ## headings for sections\n- Use **bold** for emphasis\n- Use `code` for topic names and values\n- Use bullet lists for findings\n- Use tables when comparing data\n\n**Important rules:**\n- NEVER reproduce the raw input data table in your response\n- Do NOT echo back the topic tree structure you received\n- Avoid long sequences of dashes (---) or other separator characters\n- Focus on analysis and insights, not data reproduction\n\nWhen analyzing:\n- Identify naming patterns and hierarchy structure\n- Spot anomalies or unusual values\n- Recognize IoT patterns (Sparkplug, Homie, etc.)\n- Provide concise, actionable insights\n\nTopic data:",
+  "quickActions": [
+    {
+      "id": "summarize",
+      "label": "Summarize",
+      "title": "Summarize the topic tree",
+      "prompt": "Provide a high-level summary of this topic tree. What kind of data is being collected? What systems or devices are represented?"
+    },
+    {
+      "id": "find-structure",
+      "label": "Find Structure",
+      "title": "Analyze naming patterns and hierarchy",
+      "prompt": "Analyze the MQTT topic tree to identify reusable structures and data models:\n\n1. **Topic Hierarchy Analysis:**\n   - Identify naming patterns and conventions (e.g., location/device/metric)\n   - Detect object types vs object instances (e.g., \"sensors/temperature\" is a type, \"sensors/sensor-001\" is an instance)\n   - Find common path segments that represent categories or classes\n\n2. **Payload Structure Analysis:**\n   - Examine JSON payloads to identify common schemas\n   - Find recurring field patterns across different topics\n   - Detect potential data models (e.g., all temperature sensors share {value, unit, timestamp})\n\n3. **Pattern Recognition:**\n   - Group topics by similar payload structures\n   - Identify templates or base types that multiple instances follow\n   - Suggest potential object hierarchies or inheritance patterns\n\nPlease present your findings as:\n- Identified object types/classes with their common structure\n- Object instances found for each type\n- Suggested data model or schema for reusable structures"
+    },
+    {
+      "id": "detect-anomalies",
+      "label": "Detect Anomalies",
+      "title": "Find unusual values or outliers",
+      "prompt": "Look for anomalies in this data: unusual values, potential errors, outliers, or values that seem inconsistent with their neighbors."
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Scripts</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/help-modal.js"></script>
+    <style>
+        .search-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+            max-width: 400px;
+        }
+        .search-input {
+            flex: 1;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .search-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+        }
+        .section-container {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            margin-bottom: 2rem;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            padding: 0.6rem 1.25rem;
+            font-size: 0.875rem;
+        }
+        .btn svg {
+            flex-shrink: 0;
+        }
+        .table-wrapper {
+            overflow-x: auto;
+        }
+        table.data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        table.data-table th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: left;
+            border-bottom: 1px solid var(--dark-border);
+        }
+        table.data-table td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            color: var(--text-secondary);
+        }
+        table.data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+        table.data-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-topic {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .badge-timer {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+        }
+        .badge-error {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+        <ix-menu application-name="MonsterMQ" pinned start-expanded>
+        </ix-menu>
+        
+        <div class="main-content" id="main-content">
+            <div class="container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                        <div>
+                            <h1 class="page-title">Scripts</h1>
+                            <p class="page-subtitle">Write simple, standalone JavaScript code blocks triggered by MQTT topics or timers</p>
+                        </div>
+                        <button onclick="openHelp('script-api')" class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem;" title="Open Scripts Help">
+                            <ix-icon name="info" size="16"></ix-icon>
+                            API Reference
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Main Section Card -->
+                <div class="section-container">
+                    <div class="table-header">
+                        <div class="search-bar-container">
+                            <input type="text" id="script-search" class="search-input" placeholder="Search scripts by name or description...">
+                        </div>
+                        <div class="table-actions">
+                            <ix-icon-button icon="refresh" variant="secondary" ghost onclick="loadScriptsList()" title="Refresh scripts"></ix-icon-button>
+                            <button class="btn btn-primary" onclick="window.spaLocation.href = '/pages/script-detail.html'">
+                                <ix-icon name="add-circle" size="16"></ix-icon>
+                                New Script
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="data-table" id="scripts-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 200px;">Name</th>
+                                    <th>Description</th>
+                                    <th style="width: 250px;">Trigger</th>
+                                    <th style="width: 100px;">Status</th>
+                                    <th style="width: 100px; text-align: right;">Runs</th>
+                                    <th style="width: 100px; text-align: right;">Errors</th>
+                                    <th style="width: 150px;">Last Run</th>
+                                    <th style="width: 140px; text-align: center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 3rem;">
+                                        Loading scripts...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="/js/log-viewer.js"></script>
+        <script src="/js/scripts.js"></script>
+        <script>
+            // Filter log viewer to show only FlowEngine/Script logs
+            window.onLogViewerReady(function(logViewer) {
+                logViewer.setFilters({
+                    sourceClassRegex: 'at\\.rocworks\\.flowengine.*'
+                });
+                
+                if (logViewer.elements && logViewer.elements.root) {
+                    const titleEl = logViewer.elements.root.querySelector('.log-viewer-title span:not(.chevron):not(.log-viewer-badge)');
+                    if (titleEl) {
+                        titleEl.textContent = 'Script Engine Logs';
+                    }
+                }
+            });
+        </script>
+    </ix-application>
+</body>
+</html>

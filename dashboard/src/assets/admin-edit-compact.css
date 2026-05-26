@@ -1,0 +1,286 @@
+/*
+ * Dense admin edit-page layout.
+ * Opt in with <body class="admin-edit-page"> after page-local styles.
+ */
+
+body.admin-edit-page {
+    line-height: 1.35;
+}
+
+body.admin-edit-page .main-content {
+    padding: 0.85rem 1rem;
+}
+
+body.admin-edit-page .container {
+    max-width: 1720px;
+    padding: 0 0.75rem;
+}
+
+body.admin-edit-page .page-header {
+    margin-bottom: 0.8rem;
+}
+
+body.admin-edit-page .page-header-content,
+body.admin-edit-page .page-header-actions {
+    gap: 0.5rem;
+}
+
+body.admin-edit-page .page-title {
+    font-size: 1.35rem;
+    line-height: 1.2;
+    margin-bottom: 0.15rem;
+}
+
+body.admin-edit-page .page-subtitle {
+    font-size: 0.82rem;
+    line-height: 1.25;
+}
+
+body.admin-edit-page .section-card {
+    margin-bottom: 0.7rem !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    transition: border-color 0.15s ease, background-color 0.15s ease !important;
+}
+
+body.admin-edit-page .section-card:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+body.admin-edit-page .section-header {
+    min-height: 0;
+    padding: 0.6rem 0.8rem !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+body.admin-edit-page .section-title,
+body.admin-edit-page .section-header h2,
+body.admin-edit-page .section-title h2 {
+    gap: 0.45rem;
+    margin: 0 !important;
+}
+
+body.admin-edit-page .section-title h2,
+body.admin-edit-page .section-header h2 {
+    font-size: 0.98rem !important;
+    line-height: 1.2;
+}
+
+body.admin-edit-page .section-icon {
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 6px !important;
+}
+
+body.admin-edit-page .section-content {
+    padding: 0.75rem 0.8rem !important;
+}
+
+body.admin-edit-page .form-grid {
+    gap: 0.55rem 0.75rem !important;
+    align-items: start;
+}
+
+@media (min-width: 1280px) {
+    body.admin-edit-page .form-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+
+    body.admin-edit-page .logger-info-grid {
+        grid-template-columns: repeat(3, minmax(320px, 1fr)) !important;
+    }
+}
+
+body.admin-edit-page .logger-info-grid,
+body.admin-edit-page .info-grid,
+body.admin-edit-page .buffer-settings-grid {
+    gap: 0.75rem !important;
+    margin-bottom: 0.75rem !important;
+}
+
+body.admin-edit-page .full-width,
+body.admin-edit-page .json-schema-section,
+body.admin-edit-page .schema-editor,
+body.admin-edit-page .test-payload-editor,
+body.admin-edit-page textarea.script {
+    grid-column: 1 / -1 !important;
+}
+
+body.admin-edit-page .form-group {
+    margin-bottom: 0.55rem !important;
+    gap: 0.25rem !important;
+}
+
+body.admin-edit-page .form-grid > .form-group,
+body.admin-edit-page .section-content > .form-group:last-child {
+    margin-bottom: 0 !important;
+}
+
+body.admin-edit-page .form-section {
+    margin-top: 0.8rem !important;
+    padding-top: 0.8rem !important;
+}
+
+body.admin-edit-page .form-group label,
+body.admin-edit-page .modal .form-group label {
+    margin-bottom: 0.25rem !important;
+    font-size: 0.78rem !important;
+    line-height: 1.2;
+    font-weight: 600 !important;
+}
+
+body.admin-edit-page input[type="text"],
+body.admin-edit-page input[type="password"],
+body.admin-edit-page input[type="number"],
+body.admin-edit-page input[type="email"],
+body.admin-edit-page select,
+body.admin-edit-page textarea,
+body.admin-edit-page .form-control {
+    min-height: 34px;
+    padding: 0.42rem 0.6rem !important;
+    border-radius: 6px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.25;
+}
+
+body.admin-edit-page textarea {
+    min-height: 68px;
+}
+
+body.admin-edit-page textarea[rows="2"] {
+    min-height: 54px;
+}
+
+body.admin-edit-page textarea[rows="3"],
+body.admin-edit-page textarea[rows="4"] {
+    min-height: 72px;
+}
+
+body.admin-edit-page #jsonSchema,
+body.admin-edit-page #headers,
+body.admin-edit-page #policy-json-schema,
+body.admin-edit-page #agent-system-prompt,
+body.admin-edit-page .schema-editor {
+    min-height: 220px !important;
+}
+
+body.admin-edit-page #script,
+body.admin-edit-page textarea.script {
+    min-height: 300px !important;
+}
+
+body.admin-edit-page small,
+body.admin-edit-page .form-hint,
+body.admin-edit-page .json-hint,
+body.admin-edit-page .info-label,
+body.admin-edit-page .message-format {
+    font-size: 0.72rem !important;
+    line-height: 1.25 !important;
+}
+
+body.admin-edit-page .form-group small,
+body.admin-edit-page small.form-hint,
+body.admin-edit-page .json-hint {
+    margin-top: 0.22rem !important;
+}
+
+body.admin-edit-page .checkbox-group {
+    gap: 0.4rem !important;
+    min-height: 34px;
+    padding: 0.35rem 0.55rem !important;
+    border-radius: 6px !important;
+}
+
+body.admin-edit-page .checkbox-group label {
+    margin: 0 !important;
+    font-size: 0.82rem !important;
+}
+
+body.admin-edit-page .checkbox-group input[type="checkbox"] {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+body.admin-edit-page .btn,
+body.admin-edit-page .btn-small,
+body.admin-edit-page .btn-ai {
+    min-height: 34px;
+    padding: 0.42rem 0.75rem !important;
+    border-radius: 6px !important;
+    font-size: 0.82rem !important;
+    line-height: 1.15;
+}
+
+body.admin-edit-page .status-badge,
+body.admin-edit-page .mode-badge,
+body.admin-edit-page .qos-badge {
+    padding: 0.22rem 0.5rem !important;
+    border-radius: 999px !important;
+    font-size: 0.68rem !important;
+    line-height: 1.15;
+}
+
+body.admin-edit-page .info-item {
+    padding: 0.55rem 0.65rem !important;
+    border-radius: 6px !important;
+}
+
+body.admin-edit-page .info-label {
+    margin-bottom: 0.25rem !important;
+}
+
+body.admin-edit-page .info-value {
+    font-size: 0.84rem !important;
+    line-height: 1.25;
+}
+
+body.admin-edit-page .data-table thead th,
+body.admin-edit-page .data-table tbody td,
+body.admin-edit-page .data-table th,
+body.admin-edit-page .data-table td {
+    padding: 0.45rem 0.6rem !important;
+    font-size: 0.82rem;
+}
+
+body.admin-edit-page .modal-content {
+    border-radius: 8px !important;
+}
+
+body.admin-edit-page .modal-header,
+body.admin-edit-page .modal-footer {
+    padding: 0.75rem 1rem !important;
+}
+
+body.admin-edit-page .modal-body {
+    padding: 1rem !important;
+}
+
+body.admin-edit-page .ai-schema-generator,
+body.admin-edit-page .help-example {
+    margin-top: 0.75rem !important;
+    padding: 0.75rem !important;
+    border-radius: 6px !important;
+}
+
+@media (max-width: 1000px) {
+    body.admin-edit-page .main-content {
+        padding: 0.65rem;
+    }
+
+    body.admin-edit-page .container {
+        padding: 0;
+    }
+
+    body.admin-edit-page .form-grid,
+    body.admin-edit-page .logger-info-grid,
+    body.admin-edit-page .info-grid,
+    body.admin-edit-page .buffer-settings-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    body.admin-edit-page .page-header-content,
+    body.admin-edit-page .page-header-actions {
+        align-items: stretch;
+    }
+}

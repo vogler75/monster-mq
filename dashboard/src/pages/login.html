@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Login</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/ix-init.css">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <style>
+        body {
+            margin: 0;
+            background: var(--theme-color-1);
+        }
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+            background: var(--theme-color-1);
+        }
+        .login-card {
+            display: grid;
+            grid-template-columns: minmax(260px, 0.85fr) minmax(360px, 1fr);
+            gap: 0;
+            background: var(--theme-color-2);
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 12px;
+            max-width: 900px;
+            width: 100%;
+            min-height: 520px;
+            overflow: hidden;
+        }
+        .login-header {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 3rem;
+            border-right: 1px solid var(--theme-color-soft-bdr);
+            background: var(--theme-color-3);
+        }
+        .login-header img {
+            height: 76px;
+            margin-bottom: 1.25rem;
+        }
+        .login-header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--theme-color-std-text);
+            margin-bottom: 0.5rem;
+            line-height: 1.15;
+        }
+        .login-header p {
+            color: var(--theme-color-soft-text);
+            font-size: 0.95rem;
+            line-height: 1.45;
+            max-width: 260px;
+        }
+        .login-form-panel {
+            padding: 2.25rem 2.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--theme-color-std-text);
+            font-weight: 500;
+        }
+        .form-control {
+            width: 100%;
+            padding: 0.68rem 0.9rem;
+            background: var(--theme-color-1);
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            color: var(--theme-color-std-text);
+            font-size: 0.95rem;
+            box-sizing: border-box;
+            min-height: 42px;
+        }
+        .form-control::placeholder {
+            color: var(--theme-color-soft-text);
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: var(--theme-color-primary);
+        }
+        select.form-control {
+            appearance: auto;
+            cursor: pointer;
+        }
+
+        /* Broker section */
+        .broker-section {
+            margin-bottom: 1.15rem;
+            padding-bottom: 1.15rem;
+            border-bottom: 1px solid var(--theme-color-soft-bdr);
+        }
+        .broker-section .section-label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            color: var(--theme-color-soft-text);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .broker-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--theme-color-soft-text);
+        }
+        .broker-status .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--theme-color-soft-text);
+        }
+        .broker-status .dot.connected {
+            background: var(--monster-green, #10B981);
+        }
+        .broker-status .dot.error {
+            background: var(--monster-red, #EF4444);
+        }
+        .login-submit {
+            width: 100%;
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 8px;
+            background: var(--theme-color-primary);
+            color: var(--theme-color-primary--contrast, #ffffff);
+            font: inherit;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .login-submit:hover:not(:disabled) {
+            filter: brightness(1.08);
+        }
+        .login-submit:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+        .guest-separator {
+            color: var(--theme-color-soft-text);
+            font-size: 0.8rem;
+            margin-bottom: 0.45rem;
+        }
+        .guest-link {
+            color: var(--theme-color-primary);
+            font-size: 0.875rem;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+        .guest-link:hover {
+            color: var(--theme-color-primary);
+        }
+        .broker-config-link-wrap {
+            margin-top: 0;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            align-items: center;
+        }
+        .broker-config-link {
+            color: var(--theme-color-primary);
+            font-size: 0.875rem;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+        .broker-config-link:hover {
+            color: var(--theme-color-primary);
+        }
+        .secondary-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--theme-color-soft-bdr);
+            align-items: stretch;
+        }
+        .secondary-actions.single-action {
+            grid-template-columns: 1fr;
+        }
+        .secondary-action {
+            height: 92px;
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            background: var(--theme-color-1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 0.75rem;
+            box-sizing: border-box;
+        }
+        .secondary-action .guest-separator {
+            display: none;
+        }
+        #guest-access {
+            margin-top: 0 !important;
+        }
+        @media (max-width: 820px) {
+            .login-container {
+                align-items: flex-start;
+                padding: 1rem;
+            }
+            .login-card {
+                grid-template-columns: 1fr;
+                min-height: 0;
+            }
+            .login-header {
+                align-items: center;
+                text-align: center;
+                padding: 1.75rem 1.5rem 1.25rem;
+                border-right: 0;
+                border-bottom: 1px solid var(--theme-color-soft-bdr);
+            }
+            .login-header img {
+                height: 56px;
+                margin-bottom: 0.75rem;
+            }
+            .login-header h1 {
+                font-size: 1.55rem;
+            }
+            .login-header p {
+                max-width: none;
+                font-size: 0.875rem;
+            }
+            .login-form-panel {
+                padding: 1.5rem;
+            }
+            .secondary-actions {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <img src="/assets/logo.png" alt="MonsterMQ Logo">
+                <h1>Welcome Back</h1>
+                <p>Sign in to access your MonsterMQ dashboard</p>
+            </div>
+
+            <div class="login-form-panel">
+            <div class="broker-section">
+                <div class="section-label">
+                    <ix-icon name="distribution" size="16"></ix-icon>
+                    Broker
+                </div>
+                <div class="form-group" style="margin-bottom: 0.75rem;">
+                    <select id="broker-select" class="form-control">
+                        <option value="" disabled selected>Loading brokers...</option>
+                    </select>
+                </div>
+                <div id="broker-status" class="broker-status" style="display:none;">
+                    <span class="dot" id="broker-status-dot"></span>
+                    <span id="broker-status-text"></span>
+                </div>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <form id="login-form" action="javascript:void(0)" method="post" autocomplete="on">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" class="form-control" autocomplete="username" placeholder="Username">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-control" autocomplete="current-password" placeholder="Password">
+                </div>
+
+                <button type="submit" id="login-btn" class="login-submit">Sign In</button>
+            </form>
+
+            <div id="secondary-actions" class="secondary-actions" style="display: none;">
+                <div id="guest-access" class="secondary-action" style="display: none; text-align: center;">
+                    <div class="guest-separator">- or -</div>
+                    <a id="guest-link" href="#" class="guest-link">
+                        View dashboard<br>(read-only)
+                    </a>
+                </div>
+
+                <div id="broker-config-access" class="broker-config-link-wrap secondary-action" style="display: none;">
+                    <span class="guest-separator">- or -</span>
+                    <a id="broker-config-link" class="broker-config-link" href="/pages/broker-config.html">
+                        Edit broker list configuration
+                    </a>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/storage.js"></script>
+    <script src="/js/broker-manager.js"></script>
+    <script src="/js/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - MQTT Clients</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+.btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            align-items: center;
+        }
+        /* Use global .btn-icon for icon-only buttons */
+        .btn-view { color: var(--monster-purple); }
+        .btn-view:hover {
+            background: rgba(124, 58, 237, 0.1);
+            border-color: var(--monster-purple);
+        }
+        .btn-play { color: var(--monster-green); }
+        .btn-play:hover {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: var(--monster-green);
+        }
+        .btn-pause { color: var(--monster-orange); }
+        .btn-pause:hover {
+            background: rgba(249, 115, 22, 0.1);
+            border-color: var(--monster-orange);
+        }
+        /* Global .btn-icon.btn-delete styles apply; local override removed */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow-x: auto;
+            box-shadow: var(--card-shadow);
+        }
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+        }
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+        }
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 2rem;
+        }
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 600px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .modal-footer {
+            padding: 1.5rem 2rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        .form-control, input[type="text"], input[type="password"], input[type="number"], select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            box-sizing: border-box;
+        }
+        .form-control:focus, input:focus, select:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .checkbox-group input[type="checkbox"] {
+            accent-color: var(--monster-purple);
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">MQTT Bridge Management</h1>
+                <p class="page-subtitle">Configure and manage MQTT broker connections for bridging</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Bridges</span>
+                        <div class="metric-icon">🔧</div>
+                    </div>
+                    <div class="metric-value" id="total-clients">0</div>
+                    <div class="metric-label">Configured Bridges</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Bridges</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-clients">0</div>
+                    <div class="metric-label">Active Connections</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Local Bridges</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-clients">0</div>
+                    <div class="metric-label">Local Bridges</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Mappings</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-addresses">0</div>
+                    <div class="metric-label">Topic Mappings</div>
+                </div>
+            </div>
+
+            <div id="clients-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Bridge Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshClients()" title="Refresh bridges"></ix-icon-button>
+                        <a href="/pages/mqtt-client-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Bridge</a>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bridge Name</th>
+                            <th>Broker URL</th>
+                            <th>Namespace</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>Mappings</th>
+                            <th>In (msg/s)</th>
+                            <th>Out (msg/s)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="clients-table-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading bridges...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the bridge "<span id="delete-client-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/mqtt-clients.js"></script>
+    </ix-application>
+</body>
+</html>

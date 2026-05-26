@@ -1,0 +1,13 @@
+{
+  "adminToken": "admin",
+  "brokers": [
+    {
+      "name": "Local",
+      "host": "localhost",
+      "port": 4000,
+      "tls": false,
+      "endpoint": "/graphql",
+      "default": true
+    }
+  ]
+}

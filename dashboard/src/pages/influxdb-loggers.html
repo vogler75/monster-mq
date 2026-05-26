@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - InfluxDB Loggers</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        /* Enhanced InfluxDB Logger Table Styles */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            border-radius: 12px 12px 0 0;
+        }
+
+        .table-title h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        /* Enhanced table styling */
+        .data-table {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            overflow-x: auto;
+            box-shadow: var(--card-shadow);
+        }
+
+        .data-table table {
+            margin: 0;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            width: 100%;
+        }
+
+        .data-table thead th {
+            background: var(--dark-surface-2);
+            padding: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--dark-border);
+            text-align: left;
+        }
+
+        .data-table tbody td {
+            padding: 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            color: var(--text-secondary);
+        }
+
+        .data-table tbody tr:hover {
+            background: rgba(71, 85, 105, 0.1);
+        }
+
+        /* Status badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-enabled {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--monster-green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .status-disabled {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--monster-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .modal-content {
+            background: var(--dark-surface);
+            border-radius: 12px;
+            border: 1px solid var(--dark-border);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .modal-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">InfluxDB Logger Management</h1>
+                <p class="page-subtitle">Configure and manage InfluxDB loggers</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Loggers</span>
+                        <div class="metric-icon">📊</div>
+                    </div>
+                    <div class="metric-value" id="total-loggers">0</div>
+                    <div class="metric-label">Configured Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled Loggers</span>
+                        <div class="metric-icon">🟢</div>
+                    </div>
+                    <div class="metric-value" id="enabled-loggers">0</div>
+                    <div class="metric-label">Active Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">On Current Node</span>
+                        <div class="metric-icon">📍</div>
+                    </div>
+                    <div class="metric-value" id="current-node-loggers">0</div>
+                    <div class="metric-label">Local Loggers</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Messages/s</span>
+                        <div class="metric-icon">⚡</div>
+                    </div>
+                    <div class="metric-value" id="messages-rate">0</div>
+                    <div class="metric-label">Total Throughput</div>
+                </div>
+            </div>
+
+            <div id="loggers-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>Logger Configuration</h2>
+                    </div>
+                    <div class="table-actions">
+                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshLoggers()" title="Refresh loggers"></ix-icon-button>
+                        <a href="/pages/influxdb-logger-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Logger</a>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Logger Name</th>
+                            <th>Endpoint URL</th>
+                            <th>Topic Filters</th>
+                            <th>Auth Type</th>
+                            <th>Node Assignment</th>
+                            <th>Status</th>
+                            <th>Messages (msg/s)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="loggers-table-body">
+                        <!-- Logger rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading loggers...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Confirm Delete</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the logger "<span id="delete-logger-name"></span>"?</p>
+                <p>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteLogger()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/influxdb-loggers.js"></script>
+    </ix-application>
+</body>
+</html>

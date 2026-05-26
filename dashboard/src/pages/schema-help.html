@@ -1,0 +1,160 @@
+<div class="modal-content">
+    <div class="modal-header">
+        <h3>JSON Schema Configuration Guide</h3>
+        <button class="modal-close" onclick="hideSchemaHelp()">×</button>
+    </div>
+    <div class="modal-body">
+        <div class="help-section">
+            <h4>Overview</h4>
+            <p>The JSON Schema defines how incoming MQTT messages are validated and mapped to target fields. It supports JSON Schema validation, JSONPath field mapping, array expansion, and automatic timestamp handling.</p>
+        </div>
+
+        <div class="help-section">
+            <h4>Schema Structure</h4>
+            <p>The schema consists of four main parts:</p>
+            <table class="help-table">
+                <thead>
+                    <tr><th>Property</th><th>Required</th><th>Description</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>properties</code></td><td>Yes</td><td>Defines target fields with their data types</td></tr>
+                    <tr><td><code>required</code></td><td>No</td><td>Array of field names that must be present</td></tr>
+                    <tr><td><code>mapping</code></td><td>No</td><td>JSONPath expressions to extract values from incoming JSON</td></tr>
+                    <tr><td><code>arrayPath</code></td><td>No</td><td>JSONPath to extract array for expanding into multiple rows</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="help-section">
+            <h4>Data Types and Formats</h4>
+            <p>Supported JSON Schema types:</p>
+            <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                <li><code>string</code> - Text values</li>
+                <li><code>number</code> - Numeric values (float/double)</li>
+                <li><code>integer</code> - Integer values</li>
+                <li><code>boolean</code> - True/false values</li>
+                <li><code>string</code> with <code>"format": "timestamp"</code> - Timestamp fields that parse ISO 8601 strings or epoch ms (auto-fills current time if missing)</li>
+                <li><code>number</code> with <code>"format": "timestampms"</code> - Timestamp fields that interpret the value as milliseconds since epoch (auto-fills current time if missing)</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h4>JSONPath Mapping</h4>
+            <p>Use the <code>mapping</code> object to extract values from nested JSON structures using JSONPath expressions:</p>
+            <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "mapping": {
+    "ts": "$.timestamp",
+    "sensor_id": "$.device.id",
+    "value": "$.readings.temperature"
+  }
+}</div>
+            <p><strong>Common JSONPath expressions:</strong></p>
+            <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                <li><code>$.field</code> - Root level field</li>
+                <li><code>$.parent.child</code> - Nested field</li>
+                <li><code>$.array[0]</code> - First array element</li>
+                <li><code>$.sensors[*]</code> - All array elements</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h4>Array Expansion</h4>
+            <p>Use <code>arrayPath</code> to expand array items into multiple rows. Root-level fields are merged with each array item:</p>
+            <div class="help-example">
+                <div class="help-example-title">Example: Expanding Sensor Array</div>
+                <strong>Incoming JSON:</strong>
+                <div class="help-code">{
+  "device_id": "sensor-123",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "sensors": [
+    {"id": "temp-1", "value": 23.5},
+    {"id": "temp-2", "value": 24.1},
+    {"id": "humidity-1", "value": 65.0}
+  ]
+}</div>
+                <strong>Schema:</strong>
+                <div class="help-code">{
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "device_id": {"type": "string"},
+    "sensor_id": {"type": "string"},
+    "value": {"type": "number"}
+  },
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_id": "$.id",
+    "value": "$.value"
+  }
+}</div>
+                <strong>Result: 3 rows created</strong>
+                <div class="help-code">Row 1: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-1', value: 23.5}
+Row 2: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'temp-2', value: 24.1}
+Row 3: {ts: '2024-01-15T10:30:00Z', device_id: 'sensor-123', sensor_id: 'humidity-1', value: 65.0}</div>
+            </div>
+        </div>
+
+        <div class="help-section">
+            <h4>Timestamp Handling</h4>
+            <p>Two timestamp formats are available:</p>
+            <p><strong><code>"format": "timestamp"</code></strong> - Flexible timestamp parsing:</p>
+            <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                <li>Automatically parses ISO 8601 format: <code>"2024-01-15T10:30:00Z"</code></li>
+                <li>Accepts epoch milliseconds as string or number: <code>1705318200000</code></li>
+                <li>If field is missing, uses current timestamp automatically</li>
+            </ul>
+            <p><strong><code>"format": "timestampms"</code></strong> - Milliseconds since epoch only:</p>
+            <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                <li>Interprets long/number values as milliseconds since epoch: <code>1705318200000</code></li>
+                <li>Use this when you have numeric timestamps to avoid parsing overhead</li>
+                <li>If field is missing, uses current timestamp automatically</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h4>Complete Example</h4>
+            <div class="help-example">
+                <div class="help-example-title">Full Configuration for IoT Sensor Data</div>
+                <strong>Schema:</strong>
+                <div class="help-code">{
+  "type": "object",
+  "properties": {
+    "ts": {"type": "string", "format": "timestamp"},
+    "device_id": {"type": "string"},
+    "sensor_type": {"type": "string"},
+    "value": {"type": "number"},
+    "unit": {"type": "string"}
+  },
+  "required": ["value"],
+  "arrayPath": "$.sensors[*]",
+  "mapping": {
+    "ts": "$.timestamp",
+    "device_id": "$.device_id",
+    "sensor_type": "$.type",
+    "value": "$.reading",
+    "unit": "$.unit"
+  }
+}</div>
+            </div>
+        </div>
+
+        <div class="help-section">
+            <h4>Important Notes</h4>
+            <ul style="color: var(--text-muted); margin-left: 1.5rem;">
+                <li>If no <code>mapping</code> is provided, field names are used directly</li>
+                <li>Array expansion creates one row per array item</li>
+                <li>Fields not in schema are ignored</li>
+                <li>Timestamp fields auto-fill with current time if missing from the payload</li>
+            </ul>
+        </div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="hideSchemaHelp()">Got it!</button>
+    </div>
+</div>

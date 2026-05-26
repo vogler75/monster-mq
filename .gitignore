@@ -32,8 +32,6 @@ gateway
 *.pyc
 .aitk/
 
-### Dashboard ###
-dashboard
 
 ### Python ###
 .venv/

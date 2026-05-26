@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Script Editor</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <script src="/js/help-modal.js"></script>
+    <script src="/js/script-editor-modal.js"></script>
+    <style>
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .section-card {
+            background: var(--dark-surface);
+            border: 1px solid var(--dark-border);
+            border-radius: 12px;
+            box-shadow: var(--card-shadow);
+            overflow: hidden;
+        }
+        .section-header {
+            padding: 1.25rem 1.5rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-header h2 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        .section-content {
+            padding: 1.5rem;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.25rem;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .form-group label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .form-control {
+            background: var(--dark-bg);
+            border: 1px solid var(--dark-border);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+        }
+        .form-control:disabled {
+            background: rgba(71, 85, 105, 0.1);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            border-color: rgba(71, 85, 105, 0.2);
+        }
+        .header-checkbox-wrapper {
+            display: flex;
+            align-items: center;
+        }
+        .header-checkbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .trigger-toggle-group {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .trigger-toggle-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        .trigger-panel {
+            background: rgba(71, 85, 105, 0.1);
+            border: 1px dashed var(--dark-border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            display: none;
+        }
+        .trigger-panel.active {
+            display: block;
+        }
+        .topic-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+        .topic-row:last-child {
+            margin-bottom: 0;
+        }
+        .database-node-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .database-node-card {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .database-node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.85rem 1rem;
+            background: rgba(71, 85, 105, 0.15);
+            border-bottom: 1px solid var(--dark-border);
+        }
+        .database-node-title {
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .database-node-body {
+            padding: 1rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+        .database-node-body .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        .database-empty-state {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 1rem;
+            border: 1px dashed var(--dark-border);
+            border-radius: 8px;
+            background: rgba(71, 85, 105, 0.08);
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            cursor: pointer;
+            text-decoration: none;
+            padding: 0.6rem 1.25rem;
+            font-size: 0.875rem;
+        }
+        .btn svg {
+            flex-shrink: 0;
+        }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        .btn-danger:hover {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-small {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.75rem;
+            border-radius: 6px;
+        }
+        .code-actions-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--dark-bg);
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--dark-border);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+        }
+        textarea.code-editor {
+            width: 100%;
+            height: 350px;
+            background: #0f172a;
+            border: 1px solid var(--dark-border);
+            color: #cbd5e1;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            padding: 1rem;
+            border-radius: 0 0 8px 8px;
+            outline: none;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        textarea.code-editor:focus {
+            border-color: var(--primary-color);
+        }
+        .script-editor-validation {
+            margin-top: 0.5rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            display: none;
+        }
+        .script-editor-validation.success {
+            background: rgba(16, 185, 129, 0.12);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+        .script-editor-validation.error {
+            background: rgba(239, 68, 68, 0.12);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+        .script-editor-validation.warning {
+            background: rgba(245, 158, 11, 0.12);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        
+        /* Inline AI Generator Panel */
+        .ai-assistant-card {
+            background: rgba(124, 58, 237, 0.05);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-top: 1.5rem;
+        }
+        .ai-assistant-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #a78bfa;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.75rem;
+        }
+        .ai-input-wrapper {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .ai-input {
+            flex: 1;
+            background: var(--dark-bg);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 0.6rem 1rem;
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .ai-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+        }
+        .ai-btn-generate {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0 1.25rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .ai-btn-generate:hover {
+            background: var(--primary-hover);
+        }
+        .ai-btn-generate:disabled {
+            background: rgba(124, 58, 237, 0.4);
+            color: rgba(255,255,255,0.6);
+            cursor: not-allowed;
+        }
+        .ai-feedback-box {
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.15);
+            display: none;
+        }
+        .ai-feedback-box.loading {
+            color: var(--text-secondary);
+        }
+        .ai-feedback-box.success {
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+        }
+        .ai-feedback-box.error {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+        
+        /* CSS styling rules for Shared Script Editor Modal styling overrides */
+        .script-editor-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 15000;
+            display: none; align-items: center; justify-content: center;
+        }
+        .script-editor-overlay.active { display: flex; }
+        .script-editor-modal {
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+            width: 1400px; max-width: 95vw; height: 85vh; max-height: 90vh;
+            display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        .script-editor-header {
+            padding: 1rem 1.5rem; background: #0f172a; border-bottom: 1px solid #334155;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .script-editor-title { color: #f8fafc; font-size: 1.15rem; font-weight: 600; margin: 0; }
+        .script-editor-subtitle { color: #94a3b8; font-size: 0.8rem; margin-top: 2px; }
+        .script-editor-actions { display: flex; gap: 0.5rem; }
+        .script-editor-btn {
+            background: #334155; border: 1px solid #475569; color: #cbd5e1;
+            padding: 0.4rem 0.8rem; border-radius: 6px; font-size: 0.75rem; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s;
+        }
+        .script-editor-btn:hover { background: #475569; color: #f8fafc; }
+        .script-editor-btn-save { background: var(--primary-color); border-color: var(--primary-color); color: white; }
+        .script-editor-btn-save:hover { background: var(--primary-hover); }
+        .script-editor-body { flex: 1; display: flex; flex-direction: column; position: relative; }
+        .script-editor-textarea {
+            flex: 1; width: 100%; background: #0f172a; border: none; color: #e2e8f0;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace; font-size: 0.9rem;
+            padding: 1.5rem; resize: none; outline: none; box-sizing: border-box;
+        }
+        .script-editor-validation {
+            position: absolute; bottom: 0; left: 0; width: 100%; box-sizing: border-box;
+            background: #0f172a; border-top: 1px solid #334155;
+        }
+        .script-editor-ai-panel {
+            padding: 1rem 1.5rem; background: #0f172a; border-top: 1px solid #334155;
+            display: flex; flex-direction: column; gap: 0.5rem;
+        }
+        .script-editor-ai-header { display: flex; align-items: center; gap: 0.4rem; color: #a78bfa; font-size: 0.8rem; font-weight: 600; }
+        .script-editor-ai-input-area { display: flex; gap: 0.5rem; }
+        .script-editor-ai-input {
+            flex: 1; background: #1e293b; border: 1px solid #334155; color: #f8fafc;
+            border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.8rem; outline: none;
+        }
+        .script-editor-ai-input:focus { border-color: var(--primary-color); }
+        .script-editor-ai-send {
+            background: var(--primary-color); border: none; border-radius: 6px;
+            color: white; width: 32px; height: 32px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+        }
+        .script-editor-ai-send:hover { background: var(--primary-hover); }
+        .script-editor-ai-send:disabled { background: #3b2c5c; cursor: not-allowed; }
+        .script-editor-ai-feedback { padding: 0.5rem 0; font-size: 0.75rem; }
+        .script-editor-ai-feedback.loading { color: #94a3b8; }
+        .script-editor-ai-feedback.success { color: #34d399; }
+        .script-editor-ai-feedback.error { color: #f87171; }
+        .ai-explanation { margin-top: 4px; color: #94a3b8; font-style: italic; white-space: pre-line; }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+        <ix-menu application-name="MonsterMQ" pinned start-expanded>
+        </ix-menu>
+        
+        <div class="main-content" id="main-content">
+            <div class="container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                        <div>
+                            <h1 class="page-title" id="editor-title">New Script</h1>
+                            <p class="page-subtitle" id="editor-subtitle">Create a simple, standalone script executed in the background</p>
+                        </div>
+                        <div style="display: flex; gap: 0.75rem;">
+                            <button class="btn btn-secondary" onclick="goBackToScriptsList()">Cancel</button>
+                            <button class="btn btn-danger" id="delete-btn" style="display: none;" onclick="deleteCurrentScript()">Delete</button>
+                            <button class="btn btn-primary" onclick="saveScript()">Save Script</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Layout -->
+                <div class="form-container">
+                    <!-- Section 1: Script Details -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>Script Details</h2>
+                            <div class="header-checkbox-wrapper">
+                                <label class="header-checkbox">
+                                    <input type="checkbox" id="sc-enabled" checked>
+                                    <span>Enabled</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="section-content">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="sc-name">Script Name</label>
+                                    <input type="text" id="sc-name" class="form-control" placeholder="e.g. TempAlert" required>
+                                </div>
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label for="sc-description">Description</label>
+                                    <textarea id="sc-description" class="form-control" rows="2" placeholder="Briefly describe what this script does..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Execution Trigger -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>Execution Trigger</h2>
+                        </div>
+                        <div class="section-content">
+                            <div class="trigger-toggle-group">
+                                <label class="trigger-toggle-option">
+                                    <input type="radio" name="trigger-type" value="MQTT" checked onchange="toggleTriggerPanels()">
+                                    <span>MQTT Topic Trigger (fires when message published)</span>
+                                </label>
+                                <label class="trigger-toggle-option">
+                                    <input type="radio" name="trigger-type" value="Timer" onchange="toggleTriggerPanels()">
+                                    <span>Interval Timer Trigger (runs periodically)</span>
+                                </label>
+                            </div>
+
+                            <!-- Topic Trigger Sub-Panel -->
+                            <div id="panel-mqtt" class="trigger-panel active">
+                                <label style="display: block; color: var(--text-secondary); font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem;">
+                                    MQTT Trigger Topics (one per row)
+                                </label>
+                                <div id="topic-inputs-container">
+                                    <!-- Dynamic topic rows injected here -->
+                                </div>
+                                <button class="btn btn-secondary btn-small" style="margin-top: 0.75rem;" onclick="addTopicRow()">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                    </svg>
+                                    Add Topic
+                                </button>
+                                <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.5rem; font-style: italic;">
+                                    * Supports wildcards (+ for single level, # for multi-level). Example: <code>sensors/+/temperature</code>
+                                </p>
+                            </div>
+
+                            <!-- Timer Trigger Sub-Panel -->
+                            <div id="panel-timer" class="trigger-panel">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="sc-interval">Interval Frequency</label>
+                                        <input type="number" id="sc-interval" class="form-control" value="10" min="1">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="sc-interval-unit">Time Unit</label>
+                                        <select id="sc-interval-unit" class="form-control">
+                                            <option value="s">Seconds</option>
+                                            <option value="m">Minutes</option>
+                                            <option value="h">Hours</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Database Nodes -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>Database Nodes</h2>
+                            <button class="btn btn-secondary btn-small" onclick="addDatabaseNode()" title="Add JDBC database node">
+                                <ix-icon name="add-circle" size="14"></ix-icon>
+                                Add Database
+                            </button>
+                        </div>
+                        <div class="section-content">
+                            <div id="database-nodes-container" class="database-node-list">
+                                <!-- Dynamic database node cards injected here -->
+                            </div>
+                            <p style="color: var(--text-muted); font-size: 0.75rem; margin-top: 0.75rem; font-style: italic;">
+                                Database nodes are available inside the script with <code>dbs.get("nodeId").execute(sql, args)</code>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Section 4: Script Block -->
+                    <div class="section-card">
+                        <div class="section-header">
+                            <h2>JavaScript Code</h2>
+                        </div>
+                        <div class="section-content" style="padding-bottom: 1.5rem;">
+                            <div class="code-actions-bar">
+                                <button class="btn btn-secondary btn-small" onclick="validateScriptCode()" title="Validate JavaScript syntax">
+                                    Validate Syntax
+                                </button>
+                                <button class="btn btn-secondary btn-small" onclick="expandFullCodeEditor()" title="Expand to fullscreen script editor">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;">
+                                        <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                                      </svg>
+                                    Maximize Editor
+                                </button>
+                            </div>
+                            <textarea id="sc-code" class="code-editor" spellcheck="false" placeholder="// Write JavaScript code...&#10;// Use msg.value, msg.topic, msg.timestamp to read triggers&#10;// Use mqtt.publish(topic, value) to publish results&#10;// Use dbs.get(&quot;nodeId&quot;).execute(sql, args) to query configured database nodes&#10;// Use console.log(val) to log output&#10;&#10;console.log('Script triggered with value:', msg.value);&#10;"></textarea>
+                            <div id="sc-validation" class="script-editor-validation"></div>
+
+                            <!-- Premium AI Assistant Panel -->
+                            <div class="ai-assistant-card">
+                                <div class="ai-assistant-header">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                                        <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                                    </svg>
+                                    AI Script Generator
+                                </div>
+                                <div class="ai-input-wrapper">
+                                    <input type="text" id="ai-prompt-input" class="ai-input" placeholder="e.g. Check if value is above 50, then publish warning alert payload to alerts/high-temp...">
+                                    <button id="ai-btn-generate" class="ai-btn-generate" onclick="generateScriptWithAI()">
+                                        Generate Code
+                                    </button>
+                                </div>
+                                <div id="ai-feedback" class="ai-feedback-box"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="/js/script-detail.js"></script>
+    </ix-application>
+</body>
+</html>

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Broker Configuration</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/ix-init.css">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/broker-manager.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--theme-color-1);
+            color: var(--theme-color-std-text);
+        }
+
+        .broker-config-page {
+            min-height: 100vh;
+            padding: 1.5rem;
+            box-sizing: border-box;
+        }
+
+        .broker-config-shell {
+            max-width: 1120px;
+            margin: 0 auto;
+        }
+
+        .page-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .page-back-link {
+            color: var(--theme-color-soft-text);
+            text-decoration: none;
+            font-size: 0.875rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            min-height: 36px;
+        }
+
+        .page-back-link:hover {
+            color: var(--theme-color-primary);
+            text-decoration: underline;
+        }
+
+        .page-header {
+            margin: 0 0 1.25rem 0;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--theme-color-soft-bdr);
+        }
+
+        .page-title {
+            margin: 0 0 0.35rem 0;
+            color: var(--theme-color-std-text);
+            font-size: 1.5rem;
+            line-height: 1.2;
+            font-weight: 700;
+        }
+
+        .page-subtitle {
+            margin: 0;
+            color: var(--theme-color-soft-text);
+            line-height: 1.45;
+            max-width: 820px;
+            font-size: 0.92rem;
+        }
+
+        .section-card {
+            background: var(--theme-color-2);
+            border-radius: 8px;
+            border: 1px solid var(--theme-color-soft-bdr);
+            margin-bottom: 1rem;
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.9rem 1rem;
+            border-bottom: 1px solid var(--theme-color-soft-bdr);
+            background: var(--theme-color-3);
+        }
+
+        .section-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .section-header h2 {
+            margin: 0;
+            color: var(--theme-color-std-text);
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .section-content {
+            padding: 1rem;
+        }
+
+        .settings-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .settings-grid .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .settings-grid label {
+            color: var(--theme-color-soft-text);
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .token-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            margin-top: 0;
+        }
+
+        .token-input-group {
+            display: flex;
+            gap: 0.6rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .helper-text {
+            color: var(--theme-color-soft-text);
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+            max-width: 70ch;
+        }
+
+        .section-kicker {
+            color: var(--theme-color-soft-text);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            opacity: 0.9;
+        }
+
+        .token-state {
+            display: inline-block;
+            padding: 0.25rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border: 1px solid transparent;
+            white-space: nowrap;
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--monster-green);
+            border-color: rgba(16, 185, 129, 0.35);
+        }
+
+        .token-state.empty {
+            background: rgba(148, 163, 184, 0.12);
+            color: var(--theme-color-soft-text);
+            border-color: rgba(148, 163, 184, 0.3);
+        }
+
+        .broker-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.85rem;
+        }
+
+        .broker-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 0.75rem;
+            align-items: end;
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            padding: 0.75rem;
+            background: var(--theme-color-1);
+        }
+
+        .broker-grid {
+            display: grid;
+            grid-template-columns: minmax(130px, 1.1fr) minmax(160px, 1.35fr) 76px 58px minmax(120px, 1fr) 72px;
+            gap: 0.55rem;
+            align-items: end;
+        }
+
+        .broker-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            color: var(--theme-color-soft-text);
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            font-weight: 600;
+            min-width: 0;
+        }
+
+        .broker-field input {
+            color: var(--theme-color-std-text);
+        }
+
+        .broker-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.4rem;
+            align-items: end;
+            padding-bottom: 0;
+        }
+
+        .broker-actions .btn {
+            min-height: 36px;
+            padding: 0.55rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .broker-row .broker-default-wrap {
+            align-items: center;
+            justify-self: center;
+        }
+
+        .broker-row .broker-default-wrap input {
+            width: 16px;
+            height: 16px;
+            margin-top: 4px;
+        }
+
+        .broker-row .broker-tls {
+            width: 16px;
+            height: 16px;
+            margin-top: 9px;
+            align-self: center;
+        }
+
+        .broker-row .form-control {
+            min-height: 36px;
+            padding: 0.5rem 0.6rem;
+            font-size: 0.88rem;
+        }
+
+        .page-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            padding-top: 0.25rem;
+        }
+
+        .save-status {
+            font-size: 0.9rem;
+            color: var(--theme-color-soft-text);
+        }
+
+        .save-status.success { color: var(--monster-green); }
+
+        .loading-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: var(--theme-color-soft-text);
+            padding: 0.85rem 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            background: var(--theme-color-2);
+            border: 1px solid var(--theme-color-soft-bdr);
+        }
+
+        .error-message {
+            margin: 0.8rem 0;
+            padding: 0.85rem 1rem;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-radius: 8px;
+            color: var(--monster-red);
+            font-size: 0.9rem;
+        }
+
+        .lock-notice {
+            margin: 0 0 1rem 0;
+            padding: 1rem;
+            background: var(--theme-color-2);
+            border: 1px dashed var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            color: var(--theme-color-soft-text);
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.65rem 0.8rem;
+            background: var(--theme-color-1);
+            border: 1px solid var(--theme-color-soft-bdr);
+            border-radius: 8px;
+            color: var(--theme-color-std-text);
+            font-size: 0.95rem;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--theme-color-primary);
+        }
+
+        .btn {
+            min-height: 38px;
+            border-radius: 8px;
+            white-space: nowrap;
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        @media (max-width: 1180px) {
+            .broker-row {
+                grid-template-columns: 1fr;
+            }
+
+            .broker-actions {
+                justify-content: flex-end;
+            }
+        }
+
+        @media (max-width: 980px) {
+            .broker-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+            .broker-endpoint-wrap { grid-column: span 3; }
+        }
+
+        @media (max-width: 700px) {
+            .broker-config-page {
+                padding: 1rem;
+            }
+            .page-topbar,
+            .section-header,
+            .settings-grid {
+                align-items: stretch;
+                flex-direction: column;
+            }
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+            .token-actions .btn,
+            .section-header-actions .btn {
+                width: 100%;
+            }
+            .broker-grid { grid-template-columns: 1fr 1fr; }
+            .broker-endpoint-wrap { grid-column: 1 / -1; }
+            .broker-default-wrap { grid-column: 1 / -1; flex-direction: row; align-items: center; }
+            .broker-actions {
+                justify-content: stretch;
+                flex-direction: column;
+            }
+            .broker-actions .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="broker-config-page">
+        <div class="broker-config-shell">
+            <div class="page-topbar">
+                <a href="/pages/login.html" class="page-back-link">
+                    <ix-icon name="arrow-left" size="16"></ix-icon>
+                    Back to login
+                </a>
+            </div>
+
+            <div class="page-header">
+                <h1 class="page-title">Broker Configuration</h1>
+                <p class="page-subtitle">Manage broker endpoints used by this dashboard instance. The editor is locked until the admin token is verified.</p>
+            </div>
+
+            <div class="section-card">
+                <div class="section-header">
+                    <h2>Admin Token</h2>
+                    <span class="section-kicker">Required for changes</span>
+                </div>
+                <div class="section-content">
+                    <div class="settings-grid">
+                        <div class="form-group">
+                            <label for="broker-admin-token">Admin token</label>
+                            <div class="token-input-group">
+                                <input id="broker-admin-token" class="form-control" type="password" autocomplete="off" placeholder="Configured in src/config/config.json as adminToken">
+                                <span id="token-state" class="token-state empty">No token set</span>
+                            </div>
+                            <div class="helper-text">Required to unlock this page. The broker list is not loaded into the editor until the token is verified.</div>
+                        </div>
+                        <div class="token-actions">
+                            <button id="save-token-btn" class="btn btn-secondary" disabled>Unlock configuration</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="broker-editor-lock-notice" class="lock-notice">
+                Enter the admin token to unlock broker configuration.
+            </div>
+
+            <div id="broker-editor" style="display:none;">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h2>Broker List</h2>
+                        <div class="section-header-actions">
+                            <button id="refresh-brokers-btn" class="btn btn-secondary">Refresh</button>
+                            <button id="add-broker-btn" class="btn btn-secondary">Add Broker</button>
+                        </div>
+                    </div>
+                    <div class="section-content">
+                        <div id="broker-list" class="broker-list"></div>
+                    </div>
+                </div>
+
+                <div class="page-actions">
+                    <button id="save-brokers-btn" class="btn btn-primary">Save Changes</button>
+                    <span id="save-status" class="save-status"></span>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading broker configuration...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <span class="error-text"></span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/broker-config.js"></script>
+</body>
+</html>

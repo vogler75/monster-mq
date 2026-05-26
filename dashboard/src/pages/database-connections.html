@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Database Connections</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background:var(--dark-surface); border-radius:8px; border:1px solid var(--dark-border); margin-bottom:1.5rem; box-shadow:var(--card-shadow); }
+        .section-header { display:flex; justify-content:space-between; align-items:center; gap:1rem; padding:1rem 1.25rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:8px 8px 0 0; }
+        .section-title { margin:0; color:var(--text-primary); font-size:1rem; font-weight:700; }
+        .section-content { padding:1.25rem; }
+        .toolbar { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
+        .form-grid { display:grid; grid-template-columns:repeat(2, minmax(220px, 1fr)); gap:1rem; }
+        .form-group { display:flex; flex-direction:column; gap:0.4rem; }
+        .form-group label { color:var(--text-primary); font-size:0.82rem; font-weight:700; }
+        .form-control, input, select { width:100%; box-sizing:border-box; padding:0.65rem 0.75rem; background:var(--dark-bg); border:1px solid var(--dark-border); border-radius:6px; color:var(--text-primary); font-size:0.88rem; }
+        .form-control:focus, input:focus, select:focus { outline:none; border-color:var(--monster-purple); }
+        .form-hint { color:var(--text-muted); font-size:0.76rem; }
+        .connections-table { width:100%; border-collapse:collapse; }
+        .connections-table th, .connections-table td { padding:0.7rem 0.6rem; border-bottom:1px solid var(--dark-border); text-align:left; vertical-align:top; }
+        .connections-table th { color:var(--text-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; }
+        .mono { font-family:'Courier New', monospace; word-break:break-all; }
+        .badge { display:inline-flex; align-items:center; padding:0.2rem 0.55rem; border-radius:999px; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+        .badge-info { background:rgba(59,130,246,0.15); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
+        .badge-default { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; padding:0.6rem 1rem; border:0; border-radius:6px; font-weight:700; cursor:pointer; color:white; text-decoration:none; }
+        .btn-primary { background:var(--monster-purple); }
+        .btn-secondary { background:var(--dark-surface-2); border:1px solid var(--dark-border); color:var(--text-primary); }
+        .btn-danger { background:var(--monster-red); }
+        .btn-small { padding:0.35rem 0.65rem; font-size:0.78rem; }
+        .actions { display:flex; gap:0.4rem; flex-wrap:wrap; }
+        @media (max-width:900px) { .form-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Database Connections</h1>
+                <p class="page-subtitle">Manage named PostgreSQL, MongoDB, and SQLite connections for archive groups</p>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">!</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-header">
+                    <h2 class="section-title">Connections</h2>
+                    <div class="toolbar">
+                        <select id="type-filter" class="form-control" style="width:170px;">
+                            <option value="">All types</option>
+                            <option value="POSTGRES">PostgreSQL</option>
+                            <option value="MONGODB">MongoDB</option>
+                            <option value="SQLITE">SQLite</option>
+                        </select>
+                        <button class="btn btn-secondary" id="refresh-btn">Refresh</button>
+                        <button class="btn btn-primary" id="new-btn">New Connection</button>
+                    </div>
+                </div>
+                <div class="section-content">
+                    <div style="overflow:auto;">
+                        <table class="connections-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>URL / Path</th>
+                                    <th>User</th>
+                                    <th>DB / Schema</th>
+                                    <th>Source</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="connections-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card" id="editor-card" style="display:none;">
+                <div class="section-header">
+                    <h2 class="section-title" id="editor-title">New Connection</h2>
+                    <button class="btn btn-secondary btn-small" id="cancel-btn">Cancel</button>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="connection-name">Name</label>
+                            <input id="connection-name" placeholder="plant-postgres">
+                            <span class="form-hint">Unique name shown in archive group configuration</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="connection-type">Type</label>
+                            <select id="connection-type">
+                                <option value="POSTGRES">PostgreSQL</option>
+                                <option value="MONGODB">MongoDB</option>
+                                <option value="SQLITE">SQLite</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label for="connection-url">URL</label>
+                            <input id="connection-url" class="mono" placeholder="jdbc:postgresql://host:5432/db or mongodb://host:27017">
+                        </div>
+                        <div class="form-group" id="username-group">
+                            <label for="connection-username">Username</label>
+                            <input id="connection-username">
+                        </div>
+                        <div class="form-group" id="password-group">
+                            <label for="connection-password">Password</label>
+                            <input id="connection-password" type="password" placeholder="Leave empty to keep existing password">
+                        </div>
+                        <div class="form-group" id="mongo-database-group">
+                            <label for="connection-database">Mongo Database</label>
+                            <input id="connection-database" placeholder="monstermq">
+                        </div>
+                        <div class="form-group" id="postgres-schema-group">
+                            <label for="connection-schema">Postgres Schema</label>
+                            <input id="connection-schema" placeholder="public">
+                        </div>
+                    </div>
+                    <div class="actions" style="margin-top:1rem;">
+                        <button class="btn btn-primary" id="save-btn">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/database-connections.js"></script>
+    </ix-application>
+</body>
+</html>
