@@ -46,6 +46,7 @@ class MqttServer(
         mqttServer.exceptionHandler { err ->
             val msg = err.message ?: ""
             val localizedMsg = err.localizedMessage ?: msg
+            val isWrongMessageType = msg.contains("Wrong message type", ignoreCase = true)
             val isProtocolOrSslError = err is java.io.IOException ||
                     err.javaClass.name.contains("DecoderException") ||
                     err.javaClass.name.contains("SSL") ||
@@ -58,7 +59,9 @@ class MqttServer(
                     msg.contains("broken pipe", ignoreCase = true) ||
                     msg.contains("connection timed out", ignoreCase = true)
 
-            if (isProtocolOrSslError) {
+            if (isWrongMessageType) {
+                logger.warning("MQTT WebSocket port received a non-WebSocket / non-MQTT HTTP request: $localizedMsg (port was expecting MQTT or a WebSocket handshake)")
+            } else if (isProtocolOrSslError) {
                 logger.warning("MQTT Server connection warning (possible wrong protocol, SSL issue or abrupt disconnect): $localizedMsg")
             } else {
                 logger.severe("MQTT Server error: $msg [${Utils.getCurrentFunctionName()}]")

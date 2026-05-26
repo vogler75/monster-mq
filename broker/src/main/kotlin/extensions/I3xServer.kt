@@ -115,6 +115,24 @@ class I3xServer(
 
         val router = Router.router(vertx)
 
+        // Suppress client abort / broken pipe / closed channel exceptions globally
+        router.route().failureHandler { ctx ->
+            val cause = ctx.failure()
+            val msg = cause.message ?: ""
+            val isConnectionClosed = cause.javaClass.name.contains("StacklessClosedChannelException") ||
+                cause is java.io.IOException && (
+                    msg.contains("Broken pipe", ignoreCase = true) ||
+                    msg.contains("connection reset", ignoreCase = true) ||
+                    msg.contains("connection was aborted", ignoreCase = true)
+                )
+
+            if (isConnectionClosed) {
+                logger.fine("Client disconnected early: ${cause.javaClass.simpleName} $msg")
+            } else {
+                ctx.next()
+            }
+        }
+
         router.route().handler(
             CorsHandler.create()
                 .addOrigin("*")

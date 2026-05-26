@@ -112,6 +112,25 @@ class GraphQLServer(
 
         val router = Router.router(vertx)
 
+        // Suppress client abort / broken pipe / closed channel exceptions globally
+        router.route().failureHandler { ctx ->
+            val cause = ctx.failure()
+            val msg = cause.message ?: ""
+            val isConnectionClosed = cause.javaClass.name.contains("StacklessClosedChannelException") ||
+                cause is java.io.IOException && (
+                    msg.contains("Broken pipe", ignoreCase = true) ||
+                    msg.contains("connection reset", ignoreCase = true) ||
+                    msg.contains("connection was aborted", ignoreCase = true)
+                )
+
+            if (isConnectionClosed) {
+                logger.fine("Client disconnected early: ${cause.javaClass.simpleName} $msg")
+            } else {
+                ctx.next()
+            }
+        }
+
+
         // Smart CORS handler that works with both browsers and API clients
         router.route().handler { ctx ->
             val origin = ctx.request().getHeader("Origin")
@@ -221,18 +240,6 @@ class GraphQLServer(
                     .setCachingEnabled(true)
             }
             router.route("/*").handler(staticHandler)
-            // Suppress broken pipe errors from browsers closing connections early
-            router.route("/*").failureHandler { ctx ->
-                val cause = ctx.failure()
-                val msg = cause?.message ?: ""
-                val isAbortedConnection = cause is java.io.IOException &&
-                    (msg.contains("Broken pipe") || msg.contains("connection was aborted") || msg.contains("Connection reset"))
-                if (isAbortedConnection) {
-                    logger.fine("Client disconnected early: $msg")
-                } else {
-                    ctx.next()
-                }
-            }
         }
 
         // Create HTTP server
