@@ -60,7 +60,7 @@ class MqttServer(
                     msg.contains("connection timed out", ignoreCase = true)
 
             if (isWrongMessageType) {
-                logger.warning("MQTT WebSocket port received a non-WebSocket / non-MQTT HTTP request: $localizedMsg (port was expecting MQTT or a WebSocket handshake)")
+                logger.warning("MQTT WebSocket port received a standard HTTP request instead of a WebSocket handshake/MQTT traffic (e.g., a client or health check hitting the wrong port, or trying to access GraphQL/REST APIs on the MQTT WebSocket port). Message details: $localizedMsg")
             } else if (isProtocolOrSslError) {
                 logger.warning("MQTT Server connection warning (possible wrong protocol, SSL issue or abrupt disconnect): $localizedMsg")
             } else {

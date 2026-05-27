@@ -37,6 +37,26 @@ object Utils {
                 println("Unable to read default logging.properties!")
             }
         }
+
+        try {
+            // Register a custom logging filter on Netty's DefaultChannelPipeline to gracefully intercept
+            // the verbose "Wrong message type" warning and print a clear explanation instead of a giant stack trace.
+            val nettyLogger = Logger.getLogger("io.netty.channel.DefaultChannelPipeline")
+            nettyLogger.filter = java.util.logging.Filter { record ->
+                val thrown = record.thrown
+                if (thrown != null) {
+                    val msg = thrown.message ?: ""
+                    if (msg.contains("Wrong message type", ignoreCase = true)) {
+                        val customLogger = Logger.getLogger("MqttServer")
+                        customLogger.warning("MQTT WebSocket port received a standard HTTP request instead of a WebSocket handshake/MQTT traffic (e.g., a client or health check hitting the wrong port, or trying to access GraphQL/REST APIs on the MQTT WebSocket port). Message details: $msg")
+                        return@Filter false
+                    }
+                }
+                true
+            }
+        } catch (e: Exception) {
+            // Safe fallback if logger filter registration fails
+        }
     }
 
     fun getLogger(o: Class<*>, additionalName: String=""): Logger =
