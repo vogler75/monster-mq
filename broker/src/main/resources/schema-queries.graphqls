@@ -611,6 +611,8 @@ enum OpcUaServerDataType {
     BOOLEAN
     # Custom JSON format: {"value": x, "timestamp": "iso", "status": int}
     JSON
+    # Custom JSON payload: unwrapped recursively into separate sub-nodes
+    UNWRAPPED_JSON
 }
 
 # OPC UA node access level

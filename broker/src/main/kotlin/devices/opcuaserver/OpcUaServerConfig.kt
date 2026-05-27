@@ -137,7 +137,8 @@ enum class OpcUaServerDataType {
     TEXT,        // String - payload as UTF-8 text
     NUMERIC,     // Double - parse payload as number
     BOOLEAN,     // Boolean - parse payload as true/false
-    JSON         // Custom JSON format: {"value": x, "timestamp": "iso", "status": int}
+    JSON,        // Custom JSON format: {"value": x, "timestamp": "iso", "status": int}
+    UNWRAPPED_JSON // Custom JSON payload: unwrapped recursively into separate sub-nodes
 }
 
 /**

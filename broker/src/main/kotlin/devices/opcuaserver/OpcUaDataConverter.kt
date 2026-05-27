@@ -80,6 +80,11 @@ class OpcUaDataConverter {
                             Variant(String(payload, Charsets.UTF_8))
                         }
                     }
+
+                    OpcUaServerDataType.UNWRAPPED_JSON -> {
+                        // Fallback handling if mqttToOpcUa is directly called with UNWRAPPED_JSON
+                        Variant(String(payload, Charsets.UTF_8))
+                    }
                 }
 
                 DataValue(
@@ -160,6 +165,12 @@ class OpcUaDataConverter {
 
                         json.encode().toByteArray(Charsets.UTF_8)
                     }
+
+                    OpcUaServerDataType.UNWRAPPED_JSON -> {
+                        // Fallback handling if opcUaToMqtt is directly called with UNWRAPPED_JSON
+                        val text = dataValue.value.value?.toString() ?: ""
+                        text.toByteArray(Charsets.UTF_8)
+                    }
                 }
             } catch (e: Exception) {
                 logger.severe("Error converting OPC UA to MQTT: ${e.message}")
@@ -177,6 +188,7 @@ class OpcUaDataConverter {
                 OpcUaServerDataType.NUMERIC -> NodeIds0.Double
                 OpcUaServerDataType.BOOLEAN -> NodeIds0.Boolean
                 OpcUaServerDataType.JSON -> NodeIds0.BaseDataType // Use generic type for JSON
+                OpcUaServerDataType.UNWRAPPED_JSON -> NodeIds0.BaseDataType // Use generic type for unwrapped JSON
             }
         }
     }

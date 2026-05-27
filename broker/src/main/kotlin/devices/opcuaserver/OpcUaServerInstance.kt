@@ -430,15 +430,127 @@ class OpcUaServerInstance(
             if (matchingAddress != null) {
                 logger.fine { "Processing MQTT message for topic: ${message.topicName}" }
 
-                // Convert MQTT message to OPC UA DataValue
-                val dataValue = OpcUaDataConverter.mqttToOpcUa(
-                    message.payload,
-                    matchingAddress.dataType,
-                    message.time
-                )
+                if (matchingAddress.dataType == OpcUaServerDataType.UNWRAPPED_JSON) {
+                    try {
+                        val payloadString = String(message.payload, Charsets.UTF_8).trim()
+                        val json = io.vertx.core.json.JsonObject(payloadString)
 
-                // Create or update the OPC UA node dynamically like the gateway does
-                createOrUpdateNode(message.topicName, matchingAddress, dataValue)
+                        // 1. Auto-detect timestamp key case-insensitively
+                        val timestampKey = json.map.keys.find { key ->
+                            key.equals("timestamp", ignoreCase = true) ||
+                            key.equals("timestampms", ignoreCase = true) ||
+                            key.equals("timestamp_ms", ignoreCase = true) ||
+                            key.equals("time", ignoreCase = true) ||
+                            key.equals("ts", ignoreCase = true)
+                        }
+
+                        val sourceTimestamp = if (timestampKey != null) {
+                            val tsVal = json.getValue(timestampKey)
+                            when (tsVal) {
+                                is Number -> java.time.Instant.ofEpochMilli(tsVal.toLong())
+                                is String -> try {
+                                    java.time.Instant.parse(tsVal)
+                                } catch (e: Exception) {
+                                    tsVal.toLongOrNull()?.let { java.time.Instant.ofEpochMilli(it) } ?: message.time
+                                }
+                                else -> message.time
+                            }
+                        } else {
+                            message.time
+                        }
+
+                        // 2. Auto-detect status key case-insensitively
+                        val statusKey = json.map.keys.find { key ->
+                            key.equals("status", ignoreCase = true) ||
+                            key.equals("statuscode", ignoreCase = true) ||
+                            key.equals("quality", ignoreCase = true)
+                        }
+
+                        val statusCode = if (statusKey != null) {
+                            val stVal = json.getValue(statusKey)
+                            if (stVal is Number) {
+                                org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode(stVal.toLong())
+                            } else {
+                                org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode.GOOD
+                            }
+                        } else {
+                            org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode.GOOD
+                        }
+
+                        // Remove metadata keys so they don't get registered as node values
+                        timestampKey?.let { json.remove(it) }
+                        statusKey?.let { json.remove(it) }
+
+                        // 3. Recursively flatten the JSON object
+                        val flatMap = mutableMapOf<String, Any?>()
+                        fun flatten(obj: io.vertx.core.json.JsonObject, prefix: String) {
+                            for (key in obj.map.keys) {
+                                val value = obj.getValue(key)
+                                val nextPrefix = if (prefix.isEmpty()) key else "$prefix/$key"
+                                when (value) {
+                                    is io.vertx.core.json.JsonObject -> flatten(value, nextPrefix)
+                                    is Map<*, *> -> flatten(io.vertx.core.json.JsonObject(value.mapKeys { it.key.toString() }), nextPrefix)
+                                    is io.vertx.core.json.JsonArray -> {
+                                        flatMap[nextPrefix] = value.encode()
+                                    }
+                                    is List<*> -> {
+                                        flatMap[nextPrefix] = io.vertx.core.json.JsonArray(value).encode()
+                                    }
+                                    else -> flatMap[nextPrefix] = value
+                                }
+                            }
+                        }
+
+                        flatten(json, "")
+
+                        // 4. Update/Create nodes for all flattened paths
+                        for ((path, valObj) in flatMap) {
+                            val subTopic = "${message.topicName}/$path"
+
+                            val variant = when (valObj) {
+                                is Boolean -> org.eclipse.milo.opcua.stack.core.types.builtin.Variant(valObj)
+                                is Number -> org.eclipse.milo.opcua.stack.core.types.builtin.Variant(valObj.toDouble())
+                                is String -> org.eclipse.milo.opcua.stack.core.types.builtin.Variant(valObj)
+                                null -> org.eclipse.milo.opcua.stack.core.types.builtin.Variant.NULL_VALUE
+                                else -> org.eclipse.milo.opcua.stack.core.types.builtin.Variant(valObj.toString())
+                            }
+
+                            val dataValue = org.eclipse.milo.opcua.stack.core.types.builtin.DataValue(
+                                variant,
+                                statusCode,
+                                org.eclipse.milo.opcua.stack.core.types.builtin.DateTime(sourceTimestamp),
+                                org.eclipse.milo.opcua.stack.core.types.builtin.DateTime.now()
+                            )
+
+                            val leafDataType = when (valObj) {
+                                is Boolean -> OpcUaServerDataType.BOOLEAN
+                                is Number -> OpcUaServerDataType.NUMERIC
+                                is String -> OpcUaServerDataType.TEXT
+                                else -> OpcUaServerDataType.TEXT
+                            }
+
+                            val specificAddress = matchingAddress.copy(
+                                mqttTopic = subTopic,
+                                dataType = leafDataType
+                            )
+
+                            createOrUpdateNode(subTopic, specificAddress, dataValue)
+                        }
+
+                    } catch (e: Exception) {
+                        logger.warning("Failed to unwrap JSON payload for topic ${message.topicName}: ${e.message}")
+                    }
+                } else {
+                    // Convert MQTT message to OPC UA DataValue
+                    val dataValue = OpcUaDataConverter.mqttToOpcUa(
+                        message.payload,
+                        matchingAddress.dataType,
+                        message.time
+                    )
+
+                    // Create or update the OPC UA node dynamically like the gateway does
+                    createOrUpdateNode(message.topicName, matchingAddress, dataValue)
+                }
 
             } else {
                 logger.fine { "No matching address pattern found for topic: ${message.topicName}" }
@@ -487,6 +599,29 @@ class OpcUaServerInstance(
             // We only need this to get the dataType for conversion
             val address = config.addresses.find { addressConfig ->
                 TopicTree.matches(addressConfig.mqttTopic, topic)
+            } ?: run {
+                // If not found directly, check if it's a dynamic child node created under a pattern with UNWRAPPED_JSON
+                var found: OpcUaServerAddress? = null
+                val parts = topic.split("/")
+                for (len in parts.size - 1 downTo 1) {
+                    val prefixTopic = parts.take(len).joinToString("/")
+                    val matchingAddress = config.addresses.find { addressConfig ->
+                        addressConfig.dataType == OpcUaServerDataType.UNWRAPPED_JSON &&
+                        TopicTree.matches(addressConfig.mqttTopic, prefixTopic)
+                    }
+                    if (matchingAddress != null) {
+                        val leafValue = dataValue.value.value
+                        val leafDataType = when (leafValue) {
+                            is Boolean -> OpcUaServerDataType.BOOLEAN
+                            is Number -> OpcUaServerDataType.NUMERIC
+                            is String -> OpcUaServerDataType.TEXT
+                            else -> OpcUaServerDataType.TEXT
+                        }
+                        found = matchingAddress.copy(dataType = leafDataType)
+                        break
+                    }
+                }
+                found
             }
 
             if (address != null) {
