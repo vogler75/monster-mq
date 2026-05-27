@@ -39,12 +39,17 @@ object Utils {
         }
 
         try {
-            // Register a custom logging filter on Netty's DefaultChannelPipeline to gracefully intercept
-            // the verbose "Wrong message type" warning and print a clear explanation instead of a giant stack trace.
-            val nettyLogger = Logger.getLogger("io.netty.channel.DefaultChannelPipeline")
-            nettyLogger.filter = java.util.logging.Filter { record ->
+            // Register a custom logging filter on the root logger to gracefully intercept
+            // the verbose "Wrong message type" warning from Netty's DefaultChannelPipeline 
+            // and print a clear explanation instead of a giant stack trace.
+            val rootLogger = Logger.getLogger("")
+            val existingFilter = rootLogger.filter
+            rootLogger.filter = java.util.logging.Filter { record ->
+                if (existingFilter != null && !existingFilter.isLoggable(record)) {
+                    return@Filter false
+                }
                 val thrown = record.thrown
-                if (thrown != null) {
+                if (thrown != null && record.loggerName == "io.netty.channel.DefaultChannelPipeline") {
                     val msg = thrown.message ?: ""
                     if (msg.contains("Wrong message type", ignoreCase = true)) {
                         val customLogger = Logger.getLogger("MqttServer")
