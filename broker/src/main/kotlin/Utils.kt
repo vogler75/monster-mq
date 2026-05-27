@@ -39,9 +39,8 @@ object Utils {
         }
 
         try {
-            // Register a custom logging filter on the root logger to gracefully intercept
-            // the verbose "Wrong message type" warning from Netty's DefaultChannelPipeline 
-            // and print a clear explanation instead of a giant stack trace.
+            // Intercept verbose Netty pipeline warnings, appending only the exception details
+            // to the log message and suppressing the massive stack trace.
             val rootLogger = Logger.getLogger("")
             val existingFilter = rootLogger.filter
             rootLogger.filter = java.util.logging.Filter { record ->
@@ -50,12 +49,8 @@ object Utils {
                 }
                 val thrown = record.thrown
                 if (thrown != null && record.loggerName == "io.netty.channel.DefaultChannelPipeline") {
-                    val msg = thrown.message ?: ""
-                    if (msg.contains("Wrong message type", ignoreCase = true)) {
-                        val customLogger = Logger.getLogger("MqttServer")
-                        customLogger.warning("MQTT WebSocket port received a standard HTTP request instead of a WebSocket handshake/MQTT traffic (e.g., a client or health check hitting the wrong port, or trying to access GraphQL/REST APIs on the MQTT WebSocket port). Message details: $msg")
-                        return@Filter false
-                    }
+                    record.message = "${record.message} -> ${thrown.javaClass.name}: ${thrown.message}"
+                    record.thrown = null // Clears the stack trace from being printed
                 }
                 true
             }
