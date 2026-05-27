@@ -11,6 +11,52 @@
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
+    <style>
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--dark-bg);
+            border-bottom: 1px solid var(--dark-border);
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .table-header-left {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .table-header-right {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (max-width: 768px) {
+            .table-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .table-header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .table-header-right select {
+                flex: 1;
+                min-width: 0 !important;
+            }
+        }
+    </style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -69,14 +115,14 @@
             </div>
 
             <div class="data-table">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <div style="display: flex; gap: 1rem; align-items: center;">
+                <div class="table-header">
+                    <div class="table-header-left">
                         <h3 style="margin: 0; color: var(--text-primary);">Active Sessions</h3>
                         <button id="remove-selected-sessions" class="btn btn-danger" style="display: none;">
                             Remove Selected (<span id="selected-count">0</span>)
                         </button>
                     </div>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
+                    <div class="table-header-right">
                         <select id="node-filter" class="form-control" style="width: auto; min-width: 150px;">
                             <option value="">All Nodes</option>
                         </select>
@@ -88,29 +134,31 @@
                         <ix-icon-button id="refresh-sessions" icon="refresh" variant="secondary" ghost onclick="if(window.sessionManager)sessionManager.loadSessions()" title="Refresh"></ix-icon-button>
                     </div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width: 40px;">
-                                <input type="checkbox" id="select-all-sessions" style="cursor: pointer;">
-                            </th>
-                            <th>Client ID</th>
-                            <th>Node</th>
-                            <th>Protocol</th>
-                            <th>Status</th>
-                            <th>Messages In</th>
-                            <th>Messages Out</th>
-                            <th>Queued</th>
-                            <th>In-Flight (Snd/Rcv)</th>
-                            <th>Clean Session</th>
-                            <th>Client Address</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="sessions-table-body">
-                        <!-- Sessions will be populated here -->
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="select-all-sessions" style="cursor: pointer;">
+                                </th>
+                                <th>Client ID</th>
+                                <th>Node</th>
+                                <th>Protocol</th>
+                                <th>Status</th>
+                                <th>Messages In</th>
+                                <th>Messages Out</th>
+                                <th>Queued</th>
+                                <th>In-Flight (Snd/Rcv)</th>
+                                <th>Clean Session</th>
+                                <th>Client Address</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessions-table-body">
+                            <!-- Sessions will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
