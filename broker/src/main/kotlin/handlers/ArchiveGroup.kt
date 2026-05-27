@@ -600,6 +600,12 @@ class ArchiveGroup(
         val retentionMs = archiveRetentionMs ?: return
         val messageArchive = archiveStore ?: return
 
+        // Only let the cluster leader execute the purge to prevent concurrent purging overhead on Hazelcast
+        if (Monster.isClustered() && !HealthHandler.isLeader(vertx)) {
+            logger.fine { "Non-leader node, skipping Archive purge for [$name]" }
+            return
+        }
+
         // Use cluster-wide distributed lock to ensure only one node performs purging
         val lockName = "purge-lock-$name-Archive"
         val sharedData = vertx.sharedData()

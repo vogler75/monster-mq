@@ -63,8 +63,15 @@ class MessageStoreHazelcast(
     }
 
     override fun delAll(topics: List<String>) {
+        if (topics.isEmpty()) return
         vertx.eventBus().publish(delAddress, JsonArray(topics))
-        topics.forEach { store.remove(it) } // there is no delAll
+        
+        // Chunk deletion to avoid building too large a predicate, deleting
+        // keys in distributed batch operations using Predicates.in.
+        val batchSize = 1000
+        topics.chunked(batchSize).forEach { batch ->
+            store.removeAll(Predicates.`in`("__key", *batch.toTypedArray()))
+        }
     }
 
     override fun findMatchingMessages(topicName: String, callback: (BrokerMessage) -> Boolean) {
@@ -87,9 +94,9 @@ class MessageStoreHazelcast(
         
         // Use Hazelcast predicates for efficient distributed filtering
         val predicate = Predicates.lessThan<String, BrokerMessage>("time", olderThan)
-        val entriesToDelete = store.entrySet(predicate)
         
-        val topicsToDelete = entriesToDelete.map { it.key }
+        // Retrieve only keys instead of full message entries to save network and memory usage
+        val topicsToDelete = store.keySet(predicate)
         val deleteCount = topicsToDelete.size
         
         logger.fine { "Found $deleteCount messages to delete in [$name]" }
