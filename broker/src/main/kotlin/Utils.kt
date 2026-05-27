@@ -15,6 +15,7 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.time.Duration
 import java.util.logging.LogManager
+import java.util.logging.LogRecord
 import java.util.logging.Logger
 
 object Utils {
@@ -38,25 +39,45 @@ object Utils {
             }
         }
 
+        installNettyPipelineLogFilter()
+    }
+
+    private fun installNettyPipelineLogFilter() {
         try {
-            // Intercept verbose Netty pipeline warnings, appending only the exception details
-            // to the log message and suppressing the massive stack trace.
-            val rootLogger = Logger.getLogger("")
-            val existingFilter = rootLogger.filter
-            rootLogger.filter = java.util.logging.Filter { record ->
-                if (existingFilter != null && !existingFilter.isLoggable(record)) {
+            // JUL parent logger filters are not applied to child log records during handler
+            // propagation, so install this on both the Netty logger and configured handlers.
+            val nettyLogger = Logger.getLogger("io.netty.channel.DefaultChannelPipeline")
+            val existingNettyFilter = nettyLogger.filter
+            nettyLogger.filter = java.util.logging.Filter { record ->
+                if (existingNettyFilter != null && !existingNettyFilter.isLoggable(record)) {
                     return@Filter false
                 }
-                val thrown = record.thrown
-                if (thrown != null && record.loggerName == "io.netty.channel.DefaultChannelPipeline") {
-                    record.message = "${record.message} -> ${thrown.javaClass.name}: ${thrown.message}"
-                    record.thrown = null // Clears the stack trace from being printed
-                }
+                normalizeNettyPipelineLogRecord(record)
                 true
+            }
+
+            Logger.getLogger("").handlers.forEach { handler ->
+                val existingHandlerFilter = handler.filter
+                handler.filter = java.util.logging.Filter { record ->
+                    if (existingHandlerFilter != null && !existingHandlerFilter.isLoggable(record)) {
+                        return@Filter false
+                    }
+                    normalizeNettyPipelineLogRecord(record)
+                    true
+                }
             }
         } catch (e: Exception) {
             // Safe fallback if logger filter registration fails
         }
+    }
+
+    private fun normalizeNettyPipelineLogRecord(record: LogRecord) {
+        val thrown = record.thrown ?: return
+        if (record.loggerName != "io.netty.channel.DefaultChannelPipeline") return
+
+        val thrownMessage = thrown.message ?: thrown.toString()
+        record.message = "${record.message} -> ${thrown.javaClass.name}: $thrownMessage"
+        record.thrown = null
     }
 
     fun getLogger(o: Class<*>, additionalName: String=""): Logger =
