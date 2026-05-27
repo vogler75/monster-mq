@@ -239,23 +239,23 @@ class Monster(args: Array<String>) {
         }
 
         fun getSessionHandler(): SessionHandler? {
-            return getInstance().sessionHandler
+            return singleton?.sessionHandler
         }
 
         fun getFlowEngineExtension(): FlowEngineExtension? {
-            return getInstance().flowEngineExtension
+            return singleton?.flowEngineExtension
         }
 
         fun getArchiveHandler(): ArchiveHandler? {
-            return getInstance().archiveHandler
+            return singleton?.archiveHandler
         }
 
         fun getRetainedStore(): IMessageStore? {
-            return getInstance().retainedStore
+            return singleton?.retainedStore
         }
 
         fun getVertx(): Vertx? {
-            return getInstance().vertx
+            return singleton?.vertx
         }
 
         @Volatile

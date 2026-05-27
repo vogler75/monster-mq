@@ -102,6 +102,16 @@ class MqttClient(
     private var receiveMaximumLastSampledQos: Int? = null
     private var receiveMaximumLastSampledInFlightObserved: Int? = null
 
+    private val pendingEvents = mutableListOf<() -> Unit>()
+
+    private fun drainPendingEvents() {
+        if (pendingEvents.isNotEmpty()) {
+            logger.info("Client [$clientId] Session is ready, draining ${pendingEvents.size} pending queued events")
+            val events = ArrayList(pendingEvents)
+            pendingEvents.clear()
+            events.forEach { it.invoke() }
+        }
+    }
 
     // create a getter for the client id
     val clientId: String
@@ -435,6 +445,7 @@ class MqttClient(
                         // Now safe to mark as ready for new messages
                         ready = true
                         sessionHandler.onlineClient(clientId)
+                        drainPendingEvents()
 
                         // For persistent sessions, reset any stale in-flight messages and send trigger
                         // This handles the case where previous connection died with messages in-flight
@@ -596,6 +607,7 @@ class MqttClient(
                     // Now safe to mark as ready for new messages
                     ready = true
                     sessionHandler.onlineClient(clientId)
+                    drainPendingEvents()
 
                     // For persistent sessions, reset any stale in-flight messages and send trigger
                     // This handles the case where previous connection died with messages in-flight
@@ -687,11 +699,21 @@ class MqttClient(
     }
 
     private fun pingHandler() {
+        if (!ready) {
+            logger.fine { "Client [$clientId] Connection not ready, queuing PINGREQ" }
+            pendingEvents.add { pingHandler() }
+            return
+        }
         lastPing = Instant.now()
         //endpoint.pong() // A java clients dies when pong is sent
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing SUBSCRIBE for message id [${subscribe.messageId()}]")
+            pendingEvents.add { subscribeHandler(subscribe) }
+            return
+        }
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
         val protocolVersion = endpoint.protocolVersion()
 
@@ -828,6 +850,11 @@ class MqttClient(
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing UNSUBSCRIBE for message id [${unsubscribe.messageId()}]")
+            pendingEvents.add { unsubscribeHandler(unsubscribe) }
+            return
+        }
         val protocolVersion = endpoint.protocolVersion()
 
         if (protocolVersion == 5) {
@@ -910,11 +937,6 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun publishHandler(message: MqttPublishMessage) {
-        logger.finest { "Client [$clientId] Publish: message [${message.messageId()}] for [${message.topicName()}] with QoS ${message.qosLevel()} [${Utils.getCurrentFunctionName()}]" }
-
-        // Increment messages received from client
-        sessionHandler.incrementMessagesIn(clientId)
-        
         var topicName = message.topicName()
         
         // MQTT v5.0: Handle Topic Alias (Phase 4)
@@ -952,7 +974,27 @@ class MqttClient(
                 }
             }
         }
+
+        // Construct BrokerMessage immediately (copies payload bytes synchronously on Event Loop thread)
+        val msg = BrokerMessage(clientId, message, topicName)
+
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBLISH for message id [${msg.messageId}]")
+            pendingEvents.add { processPublishMessage(msg) }
+            return
+        }
+
+        processPublishMessage(msg)
+    }
+
+    private fun processPublishMessage(msg: BrokerMessage) {
+        logger.finest { "Client [$clientId] Publish: message [${msg.messageId}] for [${msg.topicName}] with QoS ${msg.qosLevel} [${Utils.getCurrentFunctionName()}]" }
+
+        // Increment messages received from client
+        sessionHandler.incrementMessagesIn(clientId)
         
+        val topicName = msg.topicName
+
         // Check system topic restrictions
         if (topicName.startsWith(Const.SYS_TOPIC_NAME)) {
             logger.warning { "Client [$clientId] Publish: message for system topic [$topicName] not allowed! [${Utils.getCurrentFunctionName()}]" }
@@ -980,8 +1022,8 @@ class MqttClient(
             // Disconnect client if configured
             if (userManager.shouldDisconnectOnUnauthorized()) {
                 logger.warning("Client [$clientId] Disconnecting due to unauthorized publish attempt: $topicName")
-            sessionHandler.disconnectClient(clientId, "Unauthorized publish to $topicName")
-            return
+                sessionHandler.disconnectClient(clientId, "Unauthorized publish to $topicName")
+                return
             }
             
             // Otherwise, just ignore the message (silent drop)
@@ -996,7 +1038,7 @@ class MqttClient(
             val nsEntry = schemaPolicyCache.matchNamespace(topicName)
             logger.finer { "Client [$clientId] Schema check for [$topicName]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
             if (nsEntry != null) {
-                val payload = String(message.payload().bytes, Charsets.UTF_8)
+                val payload = msg.getPayloadAsString()
                 val result = nsEntry.validator.validate(payload)
                 if (!result.valid) {
                     when (result.errorCategory) {
@@ -1006,8 +1048,8 @@ class MqttClient(
                     schemaPolicyCache.rejectedCount.incrementAndGet()
                     logger.warning("Client [$clientId] Publish REJECTED by namespace '${nsEntry.namespaceName}' (schema '${nsEntry.schemaPolicyName}') for [$topicName]: ${result.errorDetail}")
                     // For MQTT v5, send PUBACK with error reason code
-                    if (endpoint.protocolVersion() == 5 && message.qosLevel() == MqttQoS.AT_LEAST_ONCE) {
-                        endpoint.publishAcknowledge(message.messageId(), MqttPubAckReasonCode.PAYLOAD_FORMAT_INVALID, MqttProperties.NO_PROPERTIES)
+                    if (endpoint.protocolVersion() == 5 && msg.qosLevel == 1) {
+                        endpoint.publishAcknowledge(msg.messageId, MqttPubAckReasonCode.PAYLOAD_FORMAT_INVALID, MqttProperties.NO_PROPERTIES)
                     }
                     return
                 }
@@ -1016,36 +1058,40 @@ class MqttClient(
         }
 
         // Handle QoS levels
-        when (message.qosLevel()) {
-            MqttQoS.AT_MOST_ONCE -> { // Level 0
+        when (msg.qosLevel) {
+            0 -> { // Level 0
                 logger.finest { "Client [$clientId] Publish: no acknowledge needed [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(BrokerMessage(clientId, message, topicName))
+                sessionHandler.publishMessage(msg)
             }
-            MqttQoS.AT_LEAST_ONCE -> { // Level 1
-                logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.publishMessage(BrokerMessage(clientId, message, topicName))
-                // TODO: check the result of the publishMessage and send the acknowledge only if the message was delivered
+            1 -> { // Level 1
+                logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
+                sessionHandler.publishMessage(msg)
                 
                 // Send PUBACK with MQTT v5 reason code if protocol version is 5
                 if (endpoint.protocolVersion() == 5) {
-                    endpoint.publishAcknowledge(message.messageId(), MqttPubAckReasonCode.SUCCESS, MqttProperties.NO_PROPERTIES)
+                    endpoint.publishAcknowledge(msg.messageId, MqttPubAckReasonCode.SUCCESS, MqttProperties.NO_PROPERTIES)
                 } else {
-                    endpoint.publishAcknowledge(message.messageId())
+                    endpoint.publishAcknowledge(msg.messageId)
                 }
             }
-            MqttQoS.EXACTLY_ONCE -> { // Level 2
-                logger.finest { "Client [$clientId] Publish: sending received for id [${message.messageId()}] [${Utils.getCurrentFunctionName()}]" }
-                endpoint.publishReceived(message.messageId())
-                inFlightMessagesRcv[message.messageId()] = InFlightMessage(BrokerMessage(clientId, message, topicName))
+            2 -> { // Level 2
+                logger.finest { "Client [$clientId] Publish: sending received for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
+                endpoint.publishReceived(msg.messageId)
+                inFlightMessagesRcv[msg.messageId] = InFlightMessage(msg)
                 updateSessionHandlerInFlight()
             }
             else -> {
-                logger.warning { "Client [$clientId] Publish: unknown QoS level [${message.qosLevel()}] [${Utils.getCurrentFunctionName()}]" }
+                logger.warning { "Client [$clientId] Publish: unknown QoS level [${msg.qosLevel}] [${Utils.getCurrentFunctionName()}]" }
             }
         }
     }
 
     private fun publishReleaseHandler(id: Int) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBREL id [$id]")
+            pendingEvents.add { publishReleaseHandler(id) }
+            return
+        }
         inFlightMessagesRcv[id]?.let { inFlightMessage ->
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
             endpoint.publishComplete(id)
@@ -1286,6 +1332,11 @@ class MqttClient(
     }
 
     private fun publishAcknowledgeHandler(id: Int) { // QoS 1
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBACK id [$id]")
+            pendingEvents.add { publishAcknowledgeHandler(id) }
+            return
+        }
         try {
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
@@ -1319,6 +1370,11 @@ class MqttClient(
     }
 
     private fun publishedReceivedHandler(id: Int) { // QoS 2
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBREC id [$id]")
+            pendingEvents.add { publishedReceivedHandler(id) }
+            return
+        }
         try {
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
@@ -1335,6 +1391,11 @@ class MqttClient(
     }
 
     private fun publishCompletionHandler(id: Int) { // QoS 2
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBCOMP id [$id]")
+            pendingEvents.add { publishCompletionHandler(id) }
+            return
+        }
         try {
             inFlightMessagesSnd.first().let { inFlightMessage ->
                 if (inFlightMessage.message.messageId == id) {
