@@ -91,6 +91,9 @@ class AgentExecutor(
     @Volatile
     private var currentTaskId: String? = null
 
+    @Volatile
+    private var currentTransactionId: String? = null
+
     // Metrics
     private val messagesProcessed = AtomicLong(0)
     private val llmCalls = AtomicLong(0)
@@ -373,9 +376,12 @@ class AgentExecutor(
                     .put("arguments", request.arguments())
                 publishToAgentTopic("logs/llm", log)
                 writeToConversationLog { sb ->
-                    sb.append("===== TOOL REQUEST [${Instant.now()}] ${request.name()} =====\n")
-                    sb.append(request.arguments())
-                    sb.append("\n=====\n\n")
+                    sb.append("  TOOL_REQUEST:\n")
+                    sb.append("    tool: \"${request.name()}\"\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    arguments:\n")
+                    sb.append(formatJsonAsYaml(request.arguments() ?: "", 6))
+                    sb.append("\n\n")
                 }
             }
             .afterToolExecution { execution ->
@@ -388,9 +394,14 @@ class AgentExecutor(
                     .put("result", execution.result())
                 publishToAgentTopic("logs/llm", log)
                 writeToConversationLog { sb ->
-                    sb.append("===== TOOL RESULT [${Instant.now()}] ${request.name()} failed=${execution.hasFailed()} =====\n")
-                    sb.append(execution.result())
-                    sb.append("\n=====\n\n")
+                    sb.append("  TOOL_RESULT:\n")
+                    sb.append("    tool: \"${request.name()}\"\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    failed: ${execution.hasFailed()}\n")
+                    val resultText = execution.result() ?: ""
+                    sb.append("    result: |\n")
+                    sb.append(indent(resultText, 6))
+                    sb.append("\n\n")
                 }
             }
 
@@ -682,13 +693,17 @@ class AgentExecutor(
 
         // Write context fetch summary to conversation log
         writeToConversationLog { sb ->
-            sb.append("===== CONTEXT [${Instant.now()}] =====\n")
+            sb.append("  CONTEXT:\n")
+            sb.append("    timestamp: \"${Instant.now()}\"\n")
             if (contextLogLines.isEmpty()) {
-                sb.append("  (no context data configured or returned)\n")
+                sb.append("    data: \"(no context data configured or returned)\"\n")
             } else {
-                contextLogLines.forEach { sb.append("$it\n") }
+                sb.append("    data: |\n")
+                val dataStr = contextLogLines.joinToString("\n")
+                sb.append(indent(dataStr, 6))
+                sb.append("\n")
             }
-            sb.append("=====\n\n")
+            sb.append("\n")
         }
 
         if (lines.isEmpty()) return triggerBlock.trimEnd()
@@ -1048,6 +1063,18 @@ class AgentExecutor(
             return
         }
 
+        val txId = Utils.getUuid()
+        currentTransactionId = txId
+        writeToConversationLog { sb ->
+            sb.append("================================================================================\n")
+            sb.append("TRANSACTION START | ID: $txId | Time: ${Instant.now()} | Source: $source")
+            val taskId = currentTaskId
+            if (taskId != null) {
+                sb.append(" | Task ID: $taskId")
+            }
+            sb.append("\n--------------------------------------------------------------------------------\n\n")
+        }
+
         messagesProcessed.incrementAndGet()
         publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing task from $source")
@@ -1075,6 +1102,14 @@ class AgentExecutor(
                 }
             }
         }.onComplete { result ->
+            writeToConversationLog { sb ->
+                sb.append("--------------------------------------------------------------------------------\n")
+                sb.append("TRANSACTION END | ID: $txId | Status: ${if (result.succeeded()) "SUCCESS" else "FAILED"}\n")
+                sb.append("================================================================================\n\n")
+            }
+            if (txId == currentTransactionId) {
+                currentTransactionId = null
+            }
             if (result.succeeded()) {
                 val chatResult = result.result()
                 chatResult?.toolExecutions()?.forEach { toolExecution ->
@@ -1107,6 +1142,18 @@ class AgentExecutor(
     private fun executeAgent(userMessage: String, source: String, triggerContext: TriggerContext? = null) {
         val service = aiService ?: return
 
+        val txId = Utils.getUuid()
+        currentTransactionId = txId
+        writeToConversationLog { sb ->
+            sb.append("================================================================================\n")
+            sb.append("TRANSACTION START | ID: $txId | Time: ${Instant.now()} | Source: $source")
+            val taskId = currentTaskId
+            if (taskId != null) {
+                sb.append(" | Task ID: $taskId")
+            }
+            sb.append("\n--------------------------------------------------------------------------------\n\n")
+        }
+
         messagesProcessed.incrementAndGet()
         publishHealthStatus("running")
         logger.fine("Agent ${deviceConfig.name} processing message from $source")
@@ -1137,6 +1184,14 @@ class AgentExecutor(
                 }
             }
         }.onComplete { result ->
+            writeToConversationLog { sb ->
+                sb.append("--------------------------------------------------------------------------------\n")
+                sb.append("TRANSACTION END | ID: $txId | Status: ${if (result.succeeded()) "SUCCESS" else "FAILED"}\n")
+                sb.append("================================================================================\n\n")
+            }
+            if (txId == currentTransactionId) {
+                currentTransactionId = null
+            }
             if (result.succeeded()) {
                 val chatResult = result.result()
                 // Log MCP/tool executions that went through LangChain4j's tool provider
@@ -1238,14 +1293,20 @@ class AgentExecutor(
 
                 // Write to conversation log file
                 writeToConversationLog { sb ->
-                    sb.append("===== REQUEST [${Instant.now()}] model=${request.parameters()?.modelName()} =====\n")
+                    sb.append("  REQUEST:\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    model: \"${request.parameters()?.modelName() ?: "unknown"}\"\n")
+                    sb.append("    messages:\n")
                     val listToLog = if (onlyLast && lastMessage != null) listOf(lastMessage) else messages
                     listToLog.forEach { msg ->
                         val type = msg.type()?.name ?: "UNKNOWN"
                         val text = msg.toString()
-                        sb.append("[$type] $text\n")
+                        sb.append("      - role: \"$type\"\n")
+                        sb.append("        content: |\n")
+                        sb.append(indent(text, 10))
+                        sb.append("\n")
                     }
-                    sb.append("=====\n\n")
+                    sb.append("\n")
                 }
             }
 
@@ -1286,18 +1347,31 @@ class AgentExecutor(
 
                 // Write full response to log file
                 writeToConversationLog { sb ->
-                    val tokens = if (tokenUsage != null) "in=${tokenUsage.inputTokenCount()} out=${tokenUsage.outputTokenCount()} total=${tokenUsage.totalTokenCount()}" else ""
-                    sb.append("===== RESPONSE [${Instant.now()}] model=${metadata?.modelName()} tokens=$tokens finish=${metadata?.finishReason()?.name} =====\n")
+                    sb.append("  RESPONSE:\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    model: \"${metadata?.modelName() ?: "unknown"}\"\n")
+                    if (tokenUsage != null) {
+                        sb.append("    tokens:\n")
+                        sb.append("      input: ${tokenUsage.inputTokenCount() ?: 0}\n")
+                        sb.append("      output: ${tokenUsage.outputTokenCount() ?: 0}\n")
+                        sb.append("      total: ${tokenUsage.totalTokenCount() ?: 0}\n")
+                    }
+                    sb.append("    finishReason: \"${metadata?.finishReason()?.name ?: "unknown"}\"\n")
                     if (aiMessage.hasToolExecutionRequests()) {
+                        sb.append("    toolCalls:\n")
                         aiMessage.toolExecutionRequests().forEach { tc ->
-                            sb.append("[TOOL_CALL] ${tc.name()}(${tc.arguments()})\n")
+                            sb.append("      - name: \"${tc.name()}\"\n")
+                            sb.append("        arguments:\n")
+                            sb.append(formatJsonAsYaml(tc.arguments() ?: "", 10))
+                            sb.append("\n")
                         }
                     }
                     if (aiMessage.text() != null) {
-                        sb.append(aiMessage.text())
+                        sb.append("    text: |\n")
+                        sb.append(indent(aiMessage.text(), 6))
                         sb.append("\n")
                     }
-                    sb.append("=====\n\n")
+                    sb.append("\n")
                 }
             }
 
@@ -1310,9 +1384,12 @@ class AgentExecutor(
 
                 // Write error to log file
                 writeToConversationLog { sb ->
-                    sb.append("===== ERROR [${Instant.now()}] =====\n")
-                    sb.append("${errorContext.error().message}\n")
-                    sb.append("=====\n\n")
+                    sb.append("  ERROR:\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    message: |\n")
+                    val errMsg = errorContext.error().message ?: "Unknown error"
+                    sb.append(indent(errMsg, 6))
+                    sb.append("\n\n")
                 }
             }
         }
@@ -1326,6 +1403,34 @@ class AgentExecutor(
             log.info(sb.toString())
         } catch (e: Exception) {
             logger.warning("Failed to write conversation log for agent ${deviceConfig.name}: ${e.message}")
+        }
+    }
+
+    private fun indent(text: String, spaces: Int): String {
+        val indentStr = " ".repeat(spaces)
+        return text.lines().joinToString("\n") { line ->
+            if (line.isEmpty()) "" else "$indentStr$line"
+        }
+    }
+
+    private fun formatJsonAsYaml(jsonStr: String, spaces: Int): String {
+        return try {
+            val json = io.vertx.core.json.JsonObject(jsonStr)
+            val indentStr = " ".repeat(spaces)
+            json.map.entries.joinToString("\n") { (key, value) ->
+                val valStr = when (value) {
+                    is io.vertx.core.json.JsonObject -> value.encode()
+                    is io.vertx.core.json.JsonArray -> value.encode()
+                    else -> value?.toString() ?: "null"
+                }
+                if (valStr.contains("\n")) {
+                    "$indentStr$key: |\n" + indent(valStr, spaces + 2)
+                } else {
+                    "$indentStr$key: $valStr"
+                }
+            }
+        } catch (_: Exception) {
+            indent(jsonStr, spaces)
         }
     }
 
