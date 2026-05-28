@@ -95,7 +95,7 @@ class AgentTools(
         @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: defaultArchiveGroup
+            val group = if (archiveGroup.isNullOrBlank()) defaultArchiveGroup else archiveGroup
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("getTopicValues", "topics=$topics", "No LastValueStore for archive group '$group'")
 
@@ -124,7 +124,7 @@ class AgentTools(
         @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: defaultArchiveGroup
+            val group = if (archiveGroup.isNullOrBlank()) defaultArchiveGroup else archiveGroup
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("findTopics", "pattern=$pattern", "No LastValueStore for archive group '$group'")
 
@@ -154,7 +154,7 @@ class AgentTools(
         @P("Archive group name, or null to use the agent's default") archiveGroup: String?
     ): String {
         val result = try {
-            val group = archiveGroup ?: defaultArchiveGroup
+            val group = if (archiveGroup.isNullOrBlank()) defaultArchiveGroup else archiveGroup
             val store = getArchiveGroups()[group]?.archiveStore as? IMessageArchiveExtended
             if (store == null) return logTool("queryHistory", "topic=$topic", "No archive store for group '$group'")
 
