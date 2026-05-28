@@ -35,6 +35,22 @@ object LangChain4jFactory {
         val model = config.model ?: resolveDefaultModel(config.provider, globalConfig)
         logger.fine("Creating LangChain4j ${config.provider} model: ${model ?: "default"}")
 
+        val configProviderKey = when (config.provider.lowercase()) {
+            "gemini" -> "Gemini"
+            "claude" -> "Claude"
+            "openai" -> "OpenAI"
+            "ollama" -> "Ollama"
+            "azure-openai" -> "AzureOpenAI"
+            "llamacpp" -> "LlamaCpp"
+            else -> config.provider
+        }
+        val globalProviderTimeout = globalConfig
+            .getJsonObject("GenAI", JsonObject())
+            .getJsonObject("Providers", JsonObject())
+            .getJsonObject(configProviderKey, JsonObject())
+            .getInteger("TimeoutSeconds")?.toLong()
+        val effectiveTimeout = listOfNotNull(config.timeoutSeconds, globalProviderTimeout).maxOrNull()
+
         return when (config.provider.lowercase()) {
             "gemini" -> GoogleAiGeminiChatModel.builder()
                 .apiKey(apiKey)
@@ -43,6 +59,7 @@ object LangChain4jFactory {
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
                 .sendThinking(config.enableThinking)
                 .returnThinking(config.enableThinking)
+                .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
                 .build()
 
@@ -51,6 +68,7 @@ object LangChain4jFactory {
                 .modelName(model ?: "claude-sonnet-4-20250514")
                 .maxTokens(config.maxTokens ?: 4096)
                 .temperature(config.temperature)
+                .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
                 .build()
 
@@ -60,24 +78,17 @@ object LangChain4jFactory {
                 .apply { config.endpoint?.let { baseUrl(it) } }
                 .temperature(config.temperature)
                 .apply { config.maxTokens?.let { maxTokens(it) } }
+                .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
                 .build()
 
-            "ollama" -> {
-                val globalOllamaTimeout = globalConfig
-                    .getJsonObject("GenAI", JsonObject())
-                    .getJsonObject("Providers", JsonObject())
-                    .getJsonObject("Ollama", JsonObject())
-                    .getInteger("TimeoutSeconds")?.toLong()
-                val effectiveTimeout = listOfNotNull(config.timeoutSeconds, globalOllamaTimeout).maxOrNull()
-                OllamaChatModel.builder()
-                    .baseUrl(apiKey)
-                    .modelName(model ?: "llama3")
-                    .temperature(config.temperature)
-                    .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
-                    .listeners(listeners)
-                    .build()
-            }
+            "ollama" -> OllamaChatModel.builder()
+                .baseUrl(apiKey)
+                .modelName(model ?: "llama3")
+                .temperature(config.temperature)
+                .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
+                .listeners(listeners)
+                .build()
 
             "azure-openai" -> {
                 val endpoint = resolveEndpoint(config.endpoint, globalConfig)
@@ -90,11 +101,25 @@ object LangChain4jFactory {
                     .apply { svcVersion?.let { serviceVersion(it) } }
                     .temperature(config.temperature)
                     .apply { config.maxTokens?.let { maxTokens(it) } }
+                    .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                     .listeners(listeners)
                     .build()
             }
 
-            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai")
+            "llamacpp" -> {
+                val effectiveEndpoint = config.endpoint ?: "http://localhost:8080/v1"
+                OpenAiChatModel.builder()
+                    .apiKey(apiKey.takeIf { !it.isNullOrBlank() } ?: "dummy-key")
+                    .modelName(model ?: "local-model")
+                    .baseUrl(effectiveEndpoint)
+                    .temperature(config.temperature)
+                    .apply { config.maxTokens?.let { maxTokens(it) } }
+                    .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
+                    .listeners(listeners)
+                    .build()
+            }
+
+            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai, llamacpp")
         }
     }
 
@@ -161,10 +186,13 @@ object LangChain4jFactory {
             "openai" -> providers.getJsonObject("OpenAI", JsonObject())
             "ollama" -> providers.getJsonObject("Ollama", JsonObject())
             "azure-openai" -> providers.getJsonObject("AzureOpenAI", JsonObject())
+            "llamacpp" -> providers.getJsonObject("LlamaCpp", JsonObject())
             else -> JsonObject()
         }
         val providerKey = if (provider.lowercase() == "ollama") {
             providerSection.getString("BaseUrl")
+        } else if (provider.lowercase() == "llamacpp") {
+            providerSection.getString("Endpoint")
         } else {
             providerSection.getString("ApiKey")
         }
@@ -180,6 +208,7 @@ object LangChain4jFactory {
             "openai" -> "OPENAI_API_KEY"
             "ollama" -> "OLLAMA_BASE_URL"
             "azure-openai" -> "AZURE_OPENAI_API_KEY"
+            "llamacpp" -> "LLAMACPP_API_KEY"
             else -> null
         }
         if (envVarName != null) {
@@ -187,9 +216,12 @@ object LangChain4jFactory {
             if (!envValue.isNullOrBlank()) return envValue
         }
 
-        // 4. Default for Ollama (local, no key needed)
+        // 4. Default for Ollama / LlamaCpp (local, no key needed)
         if (provider.lowercase() == "ollama") {
             return "http://localhost:11434"
+        }
+        if (provider.lowercase() == "llamacpp") {
+            return "dummy-key"
         }
 
         val configKey = when (provider.lowercase()) {
@@ -197,6 +229,7 @@ object LangChain4jFactory {
             "claude" -> "Claude"
             "openai" -> "OpenAI"
             "azure-openai" -> "AzureOpenAI"
+            "llamacpp" -> "LlamaCpp"
             else -> provider
         }
         throw IllegalArgumentException("No API key found for provider '$provider'. " +
@@ -233,6 +266,7 @@ object LangChain4jFactory {
             "openai" -> providerSection.getJsonObject("OpenAI", null)
             "ollama" -> providerSection.getJsonObject("Ollama", null)
             "azure-openai" -> providerSection.getJsonObject("AzureOpenAI", null)
+            "llamacpp" -> providerSection.getJsonObject("LlamaCpp", null)
             else -> null
         }
         return section?.getString("Model")

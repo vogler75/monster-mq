@@ -1024,14 +1024,32 @@ function updateModelPlaceholder() {
         'claude': 'claude-sonnet-4-20250514',
         'openai': 'gpt-4o',
         'ollama': 'llama3',
-        'azure-openai': 'deployment-name'
+        'azure-openai': 'deployment-name',
+        'llamacpp': 'local-model'
     };
     modelInput.placeholder = placeholders[providerType] || 'Model name';
 
-    // Endpoint/version groups only shown in manual mode with azure-openai
+    // Endpoint/version groups only shown in manual mode with azure-openai, openai, or llamacpp
     const isAzure = isManual && providerType === 'azure-openai';
+    const isCustomOpenAi = isManual && (providerType === 'openai' || providerType === 'llamacpp');
     const endpointGroup = document.getElementById('agent-endpoint-group');
-    if (endpointGroup) endpointGroup.style.display = isAzure ? '' : 'none';
+    if (endpointGroup) {
+        endpointGroup.style.display = (isAzure || isCustomOpenAi) ? '' : 'none';
+        const label = endpointGroup.querySelector('label');
+        const input = endpointGroup.querySelector('input');
+        if (label && input) {
+            if (isAzure) {
+                label.textContent = 'Azure Endpoint';
+                input.placeholder = 'https://<resource>.openai.azure.com/';
+            } else if (providerType === 'llamacpp') {
+                label.textContent = 'llama.cpp Host URL';
+                input.placeholder = 'http://localhost:8080/v1';
+            } else {
+                label.textContent = 'Custom Endpoint (optional)';
+                input.placeholder = 'https://api.openai.com/v1 (leave blank for default)';
+            }
+        }
+    }
     const serviceVersionGroup = document.getElementById('agent-service-version-group');
     if (serviceVersionGroup) serviceVersionGroup.style.display = isAzure ? '' : 'none';
 }

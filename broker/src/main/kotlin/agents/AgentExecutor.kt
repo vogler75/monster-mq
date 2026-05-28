@@ -197,7 +197,8 @@ class AgentExecutor(
             "Gemini"      to "gemini",
             "Claude"      to "claude",
             "OpenAI"      to "openai",
-            "Ollama"      to "ollama"
+            "Ollama"      to "ollama",
+            "LlamaCpp"    to "llamacpp"
         )
         val type = keyToType[name] ?: name.lowercase()
         return GenAiProviderConfig(

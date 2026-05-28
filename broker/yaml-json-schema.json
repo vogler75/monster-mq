@@ -591,7 +591,7 @@
             "Provider": {
               "type": "string",
               "description": "AI provider for the assistant",
-              "enum": ["gemini", "claude", "openai", "ollama"],
+              "enum": ["gemini", "claude", "openai", "ollama", "llamacpp"],
               "default": "gemini"
             },
             "Model": {
@@ -615,7 +615,7 @@
         "Provider": {
           "type": "string",
           "description": "(Deprecated: use Assistant.Provider) AI provider to use",
-          "enum": ["gemini", "claude", "openai", "ollama"],
+          "enum": ["gemini", "claude", "openai", "ollama", "llamacpp"],
           "default": "gemini"
         },
         "Model": {
@@ -661,7 +661,8 @@
               "type": "object",
               "properties": {
                 "ApiKey": { "type": "string", "description": "OpenAI API key (supports ${ENV_VAR} syntax)" },
-                "Endpoint": { "type": "string", "description": "Custom OpenAI-compatible endpoint URL (e.g., http://localhost:8080/v1)" }
+                "Endpoint": { "type": "string", "description": "Custom OpenAI-compatible endpoint URL (e.g., http://localhost:8080/v1)" },
+                "TimeoutSeconds": { "type": "integer", "description": "HTTP request timeout in seconds for OpenAI requests (default: no timeout)" }
               }
             },
             "Ollama": {
@@ -669,6 +670,15 @@
               "properties": {
                 "BaseUrl": { "type": "string", "description": "Ollama base URL (e.g., http://localhost:11434)", "default": "http://localhost:11434" },
                 "TimeoutSeconds": { "type": "integer", "description": "HTTP request timeout in seconds for Ollama requests (default: no timeout)" }
+              }
+            },
+            "LlamaCpp": {
+              "type": "object",
+              "properties": {
+                "Endpoint": { "type": "string", "description": "llama.cpp server endpoint URL (e.g., http://remote-host:8080/v1)" },
+                "Model": { "type": "string", "description": "Default model name (optional for llama.cpp, e.g. llama3)" },
+                "ApiKey": { "type": "string", "description": "Optional API Key if llama.cpp server requires one (supports ${ENV_VAR} syntax)" },
+                "TimeoutSeconds": { "type": "integer", "description": "HTTP request timeout in seconds for llama.cpp requests (default: no timeout)" }
               }
             }
           }

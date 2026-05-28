@@ -109,8 +109,9 @@ class GenAiProviderDetailManager {
         const isAzure = type === 'azure-openai';
         const isOpenAI = type === 'openai';
         const isOllama = type === 'ollama';
+        const isLlamaCpp = type === 'llamacpp';
 
-        document.getElementById('provider-endpoint-group').style.display = (isAzure || isOpenAI) ? '' : 'none';
+        document.getElementById('provider-endpoint-group').style.display = (isAzure || isOpenAI || isLlamaCpp) ? '' : 'none';
         document.getElementById('provider-service-version-group').style.display = isAzure ? '' : 'none';
         document.getElementById('provider-base-url-group').style.display = isOllama ? '' : 'none';
 
@@ -122,6 +123,9 @@ class GenAiProviderDetailManager {
         } else if (isOpenAI) {
             endpointLabel.textContent = 'Custom Endpoint (optional)';
             endpointInput.placeholder = 'https://api.openai.com/v1 (leave blank for default)';
+        } else if (isLlamaCpp) {
+            endpointLabel.textContent = 'llama.cpp Host URL';
+            endpointInput.placeholder = 'http://localhost:8080/v1';
         }
 
         const modelInput = document.getElementById('provider-model');
@@ -130,7 +134,8 @@ class GenAiProviderDetailManager {
             'claude': 'claude-sonnet-4-20250514',
             'openai': 'gpt-4o',
             'ollama': 'llama3',
-            'azure-openai': 'deployment-name'
+            'azure-openai': 'deployment-name',
+            'llamacpp': 'local-model'
         };
         modelInput.placeholder = placeholders[type] || 'Model name';
     }
