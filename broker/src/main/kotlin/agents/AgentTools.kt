@@ -99,6 +99,8 @@ class AgentTools(
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("getTopicValues", "topics=$topics", "No LastValueStore for archive group '$group'")
 
+            logger.info("getTopicValues: resolved last-value store type = ${store.getType()} (${store.javaClass.name}) for group '$group'. getting values for topics: $topics")
+
             val results = JsonArray()
             for (topic in topics.split(",").map { it.trim() }) {
                 val msg = store[topic]
@@ -127,6 +129,8 @@ class AgentTools(
             val group = if (archiveGroup.isNullOrBlank()) defaultArchiveGroup else archiveGroup
             val store = getArchiveGroups()[group]?.lastValStore
             if (store == null) return logTool("findTopics", "pattern=$pattern", "No LastValueStore for archive group '$group'")
+
+            logger.info("findTopics: resolved last-value store type = ${store.getType()} (${store.javaClass.name}) for group '$group'. finding matching topics for pattern: $pattern")
 
             val results = JsonArray()
             var count = 0
@@ -158,11 +162,17 @@ class AgentTools(
             val store = getArchiveGroups()[group]?.archiveStore as? IMessageArchiveExtended
             if (store == null) return logTool("queryHistory", "topic=$topic", "No archive store for group '$group'")
 
+            val startInstant = startTime?.let { Instant.parse(it) }
+            val endInstant = endTime?.let { Instant.parse(it) }
+            val resolvedLimit = limit ?: 100
+
+            logger.info("queryHistory: resolved archive store type = ${store.getType()} (${store.javaClass.name}) for group '$group'. calling getHistory with: topic='$topic', startTime=$startInstant, endTime=$endInstant, limit=$resolvedLimit")
+
             val r = store.getHistory(
                 topic = topic,
-                startTime = startTime?.let { Instant.parse(it) },
-                endTime = endTime?.let { Instant.parse(it) },
-                limit = limit ?: 100
+                startTime = startInstant,
+                endTime = endInstant,
+                limit = resolvedLimit
             )
             // Convert to CSV: more token-efficient for LLMs than JSON
             val sb = StringBuilder()
