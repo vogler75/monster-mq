@@ -1201,8 +1201,10 @@ class AgentExecutor(
         sessionHandler.publishMessage(msg)
     }
 
-    private fun chatRequestMessagesToJson(request: ChatRequest): JsonArray {
-        return JsonArray(request.messages().map { message ->
+    private fun chatRequestMessagesToJson(request: ChatRequest, onlyLast: Boolean = false): JsonArray {
+        val messages = request.messages()
+        val list = if (onlyLast && messages.isNotEmpty()) listOf(messages.last()) else messages
+        return JsonArray(list.map { message ->
             JsonObject()
                 .put("type", message.type()?.name ?: "UNKNOWN")
                 .put("content", message.toString())
@@ -1215,6 +1217,10 @@ class AgentExecutor(
                 val request = requestContext.chatRequest()
                 val messages = request.messages()
                 val lastMessage = messages.lastOrNull()
+
+                // Only log all messages for the initial request (typically system + user message)
+                val onlyLast = messages.size > 2
+
                 logger.info(
                     "Agent ${deviceConfig.name} LLM request: model=${request.parameters()?.modelName() ?: "default"}, " +
                         "messages=${messages.size}, tools=${request.parameters()?.toolSpecifications()?.size ?: 0}"
@@ -1225,14 +1231,15 @@ class AgentExecutor(
                     .put("model", request.parameters()?.modelName())
                     .put("messageCount", messages.size)
                     .put("lastMessage", lastMessage?.toString())
-                    .put("messages", chatRequestMessagesToJson(request))
+                    .put("messages", chatRequestMessagesToJson(request, onlyLast))
                     .put("toolCount", request.parameters()?.toolSpecifications()?.size ?: 0)
                 publishToAgentTopic("logs/llm", log)
 
-                // Write full conversation to log file
+                // Write to conversation log file
                 writeToConversationLog { sb ->
                     sb.append("===== REQUEST [${Instant.now()}] model=${request.parameters()?.modelName()} =====\n")
-                    messages.forEach { msg ->
+                    val listToLog = if (onlyLast && lastMessage != null) listOf(lastMessage) else messages
+                    listToLog.forEach { msg ->
                         val type = msg.type()?.name ?: "UNKNOWN"
                         val text = msg.toString()
                         sb.append("[$type] $text\n")
