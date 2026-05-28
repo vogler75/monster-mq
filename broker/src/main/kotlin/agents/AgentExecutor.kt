@@ -462,7 +462,7 @@ class AgentExecutor(
             if (intervalMs != null && intervalMs > 0) {
                 logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
                 cronTimerId = vertx.setPeriodic(intervalMs) {
-                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron")
+                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON))
                 }
             } else {
                 logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronExpression or cronIntervalMs")
@@ -477,7 +477,7 @@ class AgentExecutor(
             val delayMs = java.time.Duration.between(now, nextExecution.get()).toMillis()
             logger.fine("Agent ${deviceConfig.name} next cron execution at ${nextExecution.get()} (in ${delayMs}ms)")
             cronTimerId = vertx.setTimer(delayMs) {
-                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron")
+                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON))
                 scheduleNextCronExecution(executionTime)
             }
         } else {
@@ -566,7 +566,29 @@ class AgentExecutor(
             .build()
     }
 
-    private fun buildContextData(): String {
+    private fun buildTriggerContextBlock(triggerContext: TriggerContext?): String {
+        val triggerLines = mutableListOf<String>()
+        if (triggerContext != null) {
+            triggerLines.add("Triggered by: ${triggerContext.type}")
+            if (triggerContext.topicName != null) {
+                triggerLines.add("Triggering Topic: ${triggerContext.topicName}")
+            }
+            if (triggerContext.value != null) {
+                triggerLines.add("Triggering Value: ${triggerContext.value}")
+            }
+        } else {
+            triggerLines.add("Triggered by: MANUAL")
+        }
+
+        return if (triggerLines.isNotEmpty()) {
+            "--- Trigger Context ---\n" + triggerLines.joinToString("\n") + "\n--- End Trigger Context ---\n\n"
+        } else {
+            ""
+        }
+    }
+
+    private fun buildContextData(triggerContext: TriggerContext? = null): String {
+        val triggerBlock = buildTriggerContextBlock(triggerContext)
         val lines = mutableListOf<String>()
         val contextLogLines = mutableListOf<String>()  // Summary for conversation log
 
@@ -668,13 +690,19 @@ class AgentExecutor(
             sb.append("=====\n\n")
         }
 
-        if (lines.isEmpty()) return ""
+        if (lines.isEmpty()) return triggerBlock.trimEnd()
 
         val now = Instant.now().atZone(localZone)
         val header = "--- Context Data (current time: ${now.format(localTimeFormatter)}, timezone: $localZone) ---"
-        return "$header\n" +
+        val mainContext = "$header\n" +
             lines.joinToString("\n") +
             "\n--- End Context Data ---"
+
+        return if (triggerBlock.isNotBlank()) {
+            triggerBlock + mainContext
+        } else {
+            mainContext
+        }
     }
 
     private val localZone: ZoneId by lazy {
@@ -785,6 +813,7 @@ class AgentExecutor(
     private fun forwardInputToInbox(msg: BrokerMessage) {
         val sessionHandler = Monster.getSessionHandler() ?: return
         val payloadStr = String(msg.payload, Charsets.UTF_8)
+
         val taskId = Utils.getUuid()
 
         // Try to parse as JSON; embed as JSON if valid, otherwise as text
@@ -858,7 +887,7 @@ class AgentExecutor(
         }
 
         val userMessage = "[Sub-agent results received]\n$resultText\n\n[All tasks complete. Summarize the results and respond to the user. Do NOT invoke more agents unless the user explicitly asks.]"
-        executeAgent(userMessage, "task-results")
+        executeAgent(userMessage, "task-results", TriggerContext(TriggerType.MANUAL))
     }
 
     private fun setupTaskTimeoutChecker() {
@@ -905,7 +934,7 @@ class AgentExecutor(
                 logger.info("Agent ${deviceConfig.name} received plain-text task $taskId")
                 publishTaskStatus(taskId, "working")
                 val taskMessage = "[Task from external, taskId=$taskId]\n$payload"
-                executeAgentWithCallback(taskMessage, "task:$taskId") { response, _ ->
+                executeAgentWithCallback(taskMessage, "task:$taskId", TriggerContext(TriggerType.MANUAL)) { response, _ ->
                     publishTaskStatus(taskId, if (response != null) "completed" else "failed")
                     if (response != null) publishResponse(response)
                 }
@@ -945,8 +974,14 @@ class AgentExecutor(
             }
             val taskMessage = "$header\n$input"
 
+            val triggerContext = if (sourceTopic != null) {
+                TriggerContext(TriggerType.MQTT, topicName = sourceTopic, value = input)
+            } else {
+                TriggerContext(TriggerType.MANUAL)
+            }
+
             // Execute the agent with a callback to publish the result
-            executeAgentWithCallback(taskMessage, "task:$taskId") { response, error ->
+            executeAgentWithCallback(taskMessage, "task:$taskId", triggerContext) { response, error ->
                 currentTaskId = null
                 val sessionHandler = Monster.getSessionHandler() ?: return@executeAgentWithCallback
                 if (error != null) {
@@ -1006,7 +1041,7 @@ class AgentExecutor(
         return llmWorkerExecutor?.executeBlocking(callable) ?: vertx.executeBlocking(callable)
     }
 
-    private fun executeAgentWithCallback(userMessage: String, source: String, callback: (String?, String?) -> Unit) {
+    private fun executeAgentWithCallback(userMessage: String, source: String, triggerContext: TriggerContext? = null, callback: (String?, String?) -> Unit) {
         val service = aiService ?: run {
             callback(null, "Agent service not available")
             return
@@ -1018,7 +1053,7 @@ class AgentExecutor(
 
         executeLlmBlocking {
             llmCalls.incrementAndGet()
-            val contextData = buildContextData()
+            val contextData = buildContextData(triggerContext)
             val fullMessage = if (contextData.isNotBlank()) {
                 "$contextData\n\n$userMessage"
             } else {
@@ -1068,7 +1103,7 @@ class AgentExecutor(
         }
     }
 
-    private fun executeAgent(userMessage: String, source: String) {
+    private fun executeAgent(userMessage: String, source: String, triggerContext: TriggerContext? = null) {
         val service = aiService ?: return
 
         messagesProcessed.incrementAndGet()
@@ -1077,7 +1112,7 @@ class AgentExecutor(
 
         executeLlmBlocking {
             llmCalls.incrementAndGet()
-            val contextData = buildContextData()
+            val contextData = buildContextData(triggerContext)
             val fullMessage = if (contextData.isNotBlank()) {
                 "$contextData\n\n$userMessage"
             } else {
@@ -1370,3 +1405,9 @@ class AgentExecutor(
         sessionHandler.publishMessage(msg)
     }
 }
+
+data class TriggerContext(
+    val type: TriggerType,
+    val topicName: String? = null,
+    val value: String? = null
+)
