@@ -328,7 +328,7 @@ class OpcUaConnector : AbstractVerticle() {
                             nodeJson.put("dataType", dataTypeStr)
 
                             val valValue = dataValues.getOrNull(dvIdx++)
-                            if (valValue != null && valValue.value != null) {
+                            if (valValue != null) {
                                 nodeJson.put("value", valValue.value.value?.toString() ?: "")
                                 val timestamp = valValue.sourceTime ?: valValue.serverTime ?: DateTime.now()
                                 nodeJson.put("timestamp", timestamp.javaInstant.toString())
