@@ -588,10 +588,10 @@ class GraphQLDashboardClient {
         return result.brokers;
     }
 
-    async getSessions(nodeId = null, connected = null) {
+    async getSessions(nodeId = null, connected = null, clientId = null) {
         const query = `
-            query GetSessions($nodeId: String, $connected: Boolean) {
-                sessions(nodeId: $nodeId, connected: $connected) {
+            query GetSessions($nodeId: String, $connected: Boolean, $clientId: String) {
+                sessions(nodeId: $nodeId, connected: $connected, clientId: $clientId) {
                     clientId
                     nodeId
                     metrics {
@@ -613,7 +613,7 @@ class GraphQLDashboardClient {
             }
         `;
 
-        const result = await this.query(query, { nodeId, connected });
+        const result = await this.query(query, { nodeId, connected, clientId });
         return result.sessions;
     }
 

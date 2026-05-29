@@ -29,6 +29,35 @@ class MetricsResolver(
         private fun getMetricsAddress(nodeId: String): String {
             return EventBusAddresses.Node.metrics(nodeId)
         }
+
+        fun wildcardMatch(s: String, pattern: String): Boolean {
+            if (pattern.isEmpty()) return true
+            val lowerS = s.lowercase()
+            val lowerPattern = pattern.lowercase()
+            if (!lowerPattern.contains("*") && !lowerPattern.contains("?")) {
+                return lowerS.contains(lowerPattern)
+            }
+            val regexPattern = "^" + lowerPattern
+                .replace("\\", "\\\\")
+                .replace(".", "\\.")
+                .replace("+", "\\+")
+                .replace("^", "\\^")
+                .replace("$", "\\$")
+                .replace("(", "\\(")
+                .replace(")", "\\)")
+                .replace("[", "\\[")
+                .replace("]", "\\]")
+                .replace("{", "\\{")
+                .replace("}", "\\}")
+                .replace("|", "\\|")
+                .replace("*", ".*")
+                .replace("?", ".") + "$"
+            return try {
+                lowerS.matches(regexPattern.toRegex())
+            } catch (e: Exception) {
+                lowerS.contains(lowerPattern.replace("*", "").replace("?", ""))
+            }
+        }
     }
 
     private fun round2(value: Double): Double {
@@ -180,9 +209,10 @@ class MetricsResolver(
             val nodeId = env.getArgument<String?>("nodeId")
             val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
             val connectedFilter = env.getArgument<Boolean?>("connected")
+            val clientIdFilter = env.getArgument<String?>("clientId")
 
-            // Always use getAllSessions and filter by nodeId if needed
-            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId)
+            // Always use getAllSessions and filter by nodeId/clientId if needed
+            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId, clientIdFilter)
 
             future
         }
@@ -304,7 +334,13 @@ class MetricsResolver(
     }
 
 
-    private fun getAllSessions(cleanSessionFilter: Boolean?, connectedFilter: Boolean?, future: CompletableFuture<List<Session>>, nodeIdFilter: String? = null) {
+    private fun getAllSessions(
+        cleanSessionFilter: Boolean?,
+        connectedFilter: Boolean?,
+        future: CompletableFuture<List<Session>>,
+        nodeIdFilter: String? = null,
+        clientIdFilter: String? = null
+    ) {
         val sessions = mutableListOf<Session>()
         val sessionProcessingQueue = mutableListOf<CompletableFuture<Session?>>()
 
@@ -315,8 +351,9 @@ class MetricsResolver(
                 val passesNodeIdFilter = nodeIdFilter?.let { it == nodeId } ?: true
                 val passesCleanSessionFilter = cleanSessionFilter?.let { it == cleanSession } ?: true
                 val passesConnectedFilter = connectedFilter?.let { it == connected } ?: true
+                val passesClientIdFilter = clientIdFilter?.let { wildcardMatch(clientId, it) } ?: true
 
-                if (passesNodeIdFilter && passesCleanSessionFilter && passesConnectedFilter) {
+                if (passesNodeIdFilter && passesCleanSessionFilter && passesConnectedFilter && passesClientIdFilter) {
                     // Create a future for processing this session
                     val sessionFuture = CompletableFuture<Session?>()
                     sessionProcessingQueue.add(sessionFuture)
@@ -536,9 +573,10 @@ class MetricsResolver(
 
             val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
             val connectedFilter = env.getArgument<Boolean?>("connected")
+            val clientIdFilter = env.getArgument<String?>("clientId")
 
             // Use getAllSessions with nodeId filter for this specific broker node
-            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId)
+            getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId, clientIdFilter)
 
             future
         }

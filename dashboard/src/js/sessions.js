@@ -4,6 +4,7 @@ class SessionManager {
         this.distributionChart = null;
         this.currentNodeFilter = '';
         this.currentConnectionFilter = '';
+        this.currentClientIdFilter = '';
         this.selectedSessions = new Set();
 
         // Load filters from URL parameters
@@ -28,6 +29,7 @@ class SessionManager {
         const urlParams = new URLSearchParams(window.location.search);
         this.currentNodeFilter = urlParams.get('nodeId') || '';
         this.currentConnectionFilter = urlParams.get('connected') || '';
+        this.currentClientIdFilter = urlParams.get('clientId') || '';
     }
 
     updateURL() {
@@ -37,6 +39,9 @@ class SessionManager {
         }
         if (this.currentConnectionFilter !== '') {
             urlParams.set('connected', this.currentConnectionFilter);
+        }
+        if (this.currentClientIdFilter) {
+            urlParams.set('clientId', this.currentClientIdFilter);
         }
 
         const newUrl = `${window.location.pathname}${urlParams.toString() ? '?' + urlParams.toString() : ''}`;
@@ -67,6 +72,19 @@ class SessionManager {
         document.getElementById('refresh-sessions').addEventListener('click', () => {
             this.loadSessions();
         });
+
+        const clientIdFilter = document.getElementById('client-id-filter');
+        if (clientIdFilter) {
+            let debounceTimer;
+            clientIdFilter.addEventListener('input', (e) => {
+                this.currentClientIdFilter = e.target.value;
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    this.updateURL();
+                    this.loadSessions();
+                }, 250);
+            });
+        }
 
         document.getElementById('node-filter').addEventListener('change', (e) => {
             this.currentNodeFilter = e.target.value;
@@ -118,12 +136,16 @@ class SessionManager {
     restoreFilterUI() {
         const nodeFilter = document.getElementById('node-filter');
         const connectionFilter = document.getElementById('connection-filter');
+        const clientIdFilter = document.getElementById('client-id-filter');
 
         if (nodeFilter && this.currentNodeFilter) {
             nodeFilter.value = this.currentNodeFilter;
         }
         if (connectionFilter && this.currentConnectionFilter) {
             connectionFilter.value = this.currentConnectionFilter;
+        }
+        if (clientIdFilter && this.currentClientIdFilter) {
+            clientIdFilter.value = this.currentClientIdFilter;
         }
     }
 
@@ -190,9 +212,10 @@ class SessionManager {
             // Prepare GraphQL parameters from current filters
             const nodeId = this.currentNodeFilter || null;
             const connected = this.currentConnectionFilter !== '' ? (this.currentConnectionFilter === 'true') : null;
+            const clientId = this.currentClientIdFilter || null;
 
             // Use GraphQL client with server-side filtering
-            this.sessions = await window.graphqlClient.getSessions(nodeId, connected);
+            this.sessions = await window.graphqlClient.getSessions(nodeId, connected, clientId);
             this.updateMetrics();
             this.updateChart();
             this.updateNodeFilter();

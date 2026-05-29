@@ -181,7 +181,9 @@ type Query {
         # Filter by session type: true=clean sessions, false=persistent sessions, null=all
         cleanSession: Boolean,
         # Filter by connection status: true=connected, false=disconnected, null=all
-        connected: Boolean
+        connected: Boolean,
+        # Filter by client ID using standard wildcards (optional - e.g. "scada*")
+        clientId: String
     ): [Session!]!
 
     # Get detailed information about a specific MQTT client session

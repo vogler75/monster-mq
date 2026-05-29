@@ -199,7 +199,9 @@ type Broker {
         # Filter by session persistence type: true=clean, false=persistent, null=all
         cleanSession: Boolean,
         # Filter by connection status: true=active connections, false=disconnected, null=all
-        connected: Boolean
+        connected: Boolean,
+        # Filter by client ID using standard wildcards (optional - e.g. "scada*")
+        clientId: String
     ): [Session!]!
 }
 
