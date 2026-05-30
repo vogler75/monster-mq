@@ -45,10 +45,12 @@ class MqttClient(
     private var lastMessagesOut: Long = 0
 
     private var nextMessageId: Int = 0
-    private fun getNextMessageId(): Int = if (nextMessageId==65535) {
-        nextMessageId=1
-        nextMessageId
-    } else ++nextMessageId
+    private fun getNextMessageId(): Int = synchronized(inFlightMessagesSnd) {
+        if (nextMessageId == 65535) {
+            nextMessageId = 1
+            nextMessageId
+        } else ++nextMessageId
+    }
 
     private data class InFlightMessage(
         val message: BrokerMessage,
@@ -101,6 +103,17 @@ class MqttClient(
     private var receiveMaximumLastSampledTopic: String? = null
     private var receiveMaximumLastSampledQos: Int? = null
     private var receiveMaximumLastSampledInFlightObserved: Int? = null
+
+    private val pendingEvents = mutableListOf<() -> Unit>()
+
+    private fun drainPendingEvents() {
+        if (pendingEvents.isNotEmpty()) {
+            logger.info("Client [$clientId] Session is ready, draining ${pendingEvents.size} pending queued events")
+            val events = ArrayList(pendingEvents)
+            pendingEvents.clear()
+            events.forEach { it.invoke() }
+        }
+    }
 
     // create a getter for the client id
     val clientId: String
@@ -434,6 +447,7 @@ class MqttClient(
                         // Now safe to mark as ready for new messages
                         ready = true
                         sessionHandler.onlineClient(clientId)
+                        drainPendingEvents()
 
                         // For persistent sessions, reset any stale in-flight messages and send trigger
                         // This handles the case where previous connection died with messages in-flight
@@ -595,6 +609,7 @@ class MqttClient(
                     // Now safe to mark as ready for new messages
                     ready = true
                     sessionHandler.onlineClient(clientId)
+                    drainPendingEvents()
 
                     // For persistent sessions, reset any stale in-flight messages and send trigger
                     // This handles the case where previous connection died with messages in-flight
@@ -686,11 +701,21 @@ class MqttClient(
     }
 
     private fun pingHandler() {
+        if (!ready) {
+            logger.fine { "Client [$clientId] Connection not ready, queuing PINGREQ" }
+            pendingEvents.add { pingHandler() }
+            return
+        }
         lastPing = Instant.now()
         //endpoint.pong() // A java clients dies when pong is sent
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing SUBSCRIBE for message id [${subscribe.messageId()}]")
+            pendingEvents.add { subscribeHandler(subscribe) }
+            return
+        }
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
         val protocolVersion = endpoint.protocolVersion()
 
@@ -827,6 +852,11 @@ class MqttClient(
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing UNSUBSCRIBE for message id [${unsubscribe.messageId()}]")
+            pendingEvents.add { unsubscribeHandler(unsubscribe) }
+            return
+        }
         val protocolVersion = endpoint.protocolVersion()
 
         if (protocolVersion == 5) {
@@ -950,6 +980,12 @@ class MqttClient(
         // Construct BrokerMessage immediately (copies payload bytes synchronously on Event Loop thread)
         val msg = BrokerMessage(clientId, message, topicName)
 
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBLISH for message id [${msg.messageId}]")
+            pendingEvents.add { processPublishMessage(msg) }
+            return
+        }
+
         processPublishMessage(msg)
     }
 
@@ -1053,6 +1089,11 @@ class MqttClient(
     }
 
     private fun publishReleaseHandler(id: Int) {
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBREL id [$id]")
+            pendingEvents.add { publishReleaseHandler(id) }
+            return
+        }
         inFlightMessagesRcv[id]?.let { inFlightMessage ->
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
             endpoint.publishComplete(id)
@@ -1204,33 +1245,35 @@ class MqttClient(
                     Monster.getMaxInFlightMessages()
                 }
                 
-                if (inFlightMessagesSnd.size >= maxInFlight) {
-                    receiveMaximumLastSampledMessageId = message.messageId
-                    receiveMaximumLastSampledTopic = message.topicName
-                    receiveMaximumLastSampledQos = message.qosLevel
-                    receiveMaximumLastSampledInFlightObserved = inFlightMessagesSnd.size
+                synchronized(inFlightMessagesSnd) {
+                    if (inFlightMessagesSnd.size >= maxInFlight) {
+                        receiveMaximumLastSampledMessageId = message.messageId
+                        receiveMaximumLastSampledTopic = message.topicName
+                        receiveMaximumLastSampledQos = message.qosLevel
+                        receiveMaximumLastSampledInFlightObserved = inFlightMessagesSnd.size
 
-                    if (!receiveMaximumWarningActive) {
-                        receiveMaximumWarningActive = true
-                        receiveMaximumWarningSince = Instant.now()
-                        receiveMaximumSuppressedWarnings = 0L
-                        logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, Receive Maximum limit reached (${inFlightMessagesSnd.size}/$maxInFlight) [${Utils.getCurrentFunctionName()}]" }
+                        if (!receiveMaximumWarningActive) {
+                            receiveMaximumWarningActive = true
+                            receiveMaximumWarningSince = Instant.now()
+                            receiveMaximumSuppressedWarnings = 0L
+                            logger.warning { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, Receive Maximum limit reached (${inFlightMessagesSnd.size}/$maxInFlight) [${Utils.getCurrentFunctionName()}]" }
+                        } else {
+                            receiveMaximumSuppressedWarnings++
+                        }
+                        // TODO: message must be removed from message store (queued messages)
                     } else {
-                        receiveMaximumSuppressedWarnings++
-                    }
-                    // TODO: message must be removed from message store (queued messages)
-                } else {
-                    // Check if we were previously in a saturated state and have recovered
-                    checkReceiveMaximumRecovery(maxInFlight)
+                        // Check if we were previously in a saturated state and have recovered
+                        checkReceiveMaximumRecovery(maxInFlight)
 
-                    inFlightMessagesSnd.addLast(InFlightMessage(message))
-                    updateSessionHandlerInFlight()
-                    if (inFlightMessagesSnd.size == 1) {
-                        sessionHandler.incrementMessagesOut(clientId)
-                        message.publishToEndpoint(endpoint)
-                        logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
-                    } else {
-                        logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] queued [${Utils.getCurrentFunctionName()}]" }
+                        inFlightMessagesSnd.addLast(InFlightMessage(message))
+                        updateSessionHandlerInFlight()
+                        if (inFlightMessagesSnd.size == 1) {
+                            sessionHandler.incrementMessagesOut(clientId)
+                            message.publishToEndpoint(endpoint)
+                            logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
+                        } else {
+                            logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] queued [${Utils.getCurrentFunctionName()}]" }
+                        }
                     }
                 }
             }
@@ -1238,11 +1281,13 @@ class MqttClient(
     }
 
     private fun publishMessageCheckNext() {
-        if (inFlightMessagesSnd.isNotEmpty()) {
-            val msg = inFlightMessagesSnd.first().message
-            sessionHandler.incrementMessagesOut(clientId)
-            msg.publishToEndpoint(endpoint)
-            logger.finest { "Client [$clientId] Subscribe: next message [${msg.messageId}] from queue delivered [${Utils.getCurrentFunctionName()}]" }
+        synchronized(inFlightMessagesSnd) {
+            if (inFlightMessagesSnd.isNotEmpty()) {
+                val msg = inFlightMessagesSnd.first().message
+                sessionHandler.incrementMessagesOut(clientId)
+                msg.publishToEndpoint(endpoint)
+                logger.finest { "Client [$clientId] Subscribe: next message [${msg.messageId}] from queue delivered [${Utils.getCurrentFunctionName()}]" }
+            }
         }
     }
 
@@ -1294,22 +1339,29 @@ class MqttClient(
     }
 
     private fun publishAcknowledgeHandler(id: Int) { // QoS 1
-        val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
-        if (inFlightMessage != null) {
-            logger.finest { "Client [$clientId] PUBACK: got acknowledge id [$id] [${Utils.getCurrentFunctionName()}]" }
-            val wasQueued = inFlightMessage.message.isQueued
-            val isFirst = inFlightMessagesSnd.firstOrNull() == inFlightMessage
-            publishMessageCompleted(inFlightMessage)
-            // For queue-first delivery: fetch next from DB queue
-            if (isFirst) {
-                if (wasQueued && isProcessingQueue) {
-                    processNextMessage()
-                } else {
-                    publishMessageCheckNext()
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBACK id [$id]")
+            pendingEvents.add { publishAcknowledgeHandler(id) }
+            return
+        }
+        synchronized(inFlightMessagesSnd) {
+            val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
+            if (inFlightMessage != null) {
+                logger.finest { "Client [$clientId] PUBACK: got acknowledge id [$id] [${Utils.getCurrentFunctionName()}]" }
+                val wasQueued = inFlightMessage.message.isQueued
+                val isFirst = inFlightMessagesSnd.firstOrNull() == inFlightMessage
+                publishMessageCompleted(inFlightMessage)
+                // For queue-first delivery: fetch next from DB queue
+                if (isFirst) {
+                    if (wasQueued && isProcessingQueue) {
+                        processNextMessage()
+                    } else {
+                        publishMessageCheckNext()
+                    }
                 }
+            } else {
+                logger.fine { "Client [$clientId] PUBACK: got acknowledge id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
             }
-        } else {
-            logger.warning { "Client [$clientId] PUBACK: got acknowledge id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
         }
     }
 
@@ -1325,63 +1377,79 @@ class MqttClient(
     }
 
     private fun publishedReceivedHandler(id: Int) { // QoS 2
-        val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
-        if (inFlightMessage != null) {
-            logger.finest { "Client [$clientId] PUBREC: got received id [$id], now sending release to client [${Utils.getCurrentFunctionName()}]" }
-            inFlightMessage.stage = 2
-            endpoint.publishRelease(id)
-        } else {
-            logger.warning { "Client [$clientId] PUBREC: got received id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBREC id [$id]")
+            pendingEvents.add { publishedReceivedHandler(id) }
+            return
+        }
+        synchronized(inFlightMessagesSnd) {
+            val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
+            if (inFlightMessage != null) {
+                logger.finest { "Client [$clientId] PUBREC: got received id [$id], now sending release to client [${Utils.getCurrentFunctionName()}]" }
+                inFlightMessage.stage = 2
+                endpoint.publishRelease(id)
+            } else {
+                logger.fine { "Client [$clientId] PUBREC: got received id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
+            }
         }
     }
 
     private fun publishCompletionHandler(id: Int) { // QoS 2
-        val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
-        if (inFlightMessage != null) {
-            logger.finest { "Client [$clientId] PUBCOMP: got complete id [$id] [${Utils.getCurrentFunctionName()}]" }
-            val wasQueued = inFlightMessage.message.isQueued
-            val isFirst = inFlightMessagesSnd.firstOrNull() == inFlightMessage
-            publishMessageCompleted(inFlightMessage)
-            // For queue-first delivery: fetch next from DB queue
-            if (isFirst) {
-                if (wasQueued && isProcessingQueue) {
-                    processNextMessage()
-                } else {
-                    publishMessageCheckNext()
+        if (!ready) {
+            logger.info("Client [$clientId] Connection not ready, queuing PUBCOMP id [$id]")
+            pendingEvents.add { publishCompletionHandler(id) }
+            return
+        }
+        synchronized(inFlightMessagesSnd) {
+            val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
+            if (inFlightMessage != null) {
+                logger.finest { "Client [$clientId] PUBCOMP: got complete id [$id] [${Utils.getCurrentFunctionName()}]" }
+                val wasQueued = inFlightMessage.message.isQueued
+                val isFirst = inFlightMessagesSnd.firstOrNull() == inFlightMessage
+                publishMessageCompleted(inFlightMessage)
+                // For queue-first delivery: fetch next from DB queue
+                if (isFirst) {
+                    if (wasQueued && isProcessingQueue) {
+                        processNextMessage()
+                    } else {
+                        publishMessageCheckNext()
+                    }
                 }
+            } else {
+                logger.fine { "Client [$clientId] PUBCOMP: got complete id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
             }
-        } else {
-            logger.warning { "Client [$clientId] PUBCOMP: got complete id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
         }
     }
 
     private fun sendingInFlightMessagesPeriodicCheck() {
         try {
-            inFlightMessagesSnd.firstOrNull()?.let { inFlightMessage ->
-                if (inFlightMessage.retryCount < Const.QOS2_RETRY_COUNT) {
-                    if (inFlightMessage.lastTryTime.plusSeconds(Const.QOS2_RETRY_INTERVAL).isBefore(Instant.now())) {
-                        logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [${inFlightMessage.stage}] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                        inFlightMessage.lastTryTime = Instant.now()
-                        inFlightMessage.retryCount++
-                        when (inFlightMessage.stage) {
-                            1 -> endpoint.let { inFlightMessage.message.publishToEndpoint(it) } // TODO: set isDup to true
-                            2 -> endpoint.publishReceived(inFlightMessage.message.messageId)
-                            else -> logger.warning { "Client [$clientId] PUBACK/PUBREC: unknown stage [${inFlightMessage.stage}] for message [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
+            synchronized(inFlightMessagesSnd) {
+                inFlightMessagesSnd.firstOrNull()?.let { inFlightMessage ->
+                    if (inFlightMessage.retryCount < Const.QOS2_RETRY_COUNT) {
+                        if (inFlightMessage.lastTryTime.plusSeconds(Const.QOS2_RETRY_INTERVAL).isBefore(Instant.now())) {
+                            logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [${inFlightMessage.stage}] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                            inFlightMessage.lastTryTime = Instant.now()
+                            inFlightMessage.retryCount++
+                            when (inFlightMessage.stage) {
+                                1 -> endpoint.let { inFlightMessage.message.publishToEndpoint(it) } // TODO: set isDup to true
+                                2 -> endpoint.publishReceived(inFlightMessage.message.messageId)
+                                else -> logger.warning { "Client [$clientId] PUBACK/PUBREC: unknown stage [${inFlightMessage.stage}] for message [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }
+                            }
                         }
-                    }
-                } else {
-                    logger.warning { "Client [$clientId] PUBACK/PUBREC: Message [${inFlightMessage.message.messageId}] for topic [${inFlightMessage.message.topicName}] not delivered [${Utils.getCurrentFunctionName()}]" }
-                    inFlightMessagesSnd.removeFirst()
-                    updateSessionHandlerInFlight()
-
-                    val maxInFlight = if (endpoint.protocolVersion() == 5) {
-                        clientReceiveMaximum
                     } else {
-                        Monster.getMaxInFlightMessages()
-                    }
-                    checkReceiveMaximumRecovery(maxInFlight)
+                        logger.warning { "Client [$clientId] PUBACK/PUBREC: Message [${inFlightMessage.message.messageId}] for topic [${inFlightMessage.message.topicName}] not delivered [${Utils.getCurrentFunctionName()}]" }
+                        inFlightMessagesSnd.removeFirst()
+                        updateSessionHandlerInFlight()
 
-                    publishMessageCheckNext()
+                        val maxInFlight = if (endpoint.protocolVersion() == 5) {
+                            clientReceiveMaximum
+                        } else {
+                            Monster.getMaxInFlightMessages()
+                        }
+                        checkReceiveMaximumRecovery(maxInFlight)
+
+                        publishMessageCheckNext()
+                    }
                 }
             }
         } catch (e: NoSuchElementException) {
