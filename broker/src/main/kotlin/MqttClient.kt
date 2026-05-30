@@ -56,7 +56,8 @@ class MqttClient(
         val message: BrokerMessage,
         var stage: Int = 1,
         var lastTryTime: Instant = Instant.now(),
-        var retryCount: Int = 0
+        var retryCount: Int = 0,
+        var sent: Boolean = false
     )
 
     private val inFlightMessagesRcv = ConcurrentHashMap<Int, InFlightMessage>() // messageId TODO: is concurrent needed?
@@ -1266,9 +1267,13 @@ class MqttClient(
                         // Check if we were previously in a saturated state and have recovered
                         checkReceiveMaximumRecovery(maxInFlight)
 
-                        inFlightMessagesSnd.addLast(InFlightMessage(message))
+                        val inFlightMessage = InFlightMessage(message)
+                        inFlightMessagesSnd.addLast(inFlightMessage)
                         updateSessionHandlerInFlight()
-                        if (inFlightMessagesSnd.size == 1) {
+                        
+                        val sentCount = inFlightMessagesSnd.count { it.sent }
+                        if (sentCount < maxInFlight) {
+                            inFlightMessage.sent = true
                             shouldPublish = true
                         } else {
                             logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] queued [${Utils.getCurrentFunctionName()}]" }
@@ -1288,8 +1293,19 @@ class MqttClient(
     private fun publishMessageCheckNext() {
         var msgToPublish: BrokerMessage? = null
         synchronized(inFlightMessagesSnd) {
-            if (inFlightMessagesSnd.isNotEmpty()) {
-                msgToPublish = inFlightMessagesSnd.first().message
+            val unsent = inFlightMessagesSnd.find { !it.sent }
+            if (unsent != null) {
+                val sentCount = inFlightMessagesSnd.count { it.sent }
+                val maxInFlight = if (endpoint.protocolVersion() == 5) {
+                    clientReceiveMaximum
+                } else {
+                    Monster.getMaxInFlightMessages()
+                }
+                if (sentCount < maxInFlight) {
+                    unsent.sent = true
+                    unsent.lastTryTime = Instant.now()
+                    msgToPublish = unsent.message
+                }
             }
         }
         
@@ -1376,12 +1392,10 @@ class MqttClient(
             }
             
             // Process next message outside lock
-            if (isFirst) {
-                if (wasQueued && isProcessingQueue) {
-                    processNextMessage()
-                } else {
-                    publishMessageCheckNext()
-                }
+            if (wasQueued && isProcessingQueue) {
+                processNextMessage()
+            } else {
+                publishMessageCheckNext()
             }
         } else {
             logger.fine { "Client [$clientId] PUBACK: got acknowledge id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
@@ -1455,12 +1469,10 @@ class MqttClient(
             }
             
             // Process next message outside lock
-            if (isFirst) {
-                if (wasQueued && isProcessingQueue) {
-                    processNextMessage()
-                } else {
-                    publishMessageCheckNext()
-                }
+            if (wasQueued && isProcessingQueue) {
+                processNextMessage()
+            } else {
+                publishMessageCheckNext()
             }
         } else {
             logger.fine { "Client [$clientId] PUBCOMP: got complete id [$id] but no matching message in in-flight queue [${Utils.getCurrentFunctionName()}]" }
@@ -1469,26 +1481,26 @@ class MqttClient(
 
     private fun sendingInFlightMessagesPeriodicCheck() {
         try {
-            var msgToRetry: InFlightMessage? = null
+            val messagesToRetry = mutableListOf<Pair<InFlightMessage, Int>>()
             var shouldCheckNext = false
-            var retryAction: Int = 0 // 0=none, 1=publishToEndpoint, 2=publishReceived, 3=warning
             
             synchronized(inFlightMessagesSnd) {
-                inFlightMessagesSnd.firstOrNull()?.let { inFlightMessage ->
+                val sentMessages = inFlightMessagesSnd.filter { it.sent }
+                for (inFlightMessage in sentMessages) {
                     if (inFlightMessage.retryCount < Const.QOS2_RETRY_COUNT) {
                         if (inFlightMessage.lastTryTime.plusSeconds(Const.QOS2_RETRY_INTERVAL).isBefore(Instant.now())) {
                             inFlightMessage.lastTryTime = Instant.now()
                             inFlightMessage.retryCount++
-                            msgToRetry = inFlightMessage
-                            retryAction = when (inFlightMessage.stage) {
+                            val action = when (inFlightMessage.stage) {
                                 1 -> 1
                                 2 -> 2
                                 else -> 3
                             }
+                            messagesToRetry.add(Pair(inFlightMessage, action))
                         }
                     } else {
                         // Max retries reached: remove it
-                        inFlightMessagesSnd.removeFirst()
+                        inFlightMessagesSnd.remove(inFlightMessage)
                         updateSessionHandlerInFlight()
 
                         val maxInFlight = if (endpoint.protocolVersion() == 5) {
@@ -1499,14 +1511,13 @@ class MqttClient(
                         checkReceiveMaximumRecovery(maxInFlight)
                         
                         shouldCheckNext = true
-                        msgToRetry = inFlightMessage
-                        retryAction = 4 // max retries exceeded log
+                        messagesToRetry.add(Pair(inFlightMessage, 4))
                     }
                 }
             }
             
             // Execute actions outside lock
-            msgToRetry?.let { inFlightMessage ->
+            messagesToRetry.forEach { (inFlightMessage, retryAction) ->
                 when (retryAction) {
                     1 -> {
                         logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [1] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
