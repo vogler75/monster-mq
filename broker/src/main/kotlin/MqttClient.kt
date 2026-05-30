@@ -102,17 +102,6 @@ class MqttClient(
     private var receiveMaximumLastSampledQos: Int? = null
     private var receiveMaximumLastSampledInFlightObserved: Int? = null
 
-    private val pendingEvents = mutableListOf<() -> Unit>()
-
-    private fun drainPendingEvents() {
-        if (pendingEvents.isNotEmpty()) {
-            logger.info("Client [$clientId] Session is ready, draining ${pendingEvents.size} pending queued events")
-            val events = ArrayList(pendingEvents)
-            pendingEvents.clear()
-            events.forEach { it.invoke() }
-        }
-    }
-
     // create a getter for the client id
     val clientId: String
         get() = endpoint.clientIdentifier()
@@ -445,7 +434,6 @@ class MqttClient(
                         // Now safe to mark as ready for new messages
                         ready = true
                         sessionHandler.onlineClient(clientId)
-                        drainPendingEvents()
 
                         // For persistent sessions, reset any stale in-flight messages and send trigger
                         // This handles the case where previous connection died with messages in-flight
@@ -607,7 +595,6 @@ class MqttClient(
                     // Now safe to mark as ready for new messages
                     ready = true
                     sessionHandler.onlineClient(clientId)
-                    drainPendingEvents()
 
                     // For persistent sessions, reset any stale in-flight messages and send trigger
                     // This handles the case where previous connection died with messages in-flight
@@ -699,21 +686,11 @@ class MqttClient(
     }
 
     private fun pingHandler() {
-        if (!ready) {
-            logger.fine { "Client [$clientId] Connection not ready, queuing PINGREQ" }
-            pendingEvents.add { pingHandler() }
-            return
-        }
         lastPing = Instant.now()
         //endpoint.pong() // A java clients dies when pong is sent
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing SUBSCRIBE for message id [${subscribe.messageId()}]")
-            pendingEvents.add { subscribeHandler(subscribe) }
-            return
-        }
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
         val protocolVersion = endpoint.protocolVersion()
 
@@ -850,11 +827,6 @@ class MqttClient(
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing UNSUBSCRIBE for message id [${unsubscribe.messageId()}]")
-            pendingEvents.add { unsubscribeHandler(unsubscribe) }
-            return
-        }
         val protocolVersion = endpoint.protocolVersion()
 
         if (protocolVersion == 5) {
@@ -978,12 +950,6 @@ class MqttClient(
         // Construct BrokerMessage immediately (copies payload bytes synchronously on Event Loop thread)
         val msg = BrokerMessage(clientId, message, topicName)
 
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBLISH for message id [${msg.messageId}]")
-            pendingEvents.add { processPublishMessage(msg) }
-            return
-        }
-
         processPublishMessage(msg)
     }
 
@@ -1087,11 +1053,6 @@ class MqttClient(
     }
 
     private fun publishReleaseHandler(id: Int) {
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBREL id [$id]")
-            pendingEvents.add { publishReleaseHandler(id) }
-            return
-        }
         inFlightMessagesRcv[id]?.let { inFlightMessage ->
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
             endpoint.publishComplete(id)
@@ -1333,11 +1294,6 @@ class MqttClient(
     }
 
     private fun publishAcknowledgeHandler(id: Int) { // QoS 1
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBACK id [$id]")
-            pendingEvents.add { publishAcknowledgeHandler(id) }
-            return
-        }
         val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
         if (inFlightMessage != null) {
             logger.finest { "Client [$clientId] PUBACK: got acknowledge id [$id] [${Utils.getCurrentFunctionName()}]" }
@@ -1369,11 +1325,6 @@ class MqttClient(
     }
 
     private fun publishedReceivedHandler(id: Int) { // QoS 2
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBREC id [$id]")
-            pendingEvents.add { publishedReceivedHandler(id) }
-            return
-        }
         val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
         if (inFlightMessage != null) {
             logger.finest { "Client [$clientId] PUBREC: got received id [$id], now sending release to client [${Utils.getCurrentFunctionName()}]" }
@@ -1385,11 +1336,6 @@ class MqttClient(
     }
 
     private fun publishCompletionHandler(id: Int) { // QoS 2
-        if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBCOMP id [$id]")
-            pendingEvents.add { publishCompletionHandler(id) }
-            return
-        }
         val inFlightMessage = inFlightMessagesSnd.find { it.message.messageId == id }
         if (inFlightMessage != null) {
             logger.finest { "Client [$clientId] PUBCOMP: got complete id [$id] [${Utils.getCurrentFunctionName()}]" }
