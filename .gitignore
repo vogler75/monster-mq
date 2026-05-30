@@ -40,3 +40,6 @@ __pycache__/
 
 ### Test environment ###
 tests/.env
+
+### Others ###
+.antigravitycli

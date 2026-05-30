@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -6,7 +7,7 @@ use clap::Parser;
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 
 #[derive(Parser, Debug)]
-#[command(name = "latency-test", about = "MQTT publish-subscribe latency measurement")]
+#[command(name = "latency-test", about = "MQTT publish-subscribe latency measurement and live throughput monitoring")]
 struct Args {
     /// Broker host (used for both publisher and subscriber unless overridden)
     #[arg(long, default_value = "localhost")]
@@ -32,7 +33,7 @@ struct Args {
     #[arg(long)]
     sub_port: Option<u16>,
 
-    /// MQTT username
+    /// MQTT username (pass empty string "" to connect anonymously without credentials)
     #[arg(long, default_value = "Test")]
     username: String,
 
@@ -55,6 +56,10 @@ struct Args {
     /// Use persistent session (clean_session=false) for the subscriber
     #[arg(long)]
     persistent: bool,
+
+    /// Live throughput subscription mode: Topic to subscribe to (e.g. "#"). Disables publisher.
+    #[arg(long)]
+    topic: Option<String>,
 }
 
 fn qos_from_u8(q: u8) -> QoS {
@@ -86,15 +91,106 @@ fn parse_field(payload: &str, key: &str) -> Option<f64> {
 fn main() {
     let args = Args::parse();
     let qos = qos_from_u8(args.qos);
+
+    let sub_host = args.sub_host.clone().unwrap_or_else(|| args.host.clone());
+    let sub_port = args.sub_port.unwrap_or(args.port);
+    let pub_host = args.pub_host.clone().unwrap_or_else(|| args.host.clone());
+    let pub_port = args.pub_port.unwrap_or(args.port);
+    
+    let uid = &uuid::Uuid::new_v4().to_string()[..8];
+
+    // If --topic is specified, run in dedicated Throughput Monitor mode
+    if let Some(custom_topic) = args.topic {
+        let total_count = Arc::new(AtomicUsize::new(0));
+        let interval_count = Arc::new(AtomicUsize::new(0));
+        
+        let total_count_clone = Arc::clone(&total_count);
+        let interval_count_clone = Arc::clone(&interval_count);
+
+        let start = Instant::now();
+        let topic_str = custom_topic.clone();
+        let sub_host_print = sub_host.clone();
+        let qos_val = args.qos;
+        
+        // Spawn reporting thread
+        thread::spawn(move || {
+            let mut last_report = Instant::now();
+            println!("\n============================================================");
+            println!(" MonsterMQ Live Throughput Monitor (Rust)");
+            println!("============================================================");
+            println!("  Broker: {}:{}", sub_host_print, sub_port);
+            println!("  Topic:  '{}'", topic_str);
+            println!("  QoS:    {}", qos_val);
+            println!("------------------------------------------------------------");
+            println!("  Format: [Elapsed] | Live Rate (msgs/s) | Running Average | Total Received");
+            println!("------------------------------------------------------------");
+            
+            loop {
+                thread::sleep(Duration::from_secs(1));
+                let now = Instant::now();
+                let elapsed = start.elapsed().as_secs_f64();
+                let interval_elapsed = now.duration_since(last_report).as_secs_f64();
+                
+                let total = total_count_clone.load(Ordering::Relaxed);
+                let interval = interval_count_clone.swap(0, Ordering::Relaxed);
+                
+                let current_rate = if interval_elapsed > 0.0 { interval as f64 / interval_elapsed } else { 0.0 };
+                let overall_rate = if elapsed > 0.0 { total as f64 / elapsed } else { 0.0 };
+                
+                let mins = elapsed as u64 / 60;
+                let secs = elapsed as u64 % 60;
+                let hours = mins / 60;
+                let mins = mins % 60;
+                
+                print!(
+                    "\r  [{:02}:{:02}:{:02}] | Live: {:8.2} msg/s | Avg: {:8.2} msg/s | Total: {}",
+                    hours, mins, secs, current_rate, overall_rate, total
+                );
+                std::io::Write::flush(&mut std::io::stdout()).unwrap();
+                last_report = now;
+            }
+        });
+
+        // Run client connection
+        let sub_id = format!("live_sub_{uid}");
+        let mut sub_opts = MqttOptions::new(&sub_id, &sub_host, sub_port);
+        sub_opts.set_keep_alive(Duration::from_secs(60));
+        // Allow packets up to 64MB to handle very large payloads without deserialization errors
+        sub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
+        if !args.username.is_empty() {
+            sub_opts.set_credentials(&args.username, &args.password);
+        }
+        sub_opts.set_clean_session(!args.persistent);
+
+        let (sub_client, mut sub_connection) = Client::new(sub_opts, 256);
+        sub_client.subscribe(&custom_topic, qos).unwrap();
+
+        for notification in sub_connection.iter() {
+            match notification {
+                Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                    // Connected successfully
+                }
+                Ok(Event::Incoming(Packet::Publish(_))) => {
+                    total_count.fetch_add(1, Ordering::Relaxed);
+                    interval_count.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(Event::Incoming(Packet::Disconnect)) => {
+                    eprintln!("\n[SUB] Disconnected from broker.");
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("\n[SUB] Connection error: {:?}", e);
+                    break;
+                }
+                _ => {}
+            }
+        }
+        return;
+    }
+
     let interval = Duration::from_millis(args.interval_ms);
     let duration = Duration::from_secs(args.duration);
 
-    let sub_host = args.sub_host.as_deref().unwrap_or(&args.host);
-    let sub_port = args.sub_port.unwrap_or(args.port);
-    let pub_host = args.pub_host.as_deref().unwrap_or(&args.host);
-    let pub_port = args.pub_port.unwrap_or(args.port);
-
-    let uid = &uuid::Uuid::new_v4().to_string()[..8];
     let topic = format!("test/latency/{uid}");
 
     // Shared collections
@@ -111,9 +207,12 @@ fn main() {
 
     // -- Subscriber -----------------------------------------------------------
     let sub_id = format!("lat_sub_{uid}");
-    let mut sub_opts = MqttOptions::new(&sub_id, sub_host, sub_port);
+    let mut sub_opts = MqttOptions::new(&sub_id, &sub_host, sub_port);
     sub_opts.set_keep_alive(Duration::from_secs(60));
-    sub_opts.set_credentials(&args.username, &args.password);
+    sub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
+    if !args.username.is_empty() {
+        sub_opts.set_credentials(&args.username, &args.password);
+    }
     sub_opts.set_clean_session(!args.persistent);
 
     let (sub_client, mut sub_connection) = Client::new(sub_opts, 256);
@@ -154,8 +253,14 @@ fn main() {
                         }
                     }
                 }
-                Ok(Event::Incoming(Packet::Disconnect)) => break,
-                Err(_) => break,
+                Ok(Event::Incoming(Packet::Disconnect)) => {
+                    eprintln!("[SUB] Disconnected before subscription ready.");
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("[SUB] Connection error: {:?}", e);
+                    std::process::exit(1);
+                }
                 _ => {}
             }
         }
@@ -167,9 +272,12 @@ fn main() {
 
     // -- Publisher -------------------------------------------------------------
     let pub_id = format!("lat_pub_{uid}");
-    let mut pub_opts = MqttOptions::new(&pub_id, pub_host, pub_port);
+    let mut pub_opts = MqttOptions::new(&pub_id, &pub_host, pub_port);
     pub_opts.set_keep_alive(Duration::from_secs(60));
-    pub_opts.set_credentials(&args.username, &args.password);
+    pub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
+    if !args.username.is_empty() {
+        pub_opts.set_credentials(&args.username, &args.password);
+    }
     pub_opts.set_clean_session(true);
 
     let (pub_client, mut pub_connection) = Client::new(pub_opts, 256);
@@ -184,8 +292,14 @@ fn main() {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
                     pub_ready_clone.wait();
                 }
-                Err(_) => break,
-                Ok(Event::Incoming(Packet::Disconnect)) => break,
+                Err(e) => {
+                    eprintln!("[PUB] Connection error: {:?}", e);
+                    std::process::exit(1);
+                }
+                Ok(Event::Incoming(Packet::Disconnect)) => {
+                    eprintln!("[PUB] Disconnected before publisher ready.");
+                    std::process::exit(1);
+                }
                 _ => {}
             }
         }
