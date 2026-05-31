@@ -35,6 +35,7 @@ type KafkaStreamMappingInfo {
     topicFilter: String!
     retentionHours: Int!
     storeType: String
+    allowWrite: Boolean!
 }
 
 input KafkaServerInput {
@@ -53,6 +54,7 @@ input KafkaStreamMappingInput {
     topicFilter: String!
     retentionHours: Int = 168
     storeType: String
+    allowWrite: Boolean = true
 }
 
 type KafkaServerResult {

@@ -388,3 +388,118 @@ def test_kafka_server_device_lifecycle(broker_config):
     assert "errors" not in result
     assert result["data"]["kafkaServer"]["delete"] is True
 
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_write_authorization_validation(broker_config):
+    """Test Kafka stream write authorization and topic filter validation."""
+    import requests
+    from kafka import KafkaProducer
+    import json
+    graphql_url = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
+    
+    # 1. Quick check if GraphQL is available
+    try:
+        requests.post(graphql_url, json={"query": "{ __typename }"}, timeout=2)
+    except Exception as e:
+        pytest.skip(f"GraphQL endpoint not reachable at {graphql_url}: {e}")
+
+    server_name = "auth-test-server"
+    test_port = 9094
+
+    # Clean up any leftover device first
+    cleanup_mutation = """
+    mutation Delete($name: String!) {
+      kafkaServer { delete(name: $name) }
+    }
+    """
+    try:
+        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, timeout=5)
+    except Exception:
+        pass
+
+    # 2. Add a new Kafka Server device with allowWrite constraints via GraphQL mutation
+    add_mutation = """
+    mutation Add($input: KafkaServerInput!) {
+      kafkaServer {
+        add(input: $input) {
+          success
+          errors
+        }
+      }
+    }
+    """
+    variables = {
+        "input": {
+            "name": server_name,
+            "namespace": "default",
+            "nodeId": "*",
+            "enabled": True,
+            "host": "0.0.0.0",
+            "port": test_port,
+            "streams": [
+                {
+                    "streamName": "test_auth_stream",
+                    "topicFilter": "pytest/auth/allowed/+",
+                    "retentionHours": 72,
+                    "allowWrite": True
+                },
+                {
+                    "streamName": "test_auth_stream",
+                    "topicFilter": "pytest/auth/forbidden/+",
+                    "retentionHours": 72,
+                    "allowWrite": False
+                }
+            ]
+        }
+    }
+
+    resp = requests.post(graphql_url, json={"query": add_mutation, "variables": variables}, timeout=5)
+    resp.raise_for_status()
+    result = resp.json()
+    assert "errors" not in result, f"GraphQL response has errors: {result}"
+    assert result["data"]["kafkaServer"]["add"]["success"], f"Mutation failed: {result['data']['kafkaServer']['add']['errors']}"
+
+    # Allow Vert.x a moment to process EventBus config change and start TCP socket
+    time.sleep(1.5)
+
+    producer = None
+    try:
+        # Initialize producer
+        producer = KafkaProducer(
+            bootstrap_servers=[f"{broker_config['host']}:{test_port}"],
+            api_version=(2, 0, 0),
+            key_serializer=lambda k: str(k).encode("utf-8"),
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            retries=0,
+            request_timeout_ms=3000
+        )
+
+        # 3. Publish to matching allowed topic filter -> should succeed!
+        future = producer.send("test_auth_stream", key="pytest/auth/allowed/1", value={"data": "allowed"})
+        record_metadata = future.get(timeout=3)
+        assert record_metadata is not None
+
+        # 4. Publish to matching forbidden topic filter -> should fail!
+        with pytest.raises(Exception) as exc_info:
+            future = producer.send("test_auth_stream", key="pytest/auth/forbidden/1", value={"data": "forbidden"})
+            future.get(timeout=3)
+        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value)
+
+        # 5. Publish to non-matching topic filter -> should fail!
+        with pytest.raises(Exception) as exc_info:
+            future = producer.send("test_auth_stream", key="pytest/auth/completely_invalid/1", value={"data": "invalid"})
+            future.get(timeout=3)
+        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value)
+
+        # 6. Publish to completely unconfigured stream/topic -> should succeed (Otherwise it can publish to any topic)
+        future = producer.send("some_other_unconfigured_topic", key="any/topic/is/allowed/here", value={"data": "unconfigured"})
+        record_metadata = future.get(timeout=3)
+        assert record_metadata is not None
+
+    finally:
+        if producer:
+            producer.close()
+        # Clean up the test device
+        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, timeout=5)
+
+

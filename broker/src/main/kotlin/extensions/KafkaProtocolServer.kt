@@ -18,6 +18,9 @@ import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import io.vertx.core.Future
+import at.rocworks.devices.kafkaserver.KafkaServerConfig
+import at.rocworks.devices.kafkaserver.KafkaStreamMapping
+import at.rocworks.data.TopicTree
 
 class KafkaProtocolServer(
     private val configJson: JsonObject,
@@ -33,18 +36,10 @@ class KafkaProtocolServer(
     private val port = kafkaConfig.getInteger("Port", 9092)
 
     private val configuredTopics = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val activeStreams = java.util.concurrent.CopyOnWriteArrayList<KafkaStreamConfig>()
 
     override fun start(startPromise: Promise<Void>) {
-        val streamsConfig = kafkaConfig.getJsonArray("Streams") ?: kafkaConfig.getJsonArray("streams") ?: io.vertx.core.json.JsonArray()
-        streamsConfig.forEach { stream ->
-            val streamObj = stream as JsonObject
-            val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName")
-            if (!streamName.isNullOrBlank()) {
-                configuredTopics.add(streamName)
-            }
-        }
-
-        // Load dynamic configured topics
+        // Load static and dynamic configured topics/streams
         refreshConfiguredTopics().onComplete { ar ->
             if (ar.failed()) {
                 logger.warning("Failed to perform initial Kafka configured topics load: ${ar.cause()?.message}")
@@ -77,14 +72,80 @@ class KafkaProtocolServer(
     }
 
     private fun refreshConfiguredTopics(): Future<Void> {
-        if (deviceConfigStore == null) return Future.succeededFuture()
+        val newStreams = mutableListOf<KafkaStreamConfig>()
+        
+        // 1. Load static streams from config.yaml
+        val streamsConfig = kafkaConfig.getJsonArray("Streams") ?: kafkaConfig.getJsonArray("streams") ?: io.vertx.core.json.JsonArray()
+        streamsConfig.forEach { stream ->
+            val streamObj = stream as JsonObject
+            val topicFilter = streamObj.getString("TopicFilter") ?: streamObj.getString("topicFilter")
+            val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName") ?: topicFilter
+            val allowWrite = streamObj.getBoolean("AllowWrite") ?: streamObj.getBoolean("allowWrite") ?: true
+            if (!streamName.isNullOrBlank() && !topicFilter.isNullOrBlank()) {
+                newStreams.add(KafkaStreamConfig(streamName, topicFilter, allowWrite))
+            }
+        }
+
+        if (deviceConfigStore == null) {
+            updateActiveStreams(newStreams)
+            return Future.succeededFuture()
+        }
+
         val currentNodeId = Monster.getClusterNodeId(vertx)
         return deviceConfigStore.getEnabledDevicesByNode(currentNodeId).map { list ->
-            val dbTopics = list.filter { it.type == DeviceConfig.DEVICE_TYPE_KAFKA_STREAM }.map { it.namespace }
-            dbTopics.forEach { topic ->
-                if (topic.isNotBlank()) configuredTopics.add(topic)
+            // 2. Dynamic streams from KafkaServer devices
+            list.filter { it.type == DeviceConfig.DEVICE_TYPE_KAFKA_SERVER }.forEach { dev ->
+                try {
+                    val serverConfig = KafkaServerConfig.fromJsonObject(dev.config)
+                    serverConfig.streams.forEach { mapping ->
+                        if (mapping.streamName.isNotBlank() && mapping.topicFilter.isNotBlank()) {
+                            newStreams.add(KafkaStreamConfig(mapping.streamName, mapping.topicFilter, mapping.allowWrite))
+                        }
+                    }
+                } catch (e: Exception) {
+                    logger.severe("Failed to parse KafkaServerConfig streams: ${e.message}")
+                }
             }
+
+            // 3. Standalone streams from Kafka-Stream devices
+            list.filter { it.type == DeviceConfig.DEVICE_TYPE_KAFKA_STREAM }.forEach { dev ->
+                val streamName = dev.name
+                val topicFilter = dev.namespace
+                val allowWrite = dev.config.getBoolean("allowWrite") ?: dev.config.getBoolean("AllowWrite") ?: true
+                if (streamName.isNotBlank() && topicFilter.isNotBlank()) {
+                    newStreams.add(KafkaStreamConfig(streamName, topicFilter, allowWrite))
+                }
+            }
+
+            updateActiveStreams(newStreams)
             null
+        }
+    }
+
+    private fun updateActiveStreams(newStreams: List<KafkaStreamConfig>) {
+        activeStreams.clear()
+        activeStreams.addAll(newStreams)
+        
+        configuredTopics.clear()
+        newStreams.forEach { stream ->
+            configuredTopics.add(stream.streamName)
+        }
+        
+        logger.info("Updated active Kafka streams: ${activeStreams.map { "${it.streamName} -> ${it.topicFilter} (allowWrite=${it.allowWrite})" }}")
+    }
+
+    private fun isWriteAllowed(topic: String, msgTopic: String): Boolean {
+        // Find all configured streams for this Kafka topic
+        val matchingStreams = activeStreams.filter { it.streamName == topic }
+        
+        // "Otherwise it can publish to any topic."
+        if (matchingStreams.isEmpty()) {
+            return true
+        }
+        
+        // Check if there is at least one matching stream config that allows write and matches the filter
+        return matchingStreams.any { stream ->
+            stream.allowWrite && at.rocworks.data.TopicTree.matches(stream.topicFilter, msgTopic)
         }
     }
 
@@ -633,6 +694,9 @@ class KafkaProtocolServer(
                 for (j in 0 until partitionCount) {
                     val partition = reader.readInt()
                     val messageSetSize = reader.readInt()
+                    var partitionError: Short = 0
+                    val partitionMessages = mutableListOf<BrokerMessage>()
+
                     if (messageSetSize > 0) {
                         val messageSetBytes = reader.readRawBytes(messageSetSize)
                         val magic = if (messageSetBytes.size >= 17) messageSetBytes[16] else 0.toByte()
@@ -640,7 +704,7 @@ class KafkaProtocolServer(
                         if (magic == 2.toByte()) {
                             // Parse RecordBatch (Magic 2)
                             val batchReader = KafkaBufferReader(Buffer.buffer(messageSetBytes))
-                            while (batchReader.hasRemaining(61)) {
+                            while (batchReader.hasRemaining(61) && partitionError == 0.toShort()) {
                                 val baseOffset = batchReader.readLong()
                                 val batchLength = batchReader.readInt()
                                 val partitionLeaderEpoch = batchReader.readInt()
@@ -656,7 +720,7 @@ class KafkaProtocolServer(
                                 val recordsCount = batchReader.readInt()
 
                                 for (r in 0 until recordsCount) {
-                                    if (batchReader.hasRemaining(1)) {
+                                    if (batchReader.hasRemaining(1) && partitionError == 0.toShort()) {
                                         val recordLen = batchReader.readVarint()
                                         if (recordLen > 0 && batchReader.hasRemaining(recordLen)) {
                                             val recordBytes = batchReader.readRawBytes(recordLen)
@@ -676,18 +740,23 @@ class KafkaProtocolServer(
                                             if (valueLen > 0 && recordReader.hasRemaining(valueLen)) {
                                                 val valueBytes = recordReader.readRawBytes(valueLen)
                                                 val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                                val brokerMsg = BrokerMessage(
-                                                    messageUuid = Utils.getUuid(),
-                                                    messageId = 0,
-                                                    topicName = msgTopic,
-                                                    payload = valueBytes,
-                                                    qosLevel = 1,
-                                                    isRetain = false,
-                                                    isDup = false,
-                                                    isQueued = false,
-                                                    clientId = clientId ?: "kafka-producer"
-                                                )
-                                                messagesToEnqueue.add(brokerMsg)
+                                                if (isWriteAllowed(topic, msgTopic)) {
+                                                    val brokerMsg = BrokerMessage(
+                                                        messageUuid = Utils.getUuid(),
+                                                        messageId = 0,
+                                                        topicName = msgTopic,
+                                                        payload = valueBytes,
+                                                        qosLevel = 1,
+                                                        isRetain = false,
+                                                        isDup = false,
+                                                        isQueued = false,
+                                                        clientId = clientId ?: "kafka-producer"
+                                                    )
+                                                    partitionMessages.add(brokerMsg)
+                                                } else {
+                                                    logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration.")
+                                                    partitionError = 29 // TopicAuthorizationFailedException
+                                                }
                                             }
                                         }
                                     }
@@ -696,7 +765,7 @@ class KafkaProtocolServer(
                         } else {
                             // Parse Legacy MessageSet (Magic 0/1)
                             val messageSetReader = KafkaBufferReader(Buffer.buffer(messageSetBytes))
-                            while (messageSetReader.hasRemaining(12)) { // offset (8) + size (4)
+                            while (messageSetReader.hasRemaining(12) && partitionError == 0.toShort()) { // offset (8) + size (4)
                                 val offset = messageSetReader.readLong()
                                 val msgSize = messageSetReader.readInt()
                                 if (msgSize > 0 && messageSetReader.hasRemaining(msgSize)) {
@@ -713,25 +782,34 @@ class KafkaProtocolServer(
 
                                     if (valueBytes != null) {
                                         val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                        val brokerMsg = BrokerMessage(
-                                            messageUuid = Utils.getUuid(),
-                                            messageId = 0,
-                                            topicName = msgTopic,
-                                            payload = valueBytes,
-                                            qosLevel = 1,
-                                            isRetain = false,
-                                            isDup = false,
-                                            isQueued = false,
-                                            clientId = clientId ?: "kafka-producer"
-                                        )
-                                        messagesToEnqueue.add(brokerMsg)
+                                        if (isWriteAllowed(topic, msgTopic)) {
+                                            val brokerMsg = BrokerMessage(
+                                                messageUuid = Utils.getUuid(),
+                                                messageId = 0,
+                                                topicName = msgTopic,
+                                                payload = valueBytes,
+                                                qosLevel = 1,
+                                                isRetain = false,
+                                                isDup = false,
+                                                isQueued = false,
+                                                clientId = clientId ?: "kafka-producer"
+                                            )
+                                            partitionMessages.add(brokerMsg)
+                                        } else {
+                                            logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration.")
+                                            partitionError = 29 // TopicAuthorizationFailedException
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    // Success for this partition
-                    partitionResponses.add(Pair(partition, 0.toShort()))
+                    if (partitionError != 0.toShort()) {
+                        partitionResponses.add(Pair(partition, partitionError))
+                    } else {
+                        messagesToEnqueue.addAll(partitionMessages)
+                        partitionResponses.add(Pair(partition, 0.toShort()))
+                    }
                 }
                 responseTopics.add(Pair(topic, partitionResponses))
             }
@@ -1074,5 +1152,11 @@ private class FetchPartitionResult(
     val partition: Int,
     val highWatermark: Long,
     val records: List<Pair<Long, BrokerMessage>>
+)
+
+data class KafkaStreamConfig(
+    val streamName: String,
+    val topicFilter: String,
+    val allowWrite: Boolean
 )
 

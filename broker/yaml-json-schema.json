@@ -733,7 +733,11 @@
           "items": {
             "type": "object",
             "properties": {
+              "StreamName": { "type": "string", "description": "Stream/Kafka topic name" },
               "TopicFilter": { "type": "string", "description": "MQTT topic filter" },
+              "AllowWrite": { "type": "boolean", "default": true, "description": "Allow Kafka client to write to this stream" },
+              "StoreType": { "type": "string", "description": "Database store override" },
+              "RetentionHours": { "type": "integer", "description": "Retention in hours" },
               "RetentionDays": { "type": "integer", "default": 7, "minimum": 1, "description": "Retention duration in days" }
             },
             "required": ["TopicFilter"]

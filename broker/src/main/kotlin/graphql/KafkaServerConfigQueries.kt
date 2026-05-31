@@ -110,7 +110,8 @@ class KafkaServerConfigQueries(
                 "streamName" to mapping.streamName,
                 "topicFilter" to mapping.topicFilter,
                 "retentionHours" to mapping.retentionHours,
-                "storeType" to mapping.storeType
+                "storeType" to mapping.storeType,
+                "allowWrite" to mapping.allowWrite
             )
         }
 

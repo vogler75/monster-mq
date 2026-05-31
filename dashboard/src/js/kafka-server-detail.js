@@ -106,7 +106,7 @@ class KafkaServerDetail {
             query GetServer($name: String!) {
                 kafkaServer(name: $name) {
                     name namespace nodeId enabled host port storeType status createdAt updatedAt
-                    streams { streamName topicFilter retentionHours storeType }
+                    streams { streamName topicFilter retentionHours storeType allowWrite }
                 }
             }
         `;
@@ -157,13 +157,13 @@ class KafkaServerDetail {
         const tbody = document.getElementById('streams-table-body');
         tbody.innerHTML = '';
         if (server.streams && server.streams.length > 0) {
-            server.streams.forEach(s => this.addStreamRow(s.streamName, s.topicFilter, s.retentionHours, s.storeType));
+            server.streams.forEach(s => this.addStreamRow(s.streamName, s.topicFilter, s.retentionHours, s.storeType, s.allowWrite));
         } else {
-            this.addStreamRow('', '', 168, '');
+            this.addStreamRow('', '', 168, '', true);
         }
     }
 
-    addStreamRow(streamName = '', topicFilter = '', retentionHours = 168, storeType = '') {
+    addStreamRow(streamName = '', topicFilter = '', retentionHours = 168, storeType = '', allowWrite = true) {
         const tbody = document.getElementById('streams-table-body');
         const row = document.createElement('tr');
         row.className = 'stream-config-row';
@@ -181,6 +181,9 @@ class KafkaServerDetail {
                 <select class="stream-store form-control">
                     ${this.storeOptionsHtml || '<option value="">Server Default</option>'}
                 </select>
+            </td>
+            <td style="text-align:center; vertical-align:middle;">
+                <input type="checkbox" class="stream-allow-write" ${allowWrite ? 'checked' : ''} style="transform:scale(1.2); cursor:pointer; accent-color:var(--monster-purple);">
             </td>
             <td style="text-align:center; vertical-align:middle;">
                 <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Remove stream" onclick="removeStreamRow(this)"></ix-icon-button>
@@ -220,8 +223,9 @@ class KafkaServerDetail {
                 const topicFilter = row.querySelector('.stream-topic-filter').value.trim();
                 const retentionHours = parseInt(row.querySelector('.stream-retention').value, 10);
                 const streamStore = row.querySelector('.stream-store').value || null;
+                const allowWrite = row.querySelector('.stream-allow-write').checked;
                 if (streamName && topicFilter) {
-                    streams.push({ streamName, topicFilter, retentionHours, storeType: streamStore });
+                    streams.push({ streamName, topicFilter, retentionHours, storeType: streamStore, allowWrite });
                 }
             }
 
@@ -319,7 +323,7 @@ var saveServer = () => kafkaServerDetail.saveServer();
 var showDeleteModal = () => kafkaServerDetail.showDeleteModal();
 var hideDeleteModal = () => kafkaServerDetail.hideDeleteModal();
 var confirmDeleteServer = () => kafkaServerDetail.confirmDeleteServer();
-var addStreamRow = () => kafkaServerDetail.addStreamRow('', '', 168, '');
+var addStreamRow = () => kafkaServerDetail.addStreamRow('', '', 168, '', true);
 function removeStreamRow(btn) {
     const row = btn.closest('.stream-config-row');
     if (row) {

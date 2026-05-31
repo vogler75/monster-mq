@@ -36,8 +36,8 @@ class KafkaMultiplexingQueueStore(
         
         streams.forEach { stream ->
             val streamObj = stream as JsonObject
-            val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName")
             val topicFilter = streamObj.getString("TopicFilter") ?: streamObj.getString("topicFilter")
+            val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName") ?: topicFilter
             val storeOverride = streamObj.getString("StoreType") ?: streamObj.getString("storeType")
             
             if (!topicFilter.isNullOrBlank() && !streamName.isNullOrBlank()) {

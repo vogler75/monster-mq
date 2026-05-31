@@ -22,7 +22,8 @@ data class KafkaServerConfig(
                     streamName = obj.getString("streamName") ?: "",
                     topicFilter = obj.getString("topicFilter") ?: "",
                     retentionHours = obj.getInteger("retentionHours") ?: 168,
-                    storeType = obj.getString("storeType")
+                    storeType = obj.getString("storeType"),
+                    allowWrite = obj.getBoolean("allowWrite") ?: obj.getBoolean("AllowWrite") ?: true
                 )
             }
 
@@ -47,6 +48,7 @@ data class KafkaServerConfig(
                 put("topicFilter", mapping.topicFilter)
                 put("retentionHours", mapping.retentionHours)
                 put("storeType", mapping.storeType)
+                put("allowWrite", mapping.allowWrite)
             })
         }
 
@@ -67,5 +69,6 @@ data class KafkaStreamMapping(
     val streamName: String,
     val topicFilter: String,
     val retentionHours: Int = 168,
-    val storeType: String? = null
+    val storeType: String? = null,
+    val allowWrite: Boolean = true
 )
