@@ -58,10 +58,12 @@ class KafkaProtocolServer(
             server.listen().onComplete { result ->
                 if (result.succeeded()) {
                     logger.info("Apache Kafka protocol server listening on $host:$port")
-                    // Periodically refresh dynamic topics every 1 minute
-                    vertx.setPeriodic(60000) {
+                    
+                    // Trigger dynamic topics refresh on Event Bus config changes
+                    vertx.eventBus().consumer<JsonObject>("kafkaserver.device.config.changed") { _ ->
                         refreshConfiguredTopics()
                     }
+                    
                     startPromise.complete()
                 } else {
                     logger.severe("Failed to start Kafka protocol server on $host:$port: ${result.cause()?.message}")
