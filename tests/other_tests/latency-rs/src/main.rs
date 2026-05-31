@@ -7,7 +7,7 @@ use clap::Parser;
 use rumqttc::{Client, Event, MqttOptions, Packet, QoS};
 
 #[derive(Parser, Debug)]
-#[command(name = "latency-test", about = "MQTT publish-subscribe latency measurement and live throughput monitoring")]
+#[command(name = "latency-test", about = "MQTT publish-subscribe latency measurement, live throughput monitoring, and high-performance publishing")]
 struct Args {
     /// Broker host (used for both publisher and subscriber unless overridden)
     #[arg(long, default_value = "localhost")]
@@ -49,7 +49,7 @@ struct Args {
     #[arg(long, default_value_t = 100)]
     interval_ms: u64,
 
-    /// Test duration in seconds
+    /// Test duration in seconds (only for latency benchmark)
     #[arg(long, default_value_t = 10)]
     duration: u64,
 
@@ -60,6 +60,18 @@ struct Args {
     /// Live throughput subscription mode: Topic to subscribe to (e.g. "#"). Disables publisher.
     #[arg(long)]
     topic: Option<String>,
+
+    /// Live publishing mode: Topic to publish to (e.g. "test/topic"). Disables subscriber.
+    #[arg(long)]
+    publish: Option<String>,
+
+    /// Payload to publish in --publish mode (placeholders: {seq} for sequence, {ts} for timestamp)
+    #[arg(long)]
+    payload: Option<String>,
+
+    /// Number of messages to publish (defaults to 1; set to 0 to run indefinitely)
+    #[arg(long, default_value_t = 1)]
+    count: u64,
 }
 
 fn qos_from_u8(q: u8) -> QoS {
@@ -98,6 +110,79 @@ fn main() {
     let pub_port = args.pub_port.unwrap_or(args.port);
     
     let uid = &uuid::Uuid::new_v4().to_string()[..8];
+
+    // If --publish is specified, run in dedicated Publisher mode
+    if let Some(pub_topic) = args.publish {
+        let interval = Duration::from_millis(args.interval_ms);
+
+        let pub_id = format!("live_pub_{uid}");
+        let mut pub_opts = MqttOptions::new(&pub_id, &pub_host, pub_port);
+        pub_opts.set_keep_alive(Duration::from_secs(60));
+        pub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
+        if !args.username.is_empty() {
+            pub_opts.set_credentials(&args.username, &args.password);
+        }
+        pub_opts.set_clean_session(true);
+
+        let (pub_client, mut pub_connection) = Client::new(pub_opts, 256);
+
+        // Wait for publisher ConnAck in background
+        let pub_ready = Arc::new(std::sync::Barrier::new(2));
+        let pub_ready_clone = Arc::clone(&pub_ready);
+        thread::spawn(move || {
+            for notification in pub_connection.iter() {
+                match notification {
+                    Ok(Event::Incoming(Packet::ConnAck(_))) => {
+                        pub_ready_clone.wait();
+                    }
+                    Err(e) => {
+                        eprintln!("\n[PUB] Connection error: {:?}", e);
+                        std::process::exit(1);
+                    }
+                    Ok(Event::Incoming(Packet::Disconnect)) => {
+                        eprintln!("\n[PUB] Disconnected before ready.");
+                        std::process::exit(1);
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        pub_ready.wait();
+        println!("[PUB] Connected successfully to {pub_host}:{pub_port}");
+
+        let payload_base = args.payload.unwrap_or_else(|| "hello from monstermq rust client".to_string());
+        let total_to_pub = args.count;
+        let mut seq: u64 = 0;
+
+        println!("Publishing to topic '{}' with QoS {}...", pub_topic, args.qos);
+        
+        loop {
+            if total_to_pub > 0 && seq >= total_to_pub {
+                break;
+            }
+            
+            // If payload contains "{seq}" or "{ts}", format it dynamically
+            let payload = payload_base
+                .replace("{seq}", &seq.to_string())
+                .replace("{ts}", &now_ms().to_string());
+
+            pub_client.publish(&pub_topic, qos, false, payload.as_bytes()).unwrap();
+            seq += 1;
+            
+            if total_to_pub > 0 && seq >= total_to_pub {
+                break;
+            }
+            
+            thread::sleep(interval);
+        }
+
+        println!("Successfully published {} messages.", seq);
+        // Wait a short duration to ensure packet hits TCP buffer before disconnect
+        thread::sleep(Duration::from_millis(200));
+        let _ = pub_client.disconnect();
+        return;
+    }
 
     // If --topic is specified, run in dedicated Throughput Monitor mode
     if let Some(custom_topic) = args.topic {
