@@ -43,4 +43,20 @@ interface IKafkaQueueStore {
      * Returns the number of deleted messages.
      */
     fun pruneExpired(olderThanMs: Long): Future<Int>
+
+    /**
+     * Get all consumer groups and their associated topics and commit watermarks.
+     */
+    fun getConsumerGroups(): Future<List<KafkaConsumerGroup>> = Future.succeededFuture(emptyList())
+
+    /**
+     * Delete a consumer group (remove all committed offsets).
+     */
+    fun deleteConsumerGroup(groupId: String): Future<Boolean> = Future.succeededFuture(false)
 }
+
+data class KafkaConsumerGroup(
+    val groupId: String,
+    val topics: List<String>,
+    val lastCommitTime: Long
+)

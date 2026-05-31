@@ -372,8 +372,8 @@ class GraphQLServer(
         val kafkaClientMutations = deviceStore?.let { KafkaClientConfigMutations(vertx, it) }
 
         // Initialize Kafka Server resolvers
-        val kafkaServerQueries = deviceStore?.let { KafkaServerConfigQueries(vertx, it) }
-        val kafkaServerMutations = deviceStore?.let { KafkaServerConfigMutations(vertx, it) }
+        val kafkaServerQueries = deviceStore?.let { KafkaServerConfigQueries(vertx, it, config) }
+        val kafkaServerMutations = deviceStore?.let { KafkaServerConfigMutations(vertx, it, config) }
 
         // Initialize WinCC OA Client resolvers
         val winCCOaClientQueries = deviceStore?.let { WinCCOaClientConfigQueries(vertx, it) }
@@ -555,6 +555,7 @@ class GraphQLServer(
                         kafkaServerQueries?.let { resolver ->
                             dataFetcher("kafkaServers", resolver.kafkaServers())
                             dataFetcher("kafkaServer", resolver.kafkaServer())
+                            dataFetcher("kafkaConsumerGroups", resolver.kafkaConsumerGroups())
                         }
                     }
                     // NATS Client queries
@@ -975,6 +976,7 @@ class GraphQLServer(
                         dataFetcher("delete", resolver.deleteKafkaServer())
                         dataFetcher("toggle", resolver.toggleKafkaServer())
                         dataFetcher("reassign", resolver.reassignKafkaServer())
+                        dataFetcher("deleteConsumerGroup", resolver.deleteConsumerGroup())
                     }
                 }
             }

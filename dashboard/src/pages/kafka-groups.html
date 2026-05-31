@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Kafka Consumer Groups</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .table-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); border-radius: 12px 12px 0 0; }
+        .table-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
+        .table-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; padding: 0.5rem 1rem; }
+        .btn-primary { background: var(--monster-purple, #7C3AED); color: white; }
+        .btn-primary:hover { background: var(--monster-purple-hover, #6D28D9); }
+        .btn-secondary { background: var(--dark-surface-2, #334155); color: var(--text-primary); border: 1px solid var(--dark-border); }
+        .btn-secondary:hover { background: var(--dark-surface-3, #475569); }
+        .btn-danger { background: rgba(239, 68, 68, 0.2); color: rgb(239, 68, 68); border: 1px solid rgba(239, 68, 68, 0.4); }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.3); }
+        .action-buttons { display: flex; gap: 0.5rem; justify-content: center; align-items: center; }
+        .data-table { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow-x: auto; box-shadow: var(--card-shadow); }
+        .data-table table { margin: 0; border-radius: 0; border: none; background: transparent; width: 100%; border-collapse: collapse; }
+        .data-table thead th { background: var(--dark-surface-2); padding: 1rem; font-weight: 600; color: var(--text-primary); border-bottom: 1px solid var(--dark-border); text-align: left; }
+        .data-table tbody td { padding: 1rem; vertical-align: middle; border-bottom: 1px solid rgba(71,85,105,0.3); color: var(--text-secondary); }
+        .data-table tbody tr:hover { background: rgba(71,85,105,0.1); }
+        .chip-container { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        .topic-chip { display: inline-flex; align-items: center; background: rgba(124, 58, 237, 0.15); color: #C084FC; border: 1px solid rgba(124, 58, 237, 0.3); padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-family: monospace; }
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; }
+        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); }
+        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+        .modal-body { padding: 2rem; color: var(--text-secondary); }
+        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
+        .search-container { display: flex; align-items: center; position: relative; margin-right: 0.5rem; }
+        .search-input { background: var(--dark-surface-2); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); padding: 0.5rem 1rem 0.5rem 2.25rem; font-size: 0.875rem; width: 220px; transition: all 0.15s ease; }
+        .search-input:focus { outline: none; border-color: var(--monster-purple); width: 280px; box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2); }
+        .search-icon { position: absolute; left: 0.75rem; color: var(--text-muted); pointer-events: none; }
+        .no-data { text-align: center !important; padding: 3rem !important; color: var(--text-muted) !important; font-style: italic; }
+        .relative-time { font-size: 0.85rem; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Kafka Consumer Groups</h1>
+                <p class="page-subtitle">Monitor offsets, active streams, and manage committed consumer states</p>
+            </div>
+
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Consumer Groups</span>
+                        <div class="metric-icon">👥</div>
+                    </div>
+                    <div class="metric-value" id="total-groups">0</div>
+                    <div class="metric-label">Registered Groups</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Active Streams</span>
+                        <div class="metric-icon">📈</div>
+                    </div>
+                    <div class="metric-value" id="active-topics">0</div>
+                    <div class="metric-label">Unique Subscribed Topics</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Recent Activity</span>
+                        <div class="metric-icon">⏱️</div>
+                    </div>
+                    <div class="metric-value" id="recent-activity" style="font-size: 1.15rem; font-weight: 600; padding-top: 0.5rem; color: var(--monster-green, #10B981);">Never</div>
+                    <div class="metric-label">Last Offset Commit</div>
+                </div>
+            </div>
+
+            <div id="groups-table-container" class="data-table">
+                <div class="table-header">
+                    <div class="table-title"><h2>Active Consumer Groups</h2></div>
+                    <div class="table-actions">
+                        <div class="search-container">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="group-search" class="search-input" placeholder="Search by Group ID..." oninput="kafkaGroupsManager.filterGroups()">
+                        </div>
+                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshKafkaGroups()" title="Refresh consumer groups"></ix-icon-button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Group ID</th>
+                            <th>Subscribed Topics / Streams</th>
+                            <th>Last Offset Commit</th>
+                            <th style="width: 100px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kafka-groups-table-body">
+                        <tr><td colspan="4" class="no-data">Loading consumer groups...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Syncing consumer groups...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">⚠️</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Modal -->
+    <div id="confirm-delete-group-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Remove Consumer Group</h3>
+                <button class="modal-close" onclick="hideConfirmDeleteGroupModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the consumer group <strong id="delete-group-name" style="color:var(--monster-purple);"></strong>?</p>
+                <p style="margin-top:0.5rem; color:var(--text-muted); font-size:0.875rem;">This will permanently remove all committed offsets for this group across all MQTT streams. Active consumers will be forced to restart from the configured stream offset defaults (earliest/latest).</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideConfirmDeleteGroupModal()">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmDeleteGroup()">Delete Group</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/kafka-groups.js"></script>
+    </ix-application>
+</body>
+</html>

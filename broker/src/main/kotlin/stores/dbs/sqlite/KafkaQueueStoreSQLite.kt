@@ -3,6 +3,7 @@ package at.rocworks.stores.sqlite
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IKafkaQueueStore
+import at.rocworks.stores.KafkaConsumerGroup
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -200,5 +201,39 @@ class KafkaQueueStoreSQLite(
         val params = JsonArray().add(olderThanMs)
 
         return sqlClient.executeUpdate(sql, params)
+    }
+
+    override fun getConsumerGroups(): Future<List<KafkaConsumerGroup>> {
+        val sql = """
+            SELECT group_id, topic, MAX(last_commit_time) as max_commit_time 
+            FROM $offsetTable 
+            GROUP BY group_id, topic
+        """.trimIndent()
+
+        return sqlClient.executeQuery(sql, JsonArray()).map { results ->
+            val groupsMap = mutableMapOf<String, MutableList<Pair<String, Long>>>()
+            for (i in 0 until results.size()) {
+                val row = results.getJsonObject(i)
+                val groupId = row.getString("group_id") ?: ""
+                val topic = row.getString("topic") ?: ""
+                val commitTime = row.getLong("max_commit_time") ?: 0L
+                if (groupId.isNotEmpty()) {
+                    groupsMap.computeIfAbsent(groupId) { mutableListOf() }.add(Pair(topic, commitTime))
+                }
+            }
+            groupsMap.map { (groupId, pairs) ->
+                val topics = pairs.map { it.first }.distinct()
+                val maxTime = pairs.map { it.second }.maxOrNull() ?: 0L
+                KafkaConsumerGroup(groupId, topics, maxTime * 1000)
+            }
+        }
+    }
+
+    override fun deleteConsumerGroup(groupId: String): Future<Boolean> {
+        val sql = "DELETE FROM $offsetTable WHERE group_id = ?"
+        val params = JsonArray().add(groupId)
+        return sqlClient.executeUpdate(sql, params).map { updatedRows ->
+            updatedRows > 0
+        }
     }
 }

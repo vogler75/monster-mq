@@ -142,4 +142,37 @@ class KafkaMultiplexingQueueStore(
         val store = streamStoresByName[topic] ?: return Future.succeededFuture(0L)
         return store.getLatestOffset(topic)
     }
+
+    override fun getConsumerGroups(): Future<List<KafkaConsumerGroup>> {
+        val uniqueStores = streamStoresByName.values.toSet()
+        if (uniqueStores.isEmpty()) return Future.succeededFuture(emptyList())
+
+        val futures = uniqueStores.map { it.getConsumerGroups() }
+        return Future.all<List<KafkaConsumerGroup>>(futures).map { results ->
+            val allGroups = mutableMapOf<String, KafkaConsumerGroup>()
+            results.list<List<KafkaConsumerGroup>>().forEach { list ->
+                list.forEach { group ->
+                    val existing = allGroups[group.groupId]
+                    if (existing == null) {
+                        allGroups[group.groupId] = group
+                    } else {
+                        val mergedTopics = (existing.topics + group.topics).distinct()
+                        val maxTime = maxOf(existing.lastCommitTime, group.lastCommitTime)
+                        allGroups[group.groupId] = KafkaConsumerGroup(group.groupId, mergedTopics, maxTime)
+                    }
+                }
+            }
+            allGroups.values.toList()
+        }
+    }
+
+    override fun deleteConsumerGroup(groupId: String): Future<Boolean> {
+        val uniqueStores = streamStoresByName.values.toSet()
+        if (uniqueStores.isEmpty()) return Future.succeededFuture(false)
+
+        val futures = uniqueStores.map { it.deleteConsumerGroup(groupId) }
+        return Future.all<Boolean>(futures).map { results ->
+            results.list<Boolean>().any { it }
+        }
+    }
 }

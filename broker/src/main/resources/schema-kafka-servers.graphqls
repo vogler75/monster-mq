@@ -1,6 +1,7 @@
 extend type Query {
     kafkaServers: [KafkaServerInfo!]!
     kafkaServer(name: String!): KafkaServerInfo
+    kafkaConsumerGroups: [KafkaConsumerGroupInfo!]!
 }
 
 extend type Mutation {
@@ -13,6 +14,7 @@ type KafkaServerMutations {
     delete(name: String!): Boolean!
     toggle(name: String!, enabled: Boolean!): KafkaServerResult!
     reassign(name: String!, nodeId: String!): KafkaServerResult!
+    deleteConsumerGroup(groupId: String!): Boolean!
 }
 
 type KafkaServerInfo {
@@ -61,4 +63,10 @@ type KafkaServerResult {
     success: Boolean!
     server: KafkaServerInfo
     errors: [String!]!
+}
+
+type KafkaConsumerGroupInfo {
+    groupId: String!
+    topics: [String!]!
+    lastCommitTime: String!
 }

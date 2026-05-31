@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
 import at.rocworks.stores.IKafkaQueueStore
+import at.rocworks.stores.KafkaConsumerGroup
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -298,5 +299,60 @@ class KafkaQueueStorePostgres(
             messageExpiryInterval = null
         )
         return Pair(offset, msg)
+    }
+
+    override fun getConsumerGroups(): Future<List<KafkaConsumerGroup>> {
+        return vertx.executeBlocking(java.util.concurrent.Callable<List<KafkaConsumerGroup>> {
+            val sql = """
+                SELECT group_id, topic, MAX(last_commit_time) as max_commit_time 
+                FROM $offsetTable 
+                GROUP BY group_id, topic
+            """.trimIndent()
+
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { ps ->
+                        val rs = ps.executeQuery()
+                        val groupsMap = mutableMapOf<String, MutableList<Pair<String, Long>>>()
+                        while (rs.next()) {
+                            val groupId = rs.getString("group_id") ?: ""
+                            val topic = rs.getString("topic") ?: ""
+                            val commitTime = rs.getTimestamp("max_commit_time")?.time ?: 0L
+                            if (groupId.isNotEmpty()) {
+                                groupsMap.computeIfAbsent(groupId) { mutableListOf() }.add(Pair(topic, commitTime))
+                            }
+                        }
+                        groupsMap.map { (groupId, pairs) ->
+                            val topics = pairs.map { it.first }.distinct()
+                            val maxTime = pairs.map { it.second }.maxOrNull() ?: 0L
+                            KafkaConsumerGroup(groupId, topics, maxTime)
+                        }
+                    }
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                logger.warning("Error getting consumer groups from Postgres: ${e.message}")
+                emptyList()
+            }
+        })
+    }
+
+    override fun deleteConsumerGroup(groupId: String): Future<Boolean> {
+        return vertx.executeBlocking(java.util.concurrent.Callable<Boolean> {
+            val sql = "DELETE FROM $offsetTable WHERE group_id = ?"
+            try {
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql).use { ps ->
+                        ps.setString(1, groupId)
+                        val affected = ps.executeUpdate()
+                        connection.commit()
+                        affected > 0
+                    }
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
+                logger.warning("Error deleting consumer group from Postgres: ${e.message}")
+                false
+            }
+        })
     }
 }

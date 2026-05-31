@@ -222,4 +222,38 @@ class KafkaQueueStoreMongoDB(
             }
         })
     }
+
+    override fun getConsumerGroups(): Future<List<at.rocworks.stores.KafkaConsumerGroup>> {
+        return vertx.executeBlocking(Callable<List<at.rocworks.stores.KafkaConsumerGroup>> {
+            try {
+                val groupsMap = mutableMapOf<String, MutableList<Document>>()
+                offsetCollection.find().forEach { doc ->
+                    val groupId = doc.getString("group_id") ?: ""
+                    if (groupId.isNotEmpty()) {
+                        groupsMap.computeIfAbsent(groupId) { mutableListOf() }.add(doc)
+                    }
+                }
+                groupsMap.map { (groupId, docs) ->
+                    val topics = docs.mapNotNull { it.getString("topic") }.distinct()
+                    val maxTime = docs.mapNotNull { it.getDate("last_commit_time")?.time }.maxOrNull() ?: 0L
+                    at.rocworks.stores.KafkaConsumerGroup(groupId, topics, maxTime)
+                }
+            } catch (e: Exception) {
+                logger.warning("Error getting consumer groups from MongoDB: ${e.message}")
+                emptyList()
+            }
+        })
+    }
+
+    override fun deleteConsumerGroup(groupId: String): Future<Boolean> {
+        return vertx.executeBlocking(Callable<Boolean> {
+            try {
+                val result = offsetCollection.deleteMany(eq("group_id", groupId))
+                result.deletedCount > 0
+            } catch (e: Exception) {
+                logger.warning("Error deleting consumer group from MongoDB: ${e.message}")
+                false
+            }
+        })
+    }
 }
