@@ -34,8 +34,35 @@ class KafkaProtocolServer(
     private val kafkaConfig = configJson.getJsonObject("KafkaServer", JsonObject())
     private val host = kafkaConfig.getString("host", "0.0.0.0")
     private val port = kafkaConfig.getInteger("port", 9092)
-    private val advertisedHost = kafkaConfig.getString("advertisedHost") ?: kafkaConfig.getString("advertised_host") ?: host
+    private val rawAdvertisedHost = kafkaConfig.getString("advertisedHost") ?: kafkaConfig.getString("advertised_host") ?: host
     private val advertisedPort = kafkaConfig.getInteger("advertisedPort") ?: kafkaConfig.getInteger("advertised_port") ?: port
+
+    private val advertisedHost: String = if (rawAdvertisedHost == "0.0.0.0") {
+        resolveLocalIp()
+    } else {
+        rawAdvertisedHost
+    }
+
+    private fun resolveLocalIp(): String {
+        return try {
+            val clusterManager = Monster.getClusterManager()
+            if (clusterManager != null) {
+                val hz = clusterManager.hazelcastInstance
+                val hostString = hz.cluster.localMember.socketAddress.hostString
+                if (!hostString.isNullOrEmpty() && hostString != "0.0.0.0") {
+                    return hostString
+                }
+            }
+            val localAddress = java.net.InetAddress.getLocalHost().hostAddress
+            if (localAddress == "0.0.0.0" || localAddress == "127.0.0.1") {
+                "localhost"
+            } else {
+                localAddress
+            }
+        } catch (e: Exception) {
+            "localhost"
+        }
+    }
 
     private val configuredTopics = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val activeStreams = java.util.concurrent.CopyOnWriteArrayList<KafkaStreamConfig>()
