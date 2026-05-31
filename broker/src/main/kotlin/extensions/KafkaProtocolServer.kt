@@ -755,92 +755,121 @@ class KafkaProtocolServer(
                                 val baseSequence = batchReader.readInt()
                                 val recordsCount = batchReader.readInt()
 
-                                for (r in 0 until recordsCount) {
-                                    if (batchReader.hasRemaining(1) && partitionError == 0.toShort()) {
-                                        val recordLen = batchReader.readVarint()
-                                        if (recordLen > 0 && batchReader.hasRemaining(recordLen)) {
-                                            val recordBytes = batchReader.readRawBytes(recordLen)
-                                            val recordReader = KafkaBufferReader(Buffer.buffer(recordBytes))
-                                            
-                                            val recordAttributes = recordReader.readByte()
-                                            val timestampDelta = recordReader.readVarlong()
-                                            val offsetDelta = recordReader.readVarint()
-                                            
-                                            var keyBytes: ByteArray? = null
-                                            val keyLen = recordReader.readVarint()
-                                            if (keyLen > 0 && recordReader.hasRemaining(keyLen)) {
-                                                keyBytes = recordReader.readRawBytes(keyLen)
-                                            }
-                                            
-                                            val valueLen = recordReader.readVarint()
-                                            if (valueLen > 0 && recordReader.hasRemaining(valueLen)) {
-                                                val valueBytes = recordReader.readRawBytes(valueLen)
-                                                val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                                val authenticatedUser = username ?: "Anonymous"
-                                                val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
-                                                if (isWriteAllowed(topic, msgTopic) && canPublish) {
-                                                    val brokerMsg = BrokerMessage(
-                                                        messageUuid = Utils.getUuid(),
-                                                        messageId = 0,
-                                                        topicName = msgTopic,
-                                                        payload = valueBytes,
-                                                        qosLevel = 1,
-                                                        isRetain = false,
-                                                        isDup = false,
-                                                        isQueued = false,
-                                                        clientId = clientId ?: "kafka-producer"
-                                                    )
-                                                    partitionMessages.add(brokerMsg)
-                                                } else {
-                                                    logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
-                                                    partitionError = 29 // TopicAuthorizationFailedException
+                                val compression = attributes.toInt() and 0x07
+                                if (compression == 1) { // GZIP
+                                    val compressedLen = batchLength - 49
+                                    if (compressedLen > 0 && batchReader.hasRemaining(compressedLen)) {
+                                        val compressedBytes = batchReader.readRawBytes(compressedLen)
+                                        val decompressedBytes = try {
+                                            decompressGzip(compressedBytes)
+                                        } catch (e: Exception) {
+                                            logger.severe("Failed to decompress GZIP record batch: ${e.message}")
+                                            partitionError = 1 // UnknownServerException
+                                            null
+                                        }
+                                        
+                                        if (decompressedBytes != null) {
+                                            val recordReader = KafkaBufferReader(Buffer.buffer(decompressedBytes))
+                                            for (r in 0 until recordsCount) {
+                                                if (recordReader.hasRemaining(1) && partitionError == 0.toShort()) {
+                                                    val recordLen = recordReader.readVarint()
+                                                    if (recordLen > 0 && recordReader.hasRemaining(recordLen)) {
+                                                        val recordBytes = recordReader.readRawBytes(recordLen)
+                                                        val innerRecordReader = KafkaBufferReader(Buffer.buffer(recordBytes))
+                                                        
+                                                        val recordAttributes = innerRecordReader.readByte()
+                                                        val timestampDelta = innerRecordReader.readVarlong()
+                                                        val offsetDelta = innerRecordReader.readVarint()
+                                                        
+                                                        var keyBytes: ByteArray? = null
+                                                        val keyLen = innerRecordReader.readVarint()
+                                                        if (keyLen > 0 && innerRecordReader.hasRemaining(keyLen)) {
+                                                            keyBytes = innerRecordReader.readRawBytes(keyLen)
+                                                        }
+                                                        
+                                                        val valueLen = innerRecordReader.readVarint()
+                                                        if (valueLen > 0 && innerRecordReader.hasRemaining(valueLen)) {
+                                                            val valueBytes = innerRecordReader.readRawBytes(valueLen)
+                                                            val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
+                                                            val authenticatedUser = username ?: "Anonymous"
+                                                            val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
+                                                            if (isWriteAllowed(topic, msgTopic) && canPublish) {
+                                                                val brokerMsg = BrokerMessage(
+                                                                    messageUuid = Utils.getUuid(),
+                                                                    messageId = 0,
+                                                                    topicName = msgTopic,
+                                                                    payload = valueBytes,
+                                                                    qosLevel = 1,
+                                                                    isRetain = false,
+                                                                    isDup = false,
+                                                                    isQueued = false,
+                                                                    clientId = clientId ?: "kafka-producer"
+                                                                )
+                                                                partitionMessages.add(brokerMsg)
+                                                            } else {
+                                                                logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
+                                                                partitionError = 29 // TopicAuthorizationFailedException
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
+                                } else if (compression == 0) { // Uncompressed
+                                    for (r in 0 until recordsCount) {
+                                        if (batchReader.hasRemaining(1) && partitionError == 0.toShort()) {
+                                            val recordLen = batchReader.readVarint()
+                                            if (recordLen > 0 && batchReader.hasRemaining(recordLen)) {
+                                                val recordBytes = batchReader.readRawBytes(recordLen)
+                                                val recordReader = KafkaBufferReader(Buffer.buffer(recordBytes))
+                                                
+                                                val recordAttributes = recordReader.readByte()
+                                                val timestampDelta = recordReader.readVarlong()
+                                                val offsetDelta = recordReader.readVarint()
+                                                
+                                                var keyBytes: ByteArray? = null
+                                                val keyLen = recordReader.readVarint()
+                                                if (keyLen > 0 && recordReader.hasRemaining(keyLen)) {
+                                                    keyBytes = recordReader.readRawBytes(keyLen)
+                                                }
+                                                
+                                                val valueLen = recordReader.readVarint()
+                                                if (valueLen > 0 && recordReader.hasRemaining(valueLen)) {
+                                                    val valueBytes = recordReader.readRawBytes(valueLen)
+                                                    val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
+                                                    val authenticatedUser = username ?: "Anonymous"
+                                                    val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
+                                                    if (isWriteAllowed(topic, msgTopic) && canPublish) {
+                                                        val brokerMsg = BrokerMessage(
+                                                            messageUuid = Utils.getUuid(),
+                                                            messageId = 0,
+                                                            topicName = msgTopic,
+                                                            payload = valueBytes,
+                                                            qosLevel = 1,
+                                                            isRetain = false,
+                                                            isDup = false,
+                                                            isQueued = false,
+                                                            clientId = clientId ?: "kafka-producer"
+                                                        )
+                                                        partitionMessages.add(brokerMsg)
+                                                    } else {
+                                                        logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
+                                                        partitionError = 29 // TopicAuthorizationFailedException
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    logger.warning("Unsupported Kafka compression codec in RecordBatch: $compression")
+                                    partitionError = 13 // UnsupportedForMessageFormatOnBrokerException
                                 }
                             }
                         } else {
-                            // Parse Legacy MessageSet (Magic 0/1)
-                            val messageSetReader = KafkaBufferReader(Buffer.buffer(messageSetBytes))
-                            while (messageSetReader.hasRemaining(12) && partitionError == 0.toShort()) { // offset (8) + size (4)
-                                val offset = messageSetReader.readLong()
-                                val msgSize = messageSetReader.readInt()
-                                if (msgSize > 0 && messageSetReader.hasRemaining(msgSize)) {
-                                    val msgBytes = messageSetReader.readRawBytes(msgSize)
-                                    val msgReader = KafkaBufferReader(Buffer.buffer(msgBytes))
-                                    val crc = msgReader.readInt()
-                                    val magicVal = msgReader.readByte()
-                                    val attributes = msgReader.readByte()
-                                    if (magicVal == 1.toByte()) {
-                                        val timestamp = msgReader.readLong()
-                                    }
-                                    val keyBytes = msgReader.readBytes()
-                                    val valueBytes = msgReader.readBytes()
-
-                                    if (valueBytes != null) {
-                                        val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                        val authenticatedUser = username ?: "Anonymous"
-                                        val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
-                                        if (isWriteAllowed(topic, msgTopic) && canPublish) {
-                                            val brokerMsg = BrokerMessage(
-                                                messageUuid = Utils.getUuid(),
-                                                messageId = 0,
-                                                topicName = msgTopic,
-                                                payload = valueBytes,
-                                                qosLevel = 1,
-                                                isRetain = false,
-                                                isDup = false,
-                                                isQueued = false,
-                                                clientId = clientId ?: "kafka-producer"
-                                            )
-                                            partitionMessages.add(brokerMsg)
-                                        } else {
-                                            logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
-                                            partitionError = 29 // TopicAuthorizationFailedException
-                                        }
-                                    }
-                                }
+                            // Parse Legacy MessageSet (Magic 0/1) recursively
+                            parseLegacyMessageSet(topic, messageSetBytes, partitionMessages, clientId) { err ->
+                                partitionError = err
                             }
                         }
                     }
@@ -873,6 +902,89 @@ class KafkaProtocolServer(
             } else {
                 buildProduceResponse(apiVersion, response, responseTopics)
                 writeResponse(response)
+            }
+        }
+
+        private fun decompressGzip(compressed: ByteArray): ByteArray {
+            return java.io.ByteArrayInputStream(compressed).use { bais ->
+                java.util.zip.GZIPInputStream(bais).use { gzis ->
+                    gzis.readAllBytes()
+                }
+            }
+        }
+
+        private fun parseLegacyMessageSet(
+            topic: String,
+            messageSetBytes: ByteArray,
+            partitionMessages: MutableList<BrokerMessage>,
+            clientId: String?,
+            onError: (Short) -> Unit
+        ) {
+            val messageSetReader = KafkaBufferReader(Buffer.buffer(messageSetBytes))
+            var partitionError: Short = 0
+            
+            while (messageSetReader.hasRemaining(12) && partitionError == 0.toShort()) { // offset (8) + size (4)
+                val offset = messageSetReader.readLong()
+                val msgSize = messageSetReader.readInt()
+                if (msgSize > 0 && messageSetReader.hasRemaining(msgSize)) {
+                    val msgBytes = messageSetReader.readRawBytes(msgSize)
+                    val msgReader = KafkaBufferReader(Buffer.buffer(msgBytes))
+                    val crc = msgReader.readInt()
+                    val magicVal = msgReader.readByte()
+                    val attributes = msgReader.readByte()
+                    if (magicVal == 1.toByte()) {
+                        val timestamp = msgReader.readLong()
+                    }
+                    
+                    val compression = attributes.toInt() and 0x03
+                    if (compression == 1) { // GZIP
+                        val keyBytes = msgReader.readBytes()
+                        val valueBytes = msgReader.readBytes()
+                        if (valueBytes != null) {
+                            val decompressedBytes = try {
+                                decompressGzip(valueBytes)
+                            } catch (e: Exception) {
+                                logger.severe("Failed to decompress nested GZIP MessageSet: ${e.message}")
+                                partitionError = 1
+                                null
+                            }
+                            if (decompressedBytes != null) {
+                                parseLegacyMessageSet(topic, decompressedBytes, partitionMessages, clientId, onError)
+                            }
+                        }
+                    } else if (compression == 0) {
+                        val keyBytes = msgReader.readBytes()
+                        val valueBytes = msgReader.readBytes()
+                        if (valueBytes != null) {
+                            val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
+                            val authenticatedUser = username ?: "Anonymous"
+                            val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
+                            if (isWriteAllowed(topic, msgTopic) && canPublish) {
+                                val brokerMsg = BrokerMessage(
+                                    messageUuid = Utils.getUuid(),
+                                    messageId = 0,
+                                    topicName = msgTopic,
+                                    payload = valueBytes,
+                                    qosLevel = 1,
+                                    isRetain = false,
+                                    isDup = false,
+                                    isQueued = false,
+                                    clientId = clientId ?: "kafka-producer"
+                                )
+                                partitionMessages.add(brokerMsg)
+                            } else {
+                                logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
+                                partitionError = 29 // TopicAuthorizationFailedException
+                            }
+                        }
+                    } else {
+                        logger.warning("Unsupported legacy compression codec: $compression")
+                        partitionError = 13 // UnsupportedForMessageFormatOnBrokerException
+                    }
+                }
+            }
+            if (partitionError != 0.toShort()) {
+                onError(partitionError)
             }
         }
 
