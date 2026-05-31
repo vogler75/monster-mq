@@ -720,6 +720,27 @@
         "KeysLimit": { "type": "integer", "default": 10000, "minimum": 1 }
       }
     },
+    "KafkaServer": {
+      "type": "object",
+      "description": "Apache Kafka-compatible protocol server for topic streaming",
+      "properties": {
+        "Enabled": { "type": "boolean", "default": false },
+        "Host": { "type": "string", "default": "0.0.0.0" },
+        "Port": { "type": "integer", "default": 9092, "minimum": 0, "maximum": 65535 },
+        "Streams": {
+          "type": "array",
+          "description": "Kafka stream mappings",
+          "items": {
+            "type": "object",
+            "properties": {
+              "TopicFilter": { "type": "string", "description": "MQTT topic filter" },
+              "RetentionDays": { "type": "integer", "default": 7, "minimum": 1, "description": "Retention duration in days" }
+            },
+            "required": ["TopicFilter"]
+          }
+        }
+      }
+    },
     "Features": {
       "type": "object",
       "description": "Enable or disable optional broker features. All features are enabled by default; set a feature to false to disable it.",
@@ -731,6 +752,7 @@
         "Nats": { "type": "boolean", "default": true, "description": "NATS client bridge" },
         "Redis": { "type": "boolean", "default": true, "description": "Redis client bridge" },
         "RedisServer": { "type": "boolean", "default": true, "description": "Redis-compatible protocol server" },
+        "KafkaServer": { "type": "boolean", "default": true, "description": "Apache Kafka-compatible protocol server" },
         "Telegram": { "type": "boolean", "default": true, "description": "Telegram client bridge" },
         "WinCCOa": { "type": "boolean", "default": true, "description": "WinCC OA client bridge" },
         "WinCCUa": { "type": "boolean", "default": true, "description": "WinCC Unified client bridge" },

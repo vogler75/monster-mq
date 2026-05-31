@@ -13,6 +13,8 @@ import at.rocworks.stores.IMetricsStore
 import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.graphql.KafkaServerConfigQueries
+import at.rocworks.graphql.KafkaServerConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
 import at.rocworks.graphql.OPCUABrowserResolver
@@ -281,7 +283,8 @@ class GraphQLServer(
             "schema-topic-schema.graphqls", // Topic Schema Governance
             "schema-agents.graphqls",      // AI Agents
             "schema-mcp-servers.graphqls",  // MCP Servers
-            "schema-genai-providers.graphqls" // GenAI Providers
+            "schema-genai-providers.graphqls", // GenAI Providers
+            "schema-kafka-servers.graphqls" // Kafka Servers
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -367,6 +370,10 @@ class GraphQLServer(
         // Initialize Kafka Client resolvers
         val kafkaClientQueries = deviceStore?.let { KafkaClientConfigQueries(vertx, it) }
         val kafkaClientMutations = deviceStore?.let { KafkaClientConfigMutations(vertx, it) }
+
+        // Initialize Kafka Server resolvers
+        val kafkaServerQueries = deviceStore?.let { KafkaServerConfigQueries(vertx, it) }
+        val kafkaServerMutations = deviceStore?.let { KafkaServerConfigMutations(vertx, it) }
 
         // Initialize WinCC OA Client resolvers
         val winCCOaClientQueries = deviceStore?.let { WinCCOaClientConfigQueries(vertx, it) }
@@ -541,6 +548,13 @@ class GraphQLServer(
                     .apply {
                         kafkaClientQueries?.let { resolver ->
                             dataFetcher("kafkaClients", resolver.kafkaClients())
+                        }
+                    }
+                    // Kafka Server queries
+                    .apply {
+                        kafkaServerQueries?.let { resolver ->
+                            dataFetcher("kafkaServers", resolver.kafkaServers())
+                            dataFetcher("kafkaServer", resolver.kafkaServer())
                         }
                     }
                     // NATS Client queries
@@ -734,6 +748,16 @@ class GraphQLServer(
                     .apply {
                         kafkaClientMutations?.let { _ ->
                             dataFetcher("kafkaClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // Kafka Server mutations - grouped under kafkaServer
+                    .apply {
+                        kafkaServerMutations?.let { _ ->
+                            dataFetcher("kafkaServer") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -939,6 +963,18 @@ class GraphQLServer(
                         dataFetcher("stop", resolver.stopKafkaClient())
                         dataFetcher("toggle", resolver.toggleKafkaClient())
                         dataFetcher("reassign", resolver.reassignKafkaClient())
+                    }
+                }
+            }
+            // Register Kafka Server Mutations type
+            .type("KafkaServerMutations") { builder ->
+                builder.apply {
+                    kafkaServerMutations?.let { resolver ->
+                        dataFetcher("add", resolver.createKafkaServer())
+                        dataFetcher("update", resolver.updateKafkaServer())
+                        dataFetcher("delete", resolver.deleteKafkaServer())
+                        dataFetcher("toggle", resolver.toggleKafkaServer())
+                        dataFetcher("reassign", resolver.reassignKafkaServer())
                     }
                 }
             }

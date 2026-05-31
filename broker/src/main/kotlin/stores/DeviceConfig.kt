@@ -23,6 +23,10 @@ data class DeviceConfig(
         const val DEVICE_TYPE_OPCUA_SERVER = "OPCUA-Server"
         const val DEVICE_TYPE_MQTT_CLIENT = "MQTT-Client"
         const val DEVICE_TYPE_KAFKA_CLIENT = "KAFKA-Client"
+        const val DEVICE_TYPE_KAFKA_STREAM = "Kafka-Stream"
+        const val DEVICE_TYPE_KAFKA_SERVER = "Kafka-Server"
+
+
         const val DEVICE_TYPE_WINCCOA_CLIENT = "WinCCOA-Client"
         const val DEVICE_TYPE_WINCCUA_CLIENT = "WinCCUA-Client"
         const val DEVICE_TYPE_PLC4X_CLIENT = "PLC4X-Client"

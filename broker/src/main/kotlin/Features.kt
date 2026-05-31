@@ -21,6 +21,7 @@ object Features {
     const val Agents = "Agents"
     const val GenAi = "GenAi"
     const val Mcp = "Mcp"
+    const val KafkaServer = "KafkaServer"
     const val SchemaPolicy = "SchemaPolicy"
     const val TopicNamespace = "TopicNamespace"
     const val DeviceImportExport = "DeviceImportExport"
@@ -29,6 +30,6 @@ object Features {
         OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, RedisServer, Telegram,
         WinCCOa, WinCCUa, Plc4x, Neo4j, JdbcLogger, InfluxDBLogger, TimeBaseLogger,
         SparkplugB, FlowEngine, Agents,
-        GenAi, Mcp, SchemaPolicy, TopicNamespace, DeviceImportExport
+        GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DeviceImportExport
     )
 }

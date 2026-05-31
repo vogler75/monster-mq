@@ -1,0 +1,62 @@
+extend type Query {
+    kafkaServers: [KafkaServerInfo!]!
+    kafkaServer(name: String!): KafkaServerInfo
+}
+
+extend type Mutation {
+    kafkaServer: KafkaServerMutations!
+}
+
+type KafkaServerMutations {
+    add(input: KafkaServerInput!): KafkaServerResult!
+    update(name: String!, input: KafkaServerInput!): KafkaServerResult!
+    delete(name: String!): Boolean!
+    toggle(name: String!, enabled: Boolean!): KafkaServerResult!
+    reassign(name: String!, nodeId: String!): KafkaServerResult!
+}
+
+type KafkaServerInfo {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    host: String!
+    port: Int!
+    storeType: String
+    streams: [KafkaStreamMappingInfo!]!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    status: String!
+}
+
+type KafkaStreamMappingInfo {
+    streamName: String!
+    topicFilter: String!
+    retentionHours: Int!
+    storeType: String
+}
+
+input KafkaServerInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    host: String = "0.0.0.0"
+    port: Int = 9092
+    storeType: String
+    streams: [KafkaStreamMappingInput!]!
+}
+
+input KafkaStreamMappingInput {
+    streamName: String!
+    topicFilter: String!
+    retentionHours: Int = 168
+    storeType: String
+}
+
+type KafkaServerResult {
+    success: Boolean!
+    server: KafkaServerInfo
+    errors: [String!]!
+}

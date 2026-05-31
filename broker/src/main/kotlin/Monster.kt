@@ -48,6 +48,7 @@ import com.hazelcast.config.Config
 import com.hazelcast.config.XmlConfigBuilder
 import at.rocworks.devices.opcua.OpcUaExtension
 import at.rocworks.devices.opcuaserver.OpcUaServerExtension
+import at.rocworks.devices.kafkaserver.KafkaServerExtension
 import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
@@ -1044,6 +1045,13 @@ MORE INFO:
                     null
                 }
 
+                // Kafka Server Extension
+                val kafkaServerExtension = if (deviceConfigStore != null) {
+                    KafkaServerExtension(sessionHandler, deviceConfigStore, userManager)
+                } else {
+                    null
+                }
+
                 // Health handler
                 val healthHandler = HealthHandler(sessionHandler)
 
@@ -1333,6 +1341,15 @@ MORE INFO:
                         } else {
                             logger.fine("RedisServer extension disabled by Features config or RedisServer.Enabled=false")
                             Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        if (kafkaServerExtension != null && Monster.isFeatureEnabled(Features.KafkaServer)) {
+                            val options = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(kafkaServerExtension, options)
+                        } else {
+                            logger.fine("Kafka Server extension disabled by Features config")
+                            Future.succeededFuture<String>()
                         }
                     }
                     .compose {
