@@ -1170,6 +1170,7 @@ class KafkaProtocolServer(
             val mechanism = reader.readString()
             logger.fine { "SaslHandshake: mechanism=$mechanism, version=$apiVersion" }
             saslHandshakeReceived = true
+            authenticated = false // Reset authenticated since they initiated a SASL handshake
 
             response.writeShort(0) // No error (0)
             response.writeInt(1) // Number of mechanisms
@@ -1200,6 +1201,19 @@ class KafkaProtocolServer(
             }
 
             val (usernameVal, password) = credentials
+
+            if (!userManager.isUserManagementEnabled()) {
+                logger.info("Kafka SASL PLAIN client authenticated successfully (user: $usernameVal, user-management disabled)")
+                username = usernameVal
+                authenticated = true
+                response.writeShort(0) // Success
+                response.writeString(null) // No error message
+                response.writeBytes(ByteArray(0))
+                writeResponse(response)
+                processInput() // Resume processing
+                return
+            }
+
             authenticating = true
 
             userManager.authenticate(usernameVal, password).onComplete { ar ->
@@ -1238,6 +1252,20 @@ class KafkaProtocolServer(
             }
 
             val (usernameVal, password) = credentials
+
+            if (!userManager.isUserManagementEnabled()) {
+                logger.info("Kafka raw SASL PLAIN client authenticated successfully (user: $usernameVal, user-management disabled)")
+                username = usernameVal
+                authenticated = true
+                
+                // Reply with 4-byte length prefix of 0 (success)
+                val successBuffer = Buffer.buffer()
+                successBuffer.appendInt(0)
+                socket.write(successBuffer)
+                processInput() // Resume processing
+                return
+            }
+
             authenticating = true
 
             userManager.authenticate(usernameVal, password).onComplete { ar ->
