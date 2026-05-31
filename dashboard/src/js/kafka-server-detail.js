@@ -105,7 +105,7 @@ class KafkaServerDetail {
         const query = `
             query GetServer($name: String!) {
                 kafkaServer(name: $name) {
-                    name namespace nodeId enabled host port storeType status createdAt updatedAt
+                    name namespace nodeId enabled host port advertisedHost advertisedPort storeType status createdAt updatedAt
                     streams { streamName topicFilter retentionHours storeType allowWrite }
                 }
             }
@@ -122,6 +122,8 @@ class KafkaServerDetail {
         document.getElementById('server-namespace').value = server.namespace;
         document.getElementById('server-host').value = server.host;
         document.getElementById('server-port').value = server.port;
+        document.getElementById('server-advertised-host').value = server.advertisedHost || '';
+        document.getElementById('server-advertised-port').value = server.advertisedPort || '';
         document.getElementById('server-node').value = server.nodeId;
         document.getElementById('server-store').value = server.storeType || '';
         document.getElementById('server-enabled').checked = server.enabled;
@@ -207,6 +209,9 @@ class KafkaServerDetail {
             const namespace = document.getElementById('server-namespace').value.trim();
             const host = document.getElementById('server-host').value.trim();
             const port = parseInt(document.getElementById('server-port').value, 10);
+            const advertisedHost = document.getElementById('server-advertised-host').value.trim() || null;
+            const advertisedPortVal = document.getElementById('server-advertised-port').value;
+            const advertisedPort = advertisedPortVal ? parseInt(advertisedPortVal, 10) : null;
             const nodeId = document.getElementById('server-node').value;
             const storeType = document.getElementById('server-store').value || null;
             const enabled = document.getElementById('server-enabled').checked;
@@ -233,7 +238,7 @@ class KafkaServerDetail {
                 throw new Error('Please add at least one topic stream mapping.');
             }
 
-            const input = { name, namespace, nodeId, enabled, host, port, storeType, streams };
+            const input = { name, namespace, nodeId, enabled, host, port, advertisedHost, advertisedPort, storeType, streams };
 
             let success = false;
             let errors = [];

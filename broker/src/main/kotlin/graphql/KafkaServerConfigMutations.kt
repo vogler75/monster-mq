@@ -293,6 +293,8 @@ class KafkaServerConfigMutations(
         val enabled = input["enabled"] as? Boolean ?: true
         val host = input["host"] as? String ?: "0.0.0.0"
         val port = input["port"] as? Int ?: 9092
+        val advertisedHost = input["advertisedHost"] as? String
+        val advertisedPort = input["advertisedPort"] as? Int
         val storeType = input["storeType"] as? String
 
         @Suppress("UNCHECKED_CAST")
@@ -314,6 +316,8 @@ class KafkaServerConfigMutations(
             enabled = enabled,
             host = host,
             port = port,
+            advertisedHost = advertisedHost,
+            advertisedPort = advertisedPort,
             storeType = storeType,
             streams = streamsList
         )
@@ -372,6 +376,8 @@ class KafkaServerConfigMutations(
             "enabled" to device.enabled,
             "host" to config.host,
             "port" to config.port,
+            "advertisedHost" to config.advertisedHost,
+            "advertisedPort" to config.advertisedPort,
             "storeType" to config.storeType,
             "streams" to streamsList,
             "createdAt" to device.createdAt.toString(),

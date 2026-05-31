@@ -109,6 +109,14 @@
                             <input type="number" id="server-port" required value="9092" min="1" max="65535">
                         </div>
                         <div class="form-group">
+                            <label for="server-advertised-host">Advertised Host (Optional)</label>
+                            <input type="text" id="server-advertised-host" placeholder="e.g. 192.168.1.35 or mydomain.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="server-advertised-port">Advertised Port (Optional)</label>
+                            <input type="number" id="server-advertised-port" placeholder="e.g. 9093" min="1" max="65535">
+                        </div>
+                        <div class="form-group">
                             <label for="server-node">Cluster Node Assignment *</label>
                             <select id="server-node" required>
                                 <option value="*">All Nodes (*)</option>

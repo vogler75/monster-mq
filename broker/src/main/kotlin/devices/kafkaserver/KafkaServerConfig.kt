@@ -10,6 +10,8 @@ data class KafkaServerConfig(
     val enabled: Boolean = true,
     val host: String = "0.0.0.0",
     val port: Int = 9092,
+    val advertisedHost: String? = null,
+    val advertisedPort: Int? = null,
     val storeType: String? = null,
     val streams: List<KafkaStreamMapping> = emptyList()
 ) {
@@ -34,6 +36,8 @@ data class KafkaServerConfig(
                 enabled = json.getBoolean("enabled") ?: true,
                 host = json.getString("host") ?: "0.0.0.0",
                 port = json.getInteger("port") ?: 9092,
+                advertisedHost = json.getString("advertisedHost"),
+                advertisedPort = json.getInteger("advertisedPort"),
                 storeType = json.getString("storeType"),
                 streams = streamsList
             )
@@ -59,6 +63,8 @@ data class KafkaServerConfig(
             put("enabled", enabled)
             put("host", host)
             put("port", port)
+            if (advertisedHost != null) put("advertisedHost", advertisedHost)
+            if (advertisedPort != null) put("advertisedPort", advertisedPort)
             put("storeType", storeType)
             put("streams", streamsArray)
         }

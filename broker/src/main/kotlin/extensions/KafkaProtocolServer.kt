@@ -34,6 +34,8 @@ class KafkaProtocolServer(
     private val kafkaConfig = configJson.getJsonObject("KafkaServer", JsonObject())
     private val host = kafkaConfig.getString("host", "0.0.0.0")
     private val port = kafkaConfig.getInteger("port", 9092)
+    private val advertisedHost = kafkaConfig.getString("advertisedHost") ?: kafkaConfig.getString("advertised_host") ?: host
+    private val advertisedPort = kafkaConfig.getInteger("advertisedPort") ?: kafkaConfig.getInteger("advertised_port") ?: port
 
     private val configuredTopics = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val activeStreams = java.util.concurrent.CopyOnWriteArrayList<KafkaStreamConfig>()
@@ -356,8 +358,8 @@ class KafkaProtocolServer(
             // Brokers list
             response.writeInt(1) // 1 Broker
             response.writeInt(0) // Broker ID: 0
-            response.writeString(host)
-            response.writeInt(port)
+            response.writeString(advertisedHost)
+            response.writeInt(advertisedPort)
             if (apiVersion.toInt() >= 1) {
                 response.writeString(null) // Rack (null)
             }
@@ -413,8 +415,8 @@ class KafkaProtocolServer(
 
             // Coordinator Broker
             response.writeInt(0) // Broker ID: 0
-            response.writeString(host)
-            response.writeInt(port)
+            response.writeString(advertisedHost)
+            response.writeInt(advertisedPort)
 
             writeResponse(response)
         }

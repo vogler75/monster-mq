@@ -24,6 +24,8 @@ type KafkaServerInfo {
     enabled: Boolean!
     host: String!
     port: Int!
+    advertisedHost: String
+    advertisedPort: Int
     storeType: String
     streams: [KafkaStreamMappingInfo!]!
     createdAt: String!
@@ -47,6 +49,8 @@ input KafkaServerInput {
     enabled: Boolean = true
     host: String = "0.0.0.0"
     port: Int = 9092
+    advertisedHost: String
+    advertisedPort: Int
     storeType: String
     streams: [KafkaStreamMappingInput!]!
 }
