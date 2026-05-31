@@ -14,6 +14,9 @@ def main():
     parser.add_argument("--key-base", default="", help="Base key name prefix (e.g., 'Original/PV/')")
     parser.add_argument("--count", type=int, default=0, help="Number of messages to publish (0 for infinite)")
     parser.add_argument("--api-version", default=None, help="Kafka API version (e.g. '2.5.0'). Solves compatibility issues with modern brokers.")
+    parser.add_argument("--username", default=None, help="SASL username for authentication")
+    parser.add_argument("--password", default=None, help="SASL password for authentication")
+    parser.add_argument("--security-protocol", default=None, choices=["PLAINTEXT", "SSL", "SASL_PLAINTEXT", "SASL_SSL"], help="Security protocol (defaults to SASL_PLAINTEXT if credentials are provided)")
     args = parser.parse_args()
 
     api_ver = None
@@ -23,14 +26,29 @@ def main():
         except ValueError:
             print(f"Warning: Invalid API version format '{args.api_version}'. Defaulting to auto-negotiate.")
 
+    # Dynamically build producer configuration
+    kafka_kwargs = {
+        "bootstrap_servers": args.bootstrap_servers.split(","),
+        "api_version": api_ver,
+        "key_serializer": lambda k: str(k).encode("utf-8"),
+        "value_serializer": lambda v: json.dumps(v).encode("utf-8")
+    }
+
+    if args.username and args.password:
+        protocol = args.security_protocol or "SASL_PLAINTEXT"
+        print(f"Using SASL Authentication ({protocol}) with user: {args.username}")
+        kafka_kwargs.update({
+            "security_protocol": protocol,
+            "sasl_mechanism": "PLAIN",
+            "sasl_plain_username": args.username,
+            "sasl_plain_password": args.password,
+        })
+    elif args.security_protocol:
+        kafka_kwargs["security_protocol"] = args.security_protocol
+
     print(f"Connecting to Kafka bootstrap servers: {args.bootstrap_servers}")
     # Initialize producer
-    producer = KafkaProducer(
-        bootstrap_servers=args.bootstrap_servers.split(","),
-        api_version=api_ver,
-        key_serializer=lambda k: str(k).encode("utf-8"),
-        value_serializer=lambda v: json.dumps(v).encode("utf-8")
-    )
+    producer = KafkaProducer(**kafka_kwargs)
 
     # Force a metadata refresh to verify connection
     try:

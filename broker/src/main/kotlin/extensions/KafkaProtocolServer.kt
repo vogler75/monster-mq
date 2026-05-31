@@ -152,6 +152,10 @@ class KafkaProtocolServer(
     private inner class KafkaConnection(private val socket: NetSocket) {
         private var closed = false
         private var inputBuffer = Buffer.buffer()
+        private var authenticated = !userManager.isUserManagementEnabled()
+        private var username: String? = null
+        private var saslHandshakeReceived = false
+        private var authenticating = false
 
         fun start() {
             socket.handler { buf ->
@@ -170,7 +174,7 @@ class KafkaProtocolServer(
         }
 
         private fun processInput() {
-            while (inputBuffer.length() >= 4 && !closed) {
+            while (inputBuffer.length() >= 4 && !closed && !authenticating) {
                 val size = inputBuffer.getInt(0)
                 if (size <= 0 || size > 10 * 1024 * 1024) { // Max 10MB sanity check
                     close()
@@ -193,7 +197,18 @@ class KafkaProtocolServer(
                 }
 
                 try {
-                    handleRequest(packet)
+                    if (saslHandshakeReceived && !authenticated) {
+                        // Check if standard SaslAuthenticate request (apiKey == 36) or raw token payload
+                        val tempReader = KafkaBufferReader(packet)
+                        val tempApiKey = if (packet.length() >= 2) tempReader.readShort().toInt() else -1
+                        if (tempApiKey == 36) {
+                            handleRequest(packet)
+                        } else {
+                            handleRawSaslPlainToken(packet)
+                        }
+                    } else {
+                        handleRequest(packet)
+                    }
                 } catch (e: Exception) {
                     logger.severe("Error handling Kafka request packet: ${e.message}")
                     e.printStackTrace()
@@ -211,6 +226,15 @@ class KafkaProtocolServer(
 
             logger.finest { "Received Kafka Request: apiKey=$apiKey, apiVersion=$apiVersion, correlationId=$correlationId, clientId=$clientId" }
 
+            if (userManager.isUserManagementEnabled() && !authenticated) {
+                val apiKeyInt = apiKey.toInt()
+                if (apiKeyInt != 18 && apiKeyInt != 17 && apiKeyInt != 36) {
+                    logger.warning("Unauthenticated Kafka request rejected (apiKey=$apiKey, clientId=$clientId). Closing connection.")
+                    close()
+                    return
+                }
+            }
+
             val response = KafkaBufferWriter()
             response.writeInt(correlationId) // First field in response is always correlationId
 
@@ -227,6 +251,8 @@ class KafkaProtocolServer(
                 12 -> handleHeartbeat(apiVersion, reader, response)
                 13 -> handleLeaveGroup(apiVersion, reader, response)
                 14 -> handleSyncGroup(apiVersion, reader, response)
+                17 -> handleSaslHandshake(apiVersion, reader, response)
+                36 -> handleSaslAuthenticate(apiVersion, reader, response)
                 else -> {
                     logger.warning("Unsupported Kafka API Key: $apiKey")
                     close()
@@ -238,7 +264,7 @@ class KafkaProtocolServer(
             response.writeShort(0) // No error (0)
 
             // API Keys Array
-            response.writeInt(12) // We support 12 APIs
+            response.writeInt(14) // We support 14 APIs
 
             // Produce
             response.writeShort(0)  // key
@@ -295,10 +321,20 @@ class KafkaProtocolServer(
             response.writeShort(0)  // min version
             response.writeShort(0)  // max version
 
+            // SaslHandshake
+            response.writeShort(17) // key
+            response.writeShort(0)  // min version
+            response.writeShort(1)  // max version
+
             // ApiVersions
             response.writeShort(18) // key
             response.writeShort(0)  // min version
             response.writeShort(0)  // max version
+
+            // SaslAuthenticate
+            response.writeShort(36) // key
+            response.writeShort(0)  // min version
+            response.writeShort(1)  // max version
 
             if (apiVersion.toInt() >= 1) {
                 response.writeInt(0) // Throttle time ms
@@ -740,7 +776,9 @@ class KafkaProtocolServer(
                                             if (valueLen > 0 && recordReader.hasRemaining(valueLen)) {
                                                 val valueBytes = recordReader.readRawBytes(valueLen)
                                                 val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                                if (isWriteAllowed(topic, msgTopic)) {
+                                                val authenticatedUser = username ?: "Anonymous"
+                                                val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
+                                                if (isWriteAllowed(topic, msgTopic) && canPublish) {
                                                     val brokerMsg = BrokerMessage(
                                                         messageUuid = Utils.getUuid(),
                                                         messageId = 0,
@@ -754,7 +792,7 @@ class KafkaProtocolServer(
                                                     )
                                                     partitionMessages.add(brokerMsg)
                                                 } else {
-                                                    logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration.")
+                                                    logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
                                                     partitionError = 29 // TopicAuthorizationFailedException
                                                 }
                                             }
@@ -782,7 +820,9 @@ class KafkaProtocolServer(
 
                                     if (valueBytes != null) {
                                         val msgTopic = if (keyBytes != null) String(keyBytes, StandardCharsets.UTF_8) else topic
-                                        if (isWriteAllowed(topic, msgTopic)) {
+                                        val authenticatedUser = username ?: "Anonymous"
+                                        val canPublish = !userManager.isUserManagementEnabled() || userManager.canPublish(authenticatedUser, msgTopic)
+                                        if (isWriteAllowed(topic, msgTopic) && canPublish) {
                                             val brokerMsg = BrokerMessage(
                                                 messageUuid = Utils.getUuid(),
                                                 messageId = 0,
@@ -796,7 +836,7 @@ class KafkaProtocolServer(
                                             )
                                             partitionMessages.add(brokerMsg)
                                         } else {
-                                            logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration.")
+                                            logger.warning("Kafka producer write to topic '$topic' with key '$msgTopic' rejected: Not allowed by stream configuration or ACL permissions.")
                                             partitionError = 29 // TopicAuthorizationFailedException
                                         }
                                     }
@@ -898,20 +938,25 @@ class KafkaProtocolServer(
                     val partitionMaxBytes = reader.readInt()
 
                     val promise = Promise.promise<FetchPartitionResult>()
-                    
-                    // Fetch latest offset for high watermark tracking
-                    val watermarkFuture = kafkaStore.getLatestOffset(topic)
-                    // Fetch sequential messages starting from requested offset
-                    val recordsFuture = kafkaStore.fetch(topic, fetchOffset, 100) // Default limit 100
+                    val authenticatedUser = username ?: "Anonymous"
+                    val canSubscribe = !userManager.isUserManagementEnabled() || userManager.canSubscribe(authenticatedUser, topic)
 
-                    io.vertx.core.Future.all(watermarkFuture, recordsFuture).onComplete { ar ->
-                        if (ar.succeeded()) {
-                            val maxOffset = watermarkFuture.result()
-                            val records = recordsFuture.result()
-                            promise.complete(FetchPartitionResult(topic, partition, maxOffset, records))
-                        } else {
-                            promise.complete(FetchPartitionResult(topic, partition, 0L, emptyList()))
+                    if (canSubscribe) {
+                        val watermarkFuture = kafkaStore.getLatestOffset(topic)
+                        val recordsFuture = kafkaStore.fetch(topic, fetchOffset, 100)
+
+                        io.vertx.core.Future.all(watermarkFuture, recordsFuture).onComplete { ar ->
+                            if (ar.succeeded()) {
+                                val maxOffset = watermarkFuture.result()
+                                val records = recordsFuture.result()
+                                promise.complete(FetchPartitionResult(topic, partition, maxOffset, records))
+                            } else {
+                                promise.complete(FetchPartitionResult(topic, partition, 0L, emptyList()))
+                            }
                         }
+                    } else {
+                        logger.warning("Kafka consumer read from topic '$topic' rejected: Not authorized by ACL.")
+                        promise.complete(FetchPartitionResult(topic, partition, 0L, emptyList()))
                     }
 
                     fetchFutures.add(promise.future())
@@ -1007,6 +1052,133 @@ class KafkaProtocolServer(
 
         private fun cleanup() {
             close()
+        }
+
+        private fun handleSaslHandshake(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
+            val mechanism = reader.readString()
+            logger.fine { "SaslHandshake: mechanism=$mechanism, version=$apiVersion" }
+            saslHandshakeReceived = true
+
+            response.writeShort(0) // No error (0)
+            response.writeInt(1) // Number of mechanisms
+            response.writeString("PLAIN")
+
+            writeResponse(response)
+        }
+
+        private fun handleSaslAuthenticate(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
+            val saslAuthBytes = reader.readBytes()
+            if (saslAuthBytes == null) {
+                logger.warning("SaslAuthenticate: Empty auth token received")
+                response.writeShort(58) // SASLAuthenticationFailed (58)
+                response.writeString("Empty auth token")
+                response.writeBytes(ByteArray(0))
+                writeResponse(response)
+                return
+            }
+
+            val credentials = parsePlainToken(saslAuthBytes)
+            if (credentials == null) {
+                logger.warning("SaslAuthenticate: Failed to parse plain token")
+                response.writeShort(58) // SASLAuthenticationFailed (58)
+                response.writeString("Failed to parse plain token")
+                response.writeBytes(ByteArray(0))
+                writeResponse(response)
+                return
+            }
+
+            val (usernameVal, password) = credentials
+            authenticating = true
+
+            userManager.authenticate(usernameVal, password).onComplete { ar ->
+                authenticating = false
+                if (closed) return@onComplete
+
+                if (ar.succeeded() && ar.result() != null) {
+                    logger.info("Kafka SASL PLAIN client authenticated successfully as user: $usernameVal")
+                    username = usernameVal
+                    authenticated = true
+                    response.writeShort(0) // Success
+                    response.writeString(null) // No error message
+                    response.writeBytes(ByteArray(0))
+                } else {
+                    logger.warning("Kafka SASL PLAIN authentication failed for user: $usernameVal")
+                    response.writeShort(58) // SASLAuthenticationFailed
+                    response.writeString("Authentication failed")
+                    response.writeBytes(ByteArray(0))
+                }
+                writeResponse(response)
+
+                if (authenticated) {
+                    processInput() // Resume processing
+                } else {
+                    close() // Close connection on auth failure
+                }
+            }
+        }
+
+        private fun handleRawSaslPlainToken(packet: Buffer) {
+            val credentials = parsePlainToken(packet.bytes)
+            if (credentials == null) {
+                logger.warning("Raw SASL PLAIN: Failed to parse plain token")
+                close()
+                return
+            }
+
+            val (usernameVal, password) = credentials
+            authenticating = true
+
+            userManager.authenticate(usernameVal, password).onComplete { ar ->
+                authenticating = false
+                if (closed) return@onComplete
+
+                if (ar.succeeded() && ar.result() != null) {
+                    logger.info("Kafka raw SASL PLAIN client authenticated successfully as user: $usernameVal")
+                    username = usernameVal
+                    authenticated = true
+                    
+                    // Reply with 4-byte length prefix of 0 (success)
+                    val successBuffer = Buffer.buffer()
+                    successBuffer.appendInt(0)
+                    socket.write(successBuffer)
+                } else {
+                    logger.warning("Kafka raw SASL PLAIN authentication failed for user: $usernameVal")
+                    close()
+                }
+
+                if (authenticated) {
+                    processInput() // Resume processing
+                }
+            }
+        }
+
+        private fun parsePlainToken(bytes: ByteArray): Pair<String, String>? {
+            try {
+                var i = 0
+                // Skip authId (find first null byte)
+                while (i < bytes.size && bytes[i] != 0.toByte()) {
+                    i++
+                }
+                if (i >= bytes.size) return null
+                i++ // skip the null byte
+                
+                // Read username
+                val usernameStart = i
+                while (i < bytes.size && bytes[i] != 0.toByte()) {
+                    i++
+                }
+                if (i >= bytes.size) return null
+                val usernameVal = String(bytes, usernameStart, i - usernameStart, StandardCharsets.UTF_8)
+                i++ // skip the null byte
+                
+                // Read password
+                val passwordStart = i
+                val password = String(bytes, passwordStart, bytes.size - passwordStart, StandardCharsets.UTF_8)
+                return Pair(usernameVal, password)
+            } catch (e: Exception) {
+                logger.warning("Error parsing SASL PLAIN token: ${e.message}")
+                return null
+            }
         }
     }
 

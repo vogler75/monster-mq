@@ -14,6 +14,27 @@ API_OFFSET_COMMIT = 8
 API_OFFSET_FETCH = 9
 API_FIND_COORDINATOR = 10
 API_API_VERSIONS = 18
+API_SASL_HANDSHAKE = 17
+API_SASL_AUTHENTICATE = 36
+
+def authenticate_socket(sock, username, password, mode="standard"):
+    # Step A: SaslHandshake (API Key 17)
+    handshake_payload = pack_string("PLAIN")
+    request = make_request(API_SASL_HANDSHAKE, 0, 9999, "auth-helper", handshake_payload)
+    sock.sendall(request)
+    read_response(sock)
+
+    # Step B: Authentication
+    token = b"\x00" + username.encode('utf-8') + b"\x00" + password.encode('utf-8')
+    if mode == "standard":
+        auth_payload = struct.pack('>i', len(token)) + token
+        auth_request = make_request(API_SASL_AUTHENTICATE, 0, 10000, "auth-helper", auth_payload)
+        sock.sendall(auth_request)
+        read_response(sock)
+    else:
+        raw_payload = struct.pack('>i', len(token)) + token
+        sock.sendall(raw_payload)
+        sock.recv(4)
 
 def pack_string(s):
     if s is None:
@@ -87,6 +108,8 @@ def test_kafka_metadata(broker_config):
         pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
 
     try:
+        if broker_config["username"]:
+            authenticate_socket(sock, "Admin", "Admin")
         # Build Metadata request (Version 0)
         # Topics array length (0 = all topics)
         payload = struct.pack('>i', 0)
@@ -140,6 +163,8 @@ def test_mqtt_to_kafka_fetching(broker_config):
         pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
 
     try:
+        if broker_config["username"]:
+            authenticate_socket(sock, "Admin", "Admin")
         # Build Fetch request (Version 0):
         # replica_id (i), max_wait_ms (i), min_bytes (i), topic_count (i)
         fetch_header = struct.pack('>iiii', -1, 500, 1, 1)
@@ -216,9 +241,26 @@ def test_kafka_server_device_lifecycle(broker_config):
     import requests
     graphql_url = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
     
-    # 1. Quick check if GraphQL is available
+    # 1. Quick check if GraphQL is available and get auth token if UserManagement is enabled
+    headers = {}
     try:
-        requests.post(graphql_url, json={"query": "{ __typename }"}, timeout=2)
+        if broker_config["username"]:
+            login_query = """
+                mutation($username: String!, $password: String!) {
+                    login(username: $username, password: $password) { token }
+                }
+            """
+            resp = requests.post(graphql_url, json={"query": login_query, "variables": {"username": broker_config["username"], "password": broker_config["password"]}}, timeout=5)
+            if resp.status_code == 200:
+                body = resp.json()
+                if "data" in body and body["data"] and "login" in body["data"] and body["data"]["login"]:
+                    token = body["data"]["login"]["token"]
+                    headers = {"Authorization": f"Bearer {token}"}
+    except Exception:
+        pass
+
+    try:
+        requests.post(graphql_url, json={"query": "{ __typename }"}, headers=headers, timeout=2)
     except Exception as e:
         pytest.skip(f"GraphQL endpoint not reachable at {graphql_url}: {e}")
 
@@ -234,7 +276,7 @@ def test_kafka_server_device_lifecycle(broker_config):
     }
     """
     try:
-        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, timeout=5)
+        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, headers=headers, timeout=5)
     except Exception:
         pass
 
@@ -273,7 +315,7 @@ def test_kafka_server_device_lifecycle(broker_config):
         }
     }
 
-    resp = requests.post(graphql_url, json={"query": add_mutation, "variables": variables}, timeout=5)
+    resp = requests.post(graphql_url, json={"query": add_mutation, "variables": variables}, headers=headers, timeout=5)
     resp.raise_for_status()
     result = resp.json()
     assert "errors" not in result, f"GraphQL response has errors: {result}"
@@ -298,7 +340,7 @@ def test_kafka_server_device_lifecycle(broker_config):
       }
     }
     """
-    resp = requests.post(graphql_url, json={"query": list_query}, timeout=5)
+    resp = requests.post(graphql_url, json={"query": list_query}, headers=headers, timeout=5)
     resp.raise_for_status()
     result = resp.json()
     assert "errors" not in result
@@ -346,7 +388,7 @@ def test_kafka_server_device_lifecycle(broker_config):
     resp = requests.post(graphql_url, json={
         "query": toggle_mutation,
         "variables": {"name": server_name, "enabled": False}
-    }, timeout=5)
+    }, headers=headers, timeout=5)
     resp.raise_for_status()
     result = resp.json()
     assert "errors" not in result
@@ -382,7 +424,7 @@ def test_kafka_server_device_lifecycle(broker_config):
     resp = requests.post(graphql_url, json={
         "query": delete_mutation,
         "variables": {"name": server_name}
-    }, timeout=5)
+    }, headers=headers, timeout=5)
     resp.raise_for_status()
     result = resp.json()
     assert "errors" not in result
@@ -397,9 +439,26 @@ def test_kafka_write_authorization_validation(broker_config):
     import json
     graphql_url = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
     
-    # 1. Quick check if GraphQL is available
+    # 1. Quick check if GraphQL is available and get auth token if UserManagement is enabled
+    headers = {}
     try:
-        requests.post(graphql_url, json={"query": "{ __typename }"}, timeout=2)
+        if broker_config["username"]:
+            login_query = """
+                mutation($username: String!, $password: String!) {
+                    login(username: $username, password: $password) { token }
+                }
+            """
+            resp = requests.post(graphql_url, json={"query": login_query, "variables": {"username": broker_config["username"], "password": broker_config["password"]}}, timeout=5)
+            if resp.status_code == 200:
+                body = resp.json()
+                if "data" in body and body["data"] and "login" in body["data"] and body["data"]["login"]:
+                    token = body["data"]["login"]["token"]
+                    headers = {"Authorization": f"Bearer {token}"}
+    except Exception:
+        pass
+
+    try:
+        requests.post(graphql_url, json={"query": "{ __typename }"}, headers=headers, timeout=2)
     except Exception as e:
         pytest.skip(f"GraphQL endpoint not reachable at {graphql_url}: {e}")
 
@@ -413,7 +472,7 @@ def test_kafka_write_authorization_validation(broker_config):
     }
     """
     try:
-        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, timeout=5)
+        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, headers=headers, timeout=5)
     except Exception:
         pass
 
@@ -453,7 +512,7 @@ def test_kafka_write_authorization_validation(broker_config):
         }
     }
 
-    resp = requests.post(graphql_url, json={"query": add_mutation, "variables": variables}, timeout=5)
+    resp = requests.post(graphql_url, json={"query": add_mutation, "variables": variables}, headers=headers, timeout=5)
     resp.raise_for_status()
     result = resp.json()
     assert "errors" not in result, f"GraphQL response has errors: {result}"
@@ -465,14 +524,22 @@ def test_kafka_write_authorization_validation(broker_config):
     producer = None
     try:
         # Initialize producer
-        producer = KafkaProducer(
-            bootstrap_servers=[f"{broker_config['host']}:{test_port}"],
-            api_version=(2, 0, 0),
-            key_serializer=lambda k: str(k).encode("utf-8"),
-            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            retries=0,
-            request_timeout_ms=3000
-        )
+        producer_kwargs = {
+            "bootstrap_servers": [f"{broker_config['host']}:{test_port}"],
+            "api_version": (2, 0, 0),
+            "key_serializer": lambda k: str(k).encode("utf-8"),
+            "value_serializer": lambda v: json.dumps(v).encode("utf-8"),
+            "retries": 0,
+            "request_timeout_ms": 3000
+        }
+        if broker_config["username"]:
+            producer_kwargs.update({
+                "security_protocol": "SASL_PLAINTEXT",
+                "sasl_mechanism": "PLAIN",
+                "sasl_plain_username": "Admin",
+                "sasl_plain_password": "Admin"
+            })
+        producer = KafkaProducer(**producer_kwargs)
 
         # 3. Publish to matching allowed topic filter -> should succeed!
         future = producer.send("test_auth_stream", key="pytest/auth/allowed/1", value={"data": "allowed"})
@@ -500,6 +567,106 @@ def test_kafka_write_authorization_validation(broker_config):
         if producer:
             producer.close()
         # Clean up the test device
-        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, timeout=5)
+        requests.post(graphql_url, json={"query": cleanup_mutation, "variables": {"name": server_name}}, headers=headers, timeout=5)
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_sasl_authentication(broker_config):
+    """Test SASL PLAIN authentication over Kafka protocol server."""
+    # 1. Test standard SaslAuthenticate request (API Key 36)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((broker_config["host"], 9092))
+    except Exception as e:
+        pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
+
+    try:
+        # Step A: SaslHandshake (API Key 17)
+        handshake_payload = pack_string("PLAIN")
+        request = make_request(17, 0, 1001, "test-auth-client", handshake_payload)
+        sock.sendall(request)
+
+        response = read_response(sock)
+        assert response is not None
+        correlation_id, error_code = struct.unpack_from('>ih', response, 0)
+        assert correlation_id == 1001
+        assert error_code == 0  # Success
+
+        # Mechanisms array
+        mechs_len, = struct.unpack_from('>i', response, 6)
+        assert mechs_len >= 1
+        mech_name, _ = unpack_string(response, 10)
+        assert mech_name == "PLAIN"
+
+        # Step B: SaslAuthenticate (API Key 36) with valid credentials
+        username = "Admin"
+        password = "Admin"
+        token = b"\x00" + username.encode('utf-8') + b"\x00" + password.encode('utf-8')
+        
+        auth_payload = struct.pack('>i', len(token)) + token
+        auth_request = make_request(36, 0, 1002, "test-auth-client", auth_payload)
+        sock.sendall(auth_request)
+
+        auth_response = read_response(sock)
+        assert auth_response is not None
+        correlation_id, error_code = struct.unpack_from('>ih', auth_response, 0)
+        assert correlation_id == 1002
+        assert error_code == 0  # Success (0)
+        
+    finally:
+        sock.close()
+
+    # 2. Test SaslAuthenticate with invalid credentials
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((broker_config["host"], 9092))
+    try:
+        # Step A: SaslHandshake
+        handshake_payload = pack_string("PLAIN")
+        request = make_request(17, 0, 1003, "test-auth-client", handshake_payload)
+        sock.sendall(request)
+        read_response(sock)
+
+        # Step B: SaslAuthenticate with invalid credentials
+        token = b"\x00" + b"invalid-user" + b"\x00" + b"invalid-pass"
+        auth_payload = struct.pack('>i', len(token)) + token
+        auth_request = make_request(36, 0, 1004, "test-auth-client", auth_payload)
+        sock.sendall(auth_request)
+
+        auth_response = read_response(sock)
+        assert auth_response is not None
+        correlation_id, error_code = struct.unpack_from('>ih', auth_response, 0)
+        assert correlation_id == 1004
+        assert error_code == 58  # SASLAuthenticationFailed (58)
+        
+        # Verify connection is subsequently closed by server
+        data = sock.recv(1024)
+        assert len(data) == 0  # Socket EOF
+    finally:
+        sock.close()
+
+    # 3. Test raw socket PLAIN token fallback (SASL handshake V0 style)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((broker_config["host"], 9092))
+    try:
+        # Step A: SaslHandshake
+        handshake_payload = pack_string("PLAIN")
+        request = make_request(17, 0, 1005, "test-auth-client", handshake_payload)
+        sock.sendall(request)
+        read_response(sock)
+
+        # Step B: Send raw token directly
+        username = "Admin"
+        password = "Admin"
+        token = b"\x00" + username.encode('utf-8') + b"\x00" + password.encode('utf-8')
+        raw_payload = struct.pack('>i', len(token)) + token
+        sock.sendall(raw_payload)
+
+        # Server responds with 4-byte length prefix of 0 (success)
+        response_bytes = sock.recv(4)
+        assert len(response_bytes) == 4
+        length, = struct.unpack('>i', response_bytes)
+        assert length == 0  # Success
+    finally:
+        sock.close()
 
 
