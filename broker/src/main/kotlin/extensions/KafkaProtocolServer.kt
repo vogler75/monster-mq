@@ -32,8 +32,8 @@ class KafkaProtocolServer(
     private val logger = Utils.getLogger(this::class.java)
 
     private val kafkaConfig = configJson.getJsonObject("KafkaServer", JsonObject())
-    private val host = kafkaConfig.getString("Host", "0.0.0.0")
-    private val port = kafkaConfig.getInteger("Port", 9092)
+    private val host = kafkaConfig.getString("host", "0.0.0.0")
+    private val port = kafkaConfig.getInteger("port", 9092)
 
     private val configuredTopics = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private val activeStreams = java.util.concurrent.CopyOnWriteArrayList<KafkaStreamConfig>()
@@ -75,12 +75,12 @@ class KafkaProtocolServer(
         val newStreams = mutableListOf<KafkaStreamConfig>()
         
         // 1. Load static streams from config.yaml
-        val streamsConfig = kafkaConfig.getJsonArray("Streams") ?: kafkaConfig.getJsonArray("streams") ?: io.vertx.core.json.JsonArray()
+        val streamsConfig = kafkaConfig.getJsonArray("streams", io.vertx.core.json.JsonArray())
         streamsConfig.forEach { stream ->
             val streamObj = stream as JsonObject
-            val topicFilter = streamObj.getString("TopicFilter") ?: streamObj.getString("topicFilter")
-            val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName") ?: topicFilter
-            val allowWrite = streamObj.getBoolean("AllowWrite") ?: streamObj.getBoolean("allowWrite") ?: true
+            val topicFilter = streamObj.getString("topicFilter")
+            val streamName = streamObj.getString("streamName") ?: topicFilter
+            val allowWrite = streamObj.getBoolean("allowWrite", true)
             if (!streamName.isNullOrBlank() && !topicFilter.isNullOrBlank()) {
                 newStreams.add(KafkaStreamConfig(streamName, topicFilter, allowWrite))
             }
