@@ -333,7 +333,7 @@ class Monster(args: Array<String>) {
         fun getPublishWorkerThreads(): Int = publishWorkerThreads
 
         @Volatile
-        private var maxInFlightMessages: Int = 10_000
+        private var maxInFlightMessages: Int = 1_000
         @JvmStatic
         fun getMaxInFlightMessages(): Int = maxInFlightMessages
 
@@ -943,10 +943,10 @@ MORE INFO:
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
 
         maxInFlightMessages = try {
-            tcpServerConfig.getInteger("MaxInFlightMessages", 10_000)
+            tcpServerConfig.getInteger("MaxInFlightMessages", 1_000)
         } catch (e: Exception) {
             logger.warning("Config: MqttTcpServer.MaxInFlightMessages read failed: ${e.message}")
-            10_000
+            1_000
         }
 
         serverReceiveMaximum = try {
