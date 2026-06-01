@@ -94,7 +94,7 @@ AllowRootWildcardSubscription: true
 # Increase these values if experiencing NetworkTimeout errors during heavy subscription load
 Queues:
   SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
-  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
+  MessageQueueSize: 100000       # Queue size for message add/delete operations (default: 100,000)
 
 # User Management configuration
 UserManagement:

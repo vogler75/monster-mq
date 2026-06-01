@@ -28,7 +28,7 @@ MqttTcpServer:
 # Queue size configuration for high-load scenarios
 Queues:
   SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
-  MessageQueueSize: 50000       # Queue size for message add/delete operations (default: 10,000)
+  MessageQueueSize: 100000       # Queue size for message add/delete operations (default: 100,000)
   DatabaseBatchSize: 10000      # Batch size for database queue write/delete operations (default: 10,000)
 
 # Metrics configuration

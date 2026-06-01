@@ -128,8 +128,8 @@
         },
         "MessageQueueSize": {
           "type": "integer",
-          "default": 50000,
-          "description": "Queue capacity for outbound client message queue operations (default: 50,000)."
+          "default": 100000,
+          "description": "Queue capacity for outbound client message queue operations (default: 100,000)."
         },
         "DatabaseBatchSize": {
           "type": "integer",

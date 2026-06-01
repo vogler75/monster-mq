@@ -288,7 +288,7 @@ class Monster(args: Array<String>) {
         fun getSubscriptionQueueSize(): Int = subscriptionQueueSize
 
         @Volatile
-        private var messageQueueSize: Int = 50_000
+        private var messageQueueSize: Int = 100_000
         @JvmStatic
         fun getMessageQueueSize(): Int = messageQueueSize
 
@@ -735,10 +735,10 @@ MORE INFO:
                         50_000
                     }
                     messageQueueSize = try {
-                        queuesConfig.getInteger("MessageQueueSize", 50_000)
+                        queuesConfig.getInteger("MessageQueueSize", 100_000)
                     } catch (e: Exception) {
                         logger.warning("Config: Queues.MessageQueueSize read failed: ${e.message}")
-                        50_000
+                        100_000
                     }
                     databaseBatchSize = try {
                         queuesConfig.getInteger("DatabaseBatchSize", 10000)
