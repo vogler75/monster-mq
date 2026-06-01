@@ -273,7 +273,7 @@
         },
         "MaxInFlightMessages": {
           "type": "integer",
-          "default": 1000,
+          "default": 10000,
           "description": "Maximum number of outstanding QoS 1 and QoS 2 messages in flight for non-MQTT v5.0 clients (where limit is not negotiated via CONNECT/CONNACK)."
         },
         "ServerReceiveMaximum": {
