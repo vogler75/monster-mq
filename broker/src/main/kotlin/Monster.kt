@@ -23,17 +23,12 @@ import at.rocworks.stores.*
 import at.rocworks.stores.cratedb.MessageStoreCrateDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
 import at.rocworks.stores.mongodb.MongoClientPool
-import at.rocworks.stores.mongodb.QueueStoreMongoDBV1
-import at.rocworks.stores.mongodb.QueueStoreMongoDBV2
 import at.rocworks.stores.mongodb.SessionStoreMongoDB
 import at.rocworks.stores.postgres.MessageStorePostgres
-import at.rocworks.stores.postgres.QueueStorePostgresV1
-import at.rocworks.stores.postgres.QueueStorePostgresV2
 import at.rocworks.stores.postgres.SessionStorePostgres
 import at.rocworks.stores.sqlite.MessageStoreSQLite
-import at.rocworks.stores.sqlite.QueueStoreSQLiteV1
-import at.rocworks.stores.sqlite.QueueStoreSQLiteV2
 import at.rocworks.stores.sqlite.SessionStoreSQLite
+import at.rocworks.stores.memory.QueueStoreMemory
 import at.rocworks.stores.sqlite.SQLiteDatabasePath
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.config.ConfigRetriever
@@ -295,7 +290,7 @@ class Monster(args: Array<String>) {
         fun getMessageQueueSize(): Int = messageQueueSize
 
         @Volatile
-        private var databaseBatchSize: Int = 10000
+        private var databaseBatchSize: Int = 1000
         @JvmStatic
         fun getDatabaseBatchSize(): Int = databaseBatchSize
 
@@ -1628,60 +1623,13 @@ MORE INFO:
 
     private fun getQueueStore(vertx: Vertx): Future<IQueueStoreAsync> {
         val promise = Promise.promise<IQueueStoreAsync>()
-        val queueStoreTypeStr = Monster.getQueueStoreType(configJson)
-        val queueStoreType = try {
-            QueueStoreType.valueOf(queueStoreTypeStr)
-        } catch (e: IllegalArgumentException) {
-            val supported = QueueStoreType.entries.joinToString(", ")
-            logger.severe("Unsupported QueueStoreType '$queueStoreTypeStr'. Supported values: $supported")
-            exitProcess(1)
-        }
+        val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+        val store: IQueueStoreSync = QueueStoreMemory(vtSeconds)
 
-        // For SQLite-backed stores, ensure SQLiteVerticle is deployed first
-        val sqliteReady = if (queueStoreType == QueueStoreType.SQLITE ||
-            queueStoreType == QueueStoreType.SQLITE_V1 ||
-            queueStoreType == QueueStoreType.SQLITE_V2 ||
-            queueStoreType == QueueStoreType.MEMORY) {
-            ensureSQLiteVerticleDeployed(vertx)
-        } else {
-            Future.succeededFuture("N/A")
-        }
-
-        sqliteReady.compose { _ ->
-            val store: IQueueStoreSync = when (queueStoreType) {
-                QueueStoreType.MEMORY -> {
-                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
-                    QueueStoreSQLiteV2(SQLiteDatabasePath.QUEUE_MEMORY, vtSeconds, QueueStoreType.MEMORY)
-                }
-                QueueStoreType.POSTGRES_V1 -> {
-                    QueueStorePostgresV1(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema)
-                }
-                QueueStoreType.POSTGRES, QueueStoreType.POSTGRES_V2 -> {
-                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
-                    QueueStorePostgresV2(postgresConfig.url, postgresConfig.user, postgresConfig.pass, postgresConfig.schema, vtSeconds)
-                }
-                QueueStoreType.MONGODB_V1 -> {
-                    QueueStoreMongoDBV1(mongoDbConfig.url, mongoDbConfig.database)
-                }
-                QueueStoreType.MONGODB, QueueStoreType.MONGODB_V2 -> {
-                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
-                    QueueStoreMongoDBV2(mongoDbConfig.url, mongoDbConfig.database, vtSeconds)
-                }
-                QueueStoreType.SQLITE_V1 -> {
-                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
-                    QueueStoreSQLiteV1(configDbPath)
-                }
-                QueueStoreType.SQLITE, QueueStoreType.SQLITE_V2 -> {
-                    val configDbPath = "${sqliteConfig.path}/monstermq.db"
-                    val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
-                    QueueStoreSQLiteV2(configDbPath, vtSeconds)
-                }
-            }
-            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
-            vertx.deployVerticle(store as AbstractVerticle, options).compose { _ ->
-                val async = QueueStoreAsync(store)
-                vertx.deployVerticle(async).map { async as IQueueStoreAsync }
-            }
+        val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+        vertx.deployVerticle(store as AbstractVerticle, options).compose { _ ->
+            val async = QueueStoreAsync(store)
+            vertx.deployVerticle(async).map { async as IQueueStoreAsync }
         }.onComplete { result ->
             if (result.succeeded()) {
                 promise.complete(result.result())

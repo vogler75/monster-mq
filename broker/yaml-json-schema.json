@@ -87,13 +87,10 @@
       "enum": [
         "MEMORY",
         "POSTGRES",
-        "POSTGRES_V1",
         "POSTGRES_V2",
         "MONGODB",
-        "MONGODB_V1",
         "MONGODB_V2",
         "SQLITE",
-        "SQLITE_V1",
         "SQLITE_V2"
       ],
       "description": "Queue store backend. Defaults to DefaultStoreType if set, otherwise to an explicit persistent SessionStoreType, otherwise SQLITE."

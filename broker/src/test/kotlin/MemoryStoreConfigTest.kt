@@ -3,7 +3,7 @@ package at.rocworks
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.QueueStoreType
 import at.rocworks.stores.SessionStoreType
-import at.rocworks.stores.sqlite.QueueStoreSQLiteV2
+import at.rocworks.stores.memory.QueueStoreMemory
 import at.rocworks.stores.sqlite.SQLiteDatabasePath
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import at.rocworks.stores.sqlite.SessionStoreSQLite
@@ -59,7 +59,7 @@ class MemoryStoreConfigTest {
             sessionStore.setClient("client-a", "node-a", cleanSession = false, connected = true, JsonObject())
             assertTrue("Expected in-memory session to be readable", sessionStore.isPresent("client-a"))
 
-            val queueStore = QueueStoreSQLiteV2(SQLiteDatabasePath.QUEUE_MEMORY, 30, QueueStoreType.MEMORY)
+            val queueStore = QueueStoreMemory(30)
             waitForDeployment(vertx.deployVerticle(queueStore), "memory queue store")
             assertEquals(QueueStoreType.MEMORY, queueStore.getType())
 

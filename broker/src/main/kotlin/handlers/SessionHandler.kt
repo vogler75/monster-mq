@@ -658,8 +658,9 @@ open class SessionHandler(
                 }
             }).onComplete {
                 if (block.isNotEmpty()) {
-                    execute(block).onComplete {
-                        block.clear()
+                    val blockCopy = ArrayList(block)
+                    block.clear()
+                    execute(blockCopy).onComplete {
                         vertx.runOnContext { loop() }
                     }
                 } else {

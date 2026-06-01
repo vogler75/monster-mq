@@ -66,6 +66,7 @@ class MqttClient(
     // Queue-first state machine for QoS 1+ message delivery
     private var isProcessingQueue = false
     private var triggerPending = false
+    private var isFetchingQueueMessage = false
 
     // Message cache for bulk fetching (reduces database queries)
     private val messageCache = mutableListOf<BrokerMessage>()
@@ -211,7 +212,14 @@ class MqttClient(
             return
         }
 
+        if (isFetchingQueueMessage) {
+            logger.finest { "Client [$clientId] Already fetching next message, skipping duplicate processing" }
+            return
+        }
+
+        isFetchingQueueMessage = true
         fetchNextMessageFromCacheOrDb().onComplete { result ->
+            isFetchingQueueMessage = false
             if (result.failed()) {
                 logger.warning { "Client [$clientId] Error fetching next pending message: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
                 isProcessingQueue = false
@@ -667,6 +675,7 @@ class MqttClient(
         // Reset queue processing state
         isProcessingQueue = false
         triggerPending = false
+        isFetchingQueueMessage = false
         clearMessageCache()
 
         if (receiveMaximumWarningActive) {

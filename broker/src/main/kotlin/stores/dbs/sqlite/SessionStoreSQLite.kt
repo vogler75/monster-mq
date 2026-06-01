@@ -109,7 +109,7 @@ class SessionStoreSQLite(
     override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit) {
         val sql = "SELECT client_id, topic, qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName"
         try {
-            val results = sqlClient.executeQuerySync(sql)
+            val results = sqlClient.executeQueryDirect(sql)
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
@@ -128,7 +128,7 @@ class SessionStoreSQLite(
     override fun iterateOfflineClients(callback: (clientId: String) -> Unit) {
         val sql = "SELECT client_id FROM $sessionsTableName WHERE connected = false"
         try {
-            val results = sqlClient.executeQuerySync(sql)
+            val results = sqlClient.executeQueryDirect(sql)
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
@@ -146,7 +146,7 @@ class SessionStoreSQLite(
     override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit) {
         val sql = "SELECT client_id, node_id, connected, clean_session FROM $sessionsTableName"
         try {
-            val results = sqlClient.executeQuerySync(sql)
+            val results = sqlClient.executeQueryDirect(sql)
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
@@ -164,7 +164,7 @@ class SessionStoreSQLite(
         val sql = "SELECT client_id, clean_session, last_will_topic, last_will_message, last_will_qos, last_will_retain FROM $sessionsTableName WHERE node_id = ?"
         val params = JsonArray().add(nodeId)
         try {
-            val results = sqlClient.executeQuerySync(sql, params)
+            val results = sqlClient.executeQueryDirect(sql, params)
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
@@ -240,7 +240,7 @@ class SessionStoreSQLite(
         val sql = "SELECT connected FROM $sessionsTableName WHERE client_id = ?"
         val params = JsonArray().add(clientId)
 
-        val results = sqlClient.executeQuerySync(sql, params)
+        val results = sqlClient.executeQueryDirect(sql, params)
         return if (results.size() > 0) {
             val row = results.getJsonObject(0)
             row.getBoolean("connected", false)
@@ -253,7 +253,7 @@ class SessionStoreSQLite(
         val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ?"
         val params = JsonArray().add(clientId)
 
-        val results = sqlClient.executeQuerySync(sql, params)
+        val results = sqlClient.executeQueryDirect(sql, params)
         return results.size() > 0
     }
 
@@ -301,10 +301,10 @@ class SessionStoreSQLite(
             batchParams.add(params)
         }
 
-        sqlClient.executeBatch(sql, batchParams).onComplete { result ->
-            if (result.failed()) {
-                logger.warning("Error adding subscriptions: ${result.cause()?.message}")
-            }
+        try {
+            sqlClient.executeBatchSync(sql, batchParams)
+        } catch (e: Exception) {
+            logger.warning("Error adding subscriptions: ${e.message}")
         }
     }
 
@@ -320,10 +320,10 @@ class SessionStoreSQLite(
             batchParams.add(params)
         }
 
-        sqlClient.executeBatch(sql, batchParams).onComplete { result ->
-            if (result.failed()) {
-                logger.warning("Error deleting subscriptions: ${result.cause()?.message}")
-            }
+        try {
+            sqlClient.executeBatchSync(sql, batchParams)
+        } catch (e: Exception) {
+            logger.warning("Error deleting subscriptions: ${e.message}")
         }
     }
 
@@ -333,7 +333,7 @@ class SessionStoreSQLite(
         val params = JsonArray().add(clientId)
 
         try {
-            val results = sqlClient.executeQuerySync(selectSql, params)
+            val results = sqlClient.executeQueryDirect(selectSql, params)
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val topic = rowObj.getString("topic")

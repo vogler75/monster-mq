@@ -5,10 +5,12 @@ import at.rocworks.data.MqttSubscription
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.WorkerExecutor
 import io.vertx.core.json.JsonObject
 import java.util.concurrent.Callable
 
 class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(), ISessionStoreAsync {
+    private lateinit var dbExecutor: WorkerExecutor
 
     override fun getType(): SessionStoreType {
         return store.getType()
@@ -17,127 +19,111 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
     override val sync: ISessionStoreSync
         get() = store
 
+    override fun start(startPromise: Promise<Void>) {
+        dbExecutor = vertx.createSharedWorkerExecutor("SessionStoreExecutor", 1)
+        startPromise.complete()
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        if (::dbExecutor.isInitialized) {
+            dbExecutor.close()
+        }
+        stopPromise.complete()
+    }
+
     override fun iterateOfflineClients(callback: (clientId: String) -> Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.iterateOfflineClients(callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun iterateConnectedClients(callback: (clientId: String, nodeId: String) -> Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.iterateConnectedClients(callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun iterateAllSessions(callback: (clientId: String, nodeId: String, connected: Boolean, cleanSession: Boolean) -> Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.iterateAllSessions(callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun iterateNodeClients(nodeId: String, callback: (clientId: String, cleanSession: Boolean, lastWill: BrokerMessage) -> Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.iterateNodeClients(nodeId, callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.iterateSubscriptions(callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun setClient(clientId: String, nodeId: String, cleanSession: Boolean, connected: Boolean, information: JsonObject): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.setClient(clientId, nodeId, cleanSession, connected, information)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun setLastWill(clientId: String, message: BrokerMessage?): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.setLastWill(clientId, message)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun setConnected(clientId: String, connected: Boolean): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.setConnected(clientId, connected)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun isConnected(clientId: String): Future<Boolean> {
-        val promise = Promise.promise<Boolean>()
-        vertx.executeBlocking(Callable {
-            promise.complete(store.isConnected(clientId))
+        return dbExecutor.executeBlocking(Callable {
+            store.isConnected(clientId)
         })
-        return promise.future()
     }
 
     override fun isPresent(clientId: String): Future<Boolean> {
-        val promise = Promise.promise<Boolean>()
-        vertx.executeBlocking(Callable {
-            promise.complete(store.isPresent(clientId))
+        return dbExecutor.executeBlocking(Callable {
+            store.isPresent(clientId)
         })
-        return promise.future()
     }
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.addSubscriptions(subscriptions)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun delSubscriptions(subscriptions: List<MqttSubscription>): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.delSubscriptions(subscriptions)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun delClient(clientId: String, callback: (MqttSubscription)->Unit): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.delClient(clientId, callback)
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 
     override fun purgeSessions(): Future<Void> {
-        val promise = Promise.promise<Void>()
-        vertx.executeBlocking(Callable {
+        return dbExecutor.executeBlocking(Callable {
             store.purgeSessions()
-            promise.complete()
+            null
         })
-        return promise.future()
     }
 }
