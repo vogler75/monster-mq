@@ -141,6 +141,7 @@ open class SessionHandler(
         // Use global command key from Const to ensure interoperability with clients (e.g., MqttClient.consumeCommand)
         const val COMMAND_SUBSCRIBE = "S"
         const val COMMAND_UNSUBSCRIBE = "U"
+        private const val SUBSCRIPTION_ORIGIN_NODE_HEADER = "OriginNodeId"
     }
 
     enum class ClientStatus {
@@ -174,30 +175,17 @@ open class SessionHandler(
         vertx.eventBus().registerDefaultCodec(ClientNodeMapping::class.java, ClientNodeMappingCodec())
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionAddAddress) { message ->
-            val subscription = message.body()
-            // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(subscription.clientId, subscription.topicName, subscription.qos.value(), subscription.noLocal, subscription.retainAsPublished)
-
-            // Track topic subscriptions by node for targeted publishing (cluster replication)
-            val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
-            topicNodeMapping.addToSet(subscription.topicName, nodeId)
-            logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}] retainAsPublished=${subscription.retainAsPublished}" }
+            val originNodeId = message.headers().get(SUBSCRIPTION_ORIGIN_NODE_HEADER)
+            if (originNodeId != Monster.getClusterNodeId(vertx)) {
+                applySubscriptionAdded(message.body(), originNodeId)
+            }
         }
 
 
         vertx.eventBus().consumer<MqttSubscription>(subscriptionDelAddress) { message ->
-            val subscription = message.body()
-            // Remove from subscription manager
-            subscriptionManager.unsubscribe(subscription.clientId, subscription.topicName)
-
-            // Clean up topic-node mapping if no more clients on this node for this topic
-            val nodeId = clientNodeMapping.get(subscription.clientId) ?: Monster.getClusterNodeId(vertx)
-            val remainingClientsOnNode = subscriptionManager.findAllSubscribers(subscription.topicName)
-                .any { (clientId, _) -> clientNodeMapping.get(clientId) == nodeId }
-
-            if (!remainingClientsOnNode) {
-                topicNodeMapping.removeFromSet(subscription.topicName, nodeId)
-                logger.finest { "Removed topic subscription [${subscription.topicName}] for node [${nodeId}]" }
+            val originNodeId = message.headers().get(SUBSCRIPTION_ORIGIN_NODE_HEADER)
+            if (originNodeId != Monster.getClusterNodeId(vertx)) {
+                applySubscriptionDeleted(message.body(), originNodeId)
             }
         }
 
@@ -999,7 +987,8 @@ open class SessionHandler(
         vertx.eventBus().publish(clientStatusAddress, payload)
         val f1 = sessionStore.delClient(clientId) { subscription ->
             logger.finest { "Delete subscription [$subscription]" }
-            vertx.eventBus().publish(subscriptionDelAddress, subscription)
+            applySubscriptionDeleted(subscription)
+            publishSubscriptionEvent(subscriptionDelAddress, subscription)
         }
         val f2 = queueStore.deleteClientMessages(clientId)
         return Future.all(f1, f2).mapEmpty()
@@ -1015,6 +1004,44 @@ open class SessionHandler(
     }
 
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)
+
+    private fun applySubscriptionAdded(subscription: MqttSubscription, originNodeId: String? = null) {
+        subscriptionManager.subscribe(
+            subscription.clientId,
+            subscription.topicName,
+            subscription.qos.value(),
+            subscription.noLocal,
+            subscription.retainAsPublished
+        )
+
+        val nodeId = clientNodeMapping.get(subscription.clientId)
+            ?: originNodeId
+            ?: Monster.getClusterNodeId(vertx)
+        topicNodeMapping.addToSet(subscription.topicName, nodeId)
+        logger.finest { "Added topic subscription [${subscription.topicName}] for node [${nodeId}] retainAsPublished=${subscription.retainAsPublished}" }
+    }
+
+    private fun applySubscriptionDeleted(subscription: MqttSubscription, originNodeId: String? = null) {
+        subscriptionManager.unsubscribe(subscription.clientId, subscription.topicName)
+
+        val localNodeId = Monster.getClusterNodeId(vertx)
+        val nodeId = clientNodeMapping.get(subscription.clientId)
+            ?: originNodeId
+            ?: localNodeId
+        val remainingClientsOnNode = subscriptionManager.findAllSubscribers(subscription.topicName)
+            .any { (clientId, _) -> (clientNodeMapping.get(clientId) ?: localNodeId) == nodeId }
+
+        if (!remainingClientsOnNode) {
+            topicNodeMapping.removeFromSet(subscription.topicName, nodeId)
+            logger.finest { "Removed topic subscription [${subscription.topicName}] for node [${nodeId}]" }
+        }
+    }
+
+    private fun publishSubscriptionEvent(address: String, subscription: MqttSubscription) {
+        val nodeId = Monster.getClusterNodeId(vertx)
+        val options = DeliveryOptions().addHeader(SUBSCRIPTION_ORIGIN_NODE_HEADER, nodeId)
+        vertx.eventBus().publish(address, subscription, options)
+    }
 
     private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
         if (enqueueMessages) {
@@ -1062,7 +1089,8 @@ open class SessionHandler(
     }
 
     private fun addSubscription(subscription: MqttSubscription) {
-        vertx.eventBus().publish(subscriptionAddAddress, subscription)
+        applySubscriptionAdded(subscription)
+        publishSubscriptionEvent(subscriptionAddAddress, subscription)
         try {
             subAddQueue.add(subscription)
         } catch (e: IllegalStateException) {
@@ -1071,7 +1099,8 @@ open class SessionHandler(
     }
 
     private fun delSubscription(subscription: MqttSubscription) {
-        vertx.eventBus().publish(subscriptionDelAddress, subscription)
+        applySubscriptionDeleted(subscription)
+        publishSubscriptionEvent(subscriptionDelAddress, subscription)
         try {
             subDelQueue.add(subscription)
         } catch (e: IllegalStateException) {
@@ -1277,7 +1306,7 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0, retainAsPublished: Boolean = false) {
+    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0, retainAsPublished: Boolean = false): Future<Boolean> {
         val request = JsonObject()
             .put(Const.COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
@@ -1286,10 +1315,17 @@ open class SessionHandler(
             .put("noLocal", noLocal)  // MQTT v5 No Local option
             .put("retainHandling", retainHandling)  // MQTT v5 Retain Handling option
             .put("retainAsPublished", retainAsPublished)  // MQTT v5 Retain As Published option
-        vertx.eventBus().request<Boolean>(commandAddress(), request)
-            .onFailure { error ->
+        val result = Promise.promise<Boolean>()
+
+        vertx.eventBus().request<Boolean>(commandAddress(), request).onComplete { ar ->
+            if (ar.succeeded()) {
+                result.complete(ar.result().body())
+            } else {
+                val error = ar.cause()
                 logger.severe("Subscribe request failed [${error}] [${Utils.getCurrentFunctionName()}]")
+                result.fail(error)
             }
+        }
 
         // Check for OA subscription (!OA/<namespace>/<operation>/<name>)
         val oaParsed = Oa4jBridge.parseOaTopic(topicName)
@@ -1308,6 +1344,8 @@ open class SessionHandler(
                 // Future: Oa4jBridge.OP_DPT, Oa4jBridge.OP_SQL handlers
             }
         }
+
+        return result.future()
     }
 
     private fun subscribeCommand(command: Message<JsonObject>) {

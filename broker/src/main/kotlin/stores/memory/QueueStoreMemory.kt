@@ -37,9 +37,32 @@ class QueueStoreMemory(
         if (messages.isEmpty()) return
         val now = System.currentTimeMillis() / 1000
         messages.forEach { (message, clientIds) ->
+            val queuedMessage = if (!message.isQueued) {
+                BrokerMessage(
+                    messageUuid = message.messageUuid,
+                    messageId = message.messageId,
+                    topicName = message.topicName,
+                    payload = message.payload,
+                    qosLevel = message.qosLevel,
+                    isRetain = message.isRetain,
+                    isDup = message.isDup,
+                    isQueued = true,
+                    clientId = message.clientId,
+                    senderId = message.senderId,
+                    time = message.time,
+                    messageExpiryInterval = message.messageExpiryInterval,
+                    payloadFormatIndicator = message.payloadFormatIndicator,
+                    contentType = message.contentType,
+                    responseTopic = message.responseTopic,
+                    correlationData = message.correlationData,
+                    userProperties = message.userProperties
+                )
+            } else {
+                message
+            }
             clientIds.forEach { clientId ->
                 val queue = queues.computeIfAbsent(clientId) { CopyOnWriteArrayList() }
-                queue.add(MemoryQueuedMessage(message, now))
+                queue.add(MemoryQueuedMessage(queuedMessage, now))
             }
         }
         logger.fine { "Enqueued ${messages.size} messages in-memory for ${messages.sumOf { it.second.size }} clients" }

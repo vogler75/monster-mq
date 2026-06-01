@@ -745,7 +745,8 @@ class MqttClient(
         // For MQTT v5: use reason codes; for v3.1.1: use QoS values
         if (protocolVersion == 5) {
             // MQTT v5.0: Use MqttSubAckReasonCode
-            val reasonCodes = mutableListOf<MqttSubAckReasonCode>()
+            val reasonCodeFutures = mutableListOf<Future<MqttSubAckReasonCode>>()
+            val messageId = subscribe.messageId()
 
             subscribe.topicSubscriptions().forEach { subscription ->
                 val topic = subscription.topicName()
@@ -789,22 +790,34 @@ class MqttClient(
                     reasonCode = MqttSubAckReasonCode.qosGranted(subscription.qualityOfService())
                 }
 
-                reasonCodes.add(reasonCode)
-
                 // Forward allowed subscriptions to SessionHandler
                 if (allowed) {
                     logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()} noLocal=$noLocal retainHandling=$retainHandling retainAsPublished=$retainAsPublished" }
-                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling, retainAsPublished)
+                    val subFuture = sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling, retainAsPublished)
+                        .map { success ->
+                            if (success) reasonCode else MqttSubAckReasonCode.UNSPECIFIED_ERROR
+                        }
+                        .recover { error ->
+                            logger.warning("Client [$clientId] Subscription request failed for [$topic]: ${error.message}")
+                            Future.succeededFuture(MqttSubAckReasonCode.UNSPECIFIED_ERROR)
+                        }
+                    reasonCodeFutures.add(subFuture)
                 } else {
                     logger.fine { "Client [$clientId] Subscription REJECTED for [$topic] - reason: $reasonCode" }
+                    reasonCodeFutures.add(Future.succeededFuture(reasonCode))
                 }
             }
 
-            // Send MQTT v5 SUBACK with reason codes
-            endpoint.subscribeAcknowledge(subscribe.messageId(), reasonCodes, MqttProperties.NO_PROPERTIES)
+            Future.all<MqttSubAckReasonCode>(reasonCodeFutures).onComplete {
+                val reasonCodes = reasonCodeFutures.map { future ->
+                    if (future.succeeded()) future.result() else MqttSubAckReasonCode.UNSPECIFIED_ERROR
+                }
+                endpoint.subscribeAcknowledge(messageId, reasonCodes, MqttProperties.NO_PROPERTIES)
+            }
         } else {
             // MQTT v3.1.1: Use QoS values (backward compatibility)
-            val acknowledgements = mutableListOf<MqttQoS>()
+            val acknowledgementFutures = mutableListOf<Future<MqttQoS>>()
+            val messageId = subscribe.messageId()
 
             subscribe.topicSubscriptions().forEach { subscription ->
                 val topic = subscription.topicName()
@@ -833,20 +846,30 @@ class MqttClient(
                     }
                 }
 
-                // Build acknowledgement list
-                acknowledgements.add(if (allowed) subscription.qualityOfService() else MqttQoS.FAILURE)
-
                 // Forward allowed subscriptions to SessionHandler
                 if (allowed) {
                     logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()}" }
-                    sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
+                    val subFuture = sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService())
+                        .map { success ->
+                            if (success) subscription.qualityOfService() else MqttQoS.FAILURE
+                        }
+                        .recover { error ->
+                            logger.warning("Client [$clientId] Subscription request failed for [$topic]: ${error.message}")
+                            Future.succeededFuture(MqttQoS.FAILURE)
+                        }
+                    acknowledgementFutures.add(subFuture)
                 } else {
                     logger.fine { "Client [$clientId] Subscription REJECTED for [$topic]" }
+                    acknowledgementFutures.add(Future.succeededFuture(MqttQoS.FAILURE))
                 }
             }
 
-            // Send MQTT v3.1.1 SUBACK with QoS values
-            endpoint.subscribeAcknowledge(subscribe.messageId(), acknowledgements)
+            Future.all<MqttQoS>(acknowledgementFutures).onComplete {
+                val acknowledgements = acknowledgementFutures.map { future ->
+                    if (future.succeeded()) future.result() else MqttQoS.FAILURE
+                }
+                endpoint.subscribeAcknowledge(messageId, acknowledgements)
+            }
         }
     }
 
@@ -1560,6 +1583,12 @@ class MqttClient(
             
             if (shouldCheckNext) {
                 publishMessageCheckNext()
+            }
+            
+            // Periodic wakeup fallback: if the queue processing is idle but the client is connected,
+            // ready, and has no active messages in flight, trigger a wakeup to fetch any expired/recovered locked messages!
+            if (!isProcessingQueue && ready && endpoint.isConnected && inFlightMessagesSnd.isEmpty()) {
+                vertx.runOnContext { onMessageAvailable() }
             }
         } catch (e: NoSuchElementException) {
             // no messages in queue

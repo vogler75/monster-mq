@@ -73,21 +73,25 @@ def test_high_speed_queuing(cfg):
     offline_lock = threading.Lock()
     online_lock = threading.Lock()
     
+    import traceback
+    
     def on_offline_message(client, userdata, msg):
         try:
             data = json.loads(msg.payload)
             with offline_lock:
                 sub_offline_received.append(data["seq"])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[CALLBACK ERROR] offline subscriber: {e}")
+            traceback.print_exc()
 
     def on_online_message(client, userdata, msg):
         try:
             data = json.loads(msg.payload)
             with online_lock:
                 sub_online_received.append(data["seq"])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[CALLBACK ERROR] online subscriber: {e}")
+            traceback.print_exc()
 
     # -- Step 1: Connect sub_offline, subscribe, disconnect --
     print(f"\n[TEST] Setting up offline subscriber persistent session {sub_offline_id}")
