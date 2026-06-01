@@ -26,6 +26,15 @@ class SessionStoreSQLite(
     private val sessionsTableName = "sessions"
     private val subscriptionsTableName = "subscriptions"
 
+    private fun JsonObject.readBoolean(key: String, default: Boolean = false): Boolean {
+        return when (val value = getValue(key)) {
+            null -> default
+            is Boolean -> value
+            is Number -> value.toInt() != 0
+            is String -> value == "1" || value.equals("true", ignoreCase = true)
+            else -> default
+        }
+    }
 
     override fun getType(): SessionStoreType = storeType
 
@@ -151,8 +160,8 @@ class SessionStoreSQLite(
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
                 val nodeId = rowObj.getString("node_id") ?: ""
-                val connected = rowObj.getBoolean("connected") ?: false
-                val cleanSession = rowObj.getBoolean("clean_session") ?: true
+                val connected = rowObj.readBoolean("connected", false)
+                val cleanSession = rowObj.readBoolean("clean_session", true)
                 callback(clientId, nodeId, connected, cleanSession)
             }
         } catch (e: Exception) {
@@ -168,14 +177,14 @@ class SessionStoreSQLite(
             results.forEach { row ->
                 val rowObj = row as JsonObject
                 val clientId = rowObj.getString("client_id")
-                val cleanSession = rowObj.getBoolean("clean_session", false)
+                val cleanSession = rowObj.readBoolean("clean_session", false)
 
                 // Reconstruct last will message
                 val lastWillTopic = rowObj.getString("last_will_topic")
                 val lastWill = if (lastWillTopic != null) {
                     val payload = rowObj.getBinary("last_will_message") ?: ByteArray(0)
                     val qos = rowObj.getInteger("last_will_qos", 0)
-                    val retain = rowObj.getBoolean("last_will_retain", false)
+                    val retain = rowObj.readBoolean("last_will_retain", false)
                     BrokerMessage(
                         messageUuid = "",
                         messageId = 0,
@@ -243,7 +252,7 @@ class SessionStoreSQLite(
         val results = sqlClient.executeQueryDirect(sql, params)
         return if (results.size() > 0) {
             val row = results.getJsonObject(0)
-            row.getBoolean("connected", false)
+            row.readBoolean("connected", false)
         } else {
             false
         }

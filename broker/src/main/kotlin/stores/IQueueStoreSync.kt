@@ -5,11 +5,8 @@ import at.rocworks.data.BrokerMessage
 enum class QueueStoreType {
     MEMORY,
     POSTGRES,
-    POSTGRES_V2,
     MONGODB,
-    MONGODB_V2,
-    SQLITE,
-    SQLITE_V2
+    SQLITE
 }
 
 interface IQueueStoreSync {

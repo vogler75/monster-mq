@@ -11,7 +11,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * High-performance, ultra-reliable in-memory queue store implementing visibility timeouts (vt).
- * Replaces all database V2 queue stores to guarantee zero lock contention and 100% reliable operation.
+ * In-memory queue store with zero database lock contention.
  */
 class QueueStoreMemory(
     private val visibilityTimeoutSeconds: Int = 30
