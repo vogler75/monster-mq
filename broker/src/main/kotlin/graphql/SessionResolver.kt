@@ -66,10 +66,8 @@ class SessionResolver(
                             // Session exists - disconnect it via bus command (cluster-aware)
                             sessionHandler.disconnectClient(clientId, "Removed via GraphQL API")
 
-                            // Remove session from database (for persistent sessions)
-                            sessionStore.delClient(clientId) { subscription ->
-                                logger.finest("Deleted subscription for removed session: $subscription")
-                            }.onComplete { delResult ->
+                            // Remove session from broker completely (disconnect, db sessions, db subscriptions, db queue, in-memory)
+                            sessionHandler.delClient(clientId).onComplete { delResult ->
                                 processedCount++
 
                                 if (delResult.succeeded()) {
@@ -88,11 +86,11 @@ class SessionResolver(
                                         SessionRemovalDetail(
                                             clientId = clientId,
                                             success = false,
-                                            error = "Failed to remove session from database: ${delResult.cause()?.message}",
+                                            error = "Failed to remove session: ${delResult.cause()?.message}",
                                             nodeId = null
                                         )
                                     )
-                                    logger.warning("Failed to remove session $clientId from database: ${delResult.cause()?.message}")
+                                    logger.warning("Failed to remove session $clientId: ${delResult.cause()?.message}")
                                 }
 
                                 // Check if all sessions have been processed

@@ -123,6 +123,27 @@
       "default": true,
       "description": "Allow clients to subscribe to '#' (root wildcard). If false, SUBSCRIBE acknowledgements for '#' return failure (0x80) and the client remains connected."
     },
+    "Queues": {
+      "type": "object",
+      "description": "Internal queue capacity and batch configuration for high-load broker operations.",
+      "properties": {
+        "SubscriptionQueueSize": {
+          "type": "integer",
+          "default": 50000,
+          "description": "Queue capacity for subscription add/delete operations (default: 50,000)."
+        },
+        "MessageQueueSize": {
+          "type": "integer",
+          "default": 50000,
+          "description": "Queue capacity for outbound client message queue operations (default: 50,000)."
+        },
+        "DatabaseBatchSize": {
+          "type": "integer",
+          "default": 10000,
+          "description": "Batch/bulk size for database queue write/delete operations (default: 10,000)."
+        }
+      }
+    },
     "Metrics": {
       "type": "object",
       "description": "Broker metrics collection and history storage configuration.",

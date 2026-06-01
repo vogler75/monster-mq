@@ -439,10 +439,11 @@ open class SessionHandler(
             }
         }
 
-        queueWorkerThread("SubAddQueue", subAddQueue, 1000, sessionStore::addSubscriptions)
-        queueWorkerThread("SubDelQueue", subDelQueue, 1000, sessionStore::delSubscriptions)
+        val databaseBatchSize = Monster.getDatabaseBatchSize()
+        queueWorkerThread("SubAddQueue", subAddQueue, databaseBatchSize, sessionStore::addSubscriptions)
+        queueWorkerThread("SubDelQueue", subDelQueue, databaseBatchSize, sessionStore::delSubscriptions)
 
-        queueWorkerThread("MsgAddQueue", msgAddQueue, 1000) { block ->
+        queueWorkerThread("MsgAddQueue", msgAddQueue, databaseBatchSize) { block ->
             val future = queueStore.enqueueMessages(block)
             future.onComplete {
                 // After DB write completes, send triggers to all affected clients
@@ -453,7 +454,7 @@ open class SessionHandler(
             }
             future
         }
-        queueWorkerThread("MsgDelQueue", msgDelQueue, 1000, queueStore::removeMessages)
+        queueWorkerThread("MsgDelQueue", msgDelQueue, databaseBatchSize, queueStore::removeMessages)
 
         // Only subscribe to message bus if it's Kafka (external source)
         // Internal Vert.x message bus broadcast is no longer used - we use targeted messaging
@@ -941,15 +942,21 @@ open class SessionHandler(
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.CREATED)
         val f1 = sessionStore.setClient(clientId, nodeId, cleanSession, true, information)
+        val f2 = if (cleanSession) {
+            queueStore.deleteClientMessages(clientId)
+        } else {
+            Future.succeededFuture<Void>()
+        }
+        val fCombined = Future.all(f1, f2).mapEmpty<Void>()
         return if (Monster.isClustered()) {
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
+            Future.all<Any>(listOf(fCombined)+fx as List<Future<*>>).mapEmpty()
 
         } else {
-            val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
-            Future.all(f1, f2).mapEmpty()
+            val f3 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
+            Future.all(fCombined, f3).mapEmpty()
         }
     }
 
@@ -989,10 +996,12 @@ open class SessionHandler(
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
         vertx.eventBus().publish(clientStatusAddress, payload)
-        return sessionStore.delClient(clientId) { subscription ->
+        val f1 = sessionStore.delClient(clientId) { subscription ->
             logger.finest { "Delete subscription [$subscription]" }
             vertx.eventBus().publish(subscriptionDelAddress, subscription)
         }
+        val f2 = queueStore.deleteClientMessages(clientId)
+        return Future.all(f1, f2).mapEmpty()
     }
 
     fun setLastWill(clientId: String, will: MqttWill): Future<Void> {
