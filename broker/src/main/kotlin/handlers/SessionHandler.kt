@@ -24,8 +24,10 @@ import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
 import io.vertx.mqtt.MqttWill
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -61,11 +63,11 @@ open class SessionHandler(
     private var lastMetricsResetTime = System.currentTimeMillis()
     private val messageBusLastResetTime = AtomicLong(System.currentTimeMillis())
 
-    private val subAddQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(Monster.getSubscriptionQueueSize())
-    private val subDelQueue: ArrayBlockingQueue<MqttSubscription> = ArrayBlockingQueue(Monster.getSubscriptionQueueSize())
+    private val subAddQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
+    private val subDelQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
 
-    private val msgAddQueue: ArrayBlockingQueue<Pair<BrokerMessage, List<String>>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
-    private val msgDelQueue: ArrayBlockingQueue<Pair<String, String>> = ArrayBlockingQueue(Monster.getMessageQueueSize())
+    private val msgAddQueue: BlockingQueue<Pair<BrokerMessage, List<String>>> = createMessageQueue()
+    private val msgDelQueue: BlockingQueue<Pair<String, String>> = createMessageQueue()
 
     // Use unified EventBus addresses
     private val subscriptionAddAddress = EventBusAddresses.Cluster.SUBSCRIPTION_ADD
@@ -142,6 +144,24 @@ open class SessionHandler(
         const val COMMAND_SUBSCRIBE = "S"
         const val COMMAND_UNSUBSCRIBE = "U"
         private const val SUBSCRIPTION_ORIGIN_NODE_HEADER = "OriginNodeId"
+
+        private fun <T> createSubscriptionQueue(): BlockingQueue<T> {
+            val size = Monster.getSubscriptionQueueSize()
+            return if (size == 0) {
+                LinkedBlockingQueue()
+            } else {
+                ArrayBlockingQueue(size)
+            }
+        }
+
+        private fun <T> createMessageQueue(): BlockingQueue<T> {
+            val size = Monster.getMessageQueueSize()
+            return if (size == 0) {
+                LinkedBlockingQueue()
+            } else {
+                ArrayBlockingQueue(size)
+            }
+        }
     }
 
     enum class ClientStatus {
@@ -628,7 +648,7 @@ open class SessionHandler(
 
     private fun <T> queueWorkerThread(
         name: String,
-        queue: ArrayBlockingQueue<T>,
+        queue: BlockingQueue<T>,
         blockSize: Int,
         execute: (block: List<T>)->Future<Void>
     ) /*= thread(start = true)*/ {
@@ -1048,7 +1068,7 @@ open class SessionHandler(
             try {
                 msgAddQueue.add(Pair(message, clientIds))
             } catch (e: IllegalStateException) {
-                logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${msgAddQueue.remainingCapacity() + msgAddQueue.size}). Message [${message.topicName}] to ${clientIds.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml")
+                logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${queueCapacityLabel(msgAddQueue)}). Message [${message.topicName}] to ${clientIds.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml or set it to 0 for an unbounded queue")
             }
         }
     }
@@ -1059,8 +1079,13 @@ open class SessionHandler(
         try {
             msgDelQueue.add(Pair(clientId, messageUuid))
         } catch (e: IllegalStateException) {
-            logger.severe("CRITICAL: Message delete queue overflow! Queue is full (${msgDelQueue.size}/${msgDelQueue.remainingCapacity() + msgDelQueue.size}). Message removal for client [${clientId}] msg [${messageUuid}] will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml")
+            logger.severe("CRITICAL: Message delete queue overflow! Queue is full (${msgDelQueue.size}/${queueCapacityLabel(msgDelQueue)}). Message removal for client [${clientId}] msg [${messageUuid}] will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml or set it to 0 for an unbounded queue")
         }
+    }
+
+    private fun queueCapacityLabel(queue: BlockingQueue<*>): String {
+        val remainingCapacity = queue.remainingCapacity()
+        return if (remainingCapacity == Int.MAX_VALUE) "unbounded" else (queue.size + remainingCapacity).toString()
     }
 
     // Status-based message tracking methods
@@ -1094,7 +1119,7 @@ open class SessionHandler(
         try {
             subAddQueue.add(subscription)
         } catch (e: IllegalStateException) {
-            logger.severe("CRITICAL: Subscription queue overflow! Queue is full (${subAddQueue.size}/${subAddQueue.remainingCapacity() + subAddQueue.size}). Client [${subscription.clientId}] subscription to [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml")
+            logger.severe("CRITICAL: Subscription queue overflow! Queue is full (${subAddQueue.size}/${queueCapacityLabel(subAddQueue)}). Client [${subscription.clientId}] subscription to [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml or set it to 0 for an unbounded queue")
         }
     }
 
@@ -1104,7 +1129,7 @@ open class SessionHandler(
         try {
             subDelQueue.add(subscription)
         } catch (e: IllegalStateException) {
-            logger.severe("CRITICAL: Subscription delete queue overflow! Queue is full (${subDelQueue.size}/${subDelQueue.remainingCapacity() + subDelQueue.size}). Client [${subscription.clientId}] unsubscription from [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml")
+            logger.severe("CRITICAL: Subscription delete queue overflow! Queue is full (${subDelQueue.size}/${queueCapacityLabel(subDelQueue)}). Client [${subscription.clientId}] unsubscription from [${subscription.topicName}] will be LOST. Increase 'Queues.SubscriptionQueueSize' in config.yaml or set it to 0 for an unbounded queue")
         }
     }
 

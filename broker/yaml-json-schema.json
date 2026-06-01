@@ -123,13 +123,13 @@
       "properties": {
         "SubscriptionQueueSize": {
           "type": "integer",
-          "default": 50000,
-          "description": "Queue capacity for subscription add/delete operations (default: 50,000)."
+          "default": 0,
+          "description": "Queue capacity for subscription add/delete operations (default: 0, unbounded). Set a positive value for a bounded in-memory queue."
         },
         "MessageQueueSize": {
           "type": "integer",
-          "default": 100000,
-          "description": "Queue capacity for outbound client message queue operations (default: 100,000)."
+          "default": 0,
+          "description": "Queue capacity for outbound client message queue operations (default: 0, unbounded). Set a positive value for a bounded in-memory queue."
         },
         "DatabaseBatchSize": {
           "type": "integer",

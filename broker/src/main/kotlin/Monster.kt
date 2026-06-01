@@ -726,19 +726,19 @@ MORE INFO:
                 }
                 logger.fine("Config: MaxSubscribeRate=$maxSubscribeRate msg/s" + if (maxSubscribeRate == 0) " (unlimited)" else "")
 
-                // Read queue size configuration (defaults: 50,000 for each queue type)
+                // Read queue size configuration (default: 0 means unbounded)
                 configJson.getJsonObject("Queues", JsonObject()).let { queuesConfig ->
                     subscriptionQueueSize = try {
-                        queuesConfig.getInteger("SubscriptionQueueSize", 50_000)
+                        queuesConfig.getInteger("SubscriptionQueueSize", 0)
                     } catch (e: Exception) {
                         logger.warning("Config: Queues.SubscriptionQueueSize read failed: ${e.message}")
-                        50_000
+                        0
                     }
                     messageQueueSize = try {
-                        queuesConfig.getInteger("MessageQueueSize", 100_000)
+                        queuesConfig.getInteger("MessageQueueSize", 0)
                     } catch (e: Exception) {
                         logger.warning("Config: Queues.MessageQueueSize read failed: ${e.message}")
-                        100_000
+                        0
                     }
                     databaseBatchSize = try {
                         queuesConfig.getInteger("DatabaseBatchSize", 10000)
