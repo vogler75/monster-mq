@@ -62,7 +62,16 @@ abstract class DatabaseConnection(
         val promise = Promise.promise<Void>()
         try {
             logger.fine { "Connect to database [${Utils.getCurrentFunctionName()}]" }
-            DriverManager.getConnection(url, username, password)
+            val finalUrl = if (url.startsWith("jdbc:postgresql:") && !url.contains("reWriteBatchedInserts=")) {
+                if (url.contains("?")) {
+                    "$url&reWriteBatchedInserts=true"
+                } else {
+                    "$url?reWriteBatchedInserts=true"
+                }
+            } else {
+                url
+            }
+            DriverManager.getConnection(finalUrl, username, password)
                 ?.let { connection ->
                     this.connection = connection
                     if (disconnectedLogged) {
@@ -83,16 +92,7 @@ abstract class DatabaseConnection(
     fun check(): Boolean {
         if (connection != null && !connection!!.isClosed) {
             try {
-                connection!!.prepareStatement("SELECT 1").use { stmt ->
-                    stmt.executeQuery().use { rs ->
-                        if (rs.next()) {
-                            // Commit to avoid holding an open transaction from the health check
-                            // (only when autoCommit is off — some stores use autoCommit=true)
-                            if (!connection!!.autoCommit) connection!!.commit()
-                            return true // Connection is good
-                        }
-                    }
-                }
+                return connection!!.isValid(3)
             } catch (e: Exception) {
                 logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 // If the connection has an aborted transaction, try to rollback

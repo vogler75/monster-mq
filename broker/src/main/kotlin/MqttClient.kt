@@ -200,6 +200,17 @@ class MqttClient(
             return
         }
 
+        val maxInFlight = if (endpoint.protocolVersion() == 5) {
+            clientReceiveMaximum
+        } else {
+            Monster.getMaxInFlightMessages()
+        }
+
+        if (inFlightMessagesSnd.size >= maxInFlight) {
+            logger.finest { "Client [$clientId] Queue processing paused: outstanding in-flight (${inFlightMessagesSnd.size}) >= max ($maxInFlight)" }
+            return
+        }
+
         fetchNextMessageFromCacheOrDb().onComplete { result ->
             if (result.failed()) {
                 logger.warning { "Client [$clientId] Error fetching next pending message: ${result.cause()?.message} [${Utils.getCurrentFunctionName()}]" }
@@ -213,7 +224,7 @@ class MqttClient(
                 if (triggerPending) {
                     triggerPending = false
                     logger.finest { "Client [$clientId] Queue empty but trigger pending, checking again [${Utils.getCurrentFunctionName()}]" }
-                    processNextMessage()  // Try once more
+                    vertx.runOnContext { processNextMessage() }
                 } else {
                     logger.finest { "Client [$clientId] Queue empty, going idle [${Utils.getCurrentFunctionName()}]" }
                     isProcessingQueue = false  // Go idle
@@ -226,9 +237,11 @@ class MqttClient(
             val msgWithId = msg.cloneWithNewMessageId(getNextMessageId())
             logger.finest { "Client [$clientId] Publishing queued message [${msgWithId.messageId}] for topic [${msgWithId.topicName}] [${Utils.getCurrentFunctionName()}]" }
             publishMessage(msgWithId)
+
+            // Continue processing the next message on the event loop context to fill the window
+            vertx.runOnContext { processNextMessage() }
         }
     }
-
     /**
      * Fetch the next message from local cache, or fetch a batch from the database if cache is empty.
      */
@@ -1388,7 +1401,7 @@ class MqttClient(
             
             // Perform DB work outside lock
             if (wasQueued) {
-                sessionHandler.markMessageDelivered(clientId, foundMessage.messageUuid)
+                sessionHandler.removeMessage(clientId, foundMessage.messageUuid)
             }
             
             // Process next message outside lock
@@ -1465,7 +1478,7 @@ class MqttClient(
             
             // Perform DB work outside lock
             if (wasQueued) {
-                sessionHandler.markMessageDelivered(clientId, foundMessage.messageUuid)
+                sessionHandler.removeMessage(clientId, foundMessage.messageUuid)
             }
             
             // Process next message outside lock

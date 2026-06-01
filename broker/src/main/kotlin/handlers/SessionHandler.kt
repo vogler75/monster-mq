@@ -560,6 +560,13 @@ open class SessionHandler(
                     // Client connected to this node but we're restarting - mark as paused for now
                     // It will reconnect and update the status properly
                     clientStatus[clientId] = ClientStatus.PAUSED
+                    clientDetails[clientId] = ClientDetails(
+                        nodeId = localNodeId,
+                        clientAddress = null,
+                        cleanSession = cleanSession,
+                        sessionExpiryInterval = null,
+                        information = null
+                    )
                     logger.finest { "Loaded local client [${clientId}] as paused (node restart)" }
                 }
             } else {
@@ -567,6 +574,13 @@ open class SessionHandler(
                 if (!cleanSession) {
                     // Persistent session - mark as paused so messages can be queued
                     clientStatus[clientId] = ClientStatus.PAUSED
+                    clientDetails[clientId] = ClientDetails(
+                        nodeId = nodeId,
+                        clientAddress = null,
+                        cleanSession = false,
+                        sessionExpiryInterval = null,
+                        information = null
+                    )
                     logger.finest { "Loaded offline persistent client [${clientId}]" }
                 }
                 // Clean sessions that are offline are ignored (will be cleaned up by purge)
