@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -151,14 +151,15 @@ fn main() {
         pub_ready.wait();
         println!("[PUB] Connected successfully to {pub_host}:{pub_port}");
 
-        let payload_base = args.payload.unwrap_or_else(|| "hello from monstermq rust client".to_string());
+        let payload_base = args.payload.unwrap_or_else(|| "{\"ts\":{ts},\"seq\":{seq}}".to_string());
         let total_to_pub = args.count;
-        let mut seq: u64 = 0;
+        let mut seq: u64 = 1;
+        let mut published = 0;
 
         println!("Publishing to topic '{}' with QoS {}...", pub_topic, args.qos);
         
         loop {
-            if total_to_pub > 0 && seq >= total_to_pub {
+            if total_to_pub > 0 && published >= total_to_pub {
                 break;
             }
             
@@ -169,15 +170,16 @@ fn main() {
 
             pub_client.publish(&pub_topic, qos, false, payload.as_bytes()).unwrap();
             seq += 1;
+            published += 1;
             
-            if total_to_pub > 0 && seq >= total_to_pub {
+            if total_to_pub > 0 && published >= total_to_pub {
                 break;
             }
             
             thread::sleep(interval);
         }
 
-        println!("Successfully published {} messages.", seq);
+        println!("Successfully published {} messages.", published);
         // Wait a short duration to ensure packet hits TCP buffer before disconnect
         thread::sleep(Duration::from_millis(200));
         let _ = pub_client.disconnect();
@@ -188,11 +190,22 @@ fn main() {
     if let Some(custom_topic) = args.topic {
         let total_count = Arc::new(AtomicUsize::new(0));
         let interval_count = Arc::new(AtomicUsize::new(0));
+        let total_lost = Arc::new(AtomicUsize::new(0));
+        let total_duplicates = Arc::new(AtomicUsize::new(0));
+        let total_out_of_order = Arc::new(AtomicUsize::new(0));
         
         let total_count_clone = Arc::clone(&total_count);
         let interval_count_clone = Arc::clone(&interval_count);
+        let total_lost_clone = Arc::clone(&total_lost);
+        let total_duplicates_clone = Arc::clone(&total_duplicates);
+        let total_out_of_order_clone = Arc::clone(&total_out_of_order);
 
-        let start = Instant::now();
+        let start_time = Arc::new(Mutex::new(Instant::now()));
+        let start_time_clone = Arc::clone(&start_time);
+        
+        let should_reset_stats = Arc::new(AtomicBool::new(false));
+        let should_reset_stats_clone = Arc::clone(&should_reset_stats);
+
         let topic_str = custom_topic.clone();
         let sub_host_print = sub_host.clone();
         let qos_val = args.qos;
@@ -200,6 +213,9 @@ fn main() {
         // Spawn reporting thread
         thread::spawn(move || {
             let mut last_report = Instant::now();
+            let mut max_rate: f64 = 0.0;
+            let mut active_elapsed_secs: f64 = 0.0;
+            let mut overall_rate: f64 = 0.0;
             println!("\n============================================================");
             println!(" MonsterMQ Live Throughput Monitor (Rust)");
             println!("============================================================");
@@ -207,20 +223,46 @@ fn main() {
             println!("  Topic:  '{}'", topic_str);
             println!("  QoS:    {}", qos_val);
             println!("------------------------------------------------------------");
-            println!("  Format: [Elapsed] | Live Rate (msgs/s) | Running Average | Total Received");
+            println!("  Format: [Elapsed] | Live Rate (msgs/s) | Peak Rate (msgs/s) | Running Average | Total Received | Lost | Dup | OutOrder");
             println!("------------------------------------------------------------");
             
             loop {
                 thread::sleep(Duration::from_secs(1));
                 let now = Instant::now();
-                let elapsed = start.elapsed().as_secs_f64();
+                let start_instant = {
+                    if let Ok(guard) = start_time_clone.lock() {
+                        *guard
+                    } else {
+                        Instant::now()
+                    }
+                };
+                let elapsed = now.duration_since(start_instant).as_secs_f64();
                 let interval_elapsed = now.duration_since(last_report).as_secs_f64();
                 
                 let total = total_count_clone.load(Ordering::Relaxed);
                 let interval = interval_count_clone.swap(0, Ordering::Relaxed);
+                let lost = total_lost_clone.load(Ordering::Relaxed);
+                let dups = total_duplicates_clone.load(Ordering::Relaxed);
+                let ooo = total_out_of_order_clone.load(Ordering::Relaxed);
+                
+                if should_reset_stats_clone.swap(false, Ordering::Relaxed) {
+                    max_rate = 0.0;
+                    active_elapsed_secs = 0.0;
+                    overall_rate = 0.0;
+                }
                 
                 let current_rate = if interval_elapsed > 0.0 { interval as f64 / interval_elapsed } else { 0.0 };
-                let overall_rate = if elapsed > 0.0 { total as f64 / elapsed } else { 0.0 };
+                if current_rate > max_rate {
+                    max_rate = current_rate;
+                }
+                
+                // Only update the running average when new values are coming in (interval > 0)
+                if interval > 0 {
+                    active_elapsed_secs += interval_elapsed;
+                    if active_elapsed_secs > 0.0 {
+                        overall_rate = total as f64 / active_elapsed_secs;
+                    }
+                }
                 
                 let mins = elapsed as u64 / 60;
                 let secs = elapsed as u64 % 60;
@@ -228,8 +270,8 @@ fn main() {
                 let mins = mins % 60;
                 
                 print!(
-                    "\r  [{:02}:{:02}:{:02}] | Live: {:8.2} msg/s | Avg: {:8.2} msg/s | Total: {}",
-                    hours, mins, secs, current_rate, overall_rate, total
+                    "\r  [{:02}:{:02}:{:02}] | Live: {:8.2} msg/s | Peak: {:8.2} msg/s | Avg: {:8.2} msg/s | Total: {} | Lost: {} | Dup: {} | OutOrder: {}",
+                    hours, mins, secs, current_rate, max_rate, overall_rate, total, lost, dups, ooo
                 );
                 std::io::Write::flush(&mut std::io::stdout()).unwrap();
                 last_report = now;
@@ -250,14 +292,56 @@ fn main() {
         let (sub_client, mut sub_connection) = Client::new(sub_opts, 256);
         sub_client.subscribe(&custom_topic, qos).unwrap();
 
+        let mut expected_seq: Option<u64> = None;
+
         for notification in sub_connection.iter() {
             match notification {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
                     // Connected successfully
                 }
-                Ok(Event::Incoming(Packet::Publish(_))) => {
+                Ok(Event::Incoming(Packet::Publish(publish))) => {
                     total_count.fetch_add(1, Ordering::Relaxed);
                     interval_count.fetch_add(1, Ordering::Relaxed);
+
+                    if let Ok(payload_str) = std::str::from_utf8(&publish.payload) {
+                        if let Some(seq_f) = parse_field(payload_str, "seq") {
+                            let seq = seq_f as u64;
+                            if seq == 1 {
+                                total_lost.store(0, Ordering::Relaxed);
+                                total_duplicates.store(0, Ordering::Relaxed);
+                                total_out_of_order.store(0, Ordering::Relaxed);
+                                total_count.store(1, Ordering::Relaxed);
+                                if let Ok(mut guard) = start_time.lock() {
+                                    *guard = Instant::now();
+                                }
+                                should_reset_stats.store(true, Ordering::Relaxed);
+                                expected_seq = Some(2);
+                                eprintln!("\n[SEQUENCE RESET] Received sequence number 1. Resetting counters.");
+                            } else if let Some(expected) = expected_seq {
+                                if seq == expected {
+                                    expected_seq = Some(seq + 1);
+                                } else if seq > expected {
+                                    let lost = seq - expected;
+                                    total_lost.fetch_add(lost as usize, Ordering::Relaxed);
+                                    eprintln!(
+                                        "\n[SEQUENCE GAP] Gap detected! Expected {}, got {} (lost {})",
+                                        expected, seq, lost
+                                    );
+                                    expected_seq = Some(seq + 1);
+                                } else {
+                                    if seq == expected - 1 {
+                                        total_duplicates.fetch_add(1, Ordering::Relaxed);
+                                        eprintln!("\n[SEQUENCE DUPLICATE] Duplicate message! seq {}", seq);
+                                    } else {
+                                        total_out_of_order.fetch_add(1, Ordering::Relaxed);
+                                        eprintln!("\n[SEQUENCE OUT-OF-ORDER] Out-of-order/duplicate message! Expected {}, got {}", expected, seq);
+                                    }
+                                }
+                            } else {
+                                expected_seq = Some(seq + 1);
+                            }
+                        }
+                    }
                 }
                 Ok(Event::Incoming(Packet::Disconnect)) => {
                     eprintln!("\n[SUB] Disconnected from broker.");
@@ -329,12 +413,17 @@ fn main() {
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     let recv_ts = now_ms();
                     if let Ok(payload) = std::str::from_utf8(&publish.payload) {
+                        let parsed_seq = parse_field(payload, "seq").map(|s| s as u64);
+                        if parsed_seq == Some(1) {
+                            latencies_clone.lock().unwrap().clear();
+                            seqs_clone.lock().unwrap().clear();
+                        }
                         if let Some(send_ts) = parse_field(payload, "ts") {
                             let latency_ms = recv_ts - send_ts;
                             latencies_clone.lock().unwrap().push(latency_ms);
                         }
-                        if let Some(seq) = parse_field(payload, "seq") {
-                            seqs_clone.lock().unwrap().push(seq as u64);
+                        if let Some(seq) = parsed_seq {
+                            seqs_clone.lock().unwrap().push(seq);
                         }
                     }
                 }
@@ -395,7 +484,7 @@ fn main() {
 
     // -- Publish for the configured duration ----------------------------------
     let start = Instant::now();
-    let mut seq: u64 = 0;
+    let mut seq: u64 = 1;
     while start.elapsed() < duration {
         let payload = format!("{{\"ts\":{},\"seq\":{}}}", now_ms(), seq);
         pub_client
@@ -404,7 +493,7 @@ fn main() {
         seq += 1;
         thread::sleep(interval);
     }
-    let count = seq;
+    let count = seq - 1;
 
     // Wait for remaining messages to arrive
     thread::sleep(Duration::from_secs(1));
@@ -480,7 +569,7 @@ fn main() {
             }
         }
 
-        let expected: HashSet<u64> = (0..count).collect();
+        let expected: HashSet<u64> = (1..=count).collect();
         let missing: Vec<u64> = {
             let mut m: Vec<u64> = expected.difference(&seen).copied().collect();
             m.sort();
