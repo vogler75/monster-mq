@@ -81,8 +81,8 @@ class KafkaStreamOrchestrator(
                             flushBuffer()
                         }
 
-                        // Dynamic retention loop (runs every 12 hours)
-                        vertx.setPeriodic(12 * 60 * 60 * 1000L) {
+                        // Dynamic retention loop (runs every hour)
+                        vertx.setPeriodic(1 * 60 * 60 * 1000L) {
                             runRetentionPrune()
                         }
 
