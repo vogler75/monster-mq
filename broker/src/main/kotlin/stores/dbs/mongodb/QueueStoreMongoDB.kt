@@ -50,24 +50,29 @@ class QueueStoreMongoDB(
             countersCollection = database.getCollection("counters")
 
             vertx.executeBlocking(Callable {
-                try {
-                    collection.createIndex(
-                        Document("client_id", 1).append("vt", 1),
-                        IndexOptions().name("${collectionName}_fetch_idx")
-                    )
-                    collection.createIndex(
-                        Document("client_id", 1).append("message_uuid", 1),
-                        IndexOptions().name("${collectionName}_client_uuid_idx")
-                    )
-                    logger.info("MongoDB queue store indexes created successfully")
-                } catch (e: Exception) {
-                    logger.warning("Failed to create indexes: ${e.message}")
-                }
+                collection.createIndex(
+                    Document("client_id", 1).append("vt", 1).append("msg_id", 1),
+                    IndexOptions().name("${collectionName}_fetch_msg_id_idx")
+                )
+                collection.createIndex(
+                    Document("client_id", 1).append("msg_id", 1),
+                    IndexOptions().name("${collectionName}_client_fifo_idx")
+                )
+                collection.createIndex(
+                    Document("client_id", 1).append("message_uuid", 1),
+                    IndexOptions().name("${collectionName}_client_uuid_idx")
+                )
+                logger.info("MongoDB queue store indexes created successfully")
                 null
-            })
-
-            logger.fine("MongoDB queue store initialized.")
-            startPromise.complete()
+            }).onComplete { result ->
+                if (result.succeeded()) {
+                    logger.fine("MongoDB queue store initialized.")
+                    startPromise.complete()
+                } else {
+                    logger.severe("Failed to create MongoDB queue store indexes: ${result.cause()?.message}")
+                    startPromise.fail(result.cause())
+                }
+            }
         } catch (e: Exception) {
             logger.severe("Error while starting MongoDB queue store: ${e.message}")
             startPromise.fail(e)
@@ -79,13 +84,16 @@ class QueueStoreMongoDB(
         logger.info("MongoDB connection released.")
     }
 
-    private fun nextMsgId(): Long {
+    private fun nextMsgIds(count: Int): LongRange {
+        if (count <= 0) return LongRange.EMPTY
         val result = countersCollection.findOneAndUpdate(
             eq("_id", collectionName),
-            Document("\$inc", Document("seq", 1L)),
+            Document("\$inc", Document("seq", count.toLong())),
             FindOneAndUpdateOptions().upsert(true).returnDocument(ReturnDocument.AFTER)
         )
-        return result?.getLong("seq") ?: 1L
+        val end = result?.getLong("seq") ?: count.toLong()
+        val start = end - count + 1
+        return start..end
     }
 
     // -------------------------------------------------------------------------
@@ -93,12 +101,18 @@ class QueueStoreMongoDB(
     // -------------------------------------------------------------------------
 
     override fun enqueueMessages(messages: List<Pair<BrokerMessage, List<String>>>) {
+        if (messages.isEmpty()) return
+
         try {
+            val totalRows = messages.sumOf { it.second.size }
+            if (totalRows == 0) return
+
+            val msgIds = nextMsgIds(totalRows).iterator()
             val docs = mutableListOf<Document>()
             messages.forEach { (message, clientIds) ->
                 clientIds.forEach { clientId ->
                     docs.add(Document(mapOf(
-                        "msg_id" to nextMsgId(),
+                        "msg_id" to msgIds.nextLong(),
                         "message_uuid" to message.messageUuid,
                         "client_id" to clientId,
                         "topic" to message.topicName,
@@ -114,7 +128,7 @@ class QueueStoreMongoDB(
                 }
             }
             if (docs.isNotEmpty()) {
-                collection.insertMany(docs)
+                collection.insertMany(docs, InsertManyOptions().ordered(false))
             }
         } catch (e: Exception) {
             logger.warning("Error enqueuing messages: ${e.message} [${Utils.getCurrentFunctionName()}]")
@@ -135,6 +149,7 @@ class QueueStoreMongoDB(
                     lte("vt", now)
                 )
             ).sort(Document("msg_id", 1))
+                .hint(Document("client_id", 1).append("msg_id", 1))
 
             for (doc in cursor) {
                 if (isExpired(doc, currentTimeMillis)) continue
@@ -152,11 +167,13 @@ class QueueStoreMongoDB(
 
     override fun removeMessages(messages: List<Pair<String, String>>) {
         try {
-            val ops = messages.map { (clientId, messageUuid) ->
-                DeleteOneModel<Document>(
-                    and(eq("client_id", clientId), eq("message_uuid", messageUuid))
-                )
-            }
+            val ops = messages
+                .groupBy({ it.first }, { it.second })
+                .map { (clientId, messageUuids) ->
+                    DeleteManyModel<Document>(
+                        and(eq("client_id", clientId), `in`("message_uuid", messageUuids))
+                    )
+                }
             if (ops.isNotEmpty()) {
                 collection.bulkWrite(ops, BulkWriteOptions().ordered(false))
             }
@@ -182,7 +199,9 @@ class QueueStoreMongoDB(
                     eq("client_id", clientId),
                     lte("vt", now)
                 )
-            ).sort(Document("msg_id", 1)).limit(limit)
+            ).sort(Document("msg_id", 1))
+                .hint(Document("client_id", 1).append("msg_id", 1))
+                .limit(limit)
 
             results.mapNotNull { doc ->
                 if (isExpired(doc, currentTimeMillis)) null
@@ -210,7 +229,10 @@ class QueueStoreMongoDB(
                     eq("client_id", clientId),
                     lte("vt", now)
                 )
-            ).sort(Document("msg_id", 1)).limit(limit).toList()
+            ).sort(Document("msg_id", 1))
+                .hint(Document("client_id", 1).append("msg_id", 1))
+                .limit(limit)
+                .toList()
 
             if (docs.isEmpty()) return emptyList()
 
