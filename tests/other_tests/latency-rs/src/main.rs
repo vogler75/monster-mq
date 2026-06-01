@@ -126,22 +126,30 @@ fn main() {
 
         let (pub_client, mut pub_connection) = Client::new(pub_opts, 256);
 
+        let is_connected = Arc::new(AtomicBool::new(false));
+        let is_connected_clone = Arc::clone(&is_connected);
+
         // Wait for publisher ConnAck in background
         let pub_ready = Arc::new(std::sync::Barrier::new(2));
         let pub_ready_clone = Arc::clone(&pub_ready);
         thread::spawn(move || {
+            let mut has_signaled = false;
             for notification in pub_connection.iter() {
                 match notification {
                     Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                        pub_ready_clone.wait();
+                        is_connected_clone.store(true, Ordering::Relaxed);
+                        if !has_signaled {
+                            has_signaled = true;
+                            pub_ready_clone.wait();
+                        }
                     }
                     Err(e) => {
+                        is_connected_clone.store(false, Ordering::Relaxed);
                         eprintln!("\n[PUB] Connection error: {:?}", e);
-                        std::process::exit(1);
                     }
                     Ok(Event::Incoming(Packet::Disconnect)) => {
-                        eprintln!("\n[PUB] Disconnected before ready.");
-                        std::process::exit(1);
+                        is_connected_clone.store(false, Ordering::Relaxed);
+                        eprintln!("\n[PUB] Disconnected from server.");
                     }
                     _ => {}
                 }
@@ -155,12 +163,26 @@ fn main() {
         let total_to_pub = args.count;
         let mut seq: u64 = 1;
         let mut published = 0;
+        let mut was_connected = false;
 
         println!("Publishing to topic '{}' with QoS {}...", pub_topic, args.qos);
         
         loop {
             if total_to_pub > 0 && published >= total_to_pub {
                 break;
+            }
+
+            // Wait until connection is established/restored before publishing
+            let mut just_connected = false;
+            while !is_connected.load(Ordering::Relaxed) {
+                just_connected = true;
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            if just_connected || !was_connected {
+                was_connected = true;
+                // Give the broker a 200ms grace period to complete async session/cluster setup
+                thread::sleep(Duration::from_millis(200));
             }
             
             // If payload contains "{seq}" or "{ts}", format it dynamically
@@ -396,17 +418,20 @@ fn main() {
     let sub_handle = thread::spawn(move || {
         let mut got_connack = false;
         let mut got_suback = false;
+        let mut has_signaled = false;
         for notification in sub_connection.iter() {
             match notification {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
                     got_connack = true;
-                    if got_suback {
+                    if got_suback && !has_signaled {
+                        has_signaled = true;
                         sub_ready_clone.wait();
                     }
                 }
                 Ok(Event::Incoming(Packet::SubAck(_))) => {
                     got_suback = true;
-                    if got_connack {
+                    if got_connack && !has_signaled {
+                        has_signaled = true;
                         sub_ready_clone.wait();
                     }
                 }
@@ -456,23 +481,31 @@ fn main() {
 
     let (pub_client, mut pub_connection) = Client::new(pub_opts, 256);
 
+    let pub_is_connected = Arc::new(AtomicBool::new(false));
+    let pub_is_connected_clone = Arc::clone(&pub_is_connected);
+
     // Wait for publisher ConnAck
     let pub_ready = Arc::new(std::sync::Barrier::new(2));
     let pub_ready_clone = Arc::clone(&pub_ready);
 
     let pub_loop = thread::spawn(move || {
+        let mut has_signaled = false;
         for notification in pub_connection.iter() {
             match notification {
                 Ok(Event::Incoming(Packet::ConnAck(_))) => {
-                    pub_ready_clone.wait();
+                    pub_is_connected_clone.store(true, Ordering::Relaxed);
+                    if !has_signaled {
+                        has_signaled = true;
+                        pub_ready_clone.wait();
+                    }
                 }
                 Err(e) => {
+                    pub_is_connected_clone.store(false, Ordering::Relaxed);
                     eprintln!("[PUB] Connection error: {:?}", e);
-                    std::process::exit(1);
                 }
                 Ok(Event::Incoming(Packet::Disconnect)) => {
-                    eprintln!("[PUB] Disconnected before publisher ready.");
-                    std::process::exit(1);
+                    pub_is_connected_clone.store(false, Ordering::Relaxed);
+                    eprintln!("[PUB] Disconnected from server.");
                 }
                 _ => {}
             }
@@ -485,7 +518,21 @@ fn main() {
     // -- Publish for the configured duration ----------------------------------
     let start = Instant::now();
     let mut seq: u64 = 1;
+    let mut was_connected = false;
     while start.elapsed() < duration {
+        // Wait until connection is active
+        let mut just_connected = false;
+        while !pub_is_connected.load(Ordering::Relaxed) {
+            just_connected = true;
+            thread::sleep(Duration::from_millis(50));
+        }
+
+        if just_connected || !was_connected {
+            was_connected = true;
+            // Give the broker a 200ms grace period to complete async session/cluster setup
+            thread::sleep(Duration::from_millis(200));
+        }
+
         let payload = format!("{{\"ts\":{},\"seq\":{}}}", now_ms(), seq);
         pub_client
             .publish(&topic, qos, false, payload.as_bytes())

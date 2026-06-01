@@ -982,7 +982,7 @@ class MqttClient(
         val msg = BrokerMessage(clientId, message, topicName)
 
         if (!ready) {
-            logger.info("Client [$clientId] Connection not ready, queuing PUBLISH for message id [${msg.messageId}]")
+            logger.fine { "Client [$clientId] Connection not ready, queuing PUBLISH for message id [${msg.messageId}]" }
             pendingEvents.add { processPublishMessage(msg) }
             return
         }
