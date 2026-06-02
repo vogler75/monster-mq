@@ -133,8 +133,13 @@
         },
         "DatabaseBatchSize": {
           "type": "integer",
-          "default": 10000,
-          "description": "Batch/bulk size for database queue write/delete operations (default: 10,000)."
+          "default": 4000,
+          "description": "Batch/bulk size for database queue write/delete operations (default: 4,000). Larger batches improve write throughput but can delay persistent-session drain reads while a write batch owns the queue store worker."
+        },
+        "MessageCacheSize": {
+          "type": "integer",
+          "default": 4000,
+          "description": "Number of queued messages fetched and visibility-locked per persistent-session drain batch (default: 4,000). Larger values reduce read round-trips but lock more messages ahead of delivery."
         }
       }
     },

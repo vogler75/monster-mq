@@ -38,7 +38,8 @@ MqttTcpServer:
 Queues:
   SubscriptionQueueSize: 0      # Queue size for subscription add/delete operations (default: 10,000)
   MessageQueueSize: 0           # Queue size for message add/delete operations (default: 100,000)
-  DatabaseBatchSize: 10000      # Batch size for database queue write/delete operations (default: 10,000)
+  DatabaseBatchSize: 4000       # Batch size for database queue write/delete operations (default: 4,000)
+  MessageCacheSize: 4000        # Queued messages fetched and locked per persistent-session drain batch (default: 4,000)
 
 # User Management configuration
 UserManagement:

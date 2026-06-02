@@ -71,7 +71,7 @@ class MqttClient(
     // Message cache for bulk fetching (reduces database queries)
     private val messageCache = mutableListOf<BrokerMessage>()
     private val messageCacheLock = Any()
-    private val MESSAGE_CACHE_SIZE = 1000
+    private val messageCacheSize = Monster.getMessageCacheSize()
 
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
     
@@ -262,7 +262,7 @@ class MqttClient(
         }
 
         // Cache empty - fetch a batch from database (atomically marked in-flight)
-        return sessionHandler.fetchAndLockPendingMessages(clientId, MESSAGE_CACHE_SIZE).map { messages ->
+        return sessionHandler.fetchAndLockPendingMessages(clientId, messageCacheSize).map { messages ->
             if (messages.isEmpty()) {
                 null
             } else {

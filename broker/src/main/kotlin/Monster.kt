@@ -293,9 +293,14 @@ class Monster(args: Array<String>) {
         fun getMessageQueueSize(): Int = messageQueueSize
 
         @Volatile
-        private var databaseBatchSize: Int = 1000
+        private var databaseBatchSize: Int = 4000
         @JvmStatic
         fun getDatabaseBatchSize(): Int = databaseBatchSize
+
+        @Volatile
+        private var messageCacheSize: Int = 4000
+        @JvmStatic
+        fun getMessageCacheSize(): Int = messageCacheSize
 
         @Volatile
         private var bulkMessagingEnabled: Boolean = true
@@ -743,13 +748,19 @@ MORE INFO:
                         0
                     }
                     databaseBatchSize = try {
-                        queuesConfig.getInteger("DatabaseBatchSize", 10000)
+                        queuesConfig.getInteger("DatabaseBatchSize", 4000)
                     } catch (e: Exception) {
                         logger.warning("Config: Queues.DatabaseBatchSize read failed: ${e.message}")
-                        10000
+                        4000
+                    }
+                    messageCacheSize = try {
+                        queuesConfig.getInteger("MessageCacheSize", 4000)
+                    } catch (e: Exception) {
+                        logger.warning("Config: Queues.MessageCacheSize read failed: ${e.message}")
+                        4000
                     }
                 }
-                logger.fine("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize, DatabaseBatchSize=$databaseBatchSize")
+                logger.fine("Config: Queue sizes - Subscription=$subscriptionQueueSize, Message=$messageQueueSize, DatabaseBatchSize=$databaseBatchSize, MessageCacheSize=$messageCacheSize")
 
                 // Read bulk messaging configuration
                 configJson.getJsonObject("BulkMessaging", JsonObject()).let { bulkConfig ->
