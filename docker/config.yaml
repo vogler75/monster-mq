@@ -8,8 +8,8 @@ QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
 # Rate limiting for MQTT clients (0 = unlimited)
-MaxPublishRate: 10000    # Max messages per second a client can publish
-MaxSubscribeRate: 10000  # Max messages per second a client can receive
+MaxPublishRate: 0    # Max messages per second a client can publish
+MaxSubscribeRate: 0  # Max messages per second a client can receive
 
 DefaultStoreType: SQLITE
 
@@ -32,15 +32,17 @@ MqttTcpServer:
   ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
   SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
   MaxMessageSizeKb: 512          # Maximum MQTT message size (default: 512KB)
+  MaxInFlightMessages: 10000      # Maximum number of in-flight QoS 1/2 messages per client (default: 10000)
 
 # Queue size configuration for high-load scenarios
 Queues:
-  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
-  MessageQueueSize: 100000       # Queue size for message add/delete operations (default: 100,000)
+  SubscriptionQueueSize: 0      # Queue size for subscription add/delete operations (default: 10,000)
+  MessageQueueSize: 0           # Queue size for message add/delete operations (default: 100,000)
+  DatabaseBatchSize: 10000      # Batch size for database queue write/delete operations (default: 10,000)
 
 # User Management configuration
 UserManagement:
-  Enabled: true  # Set to true to enable user authentication and ACL
+  Enabled: false  # Set to true to enable user authentication and ACL
   PasswordAlgorithm: bcrypt
   CacheRefreshInterval: 60  # seconds
   DisconnectOnUnauthorized: true
@@ -87,7 +89,7 @@ I3x:
 
 # Redis-compatible protocol server for Redis clients.
 RedisServer:
-  Enabled: true
+  Enabled: false
   Host: "0.0.0.0"
   Port: 6379
   RequireAuth: true
