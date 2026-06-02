@@ -1570,7 +1570,7 @@ class MqttClient(
                     }
                     2 -> {
                         logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [2] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                        endpoint.publishReceived(inFlightMessage.message.messageId)
+                        endpoint.publishRelease(inFlightMessage.message.messageId)
                     }
                     3 -> {
                         logger.warning { "Client [$clientId] PUBACK/PUBREC: unknown stage [${inFlightMessage.stage}] for message [${inFlightMessage.message.messageId}] [${Utils.getCurrentFunctionName()}]" }

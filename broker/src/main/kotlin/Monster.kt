@@ -347,7 +347,9 @@ class Monster(args: Array<String>) {
                 val promise = Promise.promise<String>()
                 // Pass SQLite configuration to the verticle
                 val sqliteVerticleConfig = JsonObject().put("EnableWAL", singleton?.sqliteConfig?.enableWAL ?: true)
-                val deploymentOptions = DeploymentOptions().setConfig(sqliteVerticleConfig)
+                val deploymentOptions = DeploymentOptions()
+                    .setConfig(sqliteVerticleConfig)
+                    .setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(SQLiteVerticle(), deploymentOptions).onComplete { result ->
                     if (result.succeeded()) {
                         sqliteVerticleDeploymentId = result.result()
