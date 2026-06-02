@@ -1,0 +1,75 @@
+Release v1.8.22
+Built from commit: 458d15c4
+Date: 2026-06-02 06:19:59
+
+Changes since v1.8.21:
+---
+458d15c4 Fix QoS 2 Stage 2 retry packet type and deploy SQLiteVerticle as a worker to prevent event loop block on session deletion
+aa6af4a4 Bump version to 1.8.21
+13eae34d allow unbounded internal queues by default
+95704e06 optimize memory queue store deletes
+060ea5c5 refactor: change default MaxInFlightMessages to 10000
+08b11ced refactor: change default MessageQueueSize to 100000
+56d1a6d9 refactor: change default MaxInFlightMessages to 1000
+53c141db optimize mongodb queue store batching
+dedf0a59 Add persistent queue store backends (Postgres/Mongo/SQLite)
+3a3dbbfa fix: wait for subscription registration before suback
+0de59fed Removed all QueueStores except memory.
+46957fe2 Add DatabaseBatchSize and use in queue workers
+3dc0002d fix(queue): optimize queue database writes, cleanup speed, and reconnected delivery
+35a8a770 Improve connection handling and logging
+f7c87b97 latency-rs: JSON seq tracking and stats
+472487c7 Run retention hourly; reorganize and remove tests
+fcb6dcd2 Implement dynamic auto-resolution for advertisedHost in clustered environments
+5e5b5ac1 Add advertisedHost and advertisedPort to Kafka Protocol Server and dashboard
+1d181128 perf(kafka): replace periodic 60-second database polling with triggered event bus listener for dynamic streams refresh
+c968433b fix(kafka): support unauthenticated SASL handshakes and automated credential acceptance when UserManagement is disabled
+8ad92366 Standardize KafkaProtocolServer config parsing to strictly use lowercase keys
+1c798fbc feat: add GZIP compression support to Kafka protocol server
+f84312cc feat: add GraphQL interface and dashboard page to list and remove Kafka consumer groups
+7af069e1 feat(kafka): add SASL PLAIN authentication to Kafka Protocol Server and test scripts
+0b4fb5c2 feat(kafka): add stream write authorization control and topic filter validation with dashboard checkbox toggles
+29afc9ad feat(kafka): dynamic kafka protocol server with group coordination, offset commit/fetch persistence, hour-resolution retention, and direct kafka-key-to-mqtt-topic mapping
+14709b35 Redesign and enhance dashboard Archive Explorer with premium glassmorphism, SVG icons, and copy to clipboard
+7dc93c51 Update main.rs
+1ca151ff Delete throughput_subscriber.py
+e2ac3187 feat: implement true QoS 1/2 pipelining to optimize in-flight throughput
+ae69fd68 Add live throughput mode and subscriber tool
+878c9f2e Fix MqttClient event loop deadlock under heavy QoS 1/2 traffic with MEMORY QueueStoreType
+8d5fd44e feat(broker): restore connection packet queueing and make outbound queue pipeline thread-safe
+ffdec376 revert: remove incoming MQTT packet queuing and draining feature to restore reactive handling
+d8cf93ae fix: resolve stuck QoS 1 & 2 outbound message queue in persistent sessions (closes #162)
+a2cb6188 feat: add client ID filtering for sessions query and dashboard page
+02f93460 Fix compiler warning in OpcUaConnector: check if valValue is null
+e8d3a9c8 Improve agent execution log formatting in AgentExecutor
+435bfca3 feat(agents): log resolved store types and query arguments in AgentTools
+fd1a0074 fix: fall back to defaultArchiveGroup when LLM supplies empty string
+318672f6 feat: add remote llama.cpp provider support & fix LLM request timeouts
+213d494b perf(agents): optimize LLM request logging to avoid repeating growing conversation history
+4d0b3691 feat(agents): add trigger context with triggered topic name and value
+05f317f1 Optimize Hazelcast map purging and add leadership safeguard (fixes #24)
+bc07248d feat(opcuaserver): Add UNWRAPPED_JSON data type strategy for custom JSON unwrapping
+0b423eac Suppress Netty pipeline stack traces
+cb6a4cc6 Fix race condition and parallel packet processing during connection setup (closes #161)
+b1dc4466 Simplify Netty pipeline logging filter to generic message enrichment and stack trace suppression
+3d631397 Intercept Netty pipeline unhandled exceptions on root logger to avoid weak reference GC
+72895a38 Log descriptive warning and suppress Netty stack trace for HTTP requests on MQTT WS port
+d370e741 fix(dashboard): resolve table horizontal scrolling on mobile viewports
+b7f940a5 feat: suppress receive maximum limit recovery logs until queue reaches 0
+709601e5 feat: implement dynamic lazy-loaded OPC UA Browser dashboard
+0bed0d79 Merge branch 'main' of github.com:vogler75/monster-mq
+732b56a6 Fixes #28: Centralize name format validation in dashboard UI
+5df84886 docs: remove obsolete dashboard submodule clone and update references
+cae31958 Build docker image script
+11ae97bd Build script for testing image
+8e8cc39b Delete update-dashboard-submodule.sh
+ad64a1e5 Added dashboard again to main repo
+3ff65743 Gracefully handle Netty/Vert.x exceptions for closed channels and invalid HTTP-on-MQTT requests
+a9dffa69 Track MCP and Redis sessions and fix Redis connection auth race condition
+94835d71 feat: make max in-flight messages and server receive maximum configurable, throttle saturation warnings, and report session metrics
+ff99e750 NATS: support dynamic session disconnect/cleanup via EventBus commands
+7f82e980 NATS: show connected NATS clients as sessions in the dashboard
+fe3e247b Removed Claude skills
+a9d9218b feat: implement limitable archive statistics and lazy loading with timezone fixes
+ecd0ddb0 feat: add outbound writing support to Kafka Client with regex topic key transformation and GraphQL mappings
+dc30be95 feat(broker): add SQLite connection support & logging improvements
