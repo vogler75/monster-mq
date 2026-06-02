@@ -6,6 +6,8 @@ import at.rocworks.stores.sqlite.KafkaQueueStoreSQLite
 import at.rocworks.stores.postgres.KafkaQueueStorePostgres
 import at.rocworks.stores.mongodb.KafkaQueueStoreMongoDB
 import io.vertx.core.Future
+import io.vertx.core.DeploymentOptions
+import io.vertx.core.ThreadingModel
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 
@@ -82,7 +84,8 @@ object KafkaQueueStoreFactory {
                 }
             }
 
-            vertx.deployVerticle(store).map { store as IKafkaQueueStore }
+            val options = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+            vertx.deployVerticle(store, options).map { store as IKafkaQueueStore }
         }
     }
 
