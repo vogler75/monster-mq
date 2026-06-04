@@ -300,7 +300,7 @@ class KafkaProtocolServer(
             // Produce
             response.writeShort(0)  // key
             response.writeShort(0)  // min version
-            response.writeShort(2)  // max version
+            response.writeShort(7)  // max version
 
             // Fetch
             response.writeShort(1)  // key
@@ -320,12 +320,12 @@ class KafkaProtocolServer(
             // OffsetCommit
             response.writeShort(8)  // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(7)  // max version
 
             // OffsetFetch
             response.writeShort(9)  // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(1)  // max version
 
             // FindCoordinator
             response.writeShort(10) // key
@@ -746,6 +746,10 @@ class KafkaProtocolServer(
         }
 
         private fun handleProduce(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter, clientId: String?) {
+            var transactionalId: String? = null
+            if (apiVersion.toInt() >= 3) {
+                transactionalId = reader.readString()
+            }
             val acks = reader.readShort()
             val timeout = reader.readInt()
             val topicCount = reader.readInt()
@@ -1033,6 +1037,9 @@ class KafkaProtocolServer(
                     response.writeLong(0L) // baseOffset
                     if (apiVersion.toInt() >= 2) {
                         response.writeLong(-1L) // logAppendTimeMs
+                    }
+                    if (apiVersion.toInt() >= 5) {
+                        response.writeLong(0L) // logStartOffset
                     }
                 }
             }
