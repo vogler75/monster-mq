@@ -76,6 +76,7 @@ type KafkaConsumerGroupInfo {
     groupId: String!
     topics: [String!]!
     lastCommitTime: String!
+    lag: Long!
 }
 
 type KafkaMessageInfo {

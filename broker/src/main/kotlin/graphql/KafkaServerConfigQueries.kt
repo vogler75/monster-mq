@@ -166,6 +166,21 @@ class KafkaServerConfigQueries(
         return future
     }
 
+    private fun calculateLag(store: IKafkaQueueStore, groupId: String, topics: List<String>): Future<Long> {
+        val futures = topics.map { topic ->
+            val offsetFuture = store.getOffset(groupId, topic, 0)
+            val latestFuture = store.getLatestOffset(topic)
+            Future.all(offsetFuture, latestFuture).map { _ ->
+                val committed = offsetFuture.result() ?: 0L
+                val latest = latestFuture.result() ?: 0L
+                (latest - committed).coerceAtLeast(0L)
+            }
+        }
+        return Future.all(futures).map { _ ->
+            futures.sumOf { it.result() ?: 0L }
+        }
+    }
+
     fun kafkaConsumerGroups(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any>>>()
@@ -189,30 +204,50 @@ class KafkaServerConfigQueries(
                 Future.all(groupFutures).onComplete { allAr ->
                     if (allAr.succeeded()) {
                         try {
-                            val allGroups = mutableMapOf<String, at.rocworks.stores.KafkaConsumerGroup>()
-                            allAr.result().list<List<at.rocworks.stores.KafkaConsumerGroup>>().forEach { list ->
+                            val allGroups = mutableMapOf<String, Pair<at.rocworks.stores.KafkaConsumerGroup, IKafkaQueueStore>>()
+                            allAr.result().list<List<at.rocworks.stores.KafkaConsumerGroup>>().forEachIndexed { index, list ->
+                                val store = stores[index]
                                 list.forEach { group ->
                                     val existing = allGroups[group.groupId]
                                     if (existing == null) {
-                                        allGroups[group.groupId] = group
+                                        allGroups[group.groupId] = Pair(group, store)
                                     } else {
-                                        val mergedTopics = (existing.topics + group.topics).distinct()
-                                        val maxTime = maxOf(existing.lastCommitTime, group.lastCommitTime)
-                                        allGroups[group.groupId] = at.rocworks.stores.KafkaConsumerGroup(group.groupId, mergedTopics, maxTime)
+                                        val mergedTopics = (existing.first.topics + group.topics).distinct()
+                                        val maxTime = maxOf(existing.first.lastCommitTime, group.lastCommitTime)
+                                        allGroups[group.groupId] = Pair(at.rocworks.stores.KafkaConsumerGroup(group.groupId, mergedTopics, maxTime), store)
                                     }
                                 }
                             }
                             
-                            val resultList = allGroups.values.map { group ->
-                                mapOf(
-                                    "groupId" to group.groupId,
-                                    "topics" to group.topics,
-                                    "lastCommitTime" to Instant.ofEpochMilli(group.lastCommitTime).toString()
-                                )
+                            val lagFutures = allGroups.values.map { (group, store) ->
+                                calculateLag(store, group.groupId, group.topics).map { lagVal ->
+                                    mapOf(
+                                        "groupId" to group.groupId,
+                                        "topics" to group.topics,
+                                        "lastCommitTime" to Instant.ofEpochMilli(group.lastCommitTime).toString(),
+                                        "lag" to lagVal
+                                    )
+                                }
                             }
-                            future.complete(resultList)
+                            
+                            Future.all(lagFutures).onComplete { lagAr ->
+                                if (lagAr.succeeded()) {
+                                    future.complete(lagFutures.map { it.result() })
+                                } else {
+                                    logger.severe("Failed to calculate lag for consumer groups: ${lagAr.cause()?.message}")
+                                    val resultList = allGroups.values.map { (group, _) ->
+                                        mapOf(
+                                            "groupId" to group.groupId,
+                                            "topics" to group.topics,
+                                            "lastCommitTime" to Instant.ofEpochMilli(group.lastCommitTime).toString(),
+                                            "lag" to 0L
+                                        )
+                                    }
+                                    future.complete(resultList)
+                                }
+                            }
                         } catch (e: Exception) {
-                            logger.severe("Failed to merge consumer groups: ${e.message}")
+                            logger.severe("Failed to process consumer groups: ${e.message}")
                             future.complete(emptyList())
                         }
                     } else {

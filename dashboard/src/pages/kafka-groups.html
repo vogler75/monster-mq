@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MonsterMQ - Kafka Consumer Groups</title>
+    <title>MonsterMQ - Kafka Consumers</title>
     <script type="module" src="/js/ix-init.js"></script>
     <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
@@ -51,7 +51,7 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">Kafka Consumer Groups</h1>
+                <h1 class="page-title">Kafka Consumers</h1>
                 <p class="page-subtitle">Monitor offsets, active streams, and manage committed consumer states</p>
             </div>
 
@@ -98,12 +98,13 @@
                         <tr>
                             <th>Group ID</th>
                             <th>Subscribed Topics / Streams</th>
-                            <th>Last Offset Commit</th>
+                            <th style="text-align: center; width: 120px;">Lag (Sum)</th>
+                            <th>Last Commit</th>
                             <th style="width: 100px; text-align: center;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="kafka-groups-table-body">
-                        <tr><td colspan="4" class="no-data">Loading consumer groups...</td></tr>
+                        <tr><td colspan="5" class="no-data">Loading consumer groups...</td></tr>
                     </tbody>
                 </table>
             </div>

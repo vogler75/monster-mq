@@ -36,6 +36,7 @@ class KafkaGroupsManager {
                         groupId
                         topics
                         lastCommitTime
+                        lag
                     }
                 }
             `;
@@ -112,7 +113,7 @@ class KafkaGroupsManager {
         tbody.innerHTML = '';
         
         if (this.filteredList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="no-data">No consumer groups found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="no-data">No consumer groups found.</td></tr>`;
             return;
         }
 
@@ -142,6 +143,11 @@ class KafkaGroupsManager {
                     </div>
                 </td>
                 <td>${chipsHtml}</td>
+                <td style="text-align:center;">
+                    <span class="badge" style="font-weight:600; padding:0.25rem 0.5rem; border-radius:6px; background:${group.lag > 0 ? 'rgba(249, 115, 22, 0.15)' : 'rgba(16, 185, 129, 0.15)'}; color:${group.lag > 0 ? 'var(--monster-orange, #F97316)' : 'var(--monster-green, #10B981)'};">
+                        ${this.formatNumber(group.lag)}
+                    </span>
+                </td>
                 <td>${dateStr}</td>
                 <td>
                     <div class="action-buttons">
@@ -192,6 +198,17 @@ class KafkaGroupsManager {
     hideDeleteModal() {
         this.deleteGroupId = null;
         document.getElementById('confirm-delete-group-modal').style.display = 'none';
+    }
+
+    formatNumber(num) {
+        if (!num) return '0';
+        if (num >= 1000000) {
+            return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        }
+        if (num >= 1000) {
+            return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        }
+        return num.toString();
     }
 
     formatRelativeTime(isoString) {

@@ -177,7 +177,8 @@ class SidebarManager {
                     { href: '/pages/topic-browser.html', icon: 'search', text: 'Browser' },
                     { href: '/pages/topic-chart.html', icon: 'barchart', text: 'Visualizer' },
                     { href: '/pages/archive-explorer.html', icon: 'list', text: 'Archive Explorer' },
-                    { href: '/pages/kafka-topics.html', icon: 'list', text: 'Kafka Topics', feature: 'KafkaServer' }
+                    { href: '/pages/kafka-topics.html', icon: 'list', text: 'Kafka Topics', feature: 'KafkaServer' },
+                    { href: '/pages/kafka-groups.html', icon: 'user-management', text: 'Kafka Consumers', feature: 'KafkaServer' }
                 ]
             },
             {
@@ -219,7 +220,6 @@ class SidebarManager {
                     { href: '/pages/mqtt-clients.html', icon: 'link', text: 'MQTT Clients', feature: 'MqttClient' },
                     { href: '/pages/kafka-clients.html', icon: 'link', text: 'Kafka Clients', feature: 'Kafka' },
                     { href: '/pages/kafka-servers.html', icon: 'project-server', text: 'Kafka Servers', feature: 'KafkaServer' },
-                    { href: '/pages/kafka-groups.html', icon: 'user-management', text: 'Kafka Consumer Groups', feature: 'KafkaServer' },
                     { href: '/pages/nats-clients.html', icon: 'link', text: 'NATS Clients', feature: 'Nats' },
                     { href: '/pages/redis-clients.html', icon: 'link', text: 'Redis Clients', feature: 'Redis' },
                     { href: '/pages/telegram-clients.html', icon: 'send-top-right', text: 'Telegram Clients', feature: 'Telegram' },
