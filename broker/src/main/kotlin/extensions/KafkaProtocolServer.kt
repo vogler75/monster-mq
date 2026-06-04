@@ -188,6 +188,8 @@ class KafkaProtocolServer(
         private var saslHandshakeReceived = false
         private var authenticating = false
 
+        private val pendingResponseQueue = java.util.ArrayDeque<PendingResponse>()
+
         fun start() {
             socket.handler { buf ->
                 inputBuffer.appendBuffer(buf)
@@ -256,6 +258,11 @@ class KafkaProtocolServer(
             val clientId = reader.readString()
 
             logger.finest { "Received Kafka Request: apiKey=$apiKey, apiVersion=$apiVersion, correlationId=$correlationId, clientId=$clientId" }
+
+            val pending = PendingResponse(correlationId)
+            synchronized(pendingResponseQueue) {
+                pendingResponseQueue.add(pending)
+            }
 
             if (userManager.isUserManagementEnabled() && !authenticated) {
                 val apiKeyInt = apiKey.toInt()
@@ -1334,13 +1341,40 @@ class KafkaProtocolServer(
             completeResponse.appendInt(responseBytes.length()) // 4-byte size prefix
             completeResponse.appendBuffer(responseBytes)
 
-            socket.write(completeResponse)
+            val correlationId = responseBytes.getInt(0)
+
+            synchronized(pendingResponseQueue) {
+                val pending = pendingResponseQueue.find { it.correlationId == correlationId }
+                if (pending != null) {
+                    pending.responseBuffer = completeResponse
+                    pending.isCompleted = true
+                } else {
+                    socket.write(completeResponse)
+                    return
+                }
+
+                while (pendingResponseQueue.isNotEmpty()) {
+                    val head = pendingResponseQueue.first()
+                    if (head.isCompleted) {
+                        val buf = head.responseBuffer
+                        if (buf != null) {
+                            socket.write(buf)
+                        }
+                        pendingResponseQueue.removeFirst()
+                    } else {
+                        break
+                    }
+                }
+            }
         }
 
         private fun close() {
             if (!closed) {
                 closed = true
                 socket.close()
+                synchronized(pendingResponseQueue) {
+                    pendingResponseQueue.clear()
+                }
             }
         }
 
@@ -1668,4 +1702,9 @@ data class ConfigEntry(
     val isSensitive: Boolean,
     val configSource: Byte
 )
+
+private class PendingResponse(val correlationId: Int) {
+    @Volatile var responseBuffer: Buffer? = null
+    @Volatile var isCompleted = false
+}
 
