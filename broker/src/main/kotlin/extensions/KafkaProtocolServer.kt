@@ -305,7 +305,7 @@ class KafkaProtocolServer(
             // Fetch
             response.writeShort(1)  // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(10) // max version
 
             // ListOffsets
             response.writeShort(2)  // key
@@ -1079,10 +1079,17 @@ class KafkaProtocolServer(
                 val partitionCount = reader.readInt()
                 for (j in 0 until partitionCount) {
                     val partition = reader.readInt()
+                    
+                    var currentLeaderEpoch = -1
+                    if (apiVersion.toInt() >= 9) {
+                        currentLeaderEpoch = reader.readInt()
+                    }
+                    
                     val fetchOffset = reader.readLong()
                     
-                    if (apiVersion.toInt() >= 9) {
-                        val currentLeaderEpoch = reader.readInt()
+                    var logStartOffset = -1L
+                    if (apiVersion.toInt() >= 5) {
+                        logStartOffset = reader.readLong()
                     }
                     
                     val partitionMaxBytes = reader.readInt()
@@ -1113,6 +1120,18 @@ class KafkaProtocolServer(
                 }
             }
 
+            // Read ForgottenTopicsData if apiVersion >= 7
+            if (apiVersion.toInt() >= 7) {
+                val forgottenTopicsCount = reader.readInt()
+                for (i in 0 until forgottenTopicsCount) {
+                    val forgottenTopicName = reader.readString() ?: ""
+                    val forgottenPartitionsCount = reader.readInt()
+                    for (j in 0 until forgottenPartitionsCount) {
+                        val forgottenPartition = reader.readInt()
+                    }
+                }
+            }
+
             io.vertx.core.Future.all(fetchFutures).onComplete { ar ->
                 // Write throttleTimeMs if apiVersion >= 1
                 if (apiVersion.toInt() >= 1) {
@@ -1134,6 +1153,16 @@ class KafkaProtocolServer(
                     response.writeInt(result.partition)
                     response.writeShort(0) // No error
                     response.writeLong(result.highWatermark) // High watermark offset
+
+                    if (apiVersion.toInt() >= 4) {
+                        response.writeLong(result.highWatermark) // lastStableOffset = highWatermark
+                    }
+                    if (apiVersion.toInt() >= 5) {
+                        response.writeLong(0L) // logStartOffset = 0
+                    }
+                    if (apiVersion.toInt() >= 4) {
+                        response.writeInt(0) // abortedTransactions array length = 0
+                    }
 
                     // Serialize MessageSet V0 records
                     val messageSetWriter = KafkaBufferWriter()
