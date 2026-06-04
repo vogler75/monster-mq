@@ -335,22 +335,22 @@ class KafkaProtocolServer(
             // JoinGroup
             response.writeShort(11) // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(2)  // max version
 
             // Heartbeat
             response.writeShort(12) // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(2)  // max version
 
             // LeaveGroup
             response.writeShort(13) // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(2)  // max version
 
             // SyncGroup
             response.writeShort(14) // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(2)  // max version
 
             // SaslHandshake
             response.writeShort(17) // key
@@ -451,6 +451,9 @@ class KafkaProtocolServer(
         private fun handleJoinGroup(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
             val groupId = reader.readString()
             val sessionTimeout = reader.readInt()
+            if (apiVersion.toInt() >= 1) {
+                val rebalanceTimeout = reader.readInt()
+            }
             val memberId = reader.readString() ?: ""
             val protocolType = reader.readString()
             val protocolCount = reader.readInt()
@@ -467,9 +470,12 @@ class KafkaProtocolServer(
                 }
             }
 
-            logger.fine { "JoinGroup request from client '$memberId' in group '$groupId' with protocol '$selectedProtocol'" }
+            logger.fine { "JoinGroup request from client '$memberId' in group '$groupId' with protocol '$selectedProtocol' (version $apiVersion)" }
 
-            // Reply JoinGroupResponse V0
+            // Reply JoinGroupResponse
+            if (apiVersion.toInt() >= 2) {
+                response.writeInt(0) // throttleTimeMs
+            }
             response.writeShort(0) // error_code: 0 (No error)
             response.writeInt(1) // generation_id: 1
             response.writeString(selectedProtocol) // group_protocol
@@ -502,9 +508,12 @@ class KafkaProtocolServer(
                 }
             }
 
-            logger.fine { "SyncGroup request from client '$memberId' in group '$groupId'" }
+            logger.fine { "SyncGroup request from client '$memberId' in group '$groupId' (version $apiVersion)" }
 
-            // Reply SyncGroupResponse V0
+            // Reply SyncGroupResponse
+            if (apiVersion.toInt() >= 1) {
+                response.writeInt(0) // throttleTimeMs
+            }
             response.writeShort(0) // error_code: 0 (No error)
             if (myAssignment == null) {
                 response.writeBytes(ByteArray(0))
@@ -520,9 +529,12 @@ class KafkaProtocolServer(
             val generationId = reader.readInt()
             val memberId = reader.readString()
 
-            logger.finest { "Heartbeat request from client '$memberId' in group '$groupId'" }
+            logger.finest { "Heartbeat request from client '$memberId' in group '$groupId' (version $apiVersion)" }
 
-            // Reply HeartbeatResponse V0
+            // Reply HeartbeatResponse
+            if (apiVersion.toInt() >= 1) {
+                response.writeInt(0) // throttleTimeMs
+            }
             response.writeShort(0) // error_code: 0 (No error)
             writeResponse(response)
         }
@@ -531,9 +543,12 @@ class KafkaProtocolServer(
             val groupId = reader.readString()
             val memberId = reader.readString()
 
-            logger.fine { "LeaveGroup request from client '$memberId' in group '$groupId'" }
+            logger.fine { "LeaveGroup request from client '$memberId' in group '$groupId' (version $apiVersion)" }
 
-            // Reply LeaveGroupResponse V0
+            // Reply LeaveGroupResponse
+            if (apiVersion.toInt() >= 1) {
+                response.writeInt(0) // throttleTimeMs
+            }
             response.writeShort(0) // error_code: 0 (No error)
             writeResponse(response)
         }
