@@ -1216,12 +1216,15 @@ open class SessionHandler(
                     try {
                         // Double-check after acquiring lock
                         if (buffer.messages.size >= bulkMessagingBulkSize) {
-                            val bulkMessage = BulkClientMessage(buffer.messages.toList())
-                            buffer.messages.clear()
-                            buffer.lastFlushTime = System.currentTimeMillis()
-                            vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
-                            bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
-                            logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                            val drained = ArrayList<BrokerMessage>()
+                            buffer.messages.drainTo(drained)
+                            if (drained.isNotEmpty()) {
+                                val bulkMessage = BulkClientMessage(drained)
+                                buffer.lastFlushTime = System.currentTimeMillis()
+                                vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
+                                bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
+                                logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                            }
                         }
                     } finally {
                         buffer.lock.unlock()
@@ -1253,13 +1256,16 @@ open class SessionHandler(
                                 timeSinceFlush >= bulkMessagingTimeoutMs
 
                 if (shouldFlush) {
-                    val bulkMessage = BulkClientMessage(buffer.messages.toList())
-                    buffer.messages.clear()
-                    buffer.lastFlushTime = currentTime
+                    val drained = ArrayList<BrokerMessage>()
+                    buffer.messages.drainTo(drained)
+                    if (drained.isNotEmpty()) {
+                        val bulkMessage = BulkClientMessage(drained)
+                        buffer.lastFlushTime = currentTime
 
-                    vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
-                    bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
-                    logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (timeout)" }
+                        vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), bulkMessage)
+                        bulkMessagingClientsFlushed.addAndGet(bulkMessage.messages.size.toLong())
+                        logger.finest { "Flushed bulk to client [$clientId]: ${bulkMessage.messages.size} messages (timeout)" }
+                    }
                 }
 
                 // Mark for removal if empty and stale
@@ -1282,14 +1288,17 @@ open class SessionHandler(
                                 timeSinceFlush >= bulkMessagingTimeoutMs
 
                 if (shouldFlush) {
-                    val bulkMessage = BulkNodeMessage(buffer.messages.toList())
-                    buffer.messages.clear()
-                    buffer.lastFlushTime = currentTime
+                    val drained = ArrayList<BrokerMessage>()
+                    buffer.messages.drainTo(drained)
+                    if (drained.isNotEmpty()) {
+                        val bulkMessage = BulkNodeMessage(drained)
+                        buffer.lastFlushTime = currentTime
 
-                    vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                    messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
-                    bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
-                    logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (timeout)" }
+                        vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                        messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
+                        bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
+                        logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (timeout)" }
+                    }
                 }
 
                 // Mark for removal if empty and stale
@@ -1519,12 +1528,15 @@ open class SessionHandler(
                         try {
                             // Double-check after acquiring lock
                             if (buffer.messages.size >= bulkMessagingBulkSize) {
-                                val bulkMessage = BulkNodeMessage(buffer.messages.toList())
-                                buffer.messages.clear()
-                                buffer.lastFlushTime = System.currentTimeMillis()
-                                vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                                messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
-                                logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                                val drained = ArrayList<BrokerMessage>()
+                                buffer.messages.drainTo(drained)
+                                if (drained.isNotEmpty()) {
+                                    val bulkMessage = BulkNodeMessage(drained)
+                                    buffer.lastFlushTime = System.currentTimeMillis()
+                                    vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                                    messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
+                                    logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages (size threshold)" }
+                                }
                             }
                         } finally {
                             buffer.lock.unlock()
@@ -1555,19 +1567,22 @@ open class SessionHandler(
             // Re-check after acquiring lock to ensure we still have messages
             if (publishBulkBuffer.messages.isEmpty()) return
 
-            val batch = PublishBatch(publishBulkBuffer.messages.toList())
-            publishBulkBuffer.messages.clear()
-            publishBulkBuffer.lastFlushTime = System.currentTimeMillis()
+            val drained = ArrayList<BrokerMessage>()
+            publishBulkBuffer.messages.drainTo(drained)
+            if (drained.isNotEmpty()) {
+                val batch = PublishBatch(drained)
+                publishBulkBuffer.lastFlushTime = System.currentTimeMillis()
 
-            logger.finest { "Flushed publish batch: ${batch.messages.size} messages" }
+                logger.finest { "Flushed publish batch: ${batch.messages.size} messages" }
 
-            // Send to worker pool for parallel processing (outside lock to avoid contention)
-            if (publishWorkerPool != null) {
-                publishWorkerPool!!.sendBatch(batch)
-            } else {
-                // Fallback: process directly if pool not initialized
-                logger.warning("Worker pool not initialized, processing batch directly")
-                processBatchDirectly(batch)
+                // Send to worker pool for parallel processing (outside lock to avoid contention)
+                if (publishWorkerPool != null) {
+                    publishWorkerPool!!.sendBatch(batch)
+                } else {
+                    // Fallback: process directly if pool not initialized
+                    logger.warning("Worker pool not initialized, processing batch directly")
+                    processBatchDirectly(batch)
+                }
             }
         } finally {
             publishBulkBuffer.lock.unlock()
@@ -1839,13 +1854,16 @@ open class SessionHandler(
                     try {
                         // Double-check after acquiring lock
                         if (buffer.messages.size >= bulkMessagingBulkSize) {
-                            val bulkMessage = BulkNodeMessage(buffer.messages.toList())
-                            buffer.messages.clear()
-                            buffer.lastFlushTime = System.currentTimeMillis()
-                            vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
-                            messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
-                            bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
-                            logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages" }
+                            val drained = ArrayList<BrokerMessage>()
+                            buffer.messages.drainTo(drained)
+                            if (drained.isNotEmpty()) {
+                                val bulkMessage = BulkNodeMessage(drained)
+                                buffer.lastFlushTime = System.currentTimeMillis()
+                                vertx.eventBus().publish(nodeMessageAddress(nodeId), bulkMessage)
+                                messageBusOut.addAndGet(bulkMessage.messages.size.toLong())
+                                bulkMessagingNodesFlushed.addAndGet(bulkMessage.messages.size.toLong())
+                                logger.finest { "Flushed bulk to node [$nodeId]: ${bulkMessage.messages.size} messages" }
+                            }
                         }
                     } finally {
                         buffer.lock.unlock()
