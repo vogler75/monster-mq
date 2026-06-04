@@ -186,7 +186,7 @@ class KafkaServerConfigQueries(
                 }
                 
                 val groupFutures = stores.map { it.getConsumerGroups() }
-                Future.all<List<at.rocworks.stores.KafkaConsumerGroup>>(groupFutures).onComplete { allAr ->
+                Future.all(groupFutures).onComplete { allAr ->
                     if (allAr.succeeded()) {
                         try {
                             val allGroups = mutableMapOf<String, at.rocworks.stores.KafkaConsumerGroup>()
@@ -296,7 +296,7 @@ class KafkaServerConfigQueries(
                     }
                 }
                 
-                Future.all<IKafkaQueueStore>(futures).onComplete { allRes ->
+                Future.all(futures).onComplete { allRes ->
                     if (allRes.succeeded()) {
                         val stores = allRes.result().list<IKafkaQueueStore>()
                         promise.complete(stores)

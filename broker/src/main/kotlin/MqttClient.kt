@@ -808,7 +808,7 @@ class MqttClient(
                 }
             }
 
-            Future.all<MqttSubAckReasonCode>(reasonCodeFutures).onComplete {
+            Future.all(reasonCodeFutures).onComplete {
                 val reasonCodes = reasonCodeFutures.map { future ->
                     if (future.succeeded()) future.result() else MqttSubAckReasonCode.UNSPECIFIED_ERROR
                 }
@@ -864,7 +864,7 @@ class MqttClient(
                 }
             }
 
-            Future.all<MqttQoS>(acknowledgementFutures).onComplete {
+            Future.all(acknowledgementFutures).onComplete {
                 val acknowledgements = acknowledgementFutures.map { future ->
                     if (future.succeeded()) future.result() else MqttQoS.FAILURE
                 }

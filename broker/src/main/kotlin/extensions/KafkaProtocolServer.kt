@@ -588,7 +588,7 @@ class KafkaProtocolServer(
             }
 
             // Wait for all database offsets to resolve
-            io.vertx.core.Future.all<Pair<String, Long>>(futures.map { it.future }).onComplete { ar ->
+            io.vertx.core.Future.all(futures.map { it.future }).onComplete { ar ->
                 if (apiVersion.toInt() >= 1) {
                     response.writeInt(0) // throttleTimeMs = 0
                 }
@@ -666,7 +666,7 @@ class KafkaProtocolServer(
                 topics.add(Pair(topic, partitions))
             }
 
-            io.vertx.core.Future.all<Void>(commitFutures).onComplete { ar ->
+            io.vertx.core.Future.all(commitFutures).onComplete { ar ->
                 if (apiVersion.toInt() >= 3) {
                     response.writeInt(0) // throttleTimeMs = 0
                 }
@@ -718,7 +718,7 @@ class KafkaProtocolServer(
                 topics.add(Pair(topic, partitions))
             }
 
-            io.vertx.core.Future.all<Pair<Int, Long?>>(fetchFutures).onComplete { ar ->
+            io.vertx.core.Future.all(fetchFutures).onComplete { ar ->
                 response.writeInt(topics.size)
                 var futureIndex = 0
                 for (topicPair in topics) {
@@ -1106,7 +1106,7 @@ class KafkaProtocolServer(
                 }
             }
 
-            io.vertx.core.Future.all<FetchPartitionResult>(fetchFutures).onComplete { ar ->
+            io.vertx.core.Future.all(fetchFutures).onComplete { ar ->
                 // Write throttleTimeMs if apiVersion >= 1
                 if (apiVersion.toInt() >= 1) {
                     response.writeInt(0) // throttleTimeMs = 0

@@ -55,7 +55,7 @@ class KafkaServerExtension(
     override fun stop(stopPromise: Promise<Void>) {
         logger.fine("Stopping Kafka Server Extension")
         val stopFutures = runningServers.keys.map { stopServer(it) }
-        Future.all<Void>(stopFutures).onComplete {
+        Future.all(stopFutures).onComplete {
             runningServers.clear()
             stopPromise.complete()
         }

@@ -31,7 +31,7 @@ class FlowQueries(
                 return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
-                val name = env.getArgument<String?>("name")
+                val name = env.getArgument<String>("name")
 
                 if (name != null) {
                     // Filter by specific name
@@ -82,9 +82,9 @@ class FlowQueries(
                 return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
-                val flowClassId = env.getArgument<String?>("flowClassId")
-                val nodeId = env.getArgument<String?>("nodeId")
-                val enabled = env.getArgument<Boolean?>("enabled")
+                val flowClassId = env.getArgument<String>("flowClassId")
+                val nodeId = env.getArgument<String>("nodeId")
+                val enabled = env.getArgument<Boolean>("enabled")
 
                 deviceStore.getAllDevices().onComplete { result ->
                     if (result.succeeded()) {

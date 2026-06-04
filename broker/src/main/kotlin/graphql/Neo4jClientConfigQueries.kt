@@ -27,8 +27,8 @@ class Neo4jClientConfigQueries(
             if (!Monster.isFeatureEnabled(Features.Neo4j))
                 return@DataFetcher future.apply { complete(emptyList()) }
             try {
-                val name = env.getArgument<String?>("name")
-                val nodeId = env.getArgument<String?>("node")
+                val name = env.getArgument<String>("name")
+                val nodeId = env.getArgument<String>("node")
 
                 when {
                     // Filter by both name and node

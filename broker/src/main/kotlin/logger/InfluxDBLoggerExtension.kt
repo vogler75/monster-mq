@@ -58,7 +58,7 @@ class InfluxDBLoggerExtension : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         val undeployFutures = deployedLoggers.values.map { vertx.undeploy(it) }
-        Future.all<Void>(undeployFutures)
+        Future.all(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete {
                 stopPromise.complete()

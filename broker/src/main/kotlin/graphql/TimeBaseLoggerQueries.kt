@@ -21,8 +21,8 @@ class TimeBaseLoggerQueries(private val vertx: Vertx, private val deviceStore: I
             val future = CompletableFuture<List<Map<String, Any?>>>()
             if (!Monster.isFeatureEnabled(Features.TimeBaseLogger))
                 return@DataFetcher future.apply { complete(emptyList()) }
-            val name = env.getArgument<String?>("name")
-            val nodeId = env.getArgument<String?>("node")
+            val name = env.getArgument<String>("name")
+            val nodeId = env.getArgument<String>("node")
             val filter: (DeviceConfig) -> Boolean = { dev ->
                 dev.type == DeviceConfig.DEVICE_TYPE_TIMEBASE_LOGGER &&
                 (name == null || dev.name == name) &&

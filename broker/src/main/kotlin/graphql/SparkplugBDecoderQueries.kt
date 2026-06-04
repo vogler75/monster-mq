@@ -30,8 +30,8 @@ class SparkplugBDecoderQueries(
                 return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
-                val name = env.getArgument<String?>("name")
-                val nodeId = env.getArgument<String?>("node") ?: Monster.getClusterNodeId(vertx)
+                val name = env.getArgument<String>("name")
+                val nodeId = env.getArgument<String>("node") ?: Monster.getClusterNodeId(vertx)
 
                 when {
                     // Filter by both name and node

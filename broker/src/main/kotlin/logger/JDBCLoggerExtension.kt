@@ -61,7 +61,7 @@ class JDBCLoggerExtension : AbstractVerticle() {
     override fun stop(stopPromise: Promise<Void>) {
         logger.fine("Stopping JDBCLoggerExtension...")
         val undeployFutures = deployedLoggers.values.map { vertx.undeploy(it) }
-        Future.all<Void>(undeployFutures)
+        Future.all(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete {
                 logger.fine("JDBCLoggerExtension stopped")

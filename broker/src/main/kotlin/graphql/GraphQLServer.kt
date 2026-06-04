@@ -1257,7 +1257,7 @@ class GraphQLServer(
             .type("Broker") { builder ->
                 builder
                     .dataFetcher("enabledFeatures") { env ->
-                        val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                        val broker = env.getSource<at.rocworks.extensions.graphql.Broker>()
                         java.util.concurrent.CompletableFuture.completedFuture(
                             broker?.enabledFeatures ?: emptyList<String>()
                         )
@@ -1274,7 +1274,7 @@ class GraphQLServer(
                     .dataFetcher("isLeader") { env ->
                         val future = java.util.concurrent.CompletableFuture<Boolean>()
                         try {
-                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker>()
                             val leaderNodeId = HealthHandler.getLeaderNodeId(vertx)
                             future.complete(broker?.nodeId == leaderNodeId)
                         } catch (e: Exception) {
@@ -1286,7 +1286,7 @@ class GraphQLServer(
                     .dataFetcher("isCurrent") { env ->
                         val future = java.util.concurrent.CompletableFuture<Boolean>()
                         try {
-                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker?>()
+                            val broker = env.getSource<at.rocworks.extensions.graphql.Broker>()
                             val currentNodeId = Monster.getClusterNodeId(vertx)
                             future.complete(broker?.nodeId == currentNodeId)
                         } catch (e: Exception) {

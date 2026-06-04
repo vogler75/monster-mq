@@ -68,7 +68,7 @@ class MetricsResolver(
     fun broker(): DataFetcher<CompletableFuture<Broker?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Broker?>()
-            val nodeId = env.getArgument<String?>("nodeId") ?: Monster.getClusterNodeId(vertx)
+            val nodeId = env.getArgument<String>("nodeId") ?: Monster.getClusterNodeId(vertx)
 
             // Query the specific node for its metrics via EventBus
             val metricsAddress = getMetricsAddress(nodeId)
@@ -206,10 +206,10 @@ class MetricsResolver(
     fun sessions(): DataFetcher<CompletableFuture<List<Session>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Session>>()
-            val nodeId = env.getArgument<String?>("nodeId")
-            val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
-            val connectedFilter = env.getArgument<Boolean?>("connected")
-            val clientIdFilter = env.getArgument<String?>("clientId")
+            val nodeId = env.getArgument<String>("nodeId")
+            val cleanSessionFilter = env.getArgument<Boolean>("cleanSession")
+            val connectedFilter = env.getArgument<Boolean>("connected")
+            val clientIdFilter = env.getArgument<String>("clientId")
 
             // Always use getAllSessions and filter by nodeId/clientId if needed
             getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId, clientIdFilter)
@@ -221,7 +221,7 @@ class MetricsResolver(
     fun session(): DataFetcher<CompletableFuture<Session?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Session?>()
-            val clientId = env.getArgument<String?>("clientId")
+            val clientId = env.getArgument<String>("clientId")
 
             if (clientId == null) {
                 future.complete(null)
@@ -571,9 +571,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val cleanSessionFilter = env.getArgument<Boolean?>("cleanSession")
-            val connectedFilter = env.getArgument<Boolean?>("connected")
-            val clientIdFilter = env.getArgument<String?>("clientId")
+            val cleanSessionFilter = env.getArgument<Boolean>("cleanSession")
+            val connectedFilter = env.getArgument<Boolean>("connected")
+            val clientIdFilter = env.getArgument<String>("clientId")
 
             // Use getAllSessions with nodeId filter for this specific broker node
             getAllSessions(cleanSessionFilter, connectedFilter, future, nodeId, clientIdFilter)
@@ -607,9 +607,9 @@ class MetricsResolver(
             val broker = env.getSource<Broker>()
             val nodeId = broker?.nodeId ?: Monster.getClusterNodeId(vertx)
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 // Historical query - convert strings to Instants
@@ -733,9 +733,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 // Historical query - convert strings to Instants
@@ -953,9 +953,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
@@ -1036,9 +1036,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
@@ -1103,10 +1103,10 @@ class MetricsResolver(
                 future.complete(emptyList())
                 return@DataFetcher future
             }
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
-            val limit = env.getArgument<Int?>("limit") ?: 100
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
+            val limit = env.getArgument<Int>("limit") ?: 100
             val fromInstant = from?.let { java.time.Instant.parse(it) }
             val toInstant = to?.let { java.time.Instant.parse(it) }
             metricsStore.getMetricsHistory(at.rocworks.stores.MetricKind.ARCHIVEGROUP, groupName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
@@ -1165,9 +1165,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
@@ -1230,9 +1230,9 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             if (metricsStore != null) {
                 val fromInstant = from?.let { java.time.Instant.parse(it) }
@@ -1295,10 +1295,10 @@ class MetricsResolver(
                 future.complete(emptyList())
                 return@DataFetcher future
             }
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
-            val limit = env.getArgument<Int?>("limit") ?: 100
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
+            val limit = env.getArgument<Int>("limit") ?: 100
             val fromInstant = from?.let { java.time.Instant.parse(it) }
             val toInstant = to?.let { java.time.Instant.parse(it) }
             metricsStore.getOpcUaDeviceMetricsHistory(deviceName, fromInstant, toInstant, lastMinutes, limit).onComplete { result ->
@@ -1422,10 +1422,10 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
-            val limit = env.getArgument<Int?>("limit") ?: 100
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
+            val limit = env.getArgument<Int>("limit") ?: 100
 
             val fromInstant = from?.let { java.time.Instant.parse(it) }
             val toInstant = to?.let { java.time.Instant.parse(it) }
@@ -1525,10 +1525,10 @@ class MetricsResolver(
                 return@DataFetcher future
             }
 
-            val from = env.getArgument<String?>("from")
-            val to = env.getArgument<String?>("to")
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
-            val limit = env.getArgument<Int?>("limit") ?: 100
+            val from = env.getArgument<String>("from")
+            val to = env.getArgument<String>("to")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
+            val limit = env.getArgument<Int>("limit") ?: 100
 
             val fromInstant = from?.let { java.time.Instant.parse(it) }
             val toInstant = to?.let { java.time.Instant.parse(it) }

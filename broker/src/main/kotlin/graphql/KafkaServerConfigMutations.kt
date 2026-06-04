@@ -413,7 +413,7 @@ class KafkaServerConfigMutations(
                 }
                 
                 val deleteFutures = stores.map { it.deleteConsumerGroup(groupId) }
-                Future.all<Boolean>(deleteFutures).onComplete { allAr ->
+                Future.all(deleteFutures).onComplete { allAr ->
                     if (allAr.succeeded()) {
                         val result = allAr.result().list<Boolean>().any { it }
                         future.complete(result)
@@ -498,7 +498,7 @@ class KafkaServerConfigMutations(
                     }
                 }
                 
-                Future.all<IKafkaQueueStore>(futures).onComplete { allRes ->
+                Future.all(futures).onComplete { allRes ->
                     if (allRes.succeeded()) {
                         val stores = allRes.result().list<IKafkaQueueStore>()
                         promise.complete(stores)

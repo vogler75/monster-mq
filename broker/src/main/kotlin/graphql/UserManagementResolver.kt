@@ -61,7 +61,7 @@ class UserManagementResolver(
             // Check authorization - requires admin privileges
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
-            val username = env.getArgument<String?>("username")
+            val username = env.getArgument<String>("username")
 
             try {
                 if (username != null) {

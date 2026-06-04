@@ -29,8 +29,8 @@ class TelegramClientConfigQueries(
             if (!Monster.isFeatureEnabled(Features.Telegram))
                 return@DataFetcher future.apply { complete(emptyList()) }
             try {
-                val name = env.getArgument<String?>("name")
-                val nodeId = env.getArgument<String?>("node")
+                val name = env.getArgument<String>("name")
+                val nodeId = env.getArgument<String>("node")
 
                 when {
                     name != null && nodeId != null -> {

@@ -12,7 +12,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <kotlin.code.style>official</kotlin.code.style>
         <kotlin.compiler.jvmTarget>21</kotlin.compiler.jvmTarget>
-        <vertx.version>5.0.10</vertx.version>
+        <vertx.version>5.1.1</vertx.version>
         <guava.version>33.5.0-jre</guava.version>
         <jackson.version>2.18.1</jackson.version>
     </properties>
@@ -311,13 +311,8 @@
         </dependency>
         <dependency>
             <groupId>com.graphql-java</groupId>
-            <artifactId>graphql-java</artifactId>
-            <version>22.3</version>
-        </dependency>
-        <dependency>
-            <groupId>com.graphql-java</groupId>
             <artifactId>graphql-java-extended-scalars</artifactId>
-            <version>22.0</version>
+            <version>24.0</version>
         </dependency>
 
         <!-- LangChain4j - AI Agent Framework -->

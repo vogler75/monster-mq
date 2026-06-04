@@ -111,7 +111,7 @@ class KafkaClientConnector : AbstractVerticle() {
             if (futures.isEmpty()) {
                 stopPromise.complete()
             } else {
-                Future.all<Any>(futures).onComplete { stopPromise.complete() }
+                Future.all(futures).onComplete { stopPromise.complete() }
             }
         } catch (_: Exception) {
             stopPromise.complete()

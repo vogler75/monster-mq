@@ -495,7 +495,7 @@ class OpcUaConnector : AbstractVerticle() {
             }
         }
 
-        Future.all<Any>(resolveFutures.map { it.map { r -> r as Any } })
+        Future.all(resolveFutures.map { it.map { r -> r as Any } })
             .compose { compositeResult ->
                 val allItems = mutableListOf<Triple<OpcUaAddress, NodeId, String>>()
                 for (i in 0 until compositeResult.size()) {
@@ -515,7 +515,7 @@ class OpcUaConnector : AbstractVerticle() {
                 logger.info("Creating ${allItems.size} monitored items in ${batches.size} batch(es) for device ${deviceConfig.name}")
 
                 val batchFutures = batches.map { batch -> createMonitoredItemsBatch(batch) }
-                Future.all<Void>(batchFutures).map { null as Void? }
+                Future.all(batchFutures).map { null as Void? }
             }
             .onComplete { result ->
                 if (result.succeeded()) {

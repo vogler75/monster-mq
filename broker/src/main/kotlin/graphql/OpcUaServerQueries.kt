@@ -36,8 +36,8 @@ class OpcUaServerQueries(
             val future = CompletableFuture<List<OpcUaServerInfo>>()
             if (!Monster.isFeatureEnabled(Features.OpcUaServer))
                 return@DataFetcher future.apply { complete(emptyList()) }
-            val name = env.getArgument<String?>("name")
-            val nodeId = env.getArgument<String?>("node")
+            val name = env.getArgument<String>("name")
+            val nodeId = env.getArgument<String>("node")
 
             when {
                 // Filter by both name and node
@@ -128,7 +128,7 @@ class OpcUaServerQueries(
             if (!Monster.isFeatureEnabled(Features.OpcUaServer))
                 return@DataFetcher future.apply { complete(emptyList()) }
             val serverName = env.getArgument<String>("serverName")
-            val trusted = env.getArgument<Boolean?>("trusted")
+            val trusted = env.getArgument<Boolean>("trusted")
 
             if (serverName == null) {
                 future.complete(emptyList())

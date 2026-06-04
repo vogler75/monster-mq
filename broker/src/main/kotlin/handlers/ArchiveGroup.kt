@@ -166,7 +166,7 @@ class ArchiveGroup(
                 }
             }
 
-            Future.all<Void>(undeployFutures).onComplete { _ ->
+            Future.all(undeployFutures).onComplete { _ ->
                 logger.info("Child verticle cleanup completed for ArchiveGroup [$name]")
                 childDeployments.clear()
                 lastValStore = null

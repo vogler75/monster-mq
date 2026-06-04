@@ -352,7 +352,7 @@ open class SessionHandler(
             }
 
             // Wait for all connection statistics to be collected, then reply
-            Future.all<Void>(clientStatsFutures).onComplete { _ ->
+            Future.all(clientStatsFutures).onComplete { _ ->
                 // Calculate message bus rates
                 val messageBusInCount = messageBusIn.getAndSet(0)
                 val messageBusOutCount = messageBusOut.getAndSet(0)
@@ -961,7 +961,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            Future.all<Any>(listOf(fCombined)+fx as List<Future<*>>).mapEmpty()
+            Future.all(listOf(fCombined)+fx as List<Future<*>>).mapEmpty()
 
         } else {
             val f3 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
@@ -975,7 +975,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            Future.all<Any>(fx as List<Future<*>>).mapEmpty()
+            Future.all(fx as List<Future<*>>).mapEmpty()
         } else {
             vertx.eventBus().request<Boolean>(clientStatusAddress, payload).mapEmpty()
         }
@@ -988,7 +988,7 @@ open class SessionHandler(
             val fx = Monster.getClusterNodeIds(vertx).map {
                 vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             }
-            return Future.all<Any>(listOf(f1)+fx as List<Future<*>>).mapEmpty()
+            return Future.all(listOf(f1)+fx as List<Future<*>>).mapEmpty()
         } else {
             val f2 = vertx.eventBus().request<Boolean>(clientStatusAddress, payload)
             return Future.all(f1, f2).mapEmpty()

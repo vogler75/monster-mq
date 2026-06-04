@@ -524,11 +524,11 @@ class QueryResolver(
 
             val limit = env.getArgument<Int>("limit") ?: 100
             val orderByTime = env.getArgument<String>("orderByTime") ?: "DESC"
-            val lastMinutes = env.getArgument<Int?>("lastMinutes")
+            val lastMinutes = env.getArgument<Int>("lastMinutes")
 
             // Get time parameters
-            var startTimeStr = env.getArgument<String?>("startTime")
-            var endTimeStr = env.getArgument<String?>("endTime")
+            var startTimeStr = env.getArgument<String>("startTime")
+            var endTimeStr = env.getArgument<String>("endTime")
 
             // Handle lastMinutes option
             if (lastMinutes != null) {
@@ -554,8 +554,8 @@ class QueryResolver(
             }
 
             // Get optional filters
-            val nodeFilter = env.getArgument<String?>("node")
-            val levelArg = env.getArgument<Any?>("level")
+            val nodeFilter = env.getArgument<String>("node")
+            val levelArg = env.getArgument<Any>("level")
             val levelFilters = when (levelArg) {
                 is List<*> -> levelArg.filterIsInstance<String>()
                 is String -> listOf(levelArg)
@@ -563,10 +563,10 @@ class QueryResolver(
                 else -> emptyList()
             }
             logger.finer("QueryResolver.systemLogs - levelArg: $levelArg, levelFilters: $levelFilters")
-            val loggerFilter = env.getArgument<String?>("logger")
-            val sourceClassFilter = env.getArgument<String?>("sourceClass")
-            val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
-            val messageFilter = env.getArgument<String?>("message")
+            val loggerFilter = env.getArgument<String>("logger")
+            val sourceClassFilter = env.getArgument<String>("sourceClass")
+            val sourceMethodFilter = env.getArgument<String>("sourceMethod")
+            val messageFilter = env.getArgument<String>("message")
 
             // Validate ISO datetime strings
             val startTime = startTimeStr?.let {
@@ -830,7 +830,7 @@ class QueryResolver(
     fun topicValue(): DataFetcher<CompletableFuture<TopicValue?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<TopicValue?>()
-            val source = env.getSource<Topic?>()
+            val source = env.getSource<Topic>()
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val archiveGroupName = "Default" // Use default archive group for Topic field resolver
 
@@ -891,8 +891,8 @@ class QueryResolver(
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
-            val startTimeStr = env.getArgument<String?>("startTime")
-            val endTimeStr = env.getArgument<String?>("endTime")
+            val startTimeStr = env.getArgument<String>("startTime")
+            val endTimeStr = env.getArgument<String>("endTime")
 
             val startTime = startTimeStr?.let {
                 try {
@@ -962,7 +962,7 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            val names = env.getArgument<List<String>?>("names")
+            val names = env.getArgument<List<String>>("names")
 
             deviceStore.exportConfigs(names).onComplete { result ->
                 if (result.succeeded()) {

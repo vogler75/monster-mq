@@ -73,8 +73,8 @@ class GenAiResolver(
                     return@DataFetcher future
                 }
 
-                val context = env.getArgument<String?>("context")
-                val docs = env.getArgument<List<String>?>("docs")
+                val context = env.getArgument<String>("context")
+                val docs = env.getArgument<List<String>>("docs")
 
                 logger.info("GenAI request received: prompt length=${prompt.length}, docs=${docs?.size ?: 0}")
 
@@ -141,16 +141,16 @@ class GenAiResolver(
                 }
 
                 // Get arguments (required fields - null check for safety)
-                val archiveGroupName = env.getArgument<String?>("archiveGroup") ?: "Default"
-                val topicPattern = env.getArgument<String?>("topicPattern") ?: "#"
-                val question = env.getArgument<String?>("question")
-                val customSystemPrompt = env.getArgument<String?>("systemPrompt")
-                val maxTopics = env.getArgument<Int?>("maxTopics") ?: 100
-                val maxValueLength = env.getArgument<Int?>("maxValueLength") ?: 1000
+                val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+                val topicPattern = env.getArgument<String>("topicPattern") ?: "#"
+                val question = env.getArgument<String>("question")
+                val customSystemPrompt = env.getArgument<String>("systemPrompt")
+                val maxTopics = env.getArgument<Int>("maxTopics") ?: 100
+                val maxValueLength = env.getArgument<Int>("maxValueLength") ?: 1000
 
                 // Get chat history for follow-up questions
                 @Suppress("UNCHECKED_CAST")
-                val chatHistoryRaw = env.getArgument<List<Map<String, String>>?>("chatHistory")
+                val chatHistoryRaw = env.getArgument<List<Map<String, String>>>("chatHistory")
                 val chatHistory = chatHistoryRaw?.map { msg ->
                     ChatMessageInput(
                         role = msg["role"] ?: "user",

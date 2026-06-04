@@ -47,7 +47,7 @@ class TopicSchemaQueries(
             val future = CompletableFuture<Map<String, Any?>?>()
             if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
                 return@DataFetcher future.apply { complete(null) }
-            val name = env.getArgument<String?>("name") ?: run {
+            val name = env.getArgument<String>("name") ?: run {
                 future.complete(null); return@DataFetcher future
             }
             deviceStore.getDevice(name).onComplete { result ->
@@ -72,11 +72,11 @@ class TopicSchemaQueries(
             val future = CompletableFuture<Map<String, Any?>>()
             if (!Monster.isFeatureEnabled(Features.SchemaPolicy))
                 return@DataFetcher future.apply { complete(validationError("", "CONFIG_ERROR", "SchemaPolicy feature is not enabled on this node")) }
-            val policyName = env.getArgument<String?>("policyName") ?: run {
+            val policyName = env.getArgument<String>("policyName") ?: run {
                 future.complete(validationError("", "CONFIG_ERROR", "policyName is required"))
                 return@DataFetcher future
             }
-            val payload = env.getArgument<String?>("payload") ?: run {
+            val payload = env.getArgument<String>("payload") ?: run {
                 future.complete(validationError(policyName, "CONFIG_ERROR", "payload is required"))
                 return@DataFetcher future
             }
@@ -142,7 +142,7 @@ class TopicSchemaQueries(
             val future = CompletableFuture<Map<String, Any?>?>()
             if (!Monster.isFeatureEnabled(Features.TopicNamespace))
                 return@DataFetcher future.apply { complete(null) }
-            val name = env.getArgument<String?>("name") ?: run {
+            val name = env.getArgument<String>("name") ?: run {
                 future.complete(null); return@DataFetcher future
             }
             deviceStore.getDevice(name).onComplete { result ->
@@ -167,7 +167,7 @@ class TopicSchemaQueries(
             val future = CompletableFuture<Map<String, Any?>?>()
             if (!Monster.isFeatureEnabled(Features.TopicNamespace))
                 return@DataFetcher future.apply { complete(null) }
-            val topic = env.getArgument<String?>("topic") ?: run {
+            val topic = env.getArgument<String>("topic") ?: run {
                 future.complete(null); return@DataFetcher future
             }
             val matched = policyCache.matchNamespace(topic)

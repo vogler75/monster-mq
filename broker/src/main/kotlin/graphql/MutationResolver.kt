@@ -212,7 +212,7 @@ class MutationResolver(
     fun purgeQueuedMessages(): DataFetcher<CompletableFuture<PurgeResult>> {
         return DataFetcher { env ->
             val future = CompletableFuture<PurgeResult>()
-            val clientId = env.getArgument<String?>("clientId")
+            val clientId = env.getArgument<String>("clientId")
 
             // Check authorization - requires admin privileges
             val authResult = authContext.validateFieldAccess(env)
@@ -322,7 +322,7 @@ class MutationResolver(
                 return@DataFetcher future
             }
 
-            val configs = env.getArgument<List<Map<String, Any?>>?>("configs")
+            val configs = env.getArgument<List<Map<String, Any?>>>("configs")
             if (configs.isNullOrEmpty()) {
                 future.completeExceptionally(GraphQLException("Configs list is required and cannot be empty"))
                 return@DataFetcher future

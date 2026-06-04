@@ -1048,7 +1048,7 @@ MORE INFO:
             val archiveGroupsFuture = archiveHandler.initialize()
 
             // Wait for all stores to be ready
-            Future.all<Any>(listOf(archiveGroupsFuture, retainedReady, messageBusReady)).onFailure { it ->
+            Future.all(listOf(archiveGroupsFuture, retainedReady, messageBusReady)).onFailure { it ->
                 logger.severe("Initialization of bus or archive groups failed: ${it.message}")
                 exitProcess(-1)
             }.onComplete {
@@ -1570,7 +1570,7 @@ MORE INFO:
                             Future.succeededFuture<String>()
                         }
                     }
-                    .compose { Future.all<String>(servers.map { vertx.deployVerticle(it) }) }
+                    .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
                     .compose {
                         // Agent Extension (must start AFTER MCP server and other servers are ready)
                         if (Monster.isFeatureEnabled(Features.Agents)) {

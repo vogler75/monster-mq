@@ -91,7 +91,7 @@ class Plc4xExtension : AbstractVerticle() {
             vertx.undeploy(deploymentId)
         }
 
-        Future.all<Void>(undeployFutures)
+        Future.all(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete { result ->
                 if (result.succeeded()) {

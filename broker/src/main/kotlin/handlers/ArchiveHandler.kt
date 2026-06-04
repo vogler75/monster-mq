@@ -206,7 +206,7 @@ class ArchiveHandler(
                     }
                 }
 
-                Future.all<Any>(importFutures).onComplete { importResult ->
+                Future.all(importFutures).onComplete { importResult ->
                     val importedCount = importFutures.mapNotNull {
                         if (it.succeeded()) it.result() as Int else null
                     }.sum()
@@ -269,7 +269,7 @@ class ArchiveHandler(
                     }
                 }
 
-                Future.all<Any>(deleteFutures).onComplete {
+                Future.all(deleteFutures).onComplete {
                     logger.fine("Full sync cleanup: deleted ${orphanNames.size} orphan archive groups: $orphanNames")
                     promise.complete()
                 }
@@ -365,7 +365,7 @@ class ArchiveHandler(
                             return@onComplete
                         }
 
-                        Future.all<Any>(resolveFutures.map { it.recover { Future.succeededFuture(null) } }).onComplete {
+                        Future.all(resolveFutures.map { it.recover { Future.succeededFuture(null) } }).onComplete {
                             val archiveGroups = resolveFutures.mapNotNull { if (it.succeeded()) it.result() else null }
                             resolveFutures.forEachIndexed { index, future ->
                                 if (future.failed()) {
@@ -399,7 +399,7 @@ class ArchiveHandler(
                             }
 
                             @Suppress("UNCHECKED_CAST")
-                            Future.all<Any>(deploymentFutures as List<Future<Any>>).onComplete { result ->
+                            Future.all(deploymentFutures as List<Future<Any>>).onComplete { result ->
                                 if (result.succeeded()) {
                                     val deployedGroups = deploymentFutures.mapNotNull {
                                         if (it.succeeded()) it.result() else null

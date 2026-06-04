@@ -29,15 +29,15 @@ class AgentQueries(
                 return@DataFetcher future.apply { complete(emptyList()) }
 
             try {
-                val nodeIdFilter = env.getArgument<String?>("nodeId")
-                val enabledFilter = env.getArgument<Boolean?>("enabled")
-                val orgFilter = env.getArgument<String?>("org")?.trim()?.takeIf { it.isNotEmpty() }
-                val siteFilter = env.getArgument<String?>("site")?.trim()?.takeIf { it.isNotEmpty() }
-                val tagFilter = env.getArgument<List<String>?>("tags")
+                val nodeIdFilter = env.getArgument<String>("nodeId")
+                val enabledFilter = env.getArgument<Boolean>("enabled")
+                val orgFilter = env.getArgument<String>("org")?.trim()?.takeIf { it.isNotEmpty() }
+                val siteFilter = env.getArgument<String>("site")?.trim()?.takeIf { it.isNotEmpty() }
+                val tagFilter = env.getArgument<List<String>>("tags")
                     ?.map { it.trim() }
                     ?.filter { it.isNotEmpty() }
                     ?: emptyList()
-                val tagFilterMode = env.getArgument<String?>("tagFilterMode")?.uppercase() ?: "OR"
+                val tagFilterMode = env.getArgument<String>("tagFilterMode")?.uppercase() ?: "OR"
 
                 deviceStore.getAllDevices().onComplete { result ->
                     if (result.succeeded()) {

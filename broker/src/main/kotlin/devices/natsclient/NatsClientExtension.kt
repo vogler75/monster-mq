@@ -53,7 +53,7 @@ class NatsClientExtension : AbstractVerticle() {
 
     override fun stop(stopPromise: Promise<Void>) {
         val undeployFutures = deployedConnectors.values.map { vertx.undeploy(it) }
-        Future.all<Void>(undeployFutures)
+        Future.all(undeployFutures)
             .compose { deviceStore.close() }
             .onComplete { stopPromise.complete() }
     }

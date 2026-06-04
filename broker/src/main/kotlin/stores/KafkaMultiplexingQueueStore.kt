@@ -65,7 +65,7 @@ class KafkaMultiplexingQueueStore(
             }
         }
         
-        return Future.all<Void>(futures).map { null }
+        return Future.all(futures).map { null }
     }
     
     private fun getStoreForTopic(topic: String): IKafkaQueueStore? {
@@ -103,7 +103,7 @@ class KafkaMultiplexingQueueStore(
                 futures.add(store.enqueue(msgs))
             }
         }
-        return Future.all<Void>(futures).map { null }
+        return Future.all(futures).map { null }
     }
 
     override fun fetch(topic: String, startOffset: Long, limit: Int): Future<List<Pair<Long, BrokerMessage>>> {
@@ -118,7 +118,7 @@ class KafkaMultiplexingQueueStore(
         val futures = uniqueStores.map { store ->
             store.pruneExpired(olderThanMs)
         }
-        return Future.all<Int>(futures).map { results ->
+        return Future.all(futures).map { results ->
             results.list<Int>().sum()
         }
     }
@@ -148,7 +148,7 @@ class KafkaMultiplexingQueueStore(
         if (uniqueStores.isEmpty()) return Future.succeededFuture(emptyList())
 
         val futures = uniqueStores.map { it.getConsumerGroups() }
-        return Future.all<List<KafkaConsumerGroup>>(futures).map { results ->
+        return Future.all(futures).map { results ->
             val allGroups = mutableMapOf<String, KafkaConsumerGroup>()
             results.list<List<KafkaConsumerGroup>>().forEach { list ->
                 list.forEach { group ->
@@ -171,7 +171,7 @@ class KafkaMultiplexingQueueStore(
         if (uniqueStores.isEmpty()) return Future.succeededFuture(false)
 
         val futures = uniqueStores.map { it.deleteConsumerGroup(groupId) }
-        return Future.all<Boolean>(futures).map { results ->
+        return Future.all(futures).map { results ->
             results.list<Boolean>().any { it }
         }
     }

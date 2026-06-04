@@ -148,9 +148,9 @@ class ArchiveGroupResolver(
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
             // Extract filter parameters
-            val enabledFilter = env.getArgument<Boolean?>("enabled")
-            val lastValTypeEquals = env.getArgument<String?>("lastValTypeEquals")
-            val lastValTypeNotEquals = env.getArgument<String?>("lastValTypeNotEquals")
+            val enabledFilter = env.getArgument<Boolean>("enabled")
+            val lastValTypeEquals = env.getArgument<String>("lastValTypeEquals")
+            val lastValTypeNotEquals = env.getArgument<String>("lastValTypeNotEquals")
 
             try {
                 val configStore = archiveHandler.getConfigStore()
@@ -328,7 +328,7 @@ class ArchiveGroupResolver(
             val future = CompletableFuture<List<Map<String, Any?>>>()
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
-            val typeFilter = env.getArgument<String?>("type")
+            val typeFilter = env.getArgument<String>("type")
             val builtIns = builtInConnections()
             val configStore = archiveHandler.getConfigStore()
             if (configStore == null) {
@@ -357,7 +357,7 @@ class ArchiveGroupResolver(
             val future = CompletableFuture<List<String>>()
             if (!checkAuthorization(env, future)) return@DataFetcher future
 
-            val typeFilter = env.getArgument<String?>("type")
+            val typeFilter = env.getArgument<String>("type")
             val builtIns = builtInConnections()
                 .filter { typeFilter == null || it.type.name == typeFilter }
             val configStore = archiveHandler.getConfigStore()

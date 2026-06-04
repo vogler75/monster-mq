@@ -331,7 +331,7 @@ class WinCCUaPipeConnector : AbstractVerticle() {
             }
         }
         val promise = Promise.promise<Void>()
-        Future.all<Void>(futures).onComplete { result ->
+        Future.all(futures).onComplete { result ->
             if (result.succeeded()) {
                 logger.info("All Open Pipe subscriptions set up for device ${deviceConfig.name}")
                 promise.complete()

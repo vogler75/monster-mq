@@ -36,7 +36,7 @@ class SubscriptionResolver(
                 }
                 else -> listOf("#")
             }
-            val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
+            val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
 
             TopicUpdatePublisher(vertx, topicFilters, format)
         }
@@ -45,9 +45,9 @@ class SubscriptionResolver(
     fun topicUpdatesBulk(): DataFetcher<Publisher<TopicUpdateBulk>> {
         return DataFetcher { env ->
             val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()
-            val format = env.getArgument<DataFormat?>("format") ?: DataFormat.JSON
-            val timeoutMs = env.getArgument<Int?>("timeoutMs") ?: 1000
-            val maxSize = env.getArgument<Int?>("maxSize") ?: 100
+            val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
+            val timeoutMs = env.getArgument<Int>("timeoutMs") ?: 1000
+            val maxSize = env.getArgument<Int>("maxSize") ?: 100
 
             if (timeoutMs <= 0) throw IllegalArgumentException("timeoutMs must be > 0")
             if (maxSize <= 0) throw IllegalArgumentException("maxSize must be > 0")
@@ -58,8 +58,8 @@ class SubscriptionResolver(
 
     fun systemLogs(): DataFetcher<Publisher<SystemLogEntry>> {
         return DataFetcher { env ->
-            val node = env.getArgument<String?>("node") ?: "+"
-            val levelArg = env.getArgument<Any?>("level")
+            val node = env.getArgument<String>("node") ?: "+"
+            val levelArg = env.getArgument<Any>("level")
             val levels = when (levelArg) {
                 is List<*> -> levelArg.filterIsInstance<String>()
                 is String -> listOf(levelArg)
@@ -67,11 +67,11 @@ class SubscriptionResolver(
                 else -> listOf("+")
             }
             logger.finer("SubscriptionResolver.systemLogs - levelArg: $levelArg, levels: $levels")
-            val loggerFilter = env.getArgument<String?>("logger")
-            val threadFilter = env.getArgument<Long?>("thread")
-            val sourceClassFilter = env.getArgument<String?>("sourceClass")
-            val sourceMethodFilter = env.getArgument<String?>("sourceMethod")
-            val messageFilter = env.getArgument<String?>("message")
+            val loggerFilter = env.getArgument<String>("logger")
+            val threadFilter = env.getArgument<Long>("thread")
+            val sourceClassFilter = env.getArgument<String>("sourceClass")
+            val sourceMethodFilter = env.getArgument<String>("sourceMethod")
+            val messageFilter = env.getArgument<String>("message")
             
             SystemLogsPublisher(vertx, node, levels, loggerFilter, threadFilter, 
                                sourceClassFilter, sourceMethodFilter, messageFilter)
