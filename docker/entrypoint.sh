@@ -22,6 +22,9 @@ CLASSPATH=$(echo "$CLASSPATH" | sed 's/:$//')
 
 mkdir -p log
 
+# Ensure /cfg-data exists (e.g. when starting without external volume mounts)
+mkdir -p /cfg-data 2>/dev/null || true
+
 # /cfg-data is the persistent volume mount used by Siemens Industrial Edge
 if [ -d /cfg-data ]; then
     mkdir -p /cfg-data/db
