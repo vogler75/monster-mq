@@ -550,13 +550,13 @@ def test_kafka_write_authorization_validation(broker_config):
         with pytest.raises(Exception) as exc_info:
             future = producer.send("test_auth_stream", key="pytest/auth/forbidden/1", value={"data": "forbidden"})
             future.get(timeout=3)
-        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value)
+        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value) or "TopicAuthorizationFailedError" in str(exc_info.value)
 
         # 5. Publish to non-matching topic filter -> should fail!
         with pytest.raises(Exception) as exc_info:
             future = producer.send("test_auth_stream", key="pytest/auth/completely_invalid/1", value={"data": "invalid"})
             future.get(timeout=3)
-        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value)
+        assert "TopicAuthorizationFailedException" in str(exc_info.value) or "Broker: Topic authorization failed" in str(exc_info.value) or "TopicAuthorizationFailedError" in str(exc_info.value)
 
         # 6. Publish to completely unconfigured stream/topic -> should succeed (Otherwise it can publish to any topic)
         future = producer.send("some_other_unconfigured_topic", key="any/topic/is/allowed/here", value={"data": "unconfigured"})

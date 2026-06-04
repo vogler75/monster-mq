@@ -310,7 +310,7 @@ class KafkaProtocolServer(
             // ListOffsets
             response.writeShort(2)  // key
             response.writeShort(0)  // min version
-            response.writeShort(0)  // max version
+            response.writeShort(3)  // max version
 
             // Metadata
             response.writeShort(3)  // key
@@ -589,7 +589,7 @@ class KafkaProtocolServer(
 
             // Wait for all database offsets to resolve
             io.vertx.core.Future.all(futures.map { it.future }).onComplete { ar ->
-                if (apiVersion.toInt() >= 1) {
+                if (apiVersion.toInt() >= 2) {
                     response.writeInt(0) // throttleTimeMs = 0
                 }
 
