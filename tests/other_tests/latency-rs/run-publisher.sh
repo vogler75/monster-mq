@@ -1,1 +1,1 @@
-cargo run -- --pub-host localhost --pub-port 1883 --qos 1 --interval-ms 0 --count 1000000 --publish my/topic
+cargo run -- --publish "my/topic" --qos 1 --pub-host test.monstermq.com --count 1000000 --username "" --max-inflight 65000 --interval-ms 100 --delay-every 100

@@ -1,0 +1,13 @@
+Release v1.8.23
+Built from commit: 079a3dca
+Date: 2026-06-04 14:28:03
+
+Changes since v1.8.22:
+---
+079a3dca fix: resolve message loss concurrency race condition in bulk messaging buffers
+3cf2afd8 Add delay_every and max_inflight options
+a24f8959 Vertx upgrade from 5.0.10 to 5.1.1
+9f467b5e fix(cluster): resolve clustered startup deadlocks, postgres transaction leaks, and docker bind-mount locks
+8f440ea4 Create data directory if it does not exist
+bc064f10 Make queue drain batch size configurable
+65bb8f86 Deploy Kafka queue stores as worker verticles
