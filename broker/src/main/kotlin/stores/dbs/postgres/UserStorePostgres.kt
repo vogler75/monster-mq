@@ -247,7 +247,7 @@ class UserStorePostgres(
             val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName WHERE username = ?"
             try {
                 connection?.let { connection ->
-                    connection.prepareStatement(sql).use { stmt ->
+                    val resultVal = connection.prepareStatement(sql).use { stmt ->
                         stmt.setString(1, username)
                         val rs = stmt.executeQuery()
                         if (rs.next()) {
@@ -263,6 +263,8 @@ class UserStorePostgres(
                             )
                         } else null
                     }
+                    connection.commit()
+                    resultVal
                 }
             } catch (e: SQLException) {
                 rollbackQuietly()
@@ -288,7 +290,7 @@ class UserStorePostgres(
             val sql = "SELECT username, password_hash, enabled, can_subscribe, can_publish, is_admin, created_at, updated_at FROM $usersTableName ORDER BY username"
             try {
                 connection?.let { connection ->
-                    connection.prepareStatement(sql).use { stmt ->
+                    val resultVal = connection.prepareStatement(sql).use { stmt ->
                         val rs = stmt.executeQuery()
                         val users = mutableListOf<User>()
                         while (rs.next()) {
@@ -305,6 +307,8 @@ class UserStorePostgres(
                         }
                         users
                     }
+                    connection.commit()
+                    resultVal
                 } ?: emptyList()
             } catch (e: SQLException) {
                 rollbackQuietly()
@@ -467,7 +471,7 @@ class UserStorePostgres(
                     return@Callable null
                 }
                 connection?.let { connection ->
-                    connection.prepareStatement(sql).use { stmt ->
+                    val resultVal = connection.prepareStatement(sql).use { stmt ->
                         stmt.setInt(1, idInt)
                         val rs = stmt.executeQuery()
                         if (rs.next()) {
@@ -482,6 +486,8 @@ class UserStorePostgres(
                             )
                         } else null
                     }
+                    connection.commit()
+                    resultVal
                 }
             } catch (e: SQLException) {
                 rollbackQuietly()
@@ -507,7 +513,7 @@ class UserStorePostgres(
             val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName WHERE username = ? ORDER BY priority DESC"
             try {
                 connection?.let { connection ->
-                    connection.prepareStatement(sql).use { stmt ->
+                    val resultVal = connection.prepareStatement(sql).use { stmt ->
                         stmt.setString(1, username)
                         val rs = stmt.executeQuery()
                         val rules = mutableListOf<AclRule>()
@@ -524,6 +530,8 @@ class UserStorePostgres(
                         }
                         rules
                     }
+                    connection.commit()
+                    resultVal
                 } ?: emptyList()
             } catch (e: SQLException) {
                 rollbackQuietly()
@@ -549,7 +557,7 @@ class UserStorePostgres(
             val sql = "SELECT id, username, topic_pattern, can_subscribe, can_publish, priority, created_at FROM $usersAclTableName ORDER BY priority DESC"
             try {
                 connection?.let { connection ->
-                    connection.prepareStatement(sql).use { stmt ->
+                    val resultVal = connection.prepareStatement(sql).use { stmt ->
                         val rs = stmt.executeQuery()
                         val rules = mutableListOf<AclRule>()
                         while (rs.next()) {
@@ -565,6 +573,8 @@ class UserStorePostgres(
                         }
                         rules
                     }
+                    connection.commit()
+                    resultVal
                 } ?: emptyList()
             } catch (e: SQLException) {
                 rollbackQuietly()

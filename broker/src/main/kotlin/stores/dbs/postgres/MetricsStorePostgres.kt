@@ -265,13 +265,20 @@ class MetricsStorePostgres(
                     LIMIT 1
                 """.trimIndent()
             }
-            connection.prepareStatement(sql).use { st ->
-                st.setString(1, kind.toDbString())
-                st.setString(2, identifier)
-                st.setTimestamp(3, Timestamp.from(fromTs))
-                if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
-                val rs = st.executeQuery()
-                if (rs.next()) JsonObject(rs.getString("metrics")) else JsonObject()
+            try {
+                val resultVal = connection.prepareStatement(sql).use { st ->
+                    st.setString(1, kind.toDbString())
+                    st.setString(2, identifier)
+                    st.setTimestamp(3, Timestamp.from(fromTs))
+                    if (toTs != null) st.setTimestamp(4, Timestamp.from(toTs))
+                    val rs = st.executeQuery()
+                    if (rs.next()) JsonObject(rs.getString("metrics")) else JsonObject()
+                }
+                connection.commit()
+                resultVal
+            } catch (e: Exception) {
+                try { connection.rollback() } catch (_: Exception) {}
+                throw e
             }
         })
     }
@@ -298,24 +305,31 @@ class MetricsStorePostgres(
                     LIMIT ?
                 """.trimIndent()
             }
-            connection.prepareStatement(sql).use { st ->
-                st.setString(1, kind.toDbString())
-                st.setString(2, identifier)
-                st.setTimestamp(3, Timestamp.from(fromTs))
-                if (toTs != null) {
-                    st.setTimestamp(4, Timestamp.from(toTs))
-                    st.setInt(5, limit)
-                } else {
-                    st.setInt(4, limit)
+            try {
+                val resultVal = connection.prepareStatement(sql).use { st ->
+                    st.setString(1, kind.toDbString())
+                    st.setString(2, identifier)
+                    st.setTimestamp(3, Timestamp.from(fromTs))
+                    if (toTs != null) {
+                        st.setTimestamp(4, Timestamp.from(toTs))
+                        st.setInt(5, limit)
+                    } else {
+                        st.setInt(4, limit)
+                    }
+                    val rs = st.executeQuery()
+                    val list = mutableListOf<Pair<Instant, JsonObject>>() 
+                    while (rs.next()) {
+                        val ts = rs.getTimestamp("timestamp").toInstant()
+                        val json = JsonObject(rs.getString("metrics"))
+                        list.add(ts to json)
+                    }
+                    list
                 }
-                val rs = st.executeQuery()
-                val list = mutableListOf<Pair<Instant, JsonObject>>() 
-                while (rs.next()) {
-                    val ts = rs.getTimestamp("timestamp").toInstant()
-                    val json = JsonObject(rs.getString("metrics"))
-                    list.add(ts to json)
-                }
-                list
+                connection.commit()
+                resultVal
+            } catch (e: Exception) {
+                try { connection.rollback() } catch (_: Exception) {}
+                throw e
             }
         })
     }

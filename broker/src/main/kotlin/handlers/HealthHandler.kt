@@ -29,6 +29,9 @@ class HealthHandler(
         const val LEADER_KEY = "cluster-leader"
         const val BIRTH_KEY = "cluster-init"
 
+        @Volatile
+        private var cachedLeaderNodeId: String? = null
+
         /**
          * Gets the nodeId of the cluster leader.
          * In a single-node setup (non-clustered), returns the local node ID.
@@ -36,27 +39,10 @@ class HealthHandler(
          * Returns null if no leader is found or error occurs.
          */
         fun getLeaderNodeId(vertx: Vertx): String? {
-            return try {
-                if (!Monster.isClustered()) {
-                    // Single node - local node is the leader
-                    Monster.getClusterNodeId(vertx)
-                } else {
-                    val clusterManager = Monster.getClusterManager()
-                    if (clusterManager != null) {
-                        val map = clusterManager.hazelcastInstance.getMap<String, String>(CLUSTER_MAP)
-                        val leader = map[LEADER_KEY]
-                        if (leader == null) {
-                            Utils.getLogger(HealthHandler::class.java).warning("No leader set in cluster-config map")
-                        }
-                        leader
-                    } else {
-                        null
-                    }
-                }
-            } catch (e: Exception) {
-                Utils.getLogger(HealthHandler::class.java).severe("Error getting leader nodeId: ${e.message}")
-                null
+            if (!Monster.isClustered()) {
+                return Monster.getClusterNodeId(vertx)
             }
+            return cachedLeaderNodeId
         }
 
         /**
@@ -101,21 +87,77 @@ class HealthHandler(
 
             logger.info("Cluster local: ${cluster.localMember.address} members: ${cluster.members.joinToString(", ") { it.address.toString() }}")
 
-            instance.getMap<String, String>(CLUSTER_MAP).let { map ->
-                clusterDataMap = map
-                tryToBecomeLeader(map)
+            vertx.executeBlocking(java.util.concurrent.Callable<Void> {
+                try {
+                    val map = instance.getMap<String, String>(CLUSTER_MAP)
+                    clusterDataMap = map
+
+                    // Read current leader from map and cache it
+                    cachedLeaderNodeId = map[LEADER_KEY]
+
+                    // Register listener to keep cachedLeaderNodeId in sync
+                    map.addEntryListener(object : com.hazelcast.core.EntryListener<String, String> {
+                        override fun entryAdded(event: com.hazelcast.core.EntryEvent<String, String>) {
+                            if (event.key == LEADER_KEY) {
+                                cachedLeaderNodeId = event.value
+                                logger.info("Cluster leader added: $cachedLeaderNodeId")
+                            }
+                        }
+                        override fun entryUpdated(event: com.hazelcast.core.EntryEvent<String, String>) {
+                            if (event.key == LEADER_KEY) {
+                                cachedLeaderNodeId = event.value
+                                logger.info("Cluster leader updated: $cachedLeaderNodeId")
+                            }
+                        }
+                        override fun entryRemoved(event: com.hazelcast.core.EntryEvent<String, String>) {
+                            if (event.key == LEADER_KEY) {
+                                cachedLeaderNodeId = null
+                                logger.info("Cluster leader removed")
+                            }
+                        }
+                        override fun entryEvicted(event: com.hazelcast.core.EntryEvent<String, String>) {
+                            if (event.key == LEADER_KEY) {
+                                cachedLeaderNodeId = null
+                                logger.info("Cluster leader evicted")
+                            }
+                        }
+                        override fun entryExpired(event: com.hazelcast.core.EntryEvent<String, String>) {
+                            if (event.key == LEADER_KEY) {
+                                cachedLeaderNodeId = null
+                                logger.info("Cluster leader expired")
+                            }
+                        }
+                        override fun mapCleared(event: com.hazelcast.map.MapEvent) {
+                            cachedLeaderNodeId = null
+                            logger.info("Cluster map cleared")
+                        }
+                        override fun mapEvicted(event: com.hazelcast.map.MapEvent) {
+                            cachedLeaderNodeId = null
+                            logger.info("Cluster map evicted")
+                        }
+                    }, true)
+
+                    // Try to become leader
+                    tryToBecomeLeader(map)
+                } catch (e: Exception) {
+                    logger.severe("Failed during cluster health check initialization: ${e.message}")
+                }
+                null
+            }).onComplete { result ->
+                if (result.succeeded()) {
+                    cluster.addMembershipListener(object: MembershipListener {
+                        override fun memberAdded(event: MembershipEvent) {
+                            memberAddedHandler(event)
+                        }
+                        override fun memberRemoved(event: MembershipEvent) {
+                            memberRemovedHandler(event)
+                        }
+                    })
+                    startPromise.complete()
+                } else {
+                    startPromise.fail(result.cause())
+                }
             }
-
-            cluster.addMembershipListener(object: MembershipListener {
-                override fun memberAdded(event: MembershipEvent) {
-                    memberAddedHandler(event)
-                }
-                override fun memberRemoved(event: MembershipEvent) {
-                    memberRemovedHandler(event)
-                }
-            })
-
-            startPromise.complete()
         } else {
             startPromise.fail("Cluster manager is not Hazelcast")
         }
@@ -134,13 +176,22 @@ class HealthHandler(
             exitProcess(-1) // TODO: handle this properly
         } else {
             clusterDataMap?.let { map ->
-                if (map.remove(LEADER_KEY, nodeId)) { // remove leader if it was the removed node
-                    tryToBecomeLeader(map)
-                }
-                if (areWeTheLeader(map)) {
-                    logger.info("We are the leader - handling dead node [$nodeId] session cleanup")
-                    handleDeadNodeCleanup(nodeId)
-                }
+                vertx.executeBlocking(java.util.concurrent.Callable<Void> {
+                    try {
+                        if (map.remove(LEADER_KEY, nodeId)) { // remove leader if it was the removed node
+                            tryToBecomeLeader(map)
+                        }
+                        if (areWeTheLeader(map)) {
+                            logger.info("We are the leader - handling dead node [$nodeId] session cleanup")
+                            vertx.runOnContext {
+                                handleDeadNodeCleanup(nodeId)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.severe("Error handling member removal in Hazelcast: ${e.message}")
+                    }
+                    null
+                })
             }
         }
     }
@@ -150,10 +201,14 @@ class HealthHandler(
         logger.info("Attempting to become leader. Current nodeId: $nodeId")
         val birth = map.putIfAbsent(BIRTH_KEY, System.currentTimeMillis().toString())
         val leader = map.putIfAbsent(LEADER_KEY, nodeId)
-        logger.info("Leader election result - Previous leader value: $leader, Current nodeId: $nodeId, Map value after putIfAbsent: ${map.get(LEADER_KEY)}")
+        val currentLeader = map.get(LEADER_KEY)
+        logger.info("Leader election result - Previous leader value: $leader, Current nodeId: $nodeId, Map value after putIfAbsent: $currentLeader")
+        cachedLeaderNodeId = currentLeader
         if (leader == null) {
             logger.info("Successfully became leader!")
-            weBecameTheLeader(birth==null)
+            vertx.runOnContext {
+                weBecameTheLeader(birth == null)
+            }
         } else {
             logger.info("Another node is already the leader: $leader")
         }

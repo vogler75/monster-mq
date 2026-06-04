@@ -177,9 +177,11 @@ class MessageArchivePostgres (
                     val processingDuration = System.currentTimeMillis() - processingStart
                     logger.finer("PostgreSQL data processing took ${processingDuration}ms, processed $rowCount rows, returning ${messages.size()} messages")
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.severe("Error retrieving history for topic [$topic]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             e.printStackTrace()
         }
         return messages
@@ -189,7 +191,7 @@ class MessageArchivePostgres (
         return try {
             logger.fine { "Executing SQL query: $sql [${Utils.getCurrentFunctionName()}]" }
             db.connection?.let { connection ->
-                connection.createStatement().use { statement ->
+                val resultVal = connection.createStatement().use { statement ->
                     statement.executeQuery(sql).use { resultSet ->
                         val metaData = resultSet.metaData
                         val columnCount = metaData.columnCount
@@ -214,12 +216,15 @@ class MessageArchivePostgres (
                         result
                     }
                 }
+                connection.commit()
+                resultVal
             } ?: run {
                 logger.warning("No database connection available. [${Utils.getCurrentFunctionName()}]")
                 JsonArray().add("No database connection available.")
             }
         } catch (e: SQLException) {
             logger.severe("Error executing query: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             JsonArray().add("Error executing query: ${e.message}")
         }
     }
@@ -241,6 +246,7 @@ class MessageArchivePostgres (
             }
         } catch (e: SQLException) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
         
         val elapsedTimeMs = System.currentTimeMillis() - startTime
@@ -264,6 +270,7 @@ class MessageArchivePostgres (
             } ?: false
         } catch (e: SQLException) {
             logger.severe("Error dropping table [$tableName] for message archive [$name]: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }
@@ -272,14 +279,17 @@ class MessageArchivePostgres (
         return try {
             db.connection?.let { connection ->
                 val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, tableName)
                     val resultSet = preparedStatement.executeQuery()
                     resultSet.next()
                 }
+                connection.commit()
+                resultVal
             } ?: false
         } catch (e: SQLException) {
             logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }
@@ -312,11 +322,14 @@ class MessageArchivePostgres (
 
                 // Determine if we're using TimescaleDB time_bucket or standard date_trunc
                 val hasTimescaleDB = try {
-                    connection.createStatement().use { stmt ->
+                    val res = connection.createStatement().use { stmt ->
                         val rs = stmt.executeQuery("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'")
                         rs.next()
                     }
+                    connection.commit()
+                    res
                 } catch (e: Exception) {
+                    try { connection.rollback() } catch (_: Exception) {}
                     false
                 }
 
@@ -431,11 +444,13 @@ class MessageArchivePostgres (
                         rows.add(row)
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.warning("No database connection available for aggregation query")
             }
         } catch (e: SQLException) {
             logger.severe("Error executing aggregation query: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             e.printStackTrace()
         }
 
@@ -490,9 +505,12 @@ class MessageArchivePostgres (
                         dailyCounts.add(JsonObject().put("date", dayStr).put("count", count))
                     }
                 }
+                connection.commit()
+                stats.put("minTimestamp", minTimestampStr)
                 stats.put("dailyCounts", dailyCounts)
             } catch (e: SQLException) {
                 logger.severe("Error getting Postgres archive stats: ${e.message}")
+                try { connection.rollback() } catch (_: Exception) {}
             }
         }
         return stats
@@ -551,6 +569,7 @@ class MessageArchivePostgres (
             } ?: false
         } catch (e: Exception) {
             logger.warning("Error creating table: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }

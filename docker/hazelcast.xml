@@ -12,14 +12,14 @@
 
             <!-- Enable TCP/IP discovery with manually defined peers -->
             <tcp-ip enabled="true">
-                <member>192.168.1.4:5701</member>
-                <member>192.168.1.31:5701</member>
-                <member>192.168.1.32:5701</member>
+                <member>monster1:5701</member>
+                <member>monster2:5701</member>
+                <member>monster3:5701</member>
             </tcp-ip>
         </join>
 
         <!-- Optional: Restrict communication to specific interfaces -->
-        <interfaces enabled="true">
+        <interfaces enabled="false">
             <interface>192.168.1.*</interface>
         </interfaces>
     </network>

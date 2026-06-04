@@ -123,11 +123,13 @@ class SessionStorePostgres(
                         rows++
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.severe("Iterating subscription table not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error fetching subscriptions: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -142,11 +144,13 @@ class SessionStorePostgres(
                         }
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.severe("Iterating offline clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching offline clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -163,11 +167,13 @@ class SessionStorePostgres(
                         }
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.severe("Iterating connected clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching connected clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -186,11 +192,13 @@ class SessionStorePostgres(
                         }
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.severe("Iterating all sessions not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching all sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -226,11 +234,13 @@ class SessionStorePostgres(
                         }
                     }
                 }
+                connection.commit()
             } ?: run {
                 logger.severe("Iterating node clients not possible without database connection! [${Utils.getCurrentFunctionName()}]")
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching node clients [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -257,6 +267,7 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -273,6 +284,7 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at updating client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -280,16 +292,19 @@ class SessionStorePostgres(
         val sql = "SELECT connected FROM $sessionsTableName WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
                     if (resultSet.next()) {
-                        return resultSet.getBoolean(1)
-                    }
+                        resultSet.getBoolean(1)
+                    } else false
                 }
+                connection.commit()
+                return resultVal
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
         return false
     }
@@ -298,14 +313,17 @@ class SessionStorePostgres(
         val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ?"
         try {
             db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, clientId)
                     val resultSet = preparedStatement.executeQuery()
-                    return resultSet.next()
+                    resultSet.next()
                 }
+                connection.commit()
+                return resultVal
             }
         } catch (e: SQLException) {
             logger.warning("Error at fetching client [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
         return false
     }
@@ -331,6 +349,7 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at setting last will [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -357,6 +376,7 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at inserting subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -377,6 +397,7 @@ class SessionStorePostgres(
             }
         } catch (e: SQLException) {
             logger.warning("Error at removing subscription [${e.message}] SQL: [$sql] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -409,6 +430,7 @@ class SessionStorePostgres(
 
         } catch (e: SQLException) {
             logger.warning("Error at removing client [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -442,6 +464,7 @@ class SessionStorePostgres(
             } ?: logger.warning("No database connection available for purging sessions [${Utils.getCurrentFunctionName()}]")
         } catch (e: SQLException) {
             logger.warning("Error at purging sessions [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 

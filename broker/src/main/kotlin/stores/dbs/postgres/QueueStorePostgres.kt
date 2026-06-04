@@ -154,9 +154,11 @@ class QueueStorePostgres(
                         if (!continueProcessing) break
                     }
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.warning("Error dequeuing messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -205,7 +207,7 @@ class QueueStorePostgres(
         """.trimIndent()
         return try {
             db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { ps ->
+                val resultVal = connection.prepareStatement(sql).use { ps ->
                     ps.setString(1, clientId)
                     ps.setInt(2, limit)
                     val rs = ps.executeQuery()
@@ -215,9 +217,12 @@ class QueueStorePostgres(
                     }
                     messages
                 }
+                connection.commit()
+                resultVal
             } ?: emptyList()
         } catch (e: SQLException) {
             logger.warning("Error fetching pending messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             emptyList()
         }
     }

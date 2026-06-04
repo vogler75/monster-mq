@@ -199,6 +199,9 @@ class Monster(args: Array<String>) {
             return getInstance().clusterManager
         }
 
+        // Cache of enabled features for all nodes in the cluster
+        private val nodeEnabledFeatures: MutableMap<String, Set<String>> = java.util.concurrent.ConcurrentHashMap()
+
         // Feature flags — populated at startup from config, read by GraphQL resolvers
         @Volatile
         private var enabledFeatures: Set<String> = emptySet()
@@ -207,34 +210,69 @@ class Monster(args: Array<String>) {
 
         fun isFeatureEnabled(feature: String): Boolean = enabledFeatures.contains(feature)
 
-        private fun publishEnabledFeatures(vertx: Vertx, features: Set<String>) {
+        private fun publishEnabledFeatures(vertx: Vertx, features: Set<String>): Future<String> {
             enabledFeatures = features
+            val nodeId = getClusterNodeId(vertx)
+            nodeEnabledFeatures[nodeId] = features
+
             val instance = getInstance()
             if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
-                val map = instance.clusterManager!!.hazelcastInstance
-                    .getMap<String, Set<String>>("monster.enabledFeatures")
-                val nodeId = getClusterNodeId(vertx)
-                map[nodeId] = features
-                // Check for mismatches with other nodes
-                map.entries.forEach { (otherId, otherFeatures) ->
-                    if (otherId != nodeId && otherFeatures != features) {
-                        logger.warning(
-                            "Feature flag mismatch detected! " +
-                            "This node ($nodeId): $features / " +
-                            "Node $otherId: $otherFeatures. " +
-                            "All cluster nodes must have identical Features config."
-                        )
+                return vertx.executeBlocking(java.util.concurrent.Callable<String> {
+                    try {
+                        val map = instance.clusterManager!!.hazelcastInstance
+                            .getMap<String, Set<String>>("monster.enabledFeatures")
+                        map[nodeId] = features
+
+                        // Update local cache from the Hazelcast map
+                        nodeEnabledFeatures.putAll(map)
+
+                        // Register entry listener to keep nodeEnabledFeatures in sync
+                        map.addEntryListener(object : com.hazelcast.core.EntryListener<String, Set<String>> {
+                            override fun entryAdded(event: com.hazelcast.core.EntryEvent<String, Set<String>>) {
+                                event.key?.let { k -> event.value?.let { v -> nodeEnabledFeatures[k] = v } }
+                            }
+                            override fun entryUpdated(event: com.hazelcast.core.EntryEvent<String, Set<String>>) {
+                                event.key?.let { k -> event.value?.let { v -> nodeEnabledFeatures[k] = v } }
+                            }
+                            override fun entryRemoved(event: com.hazelcast.core.EntryEvent<String, Set<String>>) {
+                                event.key?.let { k -> nodeEnabledFeatures.remove(k) }
+                            }
+                            override fun entryEvicted(event: com.hazelcast.core.EntryEvent<String, Set<String>>) {
+                                event.key?.let { k -> nodeEnabledFeatures.remove(k) }
+                            }
+                            override fun entryExpired(event: com.hazelcast.core.EntryEvent<String, Set<String>>) {
+                                event.key?.let { k -> nodeEnabledFeatures.remove(k) }
+                            }
+                            override fun mapCleared(event: com.hazelcast.map.MapEvent) {
+                                nodeEnabledFeatures.clear()
+                            }
+                            override fun mapEvicted(event: com.hazelcast.map.MapEvent) {
+                                nodeEnabledFeatures.clear()
+                            }
+                        }, true)
+
+                        // Check for mismatches with other nodes
+                        map.entries.forEach { (otherId, otherFeatures) ->
+                            if (otherId != nodeId && otherFeatures != features) {
+                                logger.warning(
+                                    "Feature flag mismatch detected! " +
+                                    "This node ($nodeId): $features / " +
+                                    "Node $otherId: $otherFeatures. " +
+                                    "All cluster nodes must have identical Features config."
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        logger.severe("Failed to publish enabled features to Hazelcast: ${e.message}")
                     }
-                }
+                    ""
+                })
             }
+            return Future.succeededFuture("")
         }
 
         fun getEnabledFeaturesForNode(nodeId: String): Set<String> {
-            val instance = getInstance()
-            return if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
-                instance.clusterManager!!.hazelcastInstance
-                    .getMap<String, Set<String>>("monster.enabledFeatures")[nodeId] ?: enabledFeatures
-            } else enabledFeatures
+            return nodeEnabledFeatures[nodeId] ?: enabledFeatures
         }
 
         fun getSessionHandler(): SessionHandler? {
@@ -489,6 +527,21 @@ class Monster(args: Array<String>) {
             vertxOptions.setWorkerPoolSize(poolSize)
             logger.fine("Vertx worker thread pool size set to $poolSize (via -workerPoolSize argument)")
         }
+
+        if (isClustered) {
+            val hostAddress = try {
+                java.net.InetAddress.getLocalHost().hostAddress
+            } catch (e: Exception) {
+                logger.warning("Failed to get local host address, defaulting to localhost: ${e.message}")
+                "localhost"
+            }
+            logger.info("Configuring Vert.x Event Bus cluster host to: $hostAddress")
+            val eventBusOptions = io.vertx.core.eventbus.EventBusOptions()
+                .setHost(hostAddress)
+                .setClusterPublicHost(hostAddress)
+            vertxOptions.setEventBusOptions(eventBusOptions)
+        }
+
         builder.with(vertxOptions)
 
         if (isClustered())
@@ -1295,9 +1348,8 @@ MORE INFO:
                         // Resolve feature flags from top-level Features config block
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
                         val enabled = Features.all.filter { featuresConfig.getBoolean(it, true) }.toSet()
-                        publishEnabledFeatures(vertx, enabled)
                         logger.info("Enabled features: $enabled")
-                        Future.succeededFuture<String>()
+                        publishEnabledFeatures(vertx, enabled)
                     }
                     .compose {
                         if (Monster.isFeatureEnabled(Features.OpcUa)) {

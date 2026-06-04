@@ -22,9 +22,6 @@ CLASSPATH=$(echo "$CLASSPATH" | sed 's/:$//')
 
 mkdir -p log
 
-# Ensure /cfg-data exists (e.g. when starting without external volume mounts)
-mkdir -p /cfg-data 2>/dev/null || true
-
 # /cfg-data is the persistent volume mount used by Siemens Industrial Edge
 if [ -d /cfg-data ]; then
     mkdir -p /cfg-data/db
@@ -32,16 +29,20 @@ if [ -d /cfg-data ]; then
         rm -rf /app/db
         ln -s /cfg-data/db /app/db
     fi
-    if [ ! -L /app/config.yaml ]; then
-        if [ ! -f /cfg-data/config.yaml ] && [ -f /app/config.yaml ]; then
-            mv /app/config.yaml /cfg-data/config.yaml
-        else
-            rm -f /app/config.yaml
-        fi
-        ln -s /cfg-data/config.yaml /app/config.yaml
-    fi
 else
     mkdir -p db
+fi
+
+# Ensure config.yaml exists
+if [ ! -f /app/config.yaml ] && [ ! -L /app/config.yaml ]; then
+    if [ -d /cfg-data ]; then
+        if [ ! -f /cfg-data/config.yaml ]; then
+            cp /app/config-default.yaml /cfg-data/config.yaml
+        fi
+        ln -s /cfg-data/config.yaml /app/config.yaml
+    else
+        cp /app/config-default.yaml /app/config.yaml
+    fi
 fi
 
 # Detect if Java is GraalVM

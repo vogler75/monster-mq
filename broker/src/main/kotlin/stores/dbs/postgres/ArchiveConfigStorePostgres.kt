@@ -153,11 +153,13 @@ class ArchiveConfigStorePostgres(
                             archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
                         }
                     }
+                    connection.commit()
                 } ?: run {
                     logger.severe("Getting archive groups not possible without database connection! [${Utils.getCurrentFunctionName()}]")
                 }
             } catch (e: SQLException) {
                 logger.warning("Error fetching archive groups: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                try { db.connection?.rollback() } catch (_: Exception) {}
             }
 
             archiveGroups
@@ -181,7 +183,7 @@ class ArchiveConfigStorePostgres(
 
             try {
                 db.connection?.let { connection ->
-                    connection.prepareStatement(sql).use { preparedStatement ->
+                    val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                         preparedStatement.setString(1, name)
                         val resultSet = preparedStatement.executeQuery()
                         if (resultSet.next()) {
@@ -227,12 +229,15 @@ class ArchiveConfigStorePostgres(
                             null
                         }
                     }
+                    connection.commit()
+                    resultVal
                 } ?: run {
                     logger.severe("Getting archive group not possible without database connection! [${Utils.getCurrentFunctionName()}]")
                     null
                 }
             } catch (e: SQLException) {
                 logger.warning("Error fetching archive group $name: ${e.message} [${Utils.getCurrentFunctionName()}]")
+                try { db.connection?.rollback() } catch (_: Exception) {}
                 null
             }
         }).onComplete { result ->
@@ -333,12 +338,16 @@ class ArchiveConfigStorePostgres(
             val connections = mutableListOf<DatabaseConnectionConfig>()
             val sql = "SELECT name, type, url, username, password, database_name, schema_name, created_at, updated_at FROM $connectionTableName ORDER BY name"
             try {
-                db.connection?.prepareStatement(sql)?.use { statement ->
-                    val rs = statement.executeQuery()
-                    while (rs.next()) connections.add(resultSetToDatabaseConnection(rs))
+                db.connection?.let { connection ->
+                    connection.prepareStatement(sql)?.use { statement ->
+                        val rs = statement.executeQuery()
+                        while (rs.next()) connections.add(resultSetToDatabaseConnection(rs))
+                    }
+                    connection.commit()
                 }
             } catch (e: SQLException) {
                 logger.warning("Error fetching database connections: ${e.message}")
+                try { db.connection?.rollback() } catch (_: Exception) {}
             }
             connections
         }).onComplete { result ->
@@ -352,13 +361,18 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = "SELECT name, type, url, username, password, database_name, schema_name, created_at, updated_at FROM $connectionTableName WHERE name = ?"
             try {
-                db.connection?.prepareStatement(sql)?.use { statement ->
-                    statement.setString(1, name)
-                    val rs = statement.executeQuery()
-                    if (rs.next()) resultSetToDatabaseConnection(rs) else null
+                db.connection?.let { connection ->
+                    val resultVal = connection.prepareStatement(sql)?.use { statement ->
+                        statement.setString(1, name)
+                        val rs = statement.executeQuery()
+                        if (rs.next()) resultSetToDatabaseConnection(rs) else null
+                    }
+                    connection.commit()
+                    resultVal
                 }
             } catch (e: SQLException) {
                 logger.warning("Error fetching database connection '$name': ${e.message}")
+                try { db.connection?.rollback() } catch (_: Exception) {}
                 null
             }
         }).onComplete { result ->
@@ -486,14 +500,17 @@ class ArchiveConfigStorePostgres(
         return try {
             db.connection?.let { connection ->
                 val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, configTableName)
                     val resultSet = preparedStatement.executeQuery()
                     resultSet.next()
                 }
+                connection.commit()
+                resultVal
             } ?: false
         } catch (e: SQLException) {
             logger.warning("Error checking if table [$configTableName] exists: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }

@@ -139,24 +139,32 @@ class KafkaQueueStorePostgres(
                 """.trimIndent()
             }
 
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { ps ->
-                    if (tableNameSuffix.isEmpty()) {
-                        ps.setString(1, topic)
-                        ps.setLong(2, startOffset)
-                        ps.setInt(3, limit)
-                    } else {
-                        ps.setLong(1, startOffset)
-                        ps.setInt(2, limit)
+            try {
+                db.connection?.let { connection ->
+                    val resultVal = connection.prepareStatement(sql).use { ps ->
+                        if (tableNameSuffix.isEmpty()) {
+                            ps.setString(1, topic)
+                            ps.setLong(2, startOffset)
+                            ps.setInt(3, limit)
+                        } else {
+                            ps.setLong(1, startOffset)
+                            ps.setInt(2, limit)
+                        }
+                        val rs = ps.executeQuery()
+                        val list = mutableListOf<Pair<Long, BrokerMessage>>()
+                        while (rs.next()) {
+                            list.add(resultSetToRecord(rs))
+                        }
+                        list
                     }
-                    val rs = ps.executeQuery()
-                    val list = mutableListOf<Pair<Long, BrokerMessage>>()
-                    while (rs.next()) {
-                        list.add(resultSetToRecord(rs))
-                    }
-                    list
-                }
-            } ?: throw SQLException("No database connection available")
+                    connection.commit()
+                    resultVal
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
+                logger.warning("Error fetching Kafka messages: ${e.message}")
+                throw e
+            }
         })
     }
 
@@ -168,19 +176,27 @@ class KafkaQueueStorePostgres(
                 WHERE group_id = ? AND topic = ? AND partition_id = ?
             """.trimIndent()
 
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { ps ->
-                    ps.setString(1, groupId)
-                    ps.setString(2, topic)
-                    ps.setInt(3, partition)
-                    val rs = ps.executeQuery()
-                    if (rs.next()) {
-                        rs.getLong("committed_offset")
-                    } else {
-                        null
+            try {
+                db.connection?.let { connection ->
+                    val resultVal = connection.prepareStatement(sql).use { ps ->
+                        ps.setString(1, groupId)
+                        ps.setString(2, topic)
+                        ps.setInt(3, partition)
+                        val rs = ps.executeQuery()
+                        if (rs.next()) {
+                            rs.getLong("committed_offset")
+                        } else {
+                            null
+                        }
                     }
-                }
-            } ?: throw SQLException("No database connection available")
+                    connection.commit()
+                    resultVal
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
+                logger.warning("Error getting offset: ${e.message}")
+                throw e
+            }
         })
     }
 
@@ -221,20 +237,28 @@ class KafkaQueueStorePostgres(
             } else {
                 "SELECT MAX(offset_id) as max_offset FROM $queueTable"
             }
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { ps ->
-                    if (tableNameSuffix.isEmpty()) {
-                        ps.setString(1, topic)
+            try {
+                db.connection?.let { connection ->
+                    val resultVal = connection.prepareStatement(sql).use { ps ->
+                        if (tableNameSuffix.isEmpty()) {
+                            ps.setString(1, topic)
+                        }
+                        val rs = ps.executeQuery()
+                        if (rs.next()) {
+                            val maxOffset = rs.getLong("max_offset")
+                            if (rs.wasNull()) 0L else maxOffset
+                        } else {
+                            0L
+                        }
                     }
-                    val rs = ps.executeQuery()
-                    if (rs.next()) {
-                        val maxOffset = rs.getLong("max_offset")
-                        if (rs.wasNull()) 0L else maxOffset
-                    } else {
-                        0L
-                    }
-                }
-            } ?: throw SQLException("No database connection available")
+                    connection.commit()
+                    resultVal
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
+                logger.warning("Error getting latest offset: ${e.message}")
+                throw e
+            }
         })
     }
 
@@ -245,20 +269,28 @@ class KafkaQueueStorePostgres(
             } else {
                 "SELECT MIN(offset_id) as min_offset FROM $queueTable"
             }
-            db.connection?.let { connection ->
-                connection.prepareStatement(sql).use { ps ->
-                    if (tableNameSuffix.isEmpty()) {
-                        ps.setString(1, topic)
+            try {
+                db.connection?.let { connection ->
+                    val resultVal = connection.prepareStatement(sql).use { ps ->
+                        if (tableNameSuffix.isEmpty()) {
+                            ps.setString(1, topic)
+                        }
+                        val rs = ps.executeQuery()
+                        if (rs.next()) {
+                            val minOffset = rs.getLong("min_offset")
+                            if (rs.wasNull()) 0L else minOffset
+                        } else {
+                            0L
+                        }
                     }
-                    val rs = ps.executeQuery()
-                    if (rs.next()) {
-                        val minOffset = rs.getLong("min_offset")
-                        if (rs.wasNull()) 0L else minOffset
-                    } else {
-                        0L
-                    }
-                }
-            } ?: throw SQLException("No database connection available")
+                    connection.commit()
+                    resultVal
+                } ?: throw SQLException("No database connection available")
+            } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
+                logger.warning("Error getting earliest offset: ${e.message}")
+                throw e
+            }
         })
     }
 
@@ -311,7 +343,7 @@ class KafkaQueueStorePostgres(
 
             try {
                 db.connection?.let { connection ->
-                    connection.prepareStatement(sql).use { ps ->
+                    val resultVal = connection.prepareStatement(sql).use { ps ->
                         val rs = ps.executeQuery()
                         val groupsMap = mutableMapOf<String, MutableList<Pair<String, Long>>>()
                         while (rs.next()) {
@@ -328,8 +360,11 @@ class KafkaQueueStorePostgres(
                             KafkaConsumerGroup(groupId, topics, maxTime)
                         }
                     }
+                    connection.commit()
+                    resultVal
                 } ?: throw SQLException("No database connection available")
             } catch (e: SQLException) {
+                try { db.connection?.rollback() } catch (_: SQLException) {}
                 logger.warning("Error getting consumer groups from Postgres: ${e.message}")
                 emptyList()
             }

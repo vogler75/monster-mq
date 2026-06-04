@@ -120,7 +120,7 @@ class MessageStorePostgres(
             db.connection?.let { connection ->
                 val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
                              WHERE topic = ?"""
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, topicName)
                     val resultSet = preparedStatement.executeQuery()
                     if (resultSet.next()) {
@@ -130,7 +130,7 @@ class MessageStorePostgres(
                         val clientId = resultSet.getString(4)
                         val messageUuid = resultSet.getString(5)
 
-                        return BrokerMessage(
+                        BrokerMessage(
                             messageUuid = messageUuid,
                             messageId = 0,
                             topicName = topicName,
@@ -141,11 +141,14 @@ class MessageStorePostgres(
                             clientId = clientId,
                             isDup = false
                         )
-                    }
+                    } else null
                 }
+                connection.commit()
+                return resultVal
             }
         } catch (e: SQLException) {
             logger.severe("Error fetching data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
         return null
     }
@@ -227,6 +230,7 @@ class MessageStorePostgres(
             }
         } catch (e: SQLException) {
             logger.severe("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -245,6 +249,7 @@ class MessageStorePostgres(
             }
         } catch (e: SQLException) {
             logger.severe("Error deleting batch data [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -313,9 +318,11 @@ class MessageStorePostgres(
                         callback(message)
                     }
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.severe("Error finding data for topic [$topicName]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -395,9 +402,11 @@ class MessageStorePostgres(
                         }
                     }
                 }
+                connection.commit()
             }
         } catch (e: SQLException) {
             logger.severe("Error finding topics for pattern [$topicPattern]: ${e.message} [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
     }
 
@@ -467,16 +476,22 @@ class MessageStorePostgres(
 
         logger.fine { "findTopicsByName SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
 
-        db.connection?.let { connection ->
-            connection.prepareStatement(sql).use { preparedStatement ->
-                preparedStatement.setString(1, sqlNamespacePattern)
-                preparedStatement.setString(2, sqlSearchPattern)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val fullTopic = resultSet.getString("topic") ?: ""
-                    resultTopics.add(fullTopic)
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlNamespacePattern)
+                    preparedStatement.setString(2, sqlSearchPattern)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        resultTopics.add(fullTopic)
+                    }
                 }
+                connection.commit()
             }
+        } catch (e: SQLException) {
+            logger.severe("Error finding topics by name: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
 
         logger.fine { "findTopicsByName result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
@@ -499,17 +514,23 @@ class MessageStorePostgres(
 
         logger.fine { "findTopicsByDescription SQL: $sql with pattern '$sqlSearchPattern' [${Utils.getCurrentFunctionName()}]" }
 
-        db.connection?.let { connection ->
-            connection.prepareStatement(sql).use { preparedStatement ->
-                preparedStatement.setString(1, sqlNamespacePattern)
-                preparedStatement.setString(2, sqlSearchPattern)
-                val resultSet = preparedStatement.executeQuery()
-                while (resultSet.next()) {
-                    val fullTopic = resultSet.getString("topic") ?: ""
-                    val configJson = resultSet.getString("config") ?: ""
-                    resultTopics.add(Pair(fullTopic, configJson))
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { preparedStatement ->
+                    preparedStatement.setString(1, sqlNamespacePattern)
+                    preparedStatement.setString(2, sqlSearchPattern)
+                    val resultSet = preparedStatement.executeQuery()
+                    while (resultSet.next()) {
+                        val fullTopic = resultSet.getString("topic") ?: ""
+                        val configJson = resultSet.getString("config") ?: ""
+                        resultTopics.add(Pair(fullTopic, configJson))
+                    }
                 }
+                connection.commit()
             }
+        } catch (e: SQLException) {
+            logger.severe("Error finding topics by config: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
 
         logger.fine { "findTopicsByConfig result: ${resultTopics.size} topics found [${Utils.getCurrentFunctionName()}]" }
@@ -533,6 +554,7 @@ class MessageStorePostgres(
             }
         } catch (e: SQLException) {
             logger.severe("Error purging old messages from [$name]: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
         }
         
         val elapsedTimeMs = System.currentTimeMillis() - startTime
@@ -556,6 +578,7 @@ class MessageStorePostgres(
             } ?: false
         } catch (e: SQLException) {
             logger.severe("Error dropping table [$tableName] for message store [$name]: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }
@@ -564,14 +587,17 @@ class MessageStorePostgres(
         return try {
             db.connection?.let { connection ->
                 val sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?"
-                connection.prepareStatement(sql).use { preparedStatement ->
+                val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, tableName)
                     val resultSet = preparedStatement.executeQuery()
                     resultSet.next()
                 }
+                connection.commit()
+                resultVal
             } ?: false
         } catch (e: SQLException) {
             logger.warning("Error checking if table [$tableName] exists: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }
@@ -609,6 +635,7 @@ class MessageStorePostgres(
             } ?: false
         } catch (e: Exception) {
             logger.warning("Error creating table: ${e.message}")
+            try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
     }
