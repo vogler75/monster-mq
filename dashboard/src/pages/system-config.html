@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - System Configuration</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .section-card { background:var(--dark-surface); border-radius:8px; border:1px solid var(--dark-border); margin-bottom:1.5rem; box-shadow:var(--card-shadow); }
+        .section-header { display:flex; align-items:center; gap:0.6rem; padding:1rem 1.25rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:8px 8px 0 0; }
+        .section-title { margin:0; color:var(--text-primary); font-size:1rem; font-weight:700; }
+        .section-content { padding:1.25rem; }
+        .config-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1rem; }
+        .config-item { display:flex; flex-direction:column; padding:0.9rem 1.1rem; background:var(--dark-bg); border-radius:6px; border:1px solid var(--dark-border); gap:0.35rem; }
+        .config-item .label { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700; }
+        .config-item .value { color:var(--text-primary); font-weight:700; font-size:0.92rem; display:flex; align-items:center; gap:0.4rem; }
+        .config-item .value.mono { font-family:'Courier New', monospace; font-size:0.82rem; word-break:break-all; }
+        .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.6rem; border-radius:999px; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
+        .badge-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
+        .badge-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
+        .badge-port { background:rgba(124,58,237,0.15); color:var(--monster-light,#e2e8f0); border:1px solid rgba(124,58,237,0.3); }
+        .badge-info { background:rgba(59,130,246,0.15); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
+        .port-disabled { color:var(--text-muted); font-size:0.82rem; font-style:italic; }
+        .loading-indicator { display:flex; align-items:center; gap:0.75rem; color:var(--text-muted); padding:1rem; border-radius:8px; background:var(--dark-surface); border:1px solid var(--dark-border); margin-bottom:1.5rem; }
+        .error-message { display:flex; align-items:center; gap:0.75rem; color:var(--monster-red); padding:1rem; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); margin-bottom:1.5rem; }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">System Configuration</h1>
+                <p class="page-subtitle">Runtime configuration loaded from config.yaml</p>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading configuration...</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <span>⚠️</span>
+                <span class="error-text"></span>
+            </div>
+
+            <div id="config-content" style="display:none;">
+                <!-- Node & Cluster -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="project-server" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">Node &amp; Cluster</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">Node ID</span>
+                                <span class="value mono" id="cfg-node-id">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Version</span>
+                                <span class="value" id="cfg-version">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Clustering</span>
+                                <span class="value" id="cfg-clustered">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MQTT Listeners -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="link" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">MQTT Listeners</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">TCP (MQTT)</span>
+                                <span class="value" id="cfg-tcp-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">TCP TLS (MQTTS)</span>
+                                <span class="value" id="cfg-tcps-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">WebSocket (WS)</span>
+                                <span class="value" id="cfg-ws-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">WebSocket TLS (WSS)</span>
+                                <span class="value" id="cfg-wss-port">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">NATS Listener</span>
+                                <span class="value" id="cfg-nats-port">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="database" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">Storage Backends</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">Session Store</span>
+                                <span class="value" id="cfg-session-store">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Retained Message Store</span>
+                                <span class="value" id="cfg-retained-store">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Device Config Store</span>
+                                <span class="value" id="cfg-config-store">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Management -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="user-settings" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">User Management</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">User Management</span>
+                                <span class="value" id="cfg-user-mgmt">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Anonymous Access</span>
+                                <span class="value" id="cfg-anonymous">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GenAI -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="star" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">GenAI Integration</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">GenAI</span>
+                                <span class="value" id="cfg-genai">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Provider</span>
+                                <span class="value" id="cfg-genai-provider">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Model</span>
+                                <span class="value mono" id="cfg-genai-model">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Database Connections -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="database" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">Database Connections (YAML)</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">PostgreSQL URL</span>
+                                <span class="value mono" id="cfg-postgres-url">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">PostgreSQL User</span>
+                                <span class="value" id="cfg-postgres-user">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">CrateDB URL</span>
+                                <span class="value mono" id="cfg-cratedb-url">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">CrateDB User</span>
+                                <span class="value" id="cfg-cratedb-user">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">MongoDB URL</span>
+                                <span class="value mono" id="cfg-mongodb-url">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">MongoDB Database</span>
+                                <span class="value" id="cfg-mongodb-db">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">SQLite Path</span>
+                                <span class="value mono" id="cfg-sqlite-path">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Extensions -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="connector" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">Extensions &amp; APIs</h2>
+                    </div>
+                    <div class="section-content">
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <span class="label">GraphQL / Dashboard</span>
+                                <span class="value" id="cfg-graphql">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">MCP Server (AI)</span>
+                                <span class="value" id="cfg-mcp">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Prometheus Exporter</span>
+                                <span class="value" id="cfg-prometheus">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">I3X API (CESMII)</span>
+                                <span class="value" id="cfg-i3x">-</span>
+                            </div>
+                            <div class="config-item">
+                                <span class="label">Metrics Store</span>
+                                <span class="value" id="cfg-metrics">-</span>
+                            </div>
+                            <div class="config-item" style="grid-column: span 2;">
+                                <span class="label">Kafka Servers</span>
+                                <span class="value mono" id="cfg-kafka-servers">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/system-config.js"></script>
+    </ix-application>
+</body>
+</html>

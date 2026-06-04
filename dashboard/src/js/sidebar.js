@@ -233,6 +233,7 @@ class SidebarManager {
             {
                 section: 'System', sectionIcon: 'maintenance',
                 items: [
+                    { href: '/pages/system-config.html', icon: 'cogwheel', text: 'System Config' },
                     { href: '/pages/users.html', icon: 'user-settings', text: 'Users', id: 'users-nav-link', adminOnly: true },
                     { isUserItem: true }
                 ]
