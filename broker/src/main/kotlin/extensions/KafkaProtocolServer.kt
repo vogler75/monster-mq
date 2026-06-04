@@ -284,6 +284,7 @@ class KafkaProtocolServer(
                 14 -> handleSyncGroup(apiVersion, reader, response)
                 17 -> handleSaslHandshake(apiVersion, reader, response)
                 36 -> handleSaslAuthenticate(apiVersion, reader, response)
+                32 -> handleDescribeConfigs(apiVersion, reader, response)
                 else -> {
                     logger.warning("Unsupported Kafka API Key: $apiKey")
                     close()
@@ -295,7 +296,7 @@ class KafkaProtocolServer(
             response.writeShort(0) // No error (0)
 
             // API Keys Array
-            response.writeInt(14) // We support 14 APIs
+            response.writeInt(15) // We support 15 APIs
 
             // Produce
             response.writeShort(0)  // key
@@ -315,7 +316,7 @@ class KafkaProtocolServer(
             // Metadata
             response.writeShort(3)  // key
             response.writeShort(0)  // min version
-            response.writeShort(1)  // max version (Support V0/V1)
+            response.writeShort(4)  // max version (Support V0-V4)
 
             // OffsetCommit
             response.writeShort(8)  // key
@@ -367,8 +368,91 @@ class KafkaProtocolServer(
             response.writeShort(0)  // min version
             response.writeShort(1)  // max version
 
+            // DescribeConfigs
+            response.writeShort(32) // key
+            response.writeShort(0)  // min version
+            response.writeShort(1)  // max version
+
             if (apiVersion.toInt() >= 1) {
                 response.writeInt(0) // Throttle time ms
+            }
+
+            writeResponse(response)
+        }
+
+        private fun getResourceConfigs(resourceType: Byte, resourceName: String): List<ConfigEntry> {
+            return when (resourceType.toInt()) {
+                2 -> { // Topic
+                    listOf(
+                        ConfigEntry("cleanup.policy", "delete", readOnly = false, isDefault = true, isSensitive = false, configSource = 5),
+                        ConfigEntry("retention.ms", "604800000", readOnly = false, isDefault = true, isSensitive = false, configSource = 5),
+                        ConfigEntry("segment.bytes", "1073741824", readOnly = false, isDefault = true, isSensitive = false, configSource = 5)
+                    )
+                }
+                4 -> { // Broker
+                    listOf(
+                        ConfigEntry("zookeeper.connect", "", readOnly = true, isDefault = true, isSensitive = false, configSource = 5),
+                        ConfigEntry("advertised.listeners", "PLAINTEXT://$advertisedHost:$advertisedPort", readOnly = true, isDefault = true, isSensitive = false, configSource = 5)
+                    )
+                }
+                else -> emptyList()
+            }
+        }
+
+        private fun handleDescribeConfigs(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
+            val resourcesCount = reader.readInt()
+            val resources = mutableListOf<ResourceRequest>()
+            for (i in 0 until resourcesCount) {
+                val resourceType = reader.readByte()
+                val resourceName = reader.readString() ?: ""
+                val configNamesCount = reader.readInt()
+                val configNames = mutableListOf<String>()
+                for (j in 0 until configNamesCount) {
+                    configNames.add(reader.readString() ?: "")
+                }
+                resources.add(ResourceRequest(resourceType, resourceName, configNames))
+            }
+            
+            var includeSynonyms = false
+            if (apiVersion.toInt() >= 1) {
+                includeSynonyms = reader.readByte() != 0.toByte()
+            }
+
+            response.writeInt(0) // throttleTimeMs
+            response.writeInt(resources.size)
+
+            resources.forEach { req ->
+                response.writeShort(0) // ErrorCode: 0
+                response.writeString(null) // ErrorMessage
+                response.writeByte(req.type)
+                response.writeString(req.name)
+
+                val allConfigs = getResourceConfigs(req.type, req.name)
+                val filteredConfigs = if (req.configNames.isNotEmpty()) {
+                    allConfigs.filter { it.name in req.configNames }
+                } else {
+                    allConfigs
+                }
+
+                response.writeInt(filteredConfigs.size)
+                filteredConfigs.forEach { entry ->
+                    response.writeString(entry.name)
+                    response.writeString(entry.value)
+                    response.writeByte(if (entry.readOnly) 1 else 0)
+                    
+                    if (apiVersion.toInt() == 0) {
+                        response.writeByte(if (entry.isDefault) 1 else 0)
+                    } else {
+                        response.writeByte(entry.configSource) // ConfigSource: 5 (Default)
+                    }
+                    
+                    response.writeByte(if (entry.isSensitive) 1 else 0)
+
+                    if (apiVersion.toInt() >= 1) {
+                        // synonyms array: 0 elements
+                        response.writeInt(0)
+                    }
+                }
             }
 
             writeResponse(response)
@@ -382,6 +466,16 @@ class KafkaProtocolServer(
                 requestedTopics.add(reader.readString() ?: "")
             }
 
+            // allowAutoTopicCreation is only present in version 4+
+            if (apiVersion.toInt() >= 4) {
+                val allowAutoTopicCreation = reader.readByte() != 0.toByte()
+            }
+
+            // In v3+, throttle_time_ms is written first
+            if (apiVersion.toInt() >= 3) {
+                response.writeInt(0) // throttle_time_ms = 0
+            }
+
             // Brokers list
             response.writeInt(1) // 1 Broker
             response.writeInt(0) // Broker ID: 0
@@ -391,15 +485,20 @@ class KafkaProtocolServer(
                 response.writeString(null) // Rack (null)
             }
 
+            // In v2+, cluster_id is written before controller_id
+            if (apiVersion.toInt() >= 2) {
+                response.writeString("monstermq-cluster") // cluster_id
+            }
+
             if (apiVersion.toInt() >= 1) {
                 response.writeInt(0) // Controller ID
             }
 
-            // If requestedTopics is empty, return all configured topic streams
+            // If requestedTopics is empty, return all configured topic streams, else return all requested topics
             val topicsToReturn = if (requestedTopics.isEmpty()) {
                 configuredTopics.toList()
             } else {
-                requestedTopics.filter { it in configuredTopics }
+                requestedTopics
             }
 
             response.writeInt(topicsToReturn.size)
@@ -427,6 +526,7 @@ class KafkaProtocolServer(
 
             writeResponse(response)
         }
+
 
         private fun handleFindCoordinator(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
             val groupId = reader.readString()
@@ -1552,5 +1652,20 @@ data class KafkaStreamConfig(
     val streamName: String,
     val topicFilter: String,
     val allowWrite: Boolean
+)
+
+data class ResourceRequest(
+    val type: Byte,
+    val name: String,
+    val configNames: List<String>
+)
+
+data class ConfigEntry(
+    val name: String,
+    val value: String,
+    val readOnly: Boolean,
+    val isDefault: Boolean,
+    val isSensitive: Boolean,
+    val configSource: Byte
 )
 

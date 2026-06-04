@@ -106,8 +106,12 @@ class KafkaMultiplexingQueueStore(
         return Future.all(futures).map { null }
     }
 
+    private fun getStoreForTopicOrName(topic: String): IKafkaQueueStore? {
+        return streamStoresByName[topic] ?: getStoreForTopic(topic)
+    }
+
     override fun fetch(topic: String, startOffset: Long, limit: Int): Future<List<Pair<Long, BrokerMessage>>> {
-        val store = streamStoresByName[topic] ?: return Future.succeededFuture(emptyList())
+        val store = getStoreForTopicOrName(topic) ?: return Future.succeededFuture(emptyList())
         return store.fetch(topic, startOffset, limit)
     }
 
@@ -124,22 +128,22 @@ class KafkaMultiplexingQueueStore(
     }
 
     override fun commitOffset(groupId: String, topic: String, partition: Int, offset: Long): Future<Void> {
-        val store = streamStoresByName[topic] ?: return Future.succeededFuture()
+        val store = getStoreForTopicOrName(topic) ?: return Future.succeededFuture()
         return store.commitOffset(groupId, topic, partition, offset)
     }
 
     override fun getOffset(groupId: String, topic: String, partition: Int): Future<Long?> {
-        val store = streamStoresByName[topic] ?: return Future.succeededFuture(null)
+        val store = getStoreForTopicOrName(topic) ?: return Future.succeededFuture(null)
         return store.getOffset(groupId, topic, partition)
     }
 
     override fun getEarliestOffset(topic: String): Future<Long> {
-        val store = streamStoresByName[topic] ?: return Future.succeededFuture(0L)
+        val store = getStoreForTopicOrName(topic) ?: return Future.succeededFuture(0L)
         return store.getEarliestOffset(topic)
     }
 
     override fun getLatestOffset(topic: String): Future<Long> {
-        val store = streamStoresByName[topic] ?: return Future.succeededFuture(0L)
+        val store = getStoreForTopicOrName(topic) ?: return Future.succeededFuture(0L)
         return store.getLatestOffset(topic)
     }
 

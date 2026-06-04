@@ -2,7 +2,10 @@ extend type Query {
     kafkaServers: [KafkaServerInfo!]!
     kafkaServer(name: String!): KafkaServerInfo
     kafkaConsumerGroups: [KafkaConsumerGroupInfo!]!
+    kafkaMessages(serverName: String!, topic: String!, startOffset: Long, limit: Int): [KafkaMessageInfo!]!
+    kafkaTopicOffsets(serverName: String!, topic: String!): KafkaTopicOffsetInfo
 }
+
 
 extend type Mutation {
     kafkaServer: KafkaServerMutations!
@@ -74,3 +77,20 @@ type KafkaConsumerGroupInfo {
     topics: [String!]!
     lastCommitTime: String!
 }
+
+type KafkaMessageInfo {
+    offset: Long!
+    topic: String!
+    partition: Int!
+    timestamp: String!
+    key: String
+    value: String
+    size: Int!
+}
+
+type KafkaTopicOffsetInfo {
+    topic: String!
+    earliestOffset: Long!
+    latestOffset: Long!
+}
+

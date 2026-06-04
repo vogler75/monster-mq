@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Kafka Topics</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .filter-bar {
+            background: rgba(24, 38, 45, 0.6);
+            border: 1px solid rgba(211, 236, 248, 0.12);
+            border-radius: 16px;
+            padding: 1.25rem 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            align-items: center;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .filter-bar:hover {
+            border-color: rgba(211, 236, 248, 0.2);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .filter-group label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .filter-input {
+            padding: 0.55rem 0.85rem;
+            background: rgba(15, 22, 25, 0.55);
+            border: 1px solid rgba(211, 236, 248, 0.12);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.15);
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: var(--monster-purple);
+            background: rgba(15, 22, 25, 0.8);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.25), inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .filter-input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.7;
+        }
+
+        select.filter-input {
+            min-width: 120px;
+            cursor: pointer;
+        }
+
+        .filter-bar .btn-query {
+            background: linear-gradient(135deg, var(--monster-purple) 0%, var(--monster-dark) 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.35);
+            padding: 0.55rem 1.35rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .filter-bar .btn-query:hover:not(:disabled) {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+            transform: translateY(-1.5px);
+        }
+
+        .filter-bar .btn-query:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .filter-spacer {
+            flex: 1;
+        }
+
+        .stats-banner {
+            display: flex;
+            gap: 1.5rem;
+            background: rgba(15, 22, 25, 0.3);
+            border: 1px solid rgba(211, 236, 248, 0.05);
+            border-radius: 12px;
+            padding: 0.75rem 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .stats-item {
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .stats-label {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+        }
+
+        .stats-val {
+            color: var(--text-primary);
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        /* Table layout */
+        .explorer-layout {
+            display: flex;
+            gap: 0;
+            position: relative;
+        }
+
+        .explorer-table-wrapper {
+            flex: 1;
+            min-width: 0;
+            background: rgba(24, 38, 45, 0.4);
+            border: 1px solid rgba(211, 236, 248, 0.12);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+        }
+
+        .explorer-table-wrapper .data-table {
+            overflow-x: auto;
+            scrollbar-width: thin;
+        }
+
+        .explorer-table-wrapper table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+        }
+
+        .explorer-table-wrapper tbody tr {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .explorer-table-wrapper tbody tr:hover {
+            background: rgba(124, 58, 237, 0.06) !important;
+        }
+
+        .explorer-table-wrapper tbody tr.selected {
+            background: rgba(124, 58, 237, 0.15) !important;
+        }
+
+        .explorer-table-wrapper td {
+            font-size: 0.85rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(211, 236, 248, 0.06);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .explorer-table-wrapper th {
+            padding: 0.85rem 1rem;
+            background: rgba(15, 22, 25, 0.8);
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid rgba(211, 236, 248, 0.15);
+            text-align: left;
+        }
+
+        .explorer-table-wrapper td.payload-cell {
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .explorer-table-wrapper td.key-cell {
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--monster-light);
+        }
+
+        .explorer-table-wrapper td.offset-cell,
+        .explorer-table-wrapper td.timestamp-cell {
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+        }
+
+        .explorer-table-wrapper tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Detail panel */
+        .detail-panel {
+            position: fixed;
+            top: 48px;
+            right: -440px;
+            width: 420px;
+            height: calc(100vh - 48px);
+            background: rgba(24, 38, 45, 0.85);
+            border-left: 1px solid rgba(211, 236, 248, 0.15);
+            z-index: 1000;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .detail-panel.open {
+            right: 0;
+        }
+
+        .detail-panel-header {
+            padding: 1.25rem 1.5rem;
+            background: rgba(34, 50, 64, 0.5);
+            border-bottom: 1px solid rgba(211, 236, 248, 0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .detail-panel-header h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .detail-panel-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.4rem;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .detail-panel-close:hover {
+            background: rgba(211, 236, 248, 0.1);
+            color: var(--text-primary);
+        }
+
+        .detail-panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .detail-field {
+            margin-bottom: 1.5rem;
+            background: rgba(15, 22, 25, 0.3);
+            border: 1px solid rgba(211, 236, 248, 0.05);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .detail-field-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.45rem;
+        }
+
+        .detail-field-value {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            word-break: break-all;
+            line-height: 1.5;
+        }
+
+        .detail-field-value.mono {
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.825rem;
+            color: var(--monster-light);
+        }
+
+        .detail-payload {
+            background: rgba(15, 22, 25, 0.85);
+            border: 1px solid rgba(211, 236, 248, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Fira Code', 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-primary);
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .result-count {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            padding: 0.75rem 1.25rem;
+            font-weight: 500;
+            border-top: 1px solid rgba(211, 236, 248, 0.06);
+            background: rgba(15, 22, 25, 0.2);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .loading-row td {
+            text-align: center;
+            padding: 3rem !important;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 992px) {
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .filter-group {
+                flex-wrap: wrap;
+                justify-content: space-between;
+            }
+
+            .filter-group label {
+                width: 80px;
+            }
+
+            .filter-group .filter-input {
+                flex: 1;
+            }
+
+            .detail-panel {
+                width: 100vw;
+                right: -100vw;
+            }
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <h1 class="page-title">Kafka Topic Monitor</h1>
+                <p class="page-subtitle">Inspect and view message payloads stored inside Kafka server topics</p>
+            </div>
+
+            <!-- Filter Selection Bar -->
+            <div class="filter-bar">
+                <div class="filter-group">
+                    <label for="server-select">Server:</label>
+                    <select id="server-select" class="filter-input">
+                        <option value="">Select server...</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="topic-select">Topic:</label>
+                    <select id="topic-select" class="filter-input" disabled>
+                        <option value="">Select topic...</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="start-offset-select">Start Offset:</label>
+                    <select id="start-offset-select" class="filter-input">
+                        <option value="newest-100">Newest - 100</option>
+                        <option value="newest-500" selected>Newest - 500</option>
+                        <option value="earliest">Earliest</option>
+                        <option value="custom">Custom Offset...</option>
+                    </select>
+                    <input type="number" id="custom-offset-input" class="filter-input" placeholder="Offset ID" style="display: none; width: 100px;" min="0">
+                </div>
+                <div class="filter-group">
+                    <label for="limit-select">Max:</label>
+                    <select id="limit-select" class="filter-input" style="min-width: 80px;">
+                        <option value="100">100</option>
+                        <option value="500" selected>500</option>
+                        <option value="1000">1000</option>
+                    </select>
+                </div>
+                
+                <button id="btn-fetch" class="btn-query">
+                    <ix-icon name="refresh" size="16"></ix-icon> Fetch Messages
+                </button>
+            </div>
+
+            <!-- Stats Banner -->
+            <div id="stats-banner" class="stats-banner" style="display: none;">
+                <div class="stats-item">
+                    <span class="stats-label">Earliest Offset:</span>
+                    <span id="stat-earliest" class="stats-val">0</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">Latest Offset:</span>
+                    <span id="stat-latest" class="stats-val">0</span>
+                </div>
+                <div class="stats-item">
+                    <span class="stats-label">Total Messages (Est):</span>
+                    <span id="stat-count" class="stats-val">0</span>
+                </div>
+            </div>
+
+            <!-- Search bar -->
+            <div class="filter-bar" style="padding: 0.75rem 1.25rem; margin-bottom: 1.5rem; background: rgba(24, 38, 45, 0.4);">
+                <div class="filter-group" style="flex: 1;">
+                    <label for="search-input"><ix-icon name="search" size="16"></ix-icon></label>
+                    <input type="text" id="search-input" class="filter-input" placeholder="Filter table content ..." style="width: 100%; max-width: 400px;">
+                </div>
+            </div>
+
+            <!-- Messages Table Wrapper -->
+            <div class="explorer-layout">
+                <div class="explorer-table-wrapper">
+                    <div class="data-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="offset-cell" style="width: 120px;">Offset</th>
+                                    <th class="timestamp-cell" style="width: 220px;">Timestamp</th>
+                                    <th class="key-cell" style="width: 250px;">Key (MQTT Topic)</th>
+                                    <th class="payload-cell">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="messages-table-body">
+                                <tr>
+                                    <td colspan="4" class="empty-state">Select a server and topic, then click "Fetch Messages".</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="result-count-bar" class="result-count" style="display: none;">
+                        Showing <span id="displayed-count">0</span> of <span id="total-count">0</span> loaded messages.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sliding Detail Panel -->
+    <div id="detail-panel" class="detail-panel">
+        <div class="detail-panel-header">
+            <h3><ix-icon name="list" size="20"></ix-icon> Message Details</h3>
+            <button id="detail-close-btn" class="detail-panel-close" title="Close Panel">
+                <ix-icon name="close" size="16"></ix-icon>
+            </button>
+        </div>
+        <div class="detail-panel-body">
+            <div class="detail-field">
+                <div class="detail-field-label">Offset</div>
+                <div id="detail-offset" class="detail-field-value mono">-</div>
+            </div>
+            <div class="detail-field">
+                <div class="detail-field-label">Partition</div>
+                <div id="detail-partition" class="detail-field-value mono">0</div>
+            </div>
+            <div class="detail-field">
+                <div class="detail-field-label">Timestamp</div>
+                <div id="detail-timestamp" class="detail-field-value mono">-</div>
+            </div>
+            <div class="detail-field">
+                <div class="detail-field-label">Key (MQTT Topic)</div>
+                <div id="detail-key" class="detail-field-value mono">-</div>
+            </div>
+            <div class="detail-field">
+                <div class="detail-field-label">Size</div>
+                <div id="detail-size" class="detail-field-value">-</div>
+            </div>
+            <div class="detail-field" style="background: transparent; border: none; padding: 0;">
+                <div class="detail-field-label">Value</div>
+                <div id="detail-payload" class="detail-payload">Select a message...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/kafka-topics.js"></script>
+    </ix-application>
+</body>
+</html>

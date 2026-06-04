@@ -322,6 +322,176 @@ class KafkaServerConfigQueries(
         return promise.future()
     }
     
+    fun kafkaMessages(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.KafkaServer)) {
+                return@DataFetcher future.apply { complete(emptyList()) }
+            }
+
+            val serverName = env.getArgument<String>("serverName")
+            val topic = env.getArgument<String>("topic")
+            val startOffsetArg = env.getArgument<Number>("startOffset")?.toLong()
+            val limit = env.getArgument<Number>("limit")?.toInt() ?: 100
+
+            if (serverName == null || topic == null) {
+                future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            deviceConfigStore.getDevice(serverName).onComplete { ar ->
+                val device = ar.result()
+                if (ar.failed() || device == null) {
+                    future.complete(emptyList())
+                    return@onComplete
+                }
+
+                val serverConfig = try {
+                    KafkaServerConfig.fromJsonObject(device.config)
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (serverConfig == null) {
+                    future.complete(emptyList())
+                    return@onComplete
+                }
+
+                val matchingStream = serverConfig.streams.find { it.streamName == topic }
+                val storeType = matchingStream?.storeType ?: serverConfig.storeType
+                val tableNameSuffix = sanitizeTableNameSuffix(topic)
+                val cacheKey = "${storeType ?: "DEFAULT"}:$tableNameSuffix"
+
+                val storeFuture = activeStores.computeIfAbsent(cacheKey) { _ ->
+                    val customConfig = configJson.copy()
+                    val customKafkaServer = customConfig.getJsonObject("KafkaServer", JsonObject())
+                    if (storeType != null) {
+                        customKafkaServer.put("storeType", storeType)
+                    } else {
+                        customKafkaServer.remove("storeType")
+                    }
+                    customConfig.put("KafkaServer", customKafkaServer)
+
+                    at.rocworks.stores.KafkaQueueStoreFactory.create(vertx, customConfig, tableNameSuffix)
+                }
+
+                storeFuture.onComplete { storeAr ->
+                    if (storeAr.failed()) {
+                        future.complete(emptyList())
+                        return@onComplete
+                    }
+                    val store = storeAr.result()
+                    
+                    store.getEarliestOffset(topic).compose { earliest ->
+                        store.getLatestOffset(topic).compose { latest ->
+                            val startOffset = if (startOffsetArg != null && startOffsetArg >= 0) {
+                                startOffsetArg
+                            } else {
+                                (latest - limit + 1).coerceAtLeast(earliest)
+                            }
+                            store.fetch(topic, startOffset, limit)
+                        }
+                    }.onComplete { fetchAr ->
+                        if (fetchAr.failed()) {
+                            future.complete(emptyList())
+                        } else {
+                            val result = fetchAr.result().map { (offset, msg) ->
+                                mapOf(
+                                    "offset" to offset,
+                                    "topic" to msg.topicName,
+                                    "partition" to 0,
+                                    "timestamp" to msg.time.toString(),
+                                    "key" to msg.topicName,
+                                    "value" to msg.getPayloadAsString(),
+                                    "size" to msg.payload.size
+                                )
+                            }
+                            future.complete(result)
+                        }
+                    }
+                }
+            }
+            future
+        }
+    }
+
+    fun kafkaTopicOffsets(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>?>()
+            if (!Monster.isFeatureEnabled(Features.KafkaServer)) {
+                return@DataFetcher future.apply { complete(null) }
+            }
+
+            val serverName = env.getArgument<String>("serverName")
+            val topic = env.getArgument<String>("topic")
+            if (serverName == null || topic == null) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            deviceConfigStore.getDevice(serverName).onComplete { ar ->
+                val device = ar.result()
+                if (ar.failed() || device == null) {
+                    future.complete(null)
+                    return@onComplete
+                }
+
+                val serverConfig = try {
+                    KafkaServerConfig.fromJsonObject(device.config)
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (serverConfig == null) {
+                    future.complete(null)
+                    return@onComplete
+                }
+
+                val matchingStream = serverConfig.streams.find { it.streamName == topic }
+                val storeType = matchingStream?.storeType ?: serverConfig.storeType
+                val tableNameSuffix = sanitizeTableNameSuffix(topic)
+                val cacheKey = "${storeType ?: "DEFAULT"}:$tableNameSuffix"
+
+                val storeFuture = activeStores.computeIfAbsent(cacheKey) { _ ->
+                    val customConfig = configJson.copy()
+                    val customKafkaServer = customConfig.getJsonObject("KafkaServer", JsonObject())
+                    if (storeType != null) {
+                        customKafkaServer.put("storeType", storeType)
+                    } else {
+                        customKafkaServer.remove("storeType")
+                    }
+                    customConfig.put("KafkaServer", customKafkaServer)
+
+                    at.rocworks.stores.KafkaQueueStoreFactory.create(vertx, customConfig, tableNameSuffix)
+                }
+
+                storeFuture.onComplete { storeAr ->
+                    if (storeAr.failed()) {
+                        future.complete(null)
+                        return@onComplete
+                    }
+                    val store = storeAr.result()
+                    store.getEarliestOffset(topic).compose { earliest ->
+                        store.getLatestOffset(topic).map { latest ->
+                            mapOf(
+                                "topic" to topic,
+                                "earliestOffset" to earliest,
+                                "latestOffset" to latest
+                            )
+                        }
+                    }.onComplete { resAr ->
+                        if (resAr.succeeded()) {
+                            future.complete(resAr.result())
+                        } else {
+                            future.complete(null)
+                        }
+                    }
+                }
+            }
+            future
+        }
+    }
+
     private fun sanitizeTableNameSuffix(name: String): String {
         val sanitized = name.lowercase()
             .replace(Regex("[^a-z0-9]"), "_")

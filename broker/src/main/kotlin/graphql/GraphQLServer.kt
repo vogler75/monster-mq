@@ -556,6 +556,8 @@ class GraphQLServer(
                             dataFetcher("kafkaServers", resolver.kafkaServers())
                             dataFetcher("kafkaServer", resolver.kafkaServer())
                             dataFetcher("kafkaConsumerGroups", resolver.kafkaConsumerGroups())
+                            dataFetcher("kafkaMessages", resolver.kafkaMessages())
+                            dataFetcher("kafkaTopicOffsets", resolver.kafkaTopicOffsets())
                         }
                     }
                     // NATS Client queries

@@ -176,7 +176,8 @@ class SidebarManager {
                     { href: '/pages/sessions.html', icon: 'user-management', text: 'Sessions' },
                     { href: '/pages/topic-browser.html', icon: 'search', text: 'Browser' },
                     { href: '/pages/topic-chart.html', icon: 'barchart', text: 'Visualizer' },
-                    { href: '/pages/archive-explorer.html', icon: 'list', text: 'Explorer' }
+                    { href: '/pages/archive-explorer.html', icon: 'list', text: 'Archive Explorer' },
+                    { href: '/pages/kafka-topics.html', icon: 'list', text: 'Kafka Topics', feature: 'KafkaServer' }
                 ]
             },
             {

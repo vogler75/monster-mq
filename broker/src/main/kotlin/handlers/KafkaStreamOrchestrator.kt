@@ -19,7 +19,7 @@ class KafkaStreamOrchestrator(
     private val deviceConfigStore: IDeviceConfigStore? = null
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
-    private val listenerId = "kafka-stream-orchestrator"
+    private val listenerId = "kafka-stream-orchestrator-" + (configJson.getJsonObject("KafkaServer")?.getString("name") ?: java.util.UUID.randomUUID().toString())
     
     // Batching buffer for high performance writes
     private val buffer = ConcurrentLinkedQueue<BrokerMessage>()
