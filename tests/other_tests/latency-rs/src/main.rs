@@ -49,6 +49,14 @@ struct Args {
     #[arg(long, default_value_t = 100)]
     interval_ms: u64,
 
+    /// How often to delay (in number of messages, e.g. delay every N messages)
+    #[arg(long, default_value_t = 1)]
+    delay_every: u64,
+
+    /// Maximum number of in-flight messages (QoS 1 and 2)
+    #[arg(long, default_value_t = 1)]
+    max_inflight: u16,
+
     /// Test duration in seconds (only for latency benchmark)
     #[arg(long, default_value_t = 10)]
     duration: u64,
@@ -119,6 +127,7 @@ fn main() {
         let mut pub_opts = MqttOptions::new(&pub_id, &pub_host, pub_port);
         pub_opts.set_keep_alive(Duration::from_secs(60));
         pub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
+        pub_opts.set_inflight(args.max_inflight);
         if !args.username.is_empty() {
             pub_opts.set_credentials(&args.username, &args.password);
         }
@@ -198,7 +207,9 @@ fn main() {
                 break;
             }
             
-            thread::sleep(interval);
+            if args.delay_every > 0 && published % args.delay_every == 0 {
+                thread::sleep(interval);
+            }
         }
 
         println!("Successfully published {} messages.", published);
@@ -304,6 +315,7 @@ fn main() {
         let sub_id = format!("live_sub_{uid}");
         let mut sub_opts = MqttOptions::new(&sub_id, &sub_host, sub_port);
         sub_opts.set_keep_alive(Duration::from_secs(60));
+        sub_opts.set_inflight(args.max_inflight);
         // Allow packets up to 64MB to handle very large payloads without deserialization errors
         sub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
         if !args.username.is_empty() {
@@ -400,6 +412,7 @@ fn main() {
     let sub_id = format!("lat_sub_{uid}");
     let mut sub_opts = MqttOptions::new(&sub_id, &sub_host, sub_port);
     sub_opts.set_keep_alive(Duration::from_secs(60));
+    sub_opts.set_inflight(args.max_inflight);
     sub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
     if !args.username.is_empty() {
         sub_opts.set_credentials(&args.username, &args.password);
@@ -473,6 +486,7 @@ fn main() {
     let pub_id = format!("lat_pub_{uid}");
     let mut pub_opts = MqttOptions::new(&pub_id, &pub_host, pub_port);
     pub_opts.set_keep_alive(Duration::from_secs(60));
+    pub_opts.set_inflight(args.max_inflight);
     pub_opts.set_max_packet_size(64 * 1024 * 1024, 64 * 1024 * 1024);
     if !args.username.is_empty() {
         pub_opts.set_credentials(&args.username, &args.password);
@@ -538,7 +552,9 @@ fn main() {
             .publish(&topic, qos, false, payload.as_bytes())
             .unwrap();
         seq += 1;
-        thread::sleep(interval);
+        if args.delay_every > 0 && (seq - 1) % args.delay_every == 0 {
+            thread::sleep(interval);
+        }
     }
     let count = seq - 1;
 
