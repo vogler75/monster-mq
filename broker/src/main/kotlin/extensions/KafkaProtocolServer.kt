@@ -1050,6 +1050,10 @@ class KafkaProtocolServer(
                         messagesToEnqueue.forEach { msg ->
                             sessionHandler.publishMessage(msg)
                         }
+                        // Notify long-polling consumers that new data is available
+                        messagesToEnqueue.map { it.topicName }.distinct().forEach { topicName ->
+                            vertx.eventBus().publish("kafka.stream.updated.$topicName", System.currentTimeMillis())
+                        }
                     }
                     
                     // Reply to Produce Request
@@ -1193,8 +1197,7 @@ class KafkaProtocolServer(
             }
             
             val topicCount = reader.readInt()
-
-            val fetchFutures = mutableListOf<io.vertx.core.Future<FetchPartitionResult>>()
+            val paramsList = mutableListOf<FetchPartitionParams>()
 
             for (i in 0 until topicCount) {
                 val topic = reader.readString() ?: ""
@@ -1215,6 +1218,28 @@ class KafkaProtocolServer(
                     }
                     
                     val partitionMaxBytes = reader.readInt()
+                    paramsList.add(FetchPartitionParams(topic, partition, fetchOffset))
+                }
+            }
+
+            // Read ForgottenTopicsData if apiVersion >= 7
+            if (apiVersion.toInt() >= 7) {
+                val forgottenTopicsCount = reader.readInt()
+                for (i in 0 until forgottenTopicsCount) {
+                    val forgottenTopicName = reader.readString() ?: ""
+                    val forgottenPartitionsCount = reader.readInt()
+                    for (j in 0 until forgottenPartitionsCount) {
+                        val forgottenPartition = reader.readInt()
+                    }
+                }
+            }
+
+            fun executeDbFetch(): io.vertx.core.Future<List<FetchPartitionResult>> {
+                val fetchFutures = mutableListOf<io.vertx.core.Future<FetchPartitionResult>>()
+                paramsList.forEach { params ->
+                    val topic = params.topic
+                    val partition = params.partition
+                    val fetchOffset = params.fetchOffset
 
                     val promise = Promise.promise<FetchPartitionResult>()
                     val authenticatedUser = username ?: "Anonymous"
@@ -1240,21 +1265,13 @@ class KafkaProtocolServer(
 
                     fetchFutures.add(promise.future())
                 }
-            }
 
-            // Read ForgottenTopicsData if apiVersion >= 7
-            if (apiVersion.toInt() >= 7) {
-                val forgottenTopicsCount = reader.readInt()
-                for (i in 0 until forgottenTopicsCount) {
-                    val forgottenTopicName = reader.readString() ?: ""
-                    val forgottenPartitionsCount = reader.readInt()
-                    for (j in 0 until forgottenPartitionsCount) {
-                        val forgottenPartition = reader.readInt()
-                    }
+                return io.vertx.core.Future.all(fetchFutures).map {
+                    fetchFutures.map { it.result() }
                 }
             }
 
-            io.vertx.core.Future.all(fetchFutures).onComplete { ar ->
+            fun writeFetchResponse(results: List<FetchPartitionResult>) {
                 // Write throttleTimeMs if apiVersion >= 1
                 if (apiVersion.toInt() >= 1) {
                     response.writeInt(0) // throttleTimeMs = 0
@@ -1267,8 +1284,7 @@ class KafkaProtocolServer(
                 }
 
                 response.writeInt(topicCount)
-                fetchFutures.forEach { f ->
-                    val result = f.result()
+                results.forEach { result ->
                     response.writeString(result.topic)
                     response.writeInt(1) // 1 partition
 
@@ -1331,6 +1347,56 @@ class KafkaProtocolServer(
                     response.writeRawBytes(serializedBytes.bytes) // MessageSet payload
                 }
                 writeResponse(response)
+            }
+
+            executeDbFetch().onComplete { ar ->
+                if (ar.failed()) {
+                    val dummyResults = paramsList.map { params ->
+                        FetchPartitionResult(params.topic, params.partition, 0L, emptyList())
+                    }
+                    writeFetchResponse(dummyResults)
+                    return@onComplete
+                }
+
+                val initialResults = ar.result()
+                val hasData = initialResults.any { it.records.isNotEmpty() }
+
+                if (hasData || maxWaitMs <= 0) {
+                    writeFetchResponse(initialResults)
+                } else {
+                    var completed = false
+                    val consumers = mutableListOf<io.vertx.core.eventbus.MessageConsumer<Long>>()
+                    var timerId: Long? = null
+
+                    val replyOnce = { finalResults: List<FetchPartitionResult> ->
+                        if (!completed) {
+                            completed = true
+                            timerId?.let { vertx.cancelTimer(it) }
+                            consumers.forEach { it.unregister() }
+                            writeFetchResponse(finalResults)
+                        }
+                    }
+
+                    timerId = vertx.setTimer(maxWaitMs.toLong()) {
+                        replyOnce(initialResults)
+                    }
+
+                    val uniqueTopics = paramsList.map { it.topic }.distinct()
+                    uniqueTopics.forEach { topic ->
+                        val consumer = vertx.eventBus().consumer<Long>("kafka.stream.updated.$topic") { _ ->
+                            executeDbFetch().onComplete { fetchAr ->
+                                if (fetchAr.succeeded()) {
+                                    val freshResults = fetchAr.result()
+                                    val hasFreshData = freshResults.any { it.records.isNotEmpty() }
+                                    if (hasFreshData) {
+                                        replyOnce(freshResults)
+                                    }
+                                }
+                            }
+                        }
+                        consumers.add(consumer)
+                    }
+                }
             }
         }
 
@@ -1707,4 +1773,10 @@ private class PendingResponse(val correlationId: Int) {
     @Volatile var responseBuffer: Buffer? = null
     @Volatile var isCompleted = false
 }
+
+private data class FetchPartitionParams(
+    val topic: String,
+    val partition: Int,
+    val fetchOffset: Long
+)
 

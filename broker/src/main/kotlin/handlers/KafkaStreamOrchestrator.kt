@@ -128,7 +128,11 @@ class KafkaStreamOrchestrator(
         }
 
         if (batch.isNotEmpty()) {
-            kafkaStore.enqueue(batch).onFailure { err ->
+            kafkaStore.enqueue(batch).onSuccess {
+                batch.map { it.topicName }.distinct().forEach { topic ->
+                    vertx.eventBus().publish("kafka.stream.updated.$topic", System.currentTimeMillis())
+                }
+            }.onFailure { err ->
                 logger.severe("Failed to enqueue batch of ${batch.size} messages to Kafka queue: ${err.message}")
             }
         }
