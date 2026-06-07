@@ -1355,7 +1355,20 @@ class OpcUaConnector : AbstractVerticle() {
                 val entries = JsonArray(payloadStr)
                 executeBatch(entries, isRequestResponse, topic)
             } else if (nodeIdPart.isNotEmpty()) {
-                val payload = if (payloadStr.startsWith("{")) JsonObject(payloadStr) else JsonObject()
+                val payload = if (payloadStr.startsWith("{")) {
+                    try {
+                        JsonObject(payloadStr)
+                    } catch (e: Exception) {
+                        JsonObject().put("value", payloadStr)
+                    }
+                } else {
+                    if (payloadStr.isEmpty()) {
+                        JsonObject()
+                    } else {
+                        JsonObject().put("value", payloadStr)
+                    }
+                }
+
                 // No "value" field → read, has "value" field → write
                 if (payload.containsKey("value")) {
                     executeSingleWrite(nodeIdPart, payload, isRequestResponse, topic)
@@ -1642,23 +1655,73 @@ class OpcUaConnector : AbstractVerticle() {
         return typeName
     }
 
+    private fun coerceToDouble(value: Any?): Double? {
+        if (value == null) return null
+        if (value is Number) return value.toDouble()
+        if (value is Boolean) return if (value) 1.0 else 0.0
+        val str = value.toString().trim()
+        if (str.lowercase() == "true") return 1.0
+        if (str.lowercase() == "false") return 0.0
+        return str.toDoubleOrNull()
+    }
+
     private fun convertJsonToVariant(value: Any?, dataTypeHint: String?): Variant {
         if (value == null) return Variant.NULL_VALUE
 
         // If explicit data type hint provided, use it
         if (dataTypeHint != null) {
             return when (dataTypeHint.lowercase()) {
-                "boolean" -> Variant(value as? Boolean ?: value.toString().toBoolean())
-                "byte", "sbyte" -> Variant((value as Number).toByte())
-                "ubyte" -> Variant(Unsigned.ubyte((value as Number).toShort()))
-                "int16" -> Variant((value as Number).toShort())
-                "uint16" -> Variant(Unsigned.ushort((value as Number).toInt()))
-                "int32" -> Variant((value as Number).toInt())
-                "uint32" -> Variant(Unsigned.uint((value as Number).toLong()))
-                "int64" -> Variant((value as Number).toLong())
-                "uint64" -> Variant(Unsigned.ulong((value as Number).toLong()))
-                "float" -> Variant((value as Number).toFloat())
-                "double" -> Variant((value as Number).toDouble())
+                "boolean" -> Variant(value as? Boolean ?: (value.toString().lowercase() == "true" || value.toString() == "1"))
+                "byte", "sbyte" -> {
+                    val num = coerceToDouble(value)?.toInt()?.toByte()
+                        ?: value.toString().toByte()
+                    Variant(num)
+                }
+                "ubyte" -> {
+                    val num = coerceToDouble(value)?.toInt()?.toShort()
+                        ?: value.toString().toShort()
+                    Variant(Unsigned.ubyte(num))
+                }
+                "int16" -> {
+                    val num = coerceToDouble(value)?.toInt()?.toShort()
+                        ?: value.toString().toShort()
+                    Variant(num)
+                }
+                "uint16" -> {
+                    val num = coerceToDouble(value)?.toInt()
+                        ?: value.toString().toInt()
+                    Variant(Unsigned.ushort(num))
+                }
+                "int32" -> {
+                    val num = coerceToDouble(value)?.toInt()
+                        ?: value.toString().toInt()
+                    Variant(num)
+                }
+                "uint32" -> {
+                    val num = coerceToDouble(value)?.toLong()
+                        ?: value.toString().toLong()
+                    Variant(Unsigned.uint(num))
+                }
+                "int64" -> {
+                    val num = coerceToDouble(value)?.toLong()
+                        ?: value.toString().toLong()
+                    Variant(num)
+                }
+                "uint64" -> {
+                    val num = coerceToDouble(value)?.toLong()
+                        ?: value.toString().toLong()
+                    Variant(Unsigned.ulong(num))
+                }
+                "float" -> {
+                    val num = coerceToDouble(value)?.toFloat()
+                        ?: value.toString().toFloat()
+                    Variant(num)
+                }
+                "double" -> {
+                    val num = coerceToDouble(value)
+                        ?: value.toString().toDouble()
+                    Variant(num)
+                }
                 "string" -> Variant(value.toString())
                 else -> Variant(value.toString())
             }
