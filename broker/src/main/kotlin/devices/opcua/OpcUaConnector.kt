@@ -96,6 +96,7 @@ class OpcUaConnector : AbstractVerticle() {
     private var actionConsumer: MessageConsumer<JsonObject>? = null
     private val opcUaMonitoredItems = ConcurrentHashMap<String, OpcUaMonitoredItem>() // address -> item
     private val nodeDataTypeCache = ConcurrentHashMap<NodeId, String>()
+    private val topicToNodeIdMap = ConcurrentHashMap<String, NodeId>()
 
     data class AddressSubscription(
         val address: OpcUaAddress,
@@ -560,11 +561,28 @@ class OpcUaConnector : AbstractVerticle() {
 
                 var successCount = 0
                 createdItems.forEachIndexed { idx, item ->
-                    val (address, nodeId, _) = items[idx]
+                    val (address, nodeId, browsePath) = items[idx]
                     val createStatus = item.createResult.orElse(null)
                     if (createStatus != null && createStatus.isGood) {
                         addressSubscriptions[address.address] = AddressSubscription(address, nodeId)
                         opcUaMonitoredItems[address.address] = item
+
+                        val mqttTopic = address.generateMqttTopic(
+                            namespace = deviceConfig.namespace,
+                            nodeId = nodeId.toParseableString(),
+                            browsePath = browsePath
+                        )
+                        topicToNodeIdMap[mqttTopic] = nodeId
+
+                        if (address.writable) {
+                            val sessionHandler = Monster.getSessionHandler()
+                            if (sessionHandler != null) {
+                                val writeClientId = "opcua-write-${deviceConfig.name}"
+                                sessionHandler.subscribeInternalClient(writeClientId, mqttTopic, opcUaConfig.writeConfig.qos)
+                                logger.info("Subscribed to state topic for writing: $mqttTopic for device ${deviceConfig.name}")
+                            }
+                        }
+
                         successCount++
                         logger.fine { "Created monitored item for address ${address.address}, nodeId $nodeId" }
                     } else {
@@ -1194,29 +1212,30 @@ class OpcUaConnector : AbstractVerticle() {
             val timestamp = dataValue.sourceTime?.javaInstant ?: Instant.now()
             val statusCode = dataValue.statusCode.value
 
-            // Create MQTT message payload with proper data types
-            val payload = JsonObject()
-
-            // Put value with correct JSON data type
-            when (value) {
-                null -> payload.putNull("value")
-                is Boolean -> payload.put("value", value)
-                is Byte -> payload.put("value", value.toInt())
-                is Short -> payload.put("value", value.toInt())
-                is Int -> payload.put("value", value)
-                is Long -> payload.put("value", value)
-                is Float -> payload.put("value", value.toDouble())
-                is Double -> payload.put("value", value)
-                is String -> payload.put("value", value)
-                is UByte -> payload.put("value", value.toInt())
-                is UShort -> payload.put("value", value.toInt())
-                is UInteger -> payload.put("value", value.toLong())
-                is ULong -> payload.put("value", value.toLong())
-                else -> payload.put("value", value.toString())
+            val payloadBytes = if (address.publishRaw) {
+                (value?.toString() ?: "").toByteArray()
+            } else {
+                val payload = JsonObject()
+                when (value) {
+                    null -> payload.putNull("value")
+                    is Boolean -> payload.put("value", value)
+                    is Byte -> payload.put("value", value.toInt())
+                    is Short -> payload.put("value", value.toInt())
+                    is Int -> payload.put("value", value)
+                    is Long -> payload.put("value", value)
+                    is Float -> payload.put("value", value.toDouble())
+                    is Double -> payload.put("value", value)
+                    is String -> payload.put("value", value)
+                    is UByte -> payload.put("value", value.toInt())
+                    is UShort -> payload.put("value", value.toInt())
+                    is UInteger -> payload.put("value", value.toLong())
+                    is ULong -> payload.put("value", value.toLong())
+                    else -> payload.put("value", value.toString())
+                }
+                payload.put("timestamp", timestamp.toString())
+                    .put("status", statusCode)
+                payload.encode().toByteArray()
             }
-
-            payload.put("timestamp", timestamp.toString())
-                .put("status", statusCode)
 
             // Generate MQTT topic based on publish mode
             val mqttTopic = address.generateMqttTopic(
@@ -1229,7 +1248,7 @@ class OpcUaConnector : AbstractVerticle() {
             val mqttMessage = BrokerMessage(
                 messageId = 0,
                 topicName = mqttTopic,
-                payload = payload.encode().toByteArray(),
+                payload = payloadBytes,
                 qosLevel = 0,
                 isRetain = false,
                 isDup = false,
@@ -1300,6 +1319,7 @@ class OpcUaConnector : AbstractVerticle() {
     private fun teardownWriteSubscriptions() {
         writeConsumer?.unregister()
         writeConsumer = null
+        topicToNodeIdMap.clear()
     }
 
     private fun handleWriteMessage(message: BrokerMessage) {
@@ -1314,6 +1334,30 @@ class OpcUaConnector : AbstractVerticle() {
         val writeConfig = opcUaConfig.writeConfig
         val namespace = deviceConfig.namespace
         val topic = message.topicName
+
+        val cachedNodeId = topicToNodeIdMap[topic]
+        if (cachedNodeId != null) {
+            try {
+                val payloadStr = String(message.payload).trim()
+                val payload = try {
+                    JsonObject(payloadStr)
+                } catch (e: Exception) {
+                    if (payloadStr.isEmpty()) {
+                        JsonObject()
+                    } else {
+                        JsonObject().put("value", payloadStr)
+                    }
+                }
+
+                if (payload.containsKey("value")) {
+                    val shouldRespond = payload.getBoolean("response", writeConfig.requestResponseEnabled)
+                    executeSingleWrite(cachedNodeId.toParseableString(), payload, shouldRespond, topic)
+                }
+            } catch (e: Exception) {
+                logger.severe("Direct state topic write failed for $topic: ${e.message}")
+            }
+            return
+        }
 
         // Determine if this is fire&forget or request/response
         val fireForgetPrefix = "$namespace/${writeConfig.topicPrefix}"
@@ -1355,13 +1399,9 @@ class OpcUaConnector : AbstractVerticle() {
                 val entries = JsonArray(payloadStr)
                 executeBatch(entries, isRequestResponse, topic)
             } else if (nodeIdPart.isNotEmpty()) {
-                val payload = if (payloadStr.startsWith("{")) {
-                    try {
-                        JsonObject(payloadStr)
-                    } catch (e: Exception) {
-                        JsonObject().put("value", payloadStr)
-                    }
-                } else {
+                val payload = try {
+                    JsonObject(payloadStr)
+                } catch (e: Exception) {
                     if (payloadStr.isEmpty()) {
                         JsonObject()
                     } else {
@@ -1412,8 +1452,7 @@ class OpcUaConnector : AbstractVerticle() {
 
                 val response = JsonObject()
                     .put("nodeId", nodeIdStr)
-                    .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
-                    .put("statusCode", statusCode.value)
+                    .put("status", statusCode.value)
                     .put("timestamp", timestamp.toString())
 
                 // Convert OPC UA value to JSON (reuse read-path conversion logic)
@@ -1456,12 +1495,18 @@ class OpcUaConnector : AbstractVerticle() {
                     null
                 })
                 val writeStatusCode = parseStatusCode(payload)
+                val sourceTime = try {
+                    payload.getString("timestamp")?.let { DateTime(Instant.parse(it)) }
+                } catch (e: Exception) {
+                    logger.warning("Failed to parse source timestamp: ${e.message}")
+                    null
+                }
 
                 val writeValue = WriteValue(
                     nodeId,
                     Unsigned.uint(13), // AttributeId.Value
                     null,
-                    DataValue(variant, writeStatusCode, null, null)
+                    DataValue(variant, writeStatusCode, sourceTime, null)
                 )
 
                 val writeResponse = client!!.writeAsync(listOf(writeValue))
@@ -1474,8 +1519,7 @@ class OpcUaConnector : AbstractVerticle() {
                 if (isRequestResponse) {
                     val response = JsonObject()
                         .put("nodeId", nodeIdStr)
-                        .put("status", if (statusCode.isGood) "Good" else statusCode.toString())
-                        .put("statusCode", statusCode.value)
+                        .put("status", statusCode.value)
                         .put("timestamp", Instant.now().toString())
                     publishResponse(originalTopic, response.encode().toByteArray())
                 }
@@ -1512,11 +1556,17 @@ class OpcUaConnector : AbstractVerticle() {
                             null
                         })
                         val statusCode = parseStatusCode(entry)
+                        val sourceTime = try {
+                            entry.getString("timestamp")?.let { DateTime(Instant.parse(it)) }
+                        } catch (e: Exception) {
+                            logger.warning("Failed to parse source timestamp in batch: ${e.message}")
+                            null
+                        }
                         writes.add(WriteEntry(i, nodeIdStr, WriteValue(
                             nodeId,
                             Unsigned.uint(13), // AttributeId.Value
                             null,
-                            DataValue(variant, statusCode, null, null)
+                            DataValue(variant, statusCode, sourceTime, null)
                         )))
                     } else {
                         reads.add(ReadEntry(i, nodeIdStr, nodeId))
@@ -1538,8 +1588,7 @@ class OpcUaConnector : AbstractVerticle() {
                         val sc = writeResults[idx]
                         results[entry.index] = JsonObject()
                             .put("nodeId", entry.nodeIdStr)
-                            .put("status", if (sc.isGood) "Good" else sc.toString())
-                            .put("statusCode", sc.value)
+                            .put("status", sc.value)
                             .put("timestamp", Instant.now().toString())
                     }
                 }
@@ -1560,8 +1609,7 @@ class OpcUaConnector : AbstractVerticle() {
                         val ts = dv.sourceTime?.javaInstant ?: Instant.now()
                         val r = JsonObject()
                             .put("nodeId", entry.nodeIdStr)
-                            .put("status", if (sc.isGood) "Good" else sc.toString())
-                            .put("statusCode", sc.value)
+                            .put("status", sc.value)
                             .put("timestamp", ts.toString())
                         when (value) {
                             null -> r.putNull("value")
@@ -1600,6 +1648,30 @@ class OpcUaConnector : AbstractVerticle() {
     }
 
     private fun parseStatusCode(payload: JsonObject): StatusCode {
+        if (payload.containsKey("status")) {
+            val statusVal = payload.getValue("status")
+            val sc = when (statusVal) {
+                is Number -> StatusCode(statusVal.toLong())
+                is String -> {
+                    val statusStr = statusVal.uppercase()
+                    when (statusStr) {
+                        "GOOD" -> StatusCode.GOOD
+                        "BAD" -> StatusCode(0x80000000L) // Bad
+                        "UNCERTAIN" -> StatusCode(0x40000000L) // Uncertain
+                        else -> {
+                            try {
+                                StatusCode(statusStr.toLong())
+                            } catch (e: Exception) {
+                                StatusCode.GOOD
+                            }
+                        }
+                    }
+                }
+                else -> StatusCode.GOOD
+            }
+            logger.fine { "OPC UA parsed status: input=$statusVal (${statusVal?.javaClass?.name}), result=$sc" }
+            return sc
+        }
         if (payload.containsKey("statusCode")) {
             val codeVal = payload.getValue("statusCode")
             return when (codeVal) {
@@ -1612,22 +1684,6 @@ class OpcUaConnector : AbstractVerticle() {
                     }
                 }
                 else -> StatusCode.GOOD
-            }
-        }
-        if (payload.containsKey("status")) {
-            val statusStr = payload.getString("status")?.uppercase()
-            return when (statusStr) {
-                "GOOD" -> StatusCode.GOOD
-                "BAD" -> StatusCode(0x80000000L) // Bad
-                "UNCERTAIN" -> StatusCode(0x40000000L) // Uncertain
-                else -> {
-                    // Try parsing as number
-                    try {
-                        StatusCode(statusStr?.toLong() ?: 0L)
-                    } catch (e: Exception) {
-                        StatusCode.GOOD
-                    }
-                }
             }
         }
         return StatusCode.GOOD
@@ -1746,7 +1802,23 @@ class OpcUaConnector : AbstractVerticle() {
         val requestPrefix = "$namespace/${writeConfig.requestTopicPrefix}"
         val responsePrefix = "$namespace/${writeConfig.responseTopicPrefix}"
 
-        val responseTopic = originalTopic.replaceFirst(requestPrefix, responsePrefix)
+        val responseTopic = when {
+            originalTopic.startsWith(requestPrefix) -> {
+                originalTopic.replaceFirst(requestPrefix, responsePrefix)
+            }
+            originalTopic.startsWith("$namespace/path/") -> {
+                originalTopic.replaceFirst("$namespace/path/", "$namespace/$responsePrefix/path/")
+            }
+            originalTopic.startsWith("$namespace/node/") -> {
+                originalTopic.replaceFirst("$namespace/node/", "$namespace/$responsePrefix/node/")
+            }
+            originalTopic.startsWith("$namespace/") -> {
+                originalTopic.replaceFirst("$namespace/", "$namespace/$responsePrefix/")
+            }
+            else -> {
+                "$originalTopic/$responsePrefix"
+            }
+        }
 
         try {
             val sessionHandler = Monster.getSessionHandler()

@@ -10,7 +10,9 @@ data class OpcUaAddress(
     val address: String,        // BrowsePath://Objects/Factory/# or NodeId://ns=2;i=16
     val topic: String,          // MQTT topic where to publish the values (for single mode)
     val publishMode: String = "SEPARATE",  // "SINGLE" = all values on one topic, "SEPARATE" = each node gets own topic
-    val removePath: Boolean = true       // Remove base path before first wildcard from topic (default: true)
+    val removePath: Boolean = true,      // Remove base path before first wildcard from topic (default: true)
+    val writable: Boolean = false,       // Flag to allow writing directly on this topic
+    val publishRaw: Boolean = false     // Flag to publish the raw value as text instead of JSON
 ) {
     companion object {
         const val PUBLISH_MODE_SINGLE = "SINGLE"
@@ -21,7 +23,9 @@ data class OpcUaAddress(
                 address = json.getString("address"),
                 topic = json.getString("topic"),
                 publishMode = json.getString("publishMode", PUBLISH_MODE_SEPARATE),
-                removePath = json.getBoolean("removePath", true)
+                removePath = json.getBoolean("removePath", true),
+                writable = json.getBoolean("writable", false),
+                publishRaw = json.getBoolean("publishRaw", false)
             )
         }
     }
@@ -32,6 +36,8 @@ data class OpcUaAddress(
             .put("topic", topic)
             .put("publishMode", publishMode)
             .put("removePath", removePath)
+            .put("writable", writable)
+            .put("publishRaw", publishRaw)
     }
 
     fun validate(): List<String> {

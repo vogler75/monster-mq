@@ -131,7 +131,9 @@ class OpcUaClientConfigQueries(
                         "address" to address.address,
                         "topic" to address.topic,
                         "publishMode" to address.publishMode,
-                        "removePath" to address.removePath
+                        "removePath" to address.removePath,
+                        "writable" to address.writable,
+                        "publishRaw" to address.publishRaw
                     )
                 },
                 "certificateConfig" to mapOf(

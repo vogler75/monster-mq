@@ -472,6 +472,10 @@ type OpcUaAddress {
     publishMode: OpcUaPublishMode!
     # Whether to remove the browse path from the topic name when using BrowsePath addresses
     removePath: Boolean!
+    # Whether you can write values directly back to the OPC UA node on this topic
+    writable: Boolean!
+    # Whether to publish the raw value directly as text instead of JSON
+    publishRaw: Boolean!
 }
 
 type MonitoringParameters {

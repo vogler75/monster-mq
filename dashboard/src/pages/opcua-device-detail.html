@@ -342,6 +342,8 @@
                                 <th>Topic</th>
                                 <th>Publish Mode</th>
                                 <th>Remove Path</th>
+                                <th>Writable</th>
+                                <th>Publish Raw</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -388,6 +390,20 @@
                     </div>
                     <span class="form-hint">Remove base path before first wildcard from topic</span>
                 </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="address-writable">
+                        <label for="address-writable">Writable</label>
+                    </div>
+                    <span class="form-hint">Allow writing values directly back to this node using its state/read topic</span>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="address-publish-raw">
+                        <label for="address-publish-raw">Publish Raw Value</label>
+                    </div>
+                    <span class="form-hint">Publish raw value as text instead of standard JSON payload</span>
+                </div>
             </form>
         </div>
         <div class="modal-footer">
@@ -430,6 +446,20 @@
                         <label for="edit-address-remove-path">Remove Base Path</label>
                     </div>
                     <span class="form-hint">Remove base path before first wildcard from topic</span>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-address-writable">
+                        <label for="edit-address-writable">Writable</label>
+                    </div>
+                    <span class="form-hint">Allow writing values directly back to this node using its state/read topic</span>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="edit-address-publish-raw">
+                        <label for="edit-address-publish-raw">Publish Raw Value</label>
+                    </div>
+                    <span class="form-hint">Publish raw value as text instead of standard JSON payload</span>
                 </div>
             </form>
         </div>

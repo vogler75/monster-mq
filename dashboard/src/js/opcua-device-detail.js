@@ -127,6 +127,8 @@ class OpcUaDeviceDetailManager {
                                 topic
                                 publishMode
                                 removePath
+                                writable
+                                publishRaw
                             }
                             certificateConfig {
                                 securityDir
@@ -331,11 +333,11 @@ class OpcUaDeviceDetailManager {
             <code style="${t}">${ns}/${pf}/{nodeId}</code>
             &nbsp; payload: <code>{"value": 42.5}</code> or <code>{"value": 42.5, "dataType": "Double"}</code><br><br>
             <strong>Request/Response Write</strong> (with status):<br>
-            Publish: <code style="${t}">${ns}/${rq}/{nodeId}</code> &nbsp; payload: <code>{"value": 42.5}</code><br>
-            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","status":"Good","statusCode":0,"timestamp":"..."}</code><br><br>
+            Publish: <code style="${t}">${ns}/${rq}/{nodeId}</code> &nbsp; payload: <code>{"value": 42.5}</code> or <code>{"value": 42.5, "status": "Good"}</code><br>
+            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","status":0,"timestamp":"..."}</code><br><br>
             <strong>Request/Response Read</strong> (on-demand value):<br>
             Publish: <code style="${t}">${ns}/${rq}/{nodeId}</code> &nbsp; payload: <code>{}</code> (empty or no payload)<br>
-            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","value":42.5,"status":"Good","timestamp":"..."}</code><br><br>
+            Response: <code style="${p}">${ns}/${rs}/{nodeId}</code> &nbsp; <code>{"nodeId":"...","value":42.5,"status":0,"timestamp":"..."}</code><br><br>
             <strong>Batch</strong> (mixed read/write in one call):<br>
             Publish: <code style="${t}">${ns}/${rq}</code> or <code style="${t}">${ns}/${pf}</code> (writes only)<br>
             Payload: <code>[{"nodeId":"ns=2;i=1001"}, {"nodeId":"ns=2;i=1002","value":42.5}]</code><br>
@@ -379,6 +381,8 @@ class OpcUaDeviceDetailManager {
 
             const publishModeIcon = address.publishMode === 'SEPARATE' ? '📊' : '📈';
             const removePathIcon = address.removePath ? '✂️' : '📁';
+            const writableIcon = address.writable ? '✏️' : '🔒';
+            const publishRawIcon = address.publishRaw ? '📄' : '📦';
 
             row.innerHTML = `
                 <td>
@@ -403,6 +407,16 @@ class OpcUaDeviceDetailManager {
                 <td>
                     <div class="remove-path">
                         ${removePathIcon} ${address.removePath ? 'Yes' : 'No'}
+                    </div>
+                </td>
+                <td>
+                    <div class="writable">
+                        ${writableIcon} ${address.writable ? 'Yes' : 'No'}
+                    </div>
+                </td>
+                <td>
+                    <div class="publish-raw">
+                        ${publishRawIcon} ${address.publishRaw ? 'Yes' : 'No'}
                     </div>
                 </td>
                 <td>
@@ -508,7 +522,9 @@ class OpcUaDeviceDetailManager {
             address: document.getElementById('address-address').value.trim(),
             topic: document.getElementById('address-topic').value.trim(),
             publishMode: document.getElementById('address-publish-mode').value,
-            removePath: document.getElementById('address-remove-path').checked
+            removePath: document.getElementById('address-remove-path').checked,
+            writable: document.getElementById('address-writable').checked,
+            publishRaw: document.getElementById('address-publish-raw').checked
         };
 
         try {
@@ -555,6 +571,8 @@ class OpcUaDeviceDetailManager {
         document.getElementById('edit-address-topic').value = addr.topic;
         document.getElementById('edit-address-publish-mode').value = addr.publishMode;
         document.getElementById('edit-address-remove-path').checked = addr.removePath;
+        document.getElementById('edit-address-writable').checked = addr.writable || false;
+        document.getElementById('edit-address-publish-raw').checked = addr.publishRaw || false;
         document.getElementById('edit-address-modal').style.display = 'flex';
     }
 
@@ -574,7 +592,9 @@ class OpcUaDeviceDetailManager {
             address: document.getElementById('edit-address-address').value.trim(),
             topic: document.getElementById('edit-address-topic').value.trim(),
             publishMode: document.getElementById('edit-address-publish-mode').value,
-            removePath: document.getElementById('edit-address-remove-path').checked
+            removePath: document.getElementById('edit-address-remove-path').checked,
+            writable: document.getElementById('edit-address-writable').checked,
+            publishRaw: document.getElementById('edit-address-publish-raw').checked
         };
 
         try {

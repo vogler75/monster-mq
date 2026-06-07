@@ -564,6 +564,8 @@ class OpcUaClientConfigMutations(
                 val topic = inputMap["topic"] as? String
                 val publishMode = inputMap["publishMode"] as? String ?: "SEPARATE"
                 val removePath = inputMap["removePath"] as? Boolean ?: true
+                val writable = inputMap["writable"] as? Boolean ?: false
+                val publishRaw = inputMap["publishRaw"] as? Boolean ?: false
 
                 if (addressStr == null || topic == null) {
                     future.complete(
@@ -580,7 +582,9 @@ class OpcUaClientConfigMutations(
                     address = addressStr,
                     topic = topic,
                     publishMode = publishMode,
-                    removePath = removePath
+                    removePath = removePath,
+                    writable = writable,
+                    publishRaw = publishRaw
                 )
 
                 val validationErrors = address.validate()
@@ -819,7 +823,9 @@ class OpcUaClientConfigMutations(
                         "address" to address.address,
                         "topic" to address.topic,
                         "publishMode" to address.publishMode,
-                        "removePath" to address.removePath
+                        "removePath" to address.removePath,
+                        "writable" to address.writable,
+                        "publishRaw" to address.publishRaw
                     )
                 },
                 "certificateConfig" to mapOf(

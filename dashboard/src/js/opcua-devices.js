@@ -54,6 +54,8 @@ class OpcUaDeviceManager {
                                 topic
                                 publishMode
                                 removePath
+                                writable
+                                publishRaw
                             }
                         }
                         metrics {

@@ -427,6 +427,10 @@ input OpcUaAddressInput {
     publishMode: OpcUaPublishMode = SEPARATE
     # For BrowsePath addresses: whether to remove the path prefix from generated topic names
     removePath: Boolean = true
+    # Allow writing values directly back to this OPC UA node using its read/monitored topic
+    writable: Boolean = false
+    # Publish the raw value as text instead of JSON
+    publishRaw: Boolean = false
 }
 
 input OpcUaDeviceInput {
