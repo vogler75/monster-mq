@@ -95,6 +95,7 @@ class OpcUaConnector : AbstractVerticle() {
     private var writeConsumer: MessageConsumer<Any>? = null
     private var actionConsumer: MessageConsumer<JsonObject>? = null
     private val opcUaMonitoredItems = ConcurrentHashMap<String, OpcUaMonitoredItem>() // address -> item
+    private val nodeDataTypeCache = ConcurrentHashMap<NodeId, String>()
 
     data class AddressSubscription(
         val address: OpcUaAddress,
@@ -1435,13 +1436,19 @@ class OpcUaConnector : AbstractVerticle() {
                 val nodeId = NodeId.parse(nodeIdStr)
                 val value = payload.getValue("value")
                 val dataTypeHint = payload.getString("dataType")
-                val variant = convertJsonToVariant(value, dataTypeHint)
+                val variant = convertJsonToVariant(value, dataTypeHint ?: try {
+                    readNodeDataType(nodeId)
+                } catch (e: Exception) {
+                    logger.warning("Failed to automatically read DataType for node $nodeIdStr: ${e.message}")
+                    null
+                })
+                val writeStatusCode = parseStatusCode(payload)
 
                 val writeValue = WriteValue(
                     nodeId,
                     Unsigned.uint(13), // AttributeId.Value
                     null,
-                    DataValue(variant)
+                    DataValue(variant, writeStatusCode, null, null)
                 )
 
                 val writeResponse = client!!.writeAsync(listOf(writeValue))
@@ -1484,12 +1491,19 @@ class OpcUaConnector : AbstractVerticle() {
                     val nodeId = NodeId.parse(nodeIdStr)
 
                     if (entry.containsKey("value")) {
-                        val variant = convertJsonToVariant(entry.getValue("value"), entry.getString("dataType"))
+                        val dataTypeHint = entry.getString("dataType")
+                        val variant = convertJsonToVariant(entry.getValue("value"), dataTypeHint ?: try {
+                            readNodeDataType(nodeId)
+                        } catch (e: Exception) {
+                            logger.warning("Failed to automatically read DataType for node $nodeIdStr in batch: ${e.message}")
+                            null
+                        })
+                        val statusCode = parseStatusCode(entry)
                         writes.add(WriteEntry(i, nodeIdStr, WriteValue(
                             nodeId,
                             Unsigned.uint(13), // AttributeId.Value
                             null,
-                            DataValue(variant)
+                            DataValue(variant, statusCode, null, null)
                         )))
                     } else {
                         reads.add(ReadEntry(i, nodeIdStr, nodeId))
@@ -1570,6 +1584,62 @@ class OpcUaConnector : AbstractVerticle() {
                 }
             }
         }
+    }
+
+    private fun parseStatusCode(payload: JsonObject): StatusCode {
+        if (payload.containsKey("statusCode")) {
+            val codeVal = payload.getValue("statusCode")
+            return when (codeVal) {
+                is Number -> StatusCode(codeVal.toLong())
+                is String -> {
+                    try {
+                        StatusCode(codeVal.toLong())
+                    } catch (e: Exception) {
+                        StatusCode.GOOD
+                    }
+                }
+                else -> StatusCode.GOOD
+            }
+        }
+        if (payload.containsKey("status")) {
+            val statusStr = payload.getString("status")?.uppercase()
+            return when (statusStr) {
+                "GOOD" -> StatusCode.GOOD
+                "BAD" -> StatusCode(0x80000000L) // Bad
+                "UNCERTAIN" -> StatusCode(0x40000000L) // Uncertain
+                else -> {
+                    // Try parsing as number
+                    try {
+                        StatusCode(statusStr?.toLong() ?: 0L)
+                    } catch (e: Exception) {
+                        StatusCode.GOOD
+                    }
+                }
+            }
+        }
+        return StatusCode.GOOD
+    }
+
+    private fun readNodeDataType(nodeId: NodeId): String? {
+        val cached = nodeDataTypeCache[nodeId]
+        if (cached != null) return cached
+
+        val c = client ?: throw Exception("OPC UA client not connected")
+        val readValueId = ReadValueId(
+            nodeId,
+            Unsigned.uint(14), // AttributeId.DataType
+            null,
+            QualifiedName.NULL_VALUE
+        )
+        val readResponse = c.readAsync(0.0, TimestampsToReturn.Both, listOf(readValueId))
+            .get(opcUaConfig.writeConfig.writeTimeout, TimeUnit.MILLISECONDS)
+        val dataValue = readResponse.results?.getOrNull(0) ?: return null
+        if (!dataValue.statusCode.isGood) return null
+        val dataTypeNodeId = dataValue.value.value as? NodeId ?: return null
+        val typeName = resolveDataTypeName(dataTypeNodeId)
+
+        nodeDataTypeCache[nodeId] = typeName
+        return typeName
     }
 
     private fun convertJsonToVariant(value: Any?, dataTypeHint: String?): Variant {
