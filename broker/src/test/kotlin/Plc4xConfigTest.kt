@@ -97,4 +97,24 @@ class Plc4xConfigTest {
         assertEquals("[1,2,3]", payload)
         assertTrue(JsonArray(payload).contains(2))
     }
+
+    @Test
+    fun testToJsonCompatibleMapConversion() {
+        val connector = at.rocworks.devices.plc4x.Plc4xConnector()
+        val nestedMap = mapOf("foo" to "bar", "num" to 42)
+        val outerMap = mapOf("nested" to nestedMap, "list" to listOf(nestedMap))
+
+        val result = connector.toJsonCompatible(outerMap)
+        assertTrue(result is JsonObject)
+        val json = result as JsonObject
+        
+        assertTrue(json.getJsonObject("nested") is JsonObject)
+        assertEquals("bar", json.getJsonObject("nested").getString("foo"))
+        assertEquals(42, json.getJsonObject("nested").getInteger("num"))
+        
+        val list = json.getJsonArray("list")
+        assertEquals(1, list.size())
+        val listElem = list.getJsonObject(0)
+        assertEquals("bar", listElem.getString("foo"))
+    }
 }

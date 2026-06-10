@@ -193,6 +193,11 @@ class Plc4xConnector : AbstractVerticle() {
     private fun connectToPlc(): Future<Void> {
         val promise = Promise.promise<Void>()
 
+        if (isStopped) {
+            promise.fail("Connector is stopped")
+            return promise.future()
+        }
+
         if (isConnected || isReconnecting) {
             promise.complete()
             return promise.future()
@@ -201,12 +206,28 @@ class Plc4xConnector : AbstractVerticle() {
         isReconnecting = true
 
         vertx.executeBlocking<Void> {
+            if (isStopped) {
+                isReconnecting = false
+                throw Exception("Connector is stopped")
+            }
             try {
                 logger.info("Connecting to PLC: ${plc4xConfig.connectionString}")
 
                 // PLC4X automatically selects the driver based on connection string prefix
                 // Examples: "s7://192.168.1.10", "modbus-tcp://192.168.1.20:502", "ads://192.168.1.30"
-                connection = driverManager!!.getConnectionManager().getConnection(plc4xConfig.connectionString)
+                val conn = driverManager!!.getConnectionManager().getConnection(plc4xConfig.connectionString)
+
+                if (isStopped) {
+                    isReconnecting = false
+                    try {
+                        conn.close()
+                    } catch (e: Exception) {
+                        logger.warning("Error closing connection after connector stopped: ${e.message}")
+                    }
+                    throw Exception("Connector is stopped")
+                }
+
+                connection = conn
 
                 if (connection != null && connection!!.isConnected) {
                     isConnected = true
@@ -222,8 +243,10 @@ class Plc4xConnector : AbstractVerticle() {
 
             } catch (e: Exception) {
                 isReconnecting = false
-                logger.severe("Exception during PLC connection: ${e.message}")
-                scheduleReconnection()
+                if (!isStopped) {
+                    logger.severe("Exception during PLC connection: ${e.message}")
+                    scheduleReconnection()
+                }
                 throw e
             }
         }.onComplete { result ->
@@ -294,12 +317,13 @@ class Plc4xConnector : AbstractVerticle() {
             // Schedule new reconnection attempt
             reconnectTimerId = vertx.setTimer(plc4xConfig.reconnectDelay) {
                 reconnectTimerId = null
+                if (isStopped) return@setTimer
                 if (!isConnected) {
                     logger.info("Attempting to reconnect to PLC for device ${deviceConfig.name}...")
                     connectToPlc()
                         .compose { setupPolling() }
                         .onComplete { result ->
-                            if (result.failed()) {
+                            if (result.failed() && !isStopped) {
                                 logger.warning("Reconnection failed for device ${deviceConfig.name}: ${result.cause()?.message}")
                             }
                         }
@@ -311,6 +335,11 @@ class Plc4xConnector : AbstractVerticle() {
 
     private fun setupPolling(): Future<Void> {
         val promise = Promise.promise<Void>()
+
+        if (isStopped) {
+            promise.fail("Connector is stopped")
+            return promise.future()
+        }
 
         if (!plc4xConfig.enabled) {
             logger.info("Polling disabled for device ${deviceConfig.name}")
@@ -328,6 +357,7 @@ class Plc4xConnector : AbstractVerticle() {
 
         // Start periodic polling
         pollingTimerId = vertx.setPeriodic(plc4xConfig.pollingInterval) {
+            if (isStopped) return@setPeriodic
             if (isConnected) {
                 pollAddresses()
             }
@@ -374,16 +404,18 @@ class Plc4xConnector : AbstractVerticle() {
                 val response = try {
                     responseFuture.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
                 } catch (e: java.util.concurrent.TimeoutException) {
+                    if (isStopped) return@executeBlocking
                     logger.warning("PLC4X read request timed out after ${timeoutMs}ms for device ${deviceConfig.name}, scheduling reconnection")
                     responseFuture.cancel(true)
                     isConnected = false
                     scheduleReconnection()
                     return@executeBlocking
                 } catch (e: java.util.concurrent.ExecutionException) {
+                    if (isStopped) return@executeBlocking
                     // PLC4X internal error (e.g. NPE in tag response mapping) — not a connection loss
-                    val cause = e.cause
+                    val cause = e.cause ?: e
                     if (cause is NullPointerException || cause is IllegalArgumentException || cause is IllegalStateException) {
-                        logger.warning("PLC4X internal error during read (${cause.javaClass.simpleName}): ${cause.message}")
+                        logger.warning("PLC4X internal error during read (${cause.javaClass.simpleName}): ${cause.message} — requested addresses: ${enabledAddresses.map { "${it.name} (${it.address})" }}")
                         return@executeBlocking
                     }
                     throw e // other ExecutionExceptions may indicate connection loss
@@ -397,6 +429,10 @@ class Plc4xConnector : AbstractVerticle() {
                 // Process response for each address
                 enabledAddresses.forEach { address ->
                     try {
+                        if (!response.tagNames.contains(address.name)) {
+                            logger.warning("Tag '${address.name}' (address: ${address.address}) was not found in the read response — response tagNames: ${response.tagNames}")
+                            return@forEach
+                        }
                         val responseCode = try {
                             response.getResponseCode(address.name)
                         } catch (e: Exception) {
@@ -433,9 +469,10 @@ class Plc4xConnector : AbstractVerticle() {
      * Convert PLC4X array/collection types to JSON-compatible types.
      * PLC4X returns special collection types (PlcList, etc.) that Vert.x JsonObject can't serialize.
      */
-    private fun toJsonCompatible(value: Any): Any {
+    fun toJsonCompatible(value: Any): Any {
         return when (value) {
             is PlcValue -> value.getObject()?.let { toJsonCompatible(it) } ?: "null"
+            is Map<*, *> -> JsonObject(value.entries.associate { it.key.toString() to it.value?.let { v -> toJsonCompatible(v) } })
             is Collection<*> -> JsonArray(value.map { it?.let { toJsonCompatible(it) } })
             is BooleanArray -> JsonArray(value.toList())
             is ByteArray -> JsonArray(value.toList())
