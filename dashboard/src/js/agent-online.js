@@ -1,5 +1,6 @@
 // Agent Online Graph - Live network visualization of agent interactions
 
+var safeStorage = window.safeStorage;
 class AgentOnlineGraphManager {
     constructor() {
         this.client = new GraphQLDashboardClient();

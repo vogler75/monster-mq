@@ -6,3 +6,5 @@ src/svg/
 src/config/brokers.json
 src/config/config-instance.json
 .DS_Store
+dist-desktop/
+build/

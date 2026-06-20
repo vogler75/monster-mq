@@ -148,7 +148,7 @@ window.clearPageSessionState = function() {
     const keys = window.safeStorage ? Array.from(window.safeStorage.tabScopedKeys) : [];
 
     keys.forEach(function(key) {
-        const value = safeStorage.getItem(key);
+        const value = window.safeStorage.getItem(key);
         if (value !== null) preserved[key] = value;
     });
 
@@ -161,7 +161,7 @@ window.clearPageSessionState = function() {
     }
 
     Object.keys(preserved).forEach(function(key) {
-        safeStorage.setItem(key, preserved[key]);
+        window.safeStorage.setItem(key, preserved[key]);
     });
 };
 

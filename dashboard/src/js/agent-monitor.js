@@ -1,5 +1,6 @@
 // Agent Monitor - Live monitoring of all A2A agents
 
+var safeStorage = window.safeStorage;
 class AgentMonitorManager {
     constructor() {
         this.client = new GraphQLDashboardClient();

@@ -1,3 +1,4 @@
+var safeStorage = window.safeStorage;
 class SessionManager {
     constructor() {
         this.sessions = [];

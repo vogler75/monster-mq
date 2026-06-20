@@ -1,6 +1,7 @@
 /**
  * Log Viewer Component (clean implementation with resize)
  */
+var safeStorage = window.safeStorage;
 class LogViewer {
   constructor(containerId, options = {}) {
     this.containerId = containerId;
@@ -67,7 +68,7 @@ class LogViewer {
     }
     container.innerHTML = `
       <style>
-        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:var(--theme-color-1, #0f1619); color:var(--theme-color-std-text, #f0f6fc); font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid var(--theme-color-primary, #0cc); box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease, left .3s ease; backdrop-filter:blur(4px);}
+        .log-viewer { position: fixed; bottom:0; left:0; right:0; background:var(--theme-color-1, #0f1619); color:var(--theme-color-std-text, #f0f6fc); font-family:Consolas,Monaco,'Courier New',monospace; font-size:12px; border-top:2px solid var(--theme-color-primary, #0cc); box-shadow:0 -2px 10px rgba(0,0,0,.3); z-index:9999; display:flex; flex-direction:column; transition:height .25s ease; backdrop-filter:blur(4px);}
         .log-viewer.expanded { height: var(--log-viewer-height, 400px); }
         .log-viewer.collapsed { height:36px !important; }
         .log-viewer-header { display:flex; align-items:center; padding:6px 10px; background:var(--theme-color-2, #18262d); border-bottom:1px solid var(--theme-color-soft-bdr, rgba(211,236,248,.4)); cursor:pointer; user-select:none; }
@@ -387,7 +388,12 @@ class LogViewer {
     if (menu) {
       const setLeft = () => {
         const w = menu.getBoundingClientRect().width;
-        if (w > 0) this.elements.root.style.left = w + 'px';
+        if (w > 0) {
+          const nextLeft = w + 'px';
+          if (this.elements.root.style.left !== nextLeft) {
+            this.elements.root.style.left = nextLeft;
+          }
+        }
       };
       setLeft();
       // Also update when menu expands/collapses

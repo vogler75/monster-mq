@@ -4,6 +4,7 @@
 // 1. Add the item to getMenuConfig() below
 // 2. Specify: section, sectionIcon, href, icon, text, and optionally id/adminOnly
 
+var safeStorage = window.safeStorage;
 class SidebarManager {
     constructor() {
         this._currentHref = null;

@@ -1,3 +1,4 @@
+var safeStorage = window.safeStorage;
 class DashboardManager {
     constructor() {
         this.pollingInterval = null;

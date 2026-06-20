@@ -3,18 +3,51 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:dev": "NODE_ENV=development electron .",
+    "electron:build": "npm run build && electron-builder --publish never"
   },
   "dependencies": {
     "@siemens/ix": "^4.3.0",
-    "@siemens/ix-icons": "^3.4.0",
     "@siemens/ix-echarts": "^3.0.1",
+    "@siemens/ix-icons": "^3.4.0",
     "echarts": "^5.6.0"
   },
   "devDependencies": {
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
     "vite": "^6.4.2"
+  },
+  "build": {
+    "appId": "com.monstermq.desktop",
+    "productName": "MonsterMQ",
+    "publish": null,
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.png"
+    }
   }
 }

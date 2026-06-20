@@ -1,3 +1,4 @@
+var safeStorage = window.safeStorage;
 class GraphQLDashboardClient {
     constructor(endpoint = null) {
         this._fixedEndpoint = endpoint; // null = use broker manager dynamically

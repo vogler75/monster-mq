@@ -57,7 +57,7 @@ function normalizeBrokerList(rawBrokers) {
 }
 
 function mergeDefaultLocal(rawBrokers) {
-    var defaultLocal = { name: 'Local', host: '', port: 0, tls: false, default: true, endpoint: '/graphql' };
+    var defaultLocal = { name: 'Local', host: window.isElectron ? 'localhost' : '', port: window.isElectron ? 4000 : 0, tls: false, default: true, endpoint: '/graphql' };
 
     if (!Array.isArray(rawBrokers) || rawBrokers.length === 0) {
         return [defaultLocal];
@@ -76,21 +76,53 @@ class BrokerManager {
     }
 
     async _loadConfig() {
-        var defaultLocal = { name: 'Local', host: '', port: 0, tls: false, default: true, endpoint: '/graphql' };
+        var defaultLocal = { name: 'Local', host: window.isElectron ? 'localhost' : '', port: window.isElectron ? 4000 : 0, tls: false, default: true, endpoint: '/graphql' };
         var loadedFromApi = false;
+        var loadedFromRemoteApi = false;
 
-        try {
-            var apiResponse = await fetch('/api/brokers', { cache: 'no-store' });
-            if (apiResponse.ok) {
-                var apiPayload = await apiResponse.json();
-                var apiBrokers = Array.isArray(apiPayload && apiPayload.brokers) ? apiPayload.brokers : apiPayload;
-                if (Array.isArray(apiBrokers) && apiBrokers.length > 0) {
-                    this.setBrokers(apiBrokers);
+        if (window.isElectron && window.ElectronAPI) {
+            try {
+                var config = await window.ElectronAPI.readConfig();
+                if (config && Array.isArray(config.brokers) && config.brokers.length > 0) {
+                    this.setBrokers(config.brokers);
+                    if (config.activeBroker) {
+                        this.setActiveBroker(config.activeBroker);
+                    }
                     loadedFromApi = true;
                 }
+            } catch (e) {
+                console.warn('BrokerManager: failed to load desktop config via IPC', e);
             }
-        } catch (e) {
-            console.debug('BrokerManager: /api/brokers load failed, falling back to /config/brokers.json', e);
+        }
+
+        if (!loadedFromApi) {
+            try {
+                var apiResponse = await fetch('/api/brokers', { cache: 'no-store' });
+                if (apiResponse.ok) {
+                    var apiPayload = await apiResponse.json();
+                    var apiBrokers = Array.isArray(apiPayload && apiPayload.brokers) ? apiPayload.brokers : apiPayload;
+                    if (Array.isArray(apiBrokers) && apiBrokers.length > 0) {
+                        this.setBrokers(apiBrokers);
+                        loadedFromApi = true;
+                        loadedFromRemoteApi = true;
+                    }
+                }
+            } catch (e) {
+                console.debug('BrokerManager: /api/brokers load failed, falling back to local storage', e);
+            }
+        }
+
+        if (!loadedFromApi) {
+            try {
+                var stored = window.safeStorage.getItem('monstermq_desktop_brokers');
+                var brokers = stored ? JSON.parse(stored) : [];
+                if (Array.isArray(brokers) && brokers.length > 0) {
+                    this.setBrokers(brokers);
+                    loadedFromApi = true;
+                }
+            } catch (e) {
+                console.warn('BrokerManager: failed to parse local storage brokers', e);
+            }
         }
 
         if (!loadedFromApi) {
@@ -107,6 +139,8 @@ class BrokerManager {
                 this.setBrokers([defaultLocal]);
             }
         }
+
+        this.isLocalMode = !loadedFromRemoteApi;
     }
 
     async refreshConfig() {
@@ -127,8 +161,8 @@ class BrokerManager {
 
     _ensureActiveBrokerExists() {
         if (!this.configBrokers || this.configBrokers.length === 0) {
-            this.configBrokers = [{ name: 'Local', host: '', port: 0, tls: false, default: true, endpoint: '/graphql' }];
-            safeStorage.removeItem(this.STORAGE_KEY_ACTIVE);
+            this.configBrokers = [{ name: 'Local', host: window.isElectron ? 'localhost' : '', port: window.isElectron ? 4000 : 0, tls: false, default: true, endpoint: '/graphql' }];
+            window.safeStorage.removeItem(this.STORAGE_KEY_ACTIVE);
             return;
         }
 
@@ -147,12 +181,17 @@ class BrokerManager {
 
     /** Get the stored active broker identifier (name) */
     getActiveBrokerId() {
-        return safeStorage.getItem(this.STORAGE_KEY_ACTIVE);
+        return window.safeStorage.getItem(this.STORAGE_KEY_ACTIVE);
     }
 
     /** Set the active broker by name */
     setActiveBroker(name) {
-        safeStorage.setItem(this.STORAGE_KEY_ACTIVE, name);
+        window.safeStorage.setItem(this.STORAGE_KEY_ACTIVE, name);
+        if (window.isElectron && window.ElectronAPI) {
+            window.ElectronAPI.setActiveBroker(name).catch(function(e) {
+                console.warn('Failed to save active broker to desktop config:', e);
+            });
+        }
     }
 
     /** Resolve the active broker object. Falls back to the default or first broker. */
@@ -166,7 +205,7 @@ class BrokerManager {
         }
 
         var defaultBroker = all.find(function(b) { return b.default; });
-        return defaultBroker || all[0] || { name: 'Local', host: '', port: 4000, tls: false, endpoint: '/graphql' };
+        return defaultBroker || all[0] || { name: 'Local', host: window.isElectron ? 'localhost' : '', port: window.isElectron ? 4000 : 4000, tls: false, endpoint: '/graphql' };
     }
 
     /**
@@ -215,11 +254,11 @@ class BrokerManager {
         if (!brokerName) brokerName = this.getActiveBrokerId();
         if (!brokerName) return;
         for (var i = 0; i < AUTH_KEYS.length; i++) {
-            var val = safeStorage.getItem('monstermq_' + AUTH_KEYS[i]);
+            var val = window.safeStorage.getItem('monstermq_' + AUTH_KEYS[i]);
             if (val !== null) {
-                safeStorage.setItem(this._brokerKey(brokerName, AUTH_KEYS[i]), val);
+                window.safeStorage.setItem(this._brokerKey(brokerName, AUTH_KEYS[i]), val);
             } else {
-                safeStorage.removeItem(this._brokerKey(brokerName, AUTH_KEYS[i]));
+                window.safeStorage.removeItem(this._brokerKey(brokerName, AUTH_KEYS[i]));
             }
         }
     }
@@ -227,21 +266,21 @@ class BrokerManager {
     /** Restore a broker's saved auth into the global keys */
     restoreAuthForBroker(brokerName) {
         for (var i = 0; i < AUTH_KEYS.length; i++) {
-            var val = safeStorage.getItem(this._brokerKey(brokerName, AUTH_KEYS[i]));
+            var val = window.safeStorage.getItem(this._brokerKey(brokerName, AUTH_KEYS[i]));
             if (val !== null) {
-                safeStorage.setItem('monstermq_' + AUTH_KEYS[i], val);
+                window.safeStorage.setItem('monstermq_' + AUTH_KEYS[i], val);
             } else {
-                safeStorage.removeItem('monstermq_' + AUTH_KEYS[i]);
+                window.safeStorage.removeItem('monstermq_' + AUTH_KEYS[i]);
             }
         }
     }
 
     /** Check if a broker has a saved (and still valid) session */
     hasSavedSession(brokerName) {
-        var token = safeStorage.getItem(this._brokerKey(brokerName, 'token'));
+        var token = window.safeStorage.getItem(this._brokerKey(brokerName, 'token'));
         if (!token) {
             // Check for guest mode
-            return safeStorage.getItem(this._brokerKey(brokerName, 'guest')) === 'true';
+            return window.safeStorage.getItem(this._brokerKey(brokerName, 'guest')) === 'true';
         }
         if (token === 'null') return true; // auth disabled
         if (window.isJwtToken && !window.isJwtToken(token)) return true; // server-side session token

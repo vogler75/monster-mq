@@ -1,5 +1,6 @@
 // Agent Detail Monitor - Per-agent live monitoring
 
+var safeStorage = window.safeStorage;
 class AgentDetailMonitorManager {
     constructor() {
         this.client = new GraphQLDashboardClient();

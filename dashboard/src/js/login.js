@@ -1,4 +1,5 @@
 (function() {
+    var safeStorage = window.safeStorage;
     class LoginManager {
         constructor() {
             this.form = document.getElementById('login-form');
@@ -71,8 +72,8 @@
             }
 
             try {
-                await this.checkBrokerConfigApiAvailable();
                 await window.brokerManager.ready();
+                await this.checkBrokerConfigApiAvailable();
                 this.populateBrokerSelect();
                 await this.checkUserManagementEnabled();
                 if (loginMessage) {
@@ -92,13 +93,13 @@
 
             this.brokerSelect.innerHTML = '';
 
-            brokers.forEach(function(broker) {
+            brokers.forEach((broker) => {
                 var option = document.createElement('option');
                 option.value = broker.name;
                 option.textContent = broker.host ? broker.name : broker.name + ' (this server)';
                 if (broker.name === activeId) option.selected = true;
                 this.brokerSelect.appendChild(option);
-            }.bind(this));
+            });
         }
 
         onBrokerSelectChange() {
@@ -213,6 +214,12 @@
 
         async checkBrokerConfigApiAvailable() {
             this.hideBrokerConfigAccess();
+
+            var isLocal = window.isElectron || (window.brokerManager && window.brokerManager.isLocalMode);
+            if (isLocal) {
+                this.showBrokerConfigAccess();
+                return;
+            }
 
             try {
                 var response = await fetch('/api/brokers', { cache: 'no-store' });

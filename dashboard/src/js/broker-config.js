@@ -1,5 +1,6 @@
 // Broker list configuration page
 
+var safeStorage = window.safeStorage;
 var BROKER_CONFIG_TOKEN_KEY = 'monstermq_broker_config_token';
 
 class BrokerConfigManager {
@@ -14,7 +15,27 @@ class BrokerConfigManager {
     init() {
         this.currentToken = safeStorage.getItem(BROKER_CONFIG_TOKEN_KEY) || '';
         this._prepareEvents();
-        this._setEditorLocked(true);
+        var isLocal = window.isElectron || (window.brokerManager && window.brokerManager.isLocalMode);
+        if (isLocal) {
+            this._authenticated = true;
+            this._apiSupportsWrite = true;
+            var tokenCard = document.getElementById('broker-admin-token') ? document.getElementById('broker-admin-token').closest('.section-card') : null;
+            if (tokenCard) {
+                tokenCard.style.display = 'none';
+            }
+            var subtitle = document.querySelector('.page-subtitle');
+            if (subtitle) {
+                subtitle.textContent = window.isElectron ? 
+                    'Manage broker endpoints stored locally in this desktop app.' :
+                    'Manage broker endpoints stored locally in this browser.';
+            }
+            this._setEditorLocked(false);
+            this.loadBrokers().catch((e) => {
+                console.error('Failed to load local brokers:', e);
+            });
+        } else {
+            this._setEditorLocked(true);
+        }
     }
 
     _prepareEvents() {
@@ -156,6 +177,15 @@ class BrokerConfigManager {
     }
 
     _refreshTokenState() {
+        var isLocal = window.isElectron || (window.brokerManager && window.brokerManager.isLocalMode);
+        if (isLocal) {
+            var saveBtn = document.getElementById('save-brokers-btn');
+            if (saveBtn) {
+                saveBtn.removeAttribute('disabled');
+                saveBtn.title = '';
+            }
+            return;
+        }
         var tokenInput = document.getElementById('broker-admin-token');
         var saveTokenBtn = document.getElementById('save-token-btn');
         var tokenState = document.getElementById('token-state');
@@ -225,6 +255,36 @@ class BrokerConfigManager {
     async loadBrokers(options) {
         options = options || {};
         var requireAuth = options.requireAuth === true;
+        var isLocal = window.isElectron || (window.brokerManager && window.brokerManager.isLocalMode);
+
+        if (isLocal) {
+            this.showLoading(true);
+            this.showError('');
+            this._setSaveCapability(true);
+            try {
+                var brokers = [];
+                if (window.isElectron && window.ElectronAPI) {
+                    var config = await window.ElectronAPI.readConfig();
+                    brokers = config ? config.brokers : [];
+                } else {
+                    var stored = safeStorage.getItem('monstermq_desktop_brokers');
+                    brokers = stored ? JSON.parse(stored) : [];
+                }
+                if (!brokers || !brokers.length) {
+                    brokers = [{ name: 'Local', host: window.isElectron ? 'localhost' : '', port: window.isElectron ? 4000 : 0, tls: false, default: true, endpoint: '/graphql' }];
+                }
+                this.renderBrokers(brokers);
+                if (window.brokerManager && typeof window.brokerManager.setBrokers === 'function') {
+                    window.brokerManager.setBrokers(brokers);
+                }
+                this.showStatus('Loaded ' + brokers.length + ' broker(s) from local configuration.');
+            } catch (e) {
+                this.showError('Failed to load local broker config: ' + e.message);
+            } finally {
+                this.showLoading(false);
+            }
+            return;
+        }
 
         if (requireAuth && !this.currentToken) {
             throw new Error('Enter an admin token before unlocking configuration.');
@@ -528,6 +588,45 @@ class BrokerConfigManager {
     }
 
     async saveBrokers() {
+        var isLocal = window.isElectron || (window.brokerManager && window.brokerManager.isLocalMode);
+        if (isLocal) {
+            var saveBtn = document.getElementById('save-brokers-btn');
+            if (saveBtn) {
+                saveBtn.setAttribute('disabled', 'disabled');
+            }
+            try {
+                var payload = this._collectBrokers();
+                if (window.isElectron && window.ElectronAPI) {
+                    var currentConfig = await window.ElectronAPI.readConfig() || {};
+                    currentConfig.brokers = payload;
+                    // Ensure active broker is still in the list, otherwise update it
+                    if (currentConfig.activeBroker && !payload.some(function(b) { return b.name === currentConfig.activeBroker; })) {
+                        var defB = payload.find(function(b) { return b.default; }) || payload[0];
+                        currentConfig.activeBroker = defB ? defB.name : 'Local';
+                    }
+                    await window.ElectronAPI.writeConfig(currentConfig);
+                } else {
+                    safeStorage.setItem('monstermq_desktop_brokers', JSON.stringify(payload));
+                }
+                this.renderBrokers(payload);
+                if (window.brokerManager && typeof window.brokerManager.setBrokers === 'function') {
+                    window.brokerManager.setBrokers(payload);
+                } else if (window.brokerManager && typeof window.brokerManager.refreshConfig === 'function') {
+                    await window.brokerManager.refreshConfig();
+                }
+                this.showStatus('Broker configuration saved locally.', 'success');
+            } catch (error) {
+                console.error('Error saving local broker config:', error);
+                this.showError(error.message || 'Failed to save local broker configuration.');
+            } finally {
+                if (saveBtn) {
+                    saveBtn.removeAttribute('disabled');
+                }
+                this._syncDefaultState();
+            }
+            return;
+        }
+
         var tokenInput = document.getElementById('broker-admin-token');
         if (tokenInput) {
             this.currentToken = tokenInput.value.trim();
@@ -612,6 +711,9 @@ class BrokerConfigManager {
 }
 
 let brokerConfigManager;
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
+    if (window.brokerManager && typeof window.brokerManager.ready === 'function') {
+        await window.brokerManager.ready();
+    }
     brokerConfigManager = new BrokerConfigManager();
 });
