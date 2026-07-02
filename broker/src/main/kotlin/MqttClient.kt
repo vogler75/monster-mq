@@ -97,6 +97,8 @@ class MqttClient(
     // For MQTT v3.1.1: uses endpoint.isCleanSession
     private var effectiveCleanSession: Boolean = true
 
+    private var connectionAccepted: Boolean = false
+
     // Outbound Receive Maximum saturation tracking
     private var receiveMaximumWarningActive: Boolean = false
     private var receiveMaximumWarningSince: Instant? = null
@@ -611,10 +613,12 @@ class MqttClient(
                 // Shared Subscription Available (42)
                 connackProps.add(MqttProperties.IntegerProperty(42, 0))  // 0 = not supported yet
                 
+                connectionAccepted = true
                 endpoint.accept(present, connackProps)
                 logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties")
             } else {
                 // MQTT v3.1.1: Simple accept
+                connectionAccepted = true
                 endpoint.accept(present)
             }
 
@@ -1651,6 +1655,12 @@ class MqttClient(
         logger.info("Client [$clientId] Close connection [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
         if (!gracefulDisconnected) { // if there was no disconnect before
             sendLastWill()
+        }
+        if (connectionAccepted && pendingEvents.isNotEmpty()) {
+            logger.info("Client [$clientId] Connection closing, draining ${pendingEvents.size} pending queued events before session teardown")
+            val events = ArrayList(pendingEvents)
+            pendingEvents.clear()
+            events.forEach { it.invoke() }
         }
         if (endpoint.isConnected) {
             logger.fine { "Client [$clientId] Send close  [${Utils.getCurrentFunctionName()}]" }
