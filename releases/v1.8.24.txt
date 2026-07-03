@@ -1,0 +1,23 @@
+Release v1.8.24
+Built from commit: 304dcaa2
+Date: 2026-07-03 05:18:11
+
+Changes since v1.8.23:
+---
+304dcaa2 fix: drain pending connection events on close to prevent message loss for fast-disconnecting clients
+c4a0641c feat: add local connection config, fix Electron custom protocol 404, and optimize log viewer layout loop
+b29a6103 Handle stopped state and improve PLC4X conversions
+3862b698 feat(opcua): add writable and publishRaw flags, enable dynamic writes, raw value publishing, source timestamps, and unify status fields
+db85e48b feat(opcua): support writing plain raw values and convert to destination data type
+5def5936 fix(opcua): add status quality support and automatic DataType detection with caching for client writes
+bc7bc138 Support long-polling fetch + stream update events
+8894a4a6 Restore system configuration page to dashboard
+7561e74a Move Kafka Consumers to Monitoring sidebar and add consumer offset lag count
+56c6bfd6 Fix Kafka protocol correlation ID mismatch via FIFO response queue
+9adeec8c feat: add Kafka topic monitoring tool and query resolvers
+299a40c4 Merge branch 'main' into develop
+504e1768 Support newer Group API versions (v1-v2)
+07ca678e fix(kafka): support Fetch API version 10, parsing logStartOffset, currentLeaderEpoch, and ForgottenTopicsData
+a8adceb4 fix(kafka): support ListOffsets API version 3 and write throttleTimeMs only for version >= 2
+07f56d60 fix(kafka): support higher api versions for produce and offset fetch
+29c0ac81 Point latency tests to test.monstermq.com
