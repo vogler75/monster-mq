@@ -15,8 +15,7 @@ if command -v docker-buildx > /dev/null 2>&1; then
 elif docker buildx version > /dev/null 2>&1; then
     BUILDX="docker buildx"
 else
-    echo -e "${RED}✗ Error: docker buildx is not available. This script requires buildx.${NC}" >&2
-    exit 1
+    BUILDX=""
 fi
 
 # Named volumes for container builds (avoids root-owned files on Mac host)
@@ -285,8 +284,13 @@ if [ "$SHOULD_PUSH" = true ]; then
     fi
 else
     # Local build only (native platform)
-    # Use buildx --load
-    DOCKER_BUILD_LOCAL="$BUILDX build --load"
+    # Use buildx --load if available, otherwise fall back to legacy builder
+    if [ -n "$BUILDX" ]; then
+        DOCKER_BUILD_LOCAL="$BUILDX build --load"
+    else
+        echo -e "${YELLOW}buildx not available, using legacy builder${NC}"
+        DOCKER_BUILD_LOCAL="DOCKER_BUILDKIT=0 docker build"
+    fi
 
     echo -e "${YELLOW}Building Docker image (local, native platform only)...${NC}"
     if [ "$TESTING" = true ]; then
