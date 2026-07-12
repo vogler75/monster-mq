@@ -8,6 +8,7 @@ import io.vertx.core.Promise
 import io.vertx.core.Vertx
 
 class MessageBusVertx(): AbstractVerticle(), IMessageBus {
+    override val isExternalTransport: Boolean = false
     private fun messageAddress() = EventBusAddresses.Node.messageBus(deploymentID())
 
     override fun start(startPromise: Promise<Void>) {

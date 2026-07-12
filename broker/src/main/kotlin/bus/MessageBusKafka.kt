@@ -16,7 +16,7 @@ class MessageBusKafka(
     private val topicName: String,
     private val userConfig: JsonObject? = null
 ): AbstractVerticle(), IMessageBus {
-    override val isExternal: Boolean = true
+    override val isExternalTransport: Boolean = true
     private val groupId = "Monster"
     private val configConsumer: Map<String, String>
     private var kafkaProducer: KafkaProducer<String, ByteArray>? = null

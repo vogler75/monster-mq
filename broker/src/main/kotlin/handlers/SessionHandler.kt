@@ -466,10 +466,10 @@ open class SessionHandler(
 
         // Only subscribe to message bus if it's Kafka (external source)
         // Internal Vert.x message bus broadcast is no longer used - we use targeted messaging
-        val f0 = if (messageBus.isExternal) {
-            logger.fine("Subscribing to external message bus for external messages [${Utils.getCurrentFunctionName()}]")
+        val f0 = if (messageBus.isExternalTransport) {
+            logger.fine("Subscribing to external message bus [${messageBus.javaClass.simpleName}] [${Utils.getCurrentFunctionName()}]")
             messageBus.subscribeToMessageBus { message ->
-                publishMessage(message)
+                publishMessage(message, forwardToExternalBus = false)
             }
         } else {
             logger.fine("Skipping internal message bus subscription - using targeted messaging only [${Utils.getCurrentFunctionName()}]")
@@ -1450,12 +1450,9 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun publishMessage(message: BrokerMessage) {
-        // Publish to external message bus (e.g. Zenoh or Kafka) if enabled and message is local
-        if (messageBus.isExternal && (message.originNodeId == null || message.originNodeId == Monster.getClusterNodeId(vertx))) {
-            messageBus.publishMessageToBus(message)
-        }
+    fun publishMessage(message: BrokerMessage) = publishMessage(message, forwardToExternalBus = true)
 
+    private fun publishMessage(message: BrokerMessage, forwardToExternalBus: Boolean) {
         // NEW: If publish bulk processing is enabled, buffer the message instead of processing immediately
         if (publishBulkProcessingEnabled) {
             try {
@@ -1485,8 +1482,10 @@ open class SessionHandler(
 
         // Still save to archive (happens for both paths)
         messageHandler.saveMessage(message)
-        // Removed: sparkplugHandler?.metricExpansion() - replaced by SparkplugB Decoder Device system
-        // SparkplugB decoding is now handled by SparkplugBDecoderConnector verticles
+        if (forwardToExternalBus && messageBus.isExternalTransport) {
+            messageBus.publishMessageToBus(message)
+            messageBusOut.incrementAndGet()
+        }
     }
 
     /**

@@ -6,6 +6,6 @@ import io.vertx.core.Future
 interface IMessageBus {
     fun subscribeToMessageBus(callback: (BrokerMessage)->Unit): Future<Void>
     fun publishMessageToBus(message: BrokerMessage)
-    val isExternal: Boolean
+    val isExternalTransport: Boolean
         get() = false
 }

@@ -1,0 +1,29 @@
+# MonsterMQ broker A using Zenoh for publication federation.
+# Copy this file for broker B and change NodeName plus TCP/HTTP ports.
+NodeName: broker-a
+TCP: 1883
+WS: 1884
+
+DefaultStoreType: SQLITE
+QueuedMessagesEnabled: true
+
+Features:
+  Zenoh: true
+
+Zenoh:
+  Enabled: true
+  # Locator-free discovery on the same LAN. Use client + Connect for routed networks/NAT.
+  Mode: peer
+  Prefix: monstermq/mqtt
+  Allow:
+    - "#"
+  Deny:
+    - "$SYS/#"
+  Deduplication:
+    CacheSize: 100000
+    TtlSeconds: 300
+
+Logging:
+  Memory:
+    Enabled: true
+    Entries: 1000

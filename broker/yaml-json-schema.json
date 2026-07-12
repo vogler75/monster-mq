@@ -65,55 +65,54 @@
     },
     "Zenoh": {
       "type": "object",
-      "description": "Zenoh embedded federation configuration",
+      "description": "Zenoh publication federation between independent MonsterMQ brokers",
       "properties": {
-        "Enabled": {
-          "type": "boolean",
-          "default": false
-        },
-        "Mode": {
-          "type": "string",
-          "enum": ["client", "peer", "router"],
-          "default": "client"
-        },
+        "Enabled": { "type": "boolean", "default": false },
+        "Mode": { "type": "string", "enum": ["client", "peer"], "default": "peer", "description": "Peer uses multicast discovery without a locator; client connects to the configured Zenoh endpoints" },
         "Connect": {
           "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Explicit Zenoh endpoints; required by broker validation in client mode and optional in peer mode"
         },
-        "Prefix": {
-          "type": "string",
-          "default": "monstermq/mqtt"
-        },
+        "Prefix": { "type": "string", "minLength": 1, "default": "monstermq/mqtt" },
         "Allow": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string", "minLength": 1 },
           "default": ["#"]
         },
         "Deny": {
           "type": "array",
-          "items": {
-            "type": "string"
-          },
+          "items": { "type": "string", "minLength": 1 },
           "default": ["$SYS/#"]
         },
         "Deduplication": {
           "type": "object",
           "properties": {
-            "CacheSize": {
-              "type": "integer",
-              "default": 100000
+            "CacheSize": { "type": "integer", "minimum": 1, "default": 100000 },
+            "TtlSeconds": { "type": "integer", "minimum": 1, "default": 300 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "Enabled": { "const": true },
+              "Mode": { "const": "client" }
             },
-            "TtlSeconds": {
-              "type": "integer",
-              "default": 300
+            "required": ["Enabled", "Mode"]
+          },
+          "then": {
+            "required": ["Connect"],
+            "properties": {
+              "Connect": { "minItems": 1 }
             }
           }
         }
-      }
+      ],
+      "additionalProperties": false
     },
     "DefaultStoreType": {
       "type": "string",
@@ -845,7 +844,7 @@
         "SchemaPolicy": { "type": "boolean", "default": true, "description": "Topic schema policy management" },
         "TopicNamespace": { "type": "boolean", "default": true, "description": "Topic namespace management" },
         "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" },
-        "Zenoh": { "type": "boolean", "default": true, "description": "Zenoh federation transport" }
+        "Zenoh": { "type": "boolean", "default": true, "description": "Zenoh broker federation transport" }
       },
       "additionalProperties": false
     }

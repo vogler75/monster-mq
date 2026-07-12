@@ -1645,7 +1645,13 @@ MORE INFO:
 
         return when {
             zenohEnabled -> {
-                val bus = MessageBusZenoh(configJson)
+                val brokerId = configJson.getString("NodeName")?.takeIf { it.isNotBlank() }
+                    ?: try {
+                        java.net.InetAddress.getLocalHost().hostName
+                    } catch (_: Exception) {
+                        "node-${java.util.UUID.randomUUID()}"
+                    }
+                val bus = MessageBusZenoh(brokerId, zenoh)
                 val busReady = vertx.deployVerticle(bus)
                 bus to busReady
             }
