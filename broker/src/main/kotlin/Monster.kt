@@ -184,7 +184,7 @@ class Monster(args: Array<String>) {
                 // Use custom node name if available, fallback to member attribute or UUID
                 val localMember = instance.clusterManager!!.hazelcastInstance.cluster.localMember
                 localMember.getAttribute("nodeName") ?: instance.nodeName.ifEmpty { localMember.uuid.toString() }
-            } else instance.nodeName.ifEmpty { "local" }
+            } else "local"
         }
 
         fun getClusterNodeIds(vertx: Vertx): List<String> {

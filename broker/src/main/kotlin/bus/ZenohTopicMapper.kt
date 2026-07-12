@@ -38,11 +38,23 @@ object ZenohTopicMapper {
         }
 
         if (relativeTopic.isEmpty()) return null
+
+        val mqttTopic = if (relativeTopic.contains('*')) {
+            relativeTopic.split('/').joinToString("/") { level ->
+                when (level) {
+                    "*" -> "+"
+                    "**" -> "#"
+                    else -> level
+                }
+            }
+        } else {
+            relativeTopic
+        }
         
         return if (trimmedLocal.isEmpty()) {
-            relativeTopic
+            mqttTopic
         } else {
-            "$trimmedLocal/$relativeTopic"
+            "$trimmedLocal/$mqttTopic"
         }
     }
 

@@ -67,6 +67,10 @@ class ZenohTopicMapperTest {
         
         // Mismatch remote prefix should return null
         assertNull(ZenohTopicMapper.mapToMqttTopic("other/prefix/sensors/temp", "data/zenoh", "monstermq/mqtt"))
+
+        // Wildcard conversions
+        assertEquals("sensors/#", ZenohTopicMapper.mapToMqttTopic("monstermq/mqtt/sensors/**", "", "monstermq/mqtt"))
+        assertEquals("data/zenoh/sensors/+/temp", ZenohTopicMapper.mapToMqttTopic("monstermq/mqtt/sensors/*/temp", "data/zenoh", "monstermq/mqtt"))
     }
 
     @Test

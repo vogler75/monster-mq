@@ -1,5 +1,6 @@
 package at.rocworks.bus
 
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.TopicTree
@@ -19,6 +20,9 @@ import io.zenoh.pubsub.CallbackSubscriber
 import io.zenoh.pubsub.PutOptions
 import io.zenoh.qos.Reliability
 import io.zenoh.sample.Sample
+import io.zenoh.query.CallbackQueryable
+import io.zenoh.query.Query
+import io.zenoh.query.ReplyOptions
 import java.util.LinkedHashMap
 import java.util.concurrent.Callable
 
@@ -41,6 +45,7 @@ class MessageBusZenoh(
 
     private var session: Session? = null
     private val subscribers = mutableListOf<CallbackSubscriber>()
+    private val queryables = mutableListOf<CallbackQueryable>()
     @Volatile private var callback: ((BrokerMessage) -> Unit)? = null
 
     private val seenMessages = object : LinkedHashMap<String, Long>(1024, 0.75f, true) {
@@ -68,11 +73,18 @@ class MessageBusZenoh(
             try {
                 val subscriptionKeys = ZenohTopicMapper.minimalFilters(allow)
                     .mapNotNull { ZenohTopicMapper.subscriptionKey(it, localPrefix, remotePrefix) }
-                val declared = subscriptionKeys.map { key ->
+                
+                val declaredSubscribers = subscriptionKeys.map { key ->
                     opened.declareSubscriber(KeyExpr.tryFrom(key), Callback<Sample> { sample -> handleSample(sample) })
                 }
+                
+                val declaredQueryables = subscriptionKeys.map { key ->
+                    opened.declareQueryable(KeyExpr.tryFrom(key), Callback<Query> { query -> handleQuery(query) })
+                }
+
                 session = opened
-                subscribers.addAll(declared)
+                subscribers.addAll(declaredSubscribers)
+                queryables.addAll(declaredQueryables)
             } catch (error: Exception) {
                 opened.close()
                 throw error
@@ -90,6 +102,8 @@ class MessageBusZenoh(
         vertx.executeBlocking(Callable<Void?> {
             subscribers.forEach { it.close() }
             subscribers.clear()
+            queryables.forEach { it.close() }
+            queryables.clear()
             session?.close()
             session = null
             null
@@ -129,6 +143,95 @@ class MessageBusZenoh(
             vertx.runOnContext { callback?.invoke(decoded.message) }
         } catch (error: Exception) {
             logger.warning("Failed to consume Zenoh sample: ${error.message}")
+        }
+    }
+
+    private fun handleQuery(query: Query) {
+        val key = query.keyExpr.toString()
+        val topicPattern = ZenohTopicMapper.mapToMqttTopic(key, localPrefix, remotePrefix) ?: return
+
+        try {
+            val repliedTopics = mutableSetOf<String>()
+            val matchedMessages = mutableListOf<BrokerMessage>()
+
+            // 1. Retrieve from Retained Store
+            Monster.getRetainedStore()?.let { store ->
+                store.findMatchingMessages(topicPattern) { message ->
+                    if (repliedTopics.add(message.topicName)) {
+                        matchedMessages.add(message)
+                    }
+                    true // continue matching
+                }
+            }
+
+            // 2. Retrieve from Deployed LastValueStores (LVS)
+            Monster.getArchiveHandler()?.getDeployedArchiveGroups()?.values?.forEach { group ->
+                group.lastValStore?.let { store ->
+                    store.findMatchingMessages(topicPattern) { message ->
+                        if (repliedTopics.add(message.topicName)) {
+                            matchedMessages.add(message)
+                        }
+                        true // continue matching
+                    }
+                }
+            }
+
+            if (matchedMessages.isEmpty()) return
+
+            if (matchedMessages.size == 1) {
+                replyToQuery(query, matchedMessages.first())
+            } else {
+                replyMultipleToQuery(query, key, matchedMessages)
+            }
+        } catch (error: Exception) {
+            logger.warning("Error processing Zenoh query for [$key]: ${error.message}")
+        }
+    }
+
+    private fun replyToQuery(query: Query, message: BrokerMessage) {
+        val mappedKey = ZenohTopicMapper.mapToZenohKey(message.topicName, localPrefix, remotePrefix) ?: return
+        try {
+            val options = ReplyOptions().apply {
+                encoding = Encoding.APPLICATION_OCTET_STREAM
+                attachment = ZBytes.from(ZenohMessageEnvelope.encode(brokerId, message))
+            }
+            query.reply(KeyExpr.tryFrom(mappedKey), ZBytes.from(message.payload), options)
+        } catch (error: Exception) {
+            logger.warning("Failed to send Zenoh query reply for [${message.topicName}]: ${error.message}")
+        }
+    }
+
+    private fun replyMultipleToQuery(query: Query, queryKey: String, messages: List<BrokerMessage>) {
+        try {
+            val jsonArray = JsonArray()
+            messages.forEach { msg ->
+                val payloadStr = try {
+                    val str = msg.payload.toString(Charsets.UTF_8)
+                    if (str.toByteArray(Charsets.UTF_8).contentEquals(msg.payload)) {
+                        str
+                    } else {
+                        java.util.Base64.getEncoder().encodeToString(msg.payload)
+                    }
+                } catch (_: Exception) {
+                    java.util.Base64.getEncoder().encodeToString(msg.payload)
+                }
+
+                val msgJson = JsonObject()
+                    .put("topic", msg.topicName)
+                    .put("payload", payloadStr)
+                    .put("qos", msg.qosLevel)
+                    .put("clientId", msg.clientId)
+                    .put("messageUuid", msg.messageUuid)
+                    .put("timestamp", msg.time.toEpochMilli())
+                jsonArray.add(msgJson)
+            }
+
+            val options = ReplyOptions().apply {
+                encoding = Encoding.APPLICATION_JSON
+            }
+            query.reply(KeyExpr.tryFrom(queryKey), ZBytes.from(jsonArray.encode()), options)
+        } catch (error: Exception) {
+            logger.warning("Failed to send consolidated Zenoh query reply: ${error.message}")
         }
     }
 
