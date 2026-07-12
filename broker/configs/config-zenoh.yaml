@@ -14,7 +14,7 @@ Zenoh:
   Enabled: true
   # Locator-free discovery on the same LAN. Use client + Connect for routed networks/NAT.
   Mode: peer
-  Prefix: monstermq/mqtt
+  RemotePrefix: monstermq/mqtt
   # Optional local mount point in our local MQTT broker (e.g. data/zenoh). Defaults to empty (no translation)
   # LocalPrefix: data/zenoh
   Allow:

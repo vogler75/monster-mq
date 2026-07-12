@@ -31,7 +31,7 @@ class MessageBusZenoh(
     private val logger = Utils.getLogger(this::class.java)
     private val mode = zenohConfig.getString("Mode", "peer").lowercase()
     private val endpoints = zenohConfig.getJsonArray("Connect")?.map { it.toString() } ?: emptyList()
-    private val prefix = zenohConfig.getString("Prefix", "").trim('/')
+    private val remotePrefix = zenohConfig.getString("RemotePrefix", "").trim('/')
     private val localPrefix = zenohConfig.getString("LocalPrefix", "").trim('/')
     private val allow = zenohConfig.getJsonArray("Allow")?.map { it.toString() } ?: listOf("#")
     private val deny = zenohConfig.getJsonArray("Deny")?.map { it.toString() } ?: listOf("\$SYS/#")
@@ -67,7 +67,7 @@ class MessageBusZenoh(
             val opened = Zenoh.open(config)
             try {
                 val subscriptionKeys = ZenohTopicMapper.minimalFilters(allow)
-                    .mapNotNull { ZenohTopicMapper.subscriptionKey(it, localPrefix, prefix) }
+                    .mapNotNull { ZenohTopicMapper.subscriptionKey(it, localPrefix, remotePrefix) }
                 val declared = subscriptionKeys.map { key ->
                     opened.declareSubscriber(KeyExpr.tryFrom(key), Callback<Sample> { sample -> handleSample(sample) })
                 }
@@ -103,7 +103,7 @@ class MessageBusZenoh(
 
     override fun publishMessageToBus(message: BrokerMessage) {
         if (!isAllowed(message.topicName)) return
-        val zenohKey = ZenohTopicMapper.mapToZenohKey(message.topicName, localPrefix, prefix) ?: return
+        val zenohKey = ZenohTopicMapper.mapToZenohKey(message.topicName, localPrefix, remotePrefix) ?: return
         remember(message.messageUuid)
 
         try {
@@ -121,7 +121,7 @@ class MessageBusZenoh(
     private fun handleSample(sample: Sample) {
         try {
             val key = sample.keyExpr.toString()
-            val topic = ZenohTopicMapper.mapToMqttTopic(key, localPrefix, prefix) ?: return
+            val topic = ZenohTopicMapper.mapToMqttTopic(key, localPrefix, remotePrefix) ?: return
             if (!isAllowed(topic)) return
 
             val decoded = ZenohMessageEnvelope.decode(topic, sample.payload.toBytes(), sample.attachment?.toBytes())

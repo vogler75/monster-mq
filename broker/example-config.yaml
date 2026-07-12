@@ -104,7 +104,7 @@ Zenoh:
   Mode: client                    # Modes: client, peer, router (default: client)
   Connect:                        # Static router endpoints (leave empty to use multicast scouting)
     - tcp/127.0.0.1:7447
-  Prefix: monstermq/mqtt          # Root namespace prefix for MQTT topics in Zenoh network
+  RemotePrefix: monstermq/mqtt    # Root namespace prefix for MQTT topics in Zenoh network
   # LocalPrefix: data/zenoh       # Optional: Mount Zenoh publications under a local MQTT sub-tree prefix
   Allow:                          # Topic patterns to allow (MQTT wildcard syntax)
     - "#"

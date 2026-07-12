@@ -9,7 +9,7 @@ the others.
 
 On the same LAN, configure every MonsterMQ broker as a Zenoh peer. The brokers discover one
 another using multicast and do not require a central router. Each broker must use a unique
-`NodeName` and the same `Prefix`.
+`NodeName` and the same `RemotePrefix`.
 
 ```yaml
 NodeName: broker-a
@@ -20,7 +20,7 @@ Features:
 Zenoh:
   Enabled: true
   Mode: peer
-  Prefix: monstermq/mqtt
+  RemotePrefix: monstermq/mqtt
   Allow: ["#"]
   Deny: ["$SYS/#"]
   Deduplication:
