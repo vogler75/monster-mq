@@ -75,7 +75,8 @@
           "default": [],
           "description": "Explicit Zenoh endpoints; required by broker validation in client mode and optional in peer mode"
         },
-        "Prefix": { "type": "string", "minLength": 1, "default": "monstermq/mqtt" },
+        "Prefix": { "type": "string", "default": "monstermq/mqtt", "description": "Root namespace prefix for MQTT topics on the Zenoh network. Set to empty string to federate directly under all Zenoh keys." },
+        "LocalPrefix": { "type": "string", "default": "", "description": "Mount point prefix inside the local MQTT broker (e.g. data/zenoh)" },
         "Allow": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },

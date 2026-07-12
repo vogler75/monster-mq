@@ -2,6 +2,7 @@ package at.rocworks
 
 import at.rocworks.bus.ZenohTopicMapper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,5 +41,60 @@ class ZenohTopicMapperTest {
         )
         assertEquals(listOf("#"), ZenohTopicMapper.minimalFilters(listOf("factory/#", "#", "devices/+")))
         assertTrue(ZenohTopicMapper.minimalFilters(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `mapToZenohKey handles localPrefix translation`() {
+        // Without localPrefix
+        assertEquals("monstermq/mqtt/sensors/temp", ZenohTopicMapper.mapToZenohKey("sensors/temp", "", "monstermq/mqtt"))
+        assertEquals("monstermq/mqtt/sensors/temp", ZenohTopicMapper.mapToZenohKey("/sensors/temp/", "", "monstermq/mqtt/"))
+
+        // With localPrefix
+        assertEquals("monstermq/mqtt/sensors/temp", ZenohTopicMapper.mapToZenohKey("data/zenoh/sensors/temp", "data/zenoh", "monstermq/mqtt"))
+        assertEquals("monstermq/mqtt/sensors/temp", ZenohTopicMapper.mapToZenohKey("/data/zenoh/sensors/temp/", "data/zenoh/", "monstermq/mqtt/"))
+        
+        // Mismatch localPrefix should return null
+        assertNull(ZenohTopicMapper.mapToZenohKey("sensors/temp", "data/zenoh", "monstermq/mqtt"))
+    }
+
+    @Test
+    fun `mapToMqttTopic handles localPrefix translation`() {
+        // Without localPrefix
+        assertEquals("sensors/temp", ZenohTopicMapper.mapToMqttTopic("monstermq/mqtt/sensors/temp", "", "monstermq/mqtt"))
+
+        // With localPrefix
+        assertEquals("data/zenoh/sensors/temp", ZenohTopicMapper.mapToMqttTopic("monstermq/mqtt/sensors/temp", "data/zenoh", "monstermq/mqtt"))
+        
+        // Mismatch remote prefix should return null
+        assertNull(ZenohTopicMapper.mapToMqttTopic("other/prefix/sensors/temp", "data/zenoh", "monstermq/mqtt"))
+    }
+
+    @Test
+    fun `subscriptionKey handles localPrefix translation`() {
+        // Without localPrefix
+        assertEquals("monstermq/mqtt/sensors/**", ZenohTopicMapper.subscriptionKey("sensors/#", "", "monstermq/mqtt"))
+
+        // With localPrefix
+        assertEquals("monstermq/mqtt/sensors/**", ZenohTopicMapper.subscriptionKey("data/zenoh/sensors/#", "data/zenoh", "monstermq/mqtt"))
+        assertEquals("monstermq/mqtt/**", ZenohTopicMapper.subscriptionKey("#", "data/zenoh", "monstermq/mqtt"))
+        
+        // Mismatch local prefix should return null
+        assertNull(ZenohTopicMapper.subscriptionKey("sensors/#", "data/zenoh", "monstermq/mqtt"))
+    }
+
+    @Test
+    fun `empty remotePrefix mappings`() {
+        // Map to Zenoh key with empty remote prefix
+        assertEquals("sensors/temp", ZenohTopicMapper.mapToZenohKey("sensors/temp", "", ""))
+        assertEquals("sensors/temp", ZenohTopicMapper.mapToZenohKey("data/zenoh/sensors/temp", "data/zenoh", ""))
+
+        // Map back to MQTT topic with empty remote prefix
+        assertEquals("sensors/temp", ZenohTopicMapper.mapToMqttTopic("sensors/temp", "", ""))
+        assertEquals("data/zenoh/sensors/temp", ZenohTopicMapper.mapToMqttTopic("sensors/temp", "data/zenoh", ""))
+
+        // Subscription key with empty remote prefix
+        assertEquals("sensors/**", ZenohTopicMapper.subscriptionKey("sensors/#", "", ""))
+        assertEquals("sensors/**", ZenohTopicMapper.subscriptionKey("data/zenoh/sensors/#", "data/zenoh", ""))
+        assertEquals("**", ZenohTopicMapper.subscriptionKey("#", "", ""))
     }
 }

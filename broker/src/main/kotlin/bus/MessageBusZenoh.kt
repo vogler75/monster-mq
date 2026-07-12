@@ -31,7 +31,8 @@ class MessageBusZenoh(
     private val logger = Utils.getLogger(this::class.java)
     private val mode = zenohConfig.getString("Mode", "peer").lowercase()
     private val endpoints = zenohConfig.getJsonArray("Connect")?.map { it.toString() } ?: emptyList()
-    private val prefix = zenohConfig.getString("Prefix", "monstermq/mqtt").trim('/')
+    private val prefix = zenohConfig.getString("Prefix", "").trim('/')
+    private val localPrefix = zenohConfig.getString("LocalPrefix", "").trim('/')
     private val allow = zenohConfig.getJsonArray("Allow")?.map { it.toString() } ?: listOf("#")
     private val deny = zenohConfig.getJsonArray("Deny")?.map { it.toString() } ?: listOf("\$SYS/#")
     private val dedupConfig = zenohConfig.getJsonObject("Deduplication", JsonObject())
@@ -49,7 +50,6 @@ class MessageBusZenoh(
     init {
         require(brokerId.isNotBlank()) { "NodeName must not be blank when Zenoh is enabled" }
         require(mode in setOf("client", "peer")) { "Zenoh.Mode must be client or peer" }
-        require(prefix.isNotBlank()) { "Zenoh.Prefix must not be blank" }
         require(cacheSize > 0) { "Zenoh.Deduplication.CacheSize must be greater than zero" }
         require(ttlMs > 0) { "Zenoh.Deduplication.TtlSeconds must be greater than zero" }
         if (mode == "client") require(endpoints.isNotEmpty()) { "Zenoh.Connect requires at least one locator in client mode" }
@@ -67,7 +67,7 @@ class MessageBusZenoh(
             val opened = Zenoh.open(config)
             try {
                 val subscriptionKeys = ZenohTopicMapper.minimalFilters(allow)
-                    .map { ZenohTopicMapper.subscriptionKey(prefix, it) }
+                    .mapNotNull { ZenohTopicMapper.subscriptionKey(it, localPrefix, prefix) }
                 val declared = subscriptionKeys.map { key ->
                     opened.declareSubscriber(KeyExpr.tryFrom(key), Callback<Sample> { sample -> handleSample(sample) })
                 }
@@ -103,6 +103,7 @@ class MessageBusZenoh(
 
     override fun publishMessageToBus(message: BrokerMessage) {
         if (!isAllowed(message.topicName)) return
+        val zenohKey = ZenohTopicMapper.mapToZenohKey(message.topicName, localPrefix, prefix) ?: return
         remember(message.messageUuid)
 
         try {
@@ -111,7 +112,7 @@ class MessageBusZenoh(
                 reliability = Reliability.RELIABLE
                 attachment = ZBytes.from(ZenohMessageEnvelope.encode(brokerId, message))
             }
-            session?.put(KeyExpr.tryFrom("$prefix/${message.topicName}"), ZBytes.from(message.payload), options)
+            session?.put(KeyExpr.tryFrom(zenohKey), ZBytes.from(message.payload), options)
         } catch (error: Exception) {
             logger.warning("Failed to publish [${message.topicName}] to Zenoh: ${error.message}")
         }
@@ -120,8 +121,8 @@ class MessageBusZenoh(
     private fun handleSample(sample: Sample) {
         try {
             val key = sample.keyExpr.toString()
-            val topic = key.removePrefix("$prefix/")
-            if (topic == key || topic.isBlank() || !isAllowed(topic)) return
+            val topic = ZenohTopicMapper.mapToMqttTopic(key, localPrefix, prefix) ?: return
+            if (!isAllowed(topic)) return
 
             val decoded = ZenohMessageEnvelope.decode(topic, sample.payload.toBytes(), sample.attachment?.toBytes())
             if (decoded.origin == brokerId || !remember(decoded.message.messageUuid)) return
