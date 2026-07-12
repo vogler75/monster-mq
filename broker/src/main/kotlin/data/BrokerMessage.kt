@@ -30,7 +30,8 @@ class BrokerMessage(
     val contentType: String? = null,
     val responseTopic: String? = null,
     val correlationData: ByteArray? = null,
-    val userProperties: Map<String, String>? = null
+    val userProperties: Map<String, String>? = null,
+    val originNodeId: String? = null
 ): Serializable {
     
     init {
@@ -177,12 +178,12 @@ class BrokerMessage(
 
     fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
     )
     
     fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
     )
     
     /**
@@ -194,7 +195,12 @@ class BrokerMessage(
      */
     fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, retainFlag, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
+    )
+
+    fun cloneWithOriginNodeId(originNodeId: String?): BrokerMessage = BrokerMessage(
+        messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
     )
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)

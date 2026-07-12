@@ -63,6 +63,58 @@
         "Servers"
       ]
     },
+    "Zenoh": {
+      "type": "object",
+      "description": "Zenoh publication federation between independent MonsterMQ brokers",
+      "properties": {
+        "Enabled": { "type": "boolean", "default": false },
+        "Mode": { "type": "string", "enum": ["client", "peer"], "default": "peer", "description": "Peer uses multicast discovery without a locator; client connects to the configured Zenoh endpoints" },
+        "Connect": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Explicit Zenoh endpoints; required by broker validation in client mode and optional in peer mode"
+        },
+        "RemotePrefix": { "type": "string", "default": "monstermq/mqtt", "description": "Root namespace prefix for MQTT topics on the Zenoh network. Set to empty string to federate directly under all Zenoh keys." },
+        "LocalPrefix": { "type": "string", "default": "", "description": "Mount point prefix inside the local MQTT broker (e.g. data/zenoh)" },
+        "Allow": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["#"]
+        },
+        "Deny": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": ["$SYS/#"]
+        },
+        "Deduplication": {
+          "type": "object",
+          "properties": {
+            "CacheSize": { "type": "integer", "minimum": 1, "default": 100000 },
+            "TtlSeconds": { "type": "integer", "minimum": 1, "default": 300 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "Enabled": { "const": true },
+              "Mode": { "const": "client" }
+            },
+            "required": ["Enabled", "Mode"]
+          },
+          "then": {
+            "required": ["Connect"],
+            "properties": {
+              "Connect": { "minItems": 1 }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
     "DefaultStoreType": {
       "type": "string",
       "enum": [
@@ -792,7 +844,8 @@
         "Mcp": { "type": "boolean", "default": true, "description": "MCP server management" },
         "SchemaPolicy": { "type": "boolean", "default": true, "description": "Topic schema policy management" },
         "TopicNamespace": { "type": "boolean", "default": true, "description": "Topic namespace management" },
-        "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" }
+        "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" },
+        "Zenoh": { "type": "boolean", "default": true, "description": "Zenoh broker federation transport" }
       },
       "additionalProperties": false
     }

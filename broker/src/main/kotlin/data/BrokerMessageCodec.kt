@@ -13,15 +13,18 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
             buffer.appendBytes(str)
         }
 
+        fun addNullableString(text: String?) {
+            if (text == null) {
+                buffer.appendInt(-1)
+            } else {
+                val str = text.toByteArray(Charsets.UTF_8)
+                buffer.appendInt(str.size)
+                buffer.appendBytes(str)
+            }
+        }
+
         addString(s.messageUuid)
         buffer.appendInt(s.messageId)
-
-        /*
-        buffer.appendByte(s.qosLevel.toByte())
-        buffer.appendByte(if (s.isDup) 1 else 0.toByte())
-        buffer.appendByte(if (s.isRetain) 1 else 0.toByte())
-        buffer.appendByte(if (s.isQueued) 1 else 0.toByte())
-        */
 
         buffer.appendByte((((s.qosLevel and 0x03) shl 3) or
                 ((if (s.isDup) 1 else 0) shl 2)
@@ -32,6 +35,7 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         buffer.appendLong(s.time.toEpochMilli())
         buffer.appendInt(s.payload.size)
         buffer.appendBytes(s.payload)
+        addNullableString(s.originNodeId)
     }
 
     override fun decodeFromWire(pos: Int, buffer: Buffer): BrokerMessage {
@@ -40,6 +44,15 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         fun readString(): String {
             val len = buffer.getInt(position)
             position += 4
+            val str = buffer.getString(position, position + len)
+            position += len
+            return str
+        }
+
+        fun readNullableString(): String? {
+            val len = buffer.getInt(position)
+            position += 4
+            if (len == -1) return null
             val str = buffer.getString(position, position + len)
             position += len
             return str
@@ -56,16 +69,6 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         val isQueued = (status.toInt() and 0x01) == 1
         position += 1
 
-        /*
-        val qos = buffer.getByte(position).toInt()
-        position += 1
-        val isDup = (buffer.getByte(position)) == 1.toByte()
-        position += 1
-        val isRetain = (buffer.getByte(position)) == 1.toByte()
-        position += 1
-        val isQueued = (buffer.getByte(position)) == 1.toByte()
-        position += 1
-        */
         val topicName = readString()
         val clientId = readString()
         val time = buffer.getLong(position)
@@ -73,18 +76,21 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         val payloadLen = buffer.getInt(position)
         position += 4
         val payload = buffer.getBytes(position, position + payloadLen)
+        position += payloadLen
+        val originNodeId = readNullableString()
 
         return BrokerMessage(
-            messageUuid,
-            messageId,
-            topicName,
-            payload,
-            qos,
-            isRetain,
-            isDup,
-            isQueued,
-            clientId,
-            time = Instant.ofEpochMilli(time)
+            messageUuid = messageUuid,
+            messageId = messageId,
+            topicName = topicName,
+            payload = payload,
+            qosLevel = qos,
+            isRetain = isRetain,
+            isDup = isDup,
+            isQueued = isQueued,
+            clientId = clientId,
+            time = Instant.ofEpochMilli(time),
+            originNodeId = originNodeId
         )
     }
 
