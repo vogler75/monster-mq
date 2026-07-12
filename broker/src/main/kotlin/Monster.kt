@@ -3,6 +3,7 @@ package at.rocworks
 import at.rocworks.bus.IMessageBus
 import at.rocworks.bus.MessageBusKafka
 import at.rocworks.bus.MessageBusVertx
+import at.rocworks.bus.MessageBusZenoh
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BrokerMessageCodec
 import at.rocworks.data.BulkClientMessage
@@ -183,7 +184,7 @@ class Monster(args: Array<String>) {
                 // Use custom node name if available, fallback to member attribute or UUID
                 val localMember = instance.clusterManager!!.hazelcastInstance.cluster.localMember
                 localMember.getAttribute("nodeName") ?: instance.nodeName.ifEmpty { localMember.uuid.toString() }
-            } else "local"
+            } else instance.nodeName.ifEmpty { "local" }
         }
 
         fun getClusterNodeIds(vertx: Vertx): List<String> {
@@ -724,6 +725,16 @@ MORE INFO:
         getConfigRetriever(vertx).config.onComplete { it ->
             if (it.succeeded()) {
                 this.configJson = it.result()
+
+                if (this.nodeName.isEmpty()) {
+                    this.nodeName = configJson.getString("NodeName",
+                        try {
+                            java.net.InetAddress.getLocalHost().hostName
+                        } catch (e: Exception) {
+                            "node-${Utils.getUuid().take(8)}"
+                        }
+                    )
+                }
 
                 configJson.getJsonObject("Postgres", JsonObject()).let { pg ->
                     postgresConfig.url = pg.getString("Url", "jdbc:postgresql://localhost:5432/postgres")
@@ -1616,6 +1627,9 @@ MORE INFO:
     }
 
     private fun getMessageBus(vertx: Vertx): Pair<IMessageBus, Future<String>> {
+        val zenoh = configJson.getJsonObject("Zenoh", JsonObject())
+        val zenohEnabled = zenoh.getBoolean("Enabled", false)
+
         val kafka = configJson.getJsonObject("Kafka", JsonObject())
         val kafkaServers = kafka.getString("Servers", "")
         val kafkaConfig = kafka.getJsonObject("Config")
@@ -1624,14 +1638,27 @@ MORE INFO:
         val kafkaBusEnabled = kafkaBus.getBoolean("Enabled", false)
         val kafkaBusTopic = kafkaBus.getString("Topic", "monster")
 
-        return if (!kafkaBusEnabled) {
-            val bus = MessageBusVertx()
-            val busReady = vertx.deployVerticle(bus)
-            bus to busReady
-        } else {
-            val bus = MessageBusKafka(kafkaServers, kafkaBusTopic, kafkaConfig)
-            val busReady = vertx.deployVerticle(bus)
-            bus to busReady
+        if (zenohEnabled && kafkaBusEnabled) {
+            logger.severe("Configuration Error: Both Kafka bus and Zenoh federation cannot be enabled simultaneously.")
+            exitProcess(1)
+        }
+
+        return when {
+            zenohEnabled -> {
+                val bus = MessageBusZenoh(configJson)
+                val busReady = vertx.deployVerticle(bus)
+                bus to busReady
+            }
+            kafkaBusEnabled -> {
+                val bus = MessageBusKafka(kafkaServers, kafkaBusTopic, kafkaConfig)
+                val busReady = vertx.deployVerticle(bus)
+                bus to busReady
+            }
+            else -> {
+                val bus = MessageBusVertx()
+                val busReady = vertx.deployVerticle(bus)
+                bus to busReady
+            }
         }
     }
 

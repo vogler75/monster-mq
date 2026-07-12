@@ -25,11 +25,13 @@ object Features {
     const val SchemaPolicy = "SchemaPolicy"
     const val TopicNamespace = "TopicNamespace"
     const val DeviceImportExport = "DeviceImportExport"
+    const val Zenoh = "Zenoh"
 
     val all: List<String> = listOf(
         OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, RedisServer, Telegram,
         WinCCOa, WinCCUa, Plc4x, Neo4j, JdbcLogger, InfluxDBLogger, TimeBaseLogger,
         SparkplugB, FlowEngine, Agents,
-        GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DeviceImportExport
+        GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DeviceImportExport,
+        Zenoh
     )
 }

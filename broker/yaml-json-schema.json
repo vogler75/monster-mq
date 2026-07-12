@@ -63,6 +63,58 @@
         "Servers"
       ]
     },
+    "Zenoh": {
+      "type": "object",
+      "description": "Zenoh embedded federation configuration",
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "Mode": {
+          "type": "string",
+          "enum": ["client", "peer", "router"],
+          "default": "client"
+        },
+        "Connect": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Prefix": {
+          "type": "string",
+          "default": "monstermq/mqtt"
+        },
+        "Allow": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["#"]
+        },
+        "Deny": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["$SYS/#"]
+        },
+        "Deduplication": {
+          "type": "object",
+          "properties": {
+            "CacheSize": {
+              "type": "integer",
+              "default": 100000
+            },
+            "TtlSeconds": {
+              "type": "integer",
+              "default": 300
+            }
+          }
+        }
+      }
+    },
     "DefaultStoreType": {
       "type": "string",
       "enum": [
@@ -792,7 +844,8 @@
         "Mcp": { "type": "boolean", "default": true, "description": "MCP server management" },
         "SchemaPolicy": { "type": "boolean", "default": true, "description": "Topic schema policy management" },
         "TopicNamespace": { "type": "boolean", "default": true, "description": "Topic namespace management" },
-        "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" }
+        "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" },
+        "Zenoh": { "type": "boolean", "default": true, "description": "Zenoh federation transport" }
       },
       "additionalProperties": false
     }
