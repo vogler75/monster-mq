@@ -190,10 +190,15 @@ class Monster(args: Array<String>) {
         fun getClusterNodeIds(vertx: Vertx): List<String> {
             val instance = getInstance()
             return if (instance.isClustered && instance.clusterManager is HazelcastClusterManager) {
-                instance.clusterManager!!.hazelcastInstance.cluster.members.map { member ->
-                    member.getAttribute("nodeName") ?: member.uuid.toString()
+                val cluster = instance.clusterManager!!.hazelcastInstance.cluster
+                val localUuid = cluster.localMember.uuid
+                cluster.members.map { member ->
+                    // The local node must resolve exactly like getClusterNodeId - otherwise node
+                    // scoped event bus addresses (metrics, session details, ...) do not match.
+                    if (member.uuid == localUuid) getClusterNodeId(vertx)
+                    else member.getAttribute("nodeName") ?: member.uuid.toString()
                 }
-            } else listOf("local")
+            } else listOf(getClusterNodeId(vertx))
         }
 
         fun getClusterManager(): HazelcastClusterManager? {
