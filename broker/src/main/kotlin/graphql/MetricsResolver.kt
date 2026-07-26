@@ -70,61 +70,9 @@ class MetricsResolver(
             val future = CompletableFuture<Broker?>()
             val nodeId = env.getArgument<String>("nodeId") ?: Monster.getClusterNodeId(vertx)
 
-            // Query the specific node for its metrics via EventBus
-            val metricsAddress = getMetricsAddress(nodeId)
-
-            vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
-                if (reply.succeeded()) {
-                    val nodeMetrics = reply.result().body()
-
-                    // Get cluster-wide metrics from database
-                    vertx.executeBlocking<BrokerMetrics>(java.util.concurrent.Callable {
-                        try {
-                            val clusterSessionCount = getClusterSessionCount()
-                            val queuedMessagesCount = getQueuedMessagesCount()
-
-                            BrokerMetrics(
-                                messagesIn = nodeMetrics.getDouble("messagesInRate", 0.0),
-                                messagesOut = nodeMetrics.getDouble("messagesOutRate", 0.0),
-                                nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
-                                clusterSessionCount = clusterSessionCount,
-                                queuedMessagesCount = queuedMessagesCount,
-                                subscriptionCount = nodeMetrics.getInteger("subscriptionCount", 0),
-                                clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
-                                topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                                messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
-                                messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
-                                mqttClientIn = 0.0,
-                                mqttClientOut = 0.0,
-                                opcUaClientIn = 0.0,
-                                opcUaClientOut = 0.0,
-                                kafkaClientIn = 0.0,
-                                kafkaClientOut = 0.0,
-                                winCCOaClientIn = 0.0,
-                                winCCUaClientIn = 0.0,
-                                natsClientIn = 0.0,
-                                natsClientOut = 0.0,
-                                redisClientIn = 0.0,
-                                redisClientOut = 0.0,
-                                neo4jClientIn = 0.0,
-                                timestamp = TimestampConverter.currentTimeIsoString()
-                            )
-                        } catch (e: Exception) {
-                            logger.severe("Error getting cluster metrics: ${e.message}")
-                            throw e
-                        }
-                    }).onComplete { result ->
-                        if (result.succeeded()) {
-                            future.complete(Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted()))
-                        } else {
-                            future.completeExceptionally(result.cause())
-                        }
-                    }
-                } else {
-                    logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
-                    future.complete(null)
-                }
-            }
+            // Metrics are resolved by the Broker.metrics / Broker.metricsHistory field resolvers,
+            // so identifying a broker must not depend on a live metrics reply from that node.
+            future.complete(Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted()))
 
             future
         }
@@ -133,71 +81,14 @@ class MetricsResolver(
     fun brokers(): DataFetcher<CompletableFuture<List<Broker>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Broker>>()
-            val nodeIds = Monster.getClusterNodeIds(vertx)
 
-            // Query all nodes (including single "local" node in standalone mode)
-            val brokerFutures = nodeIds.map { nodeId ->
-                val brokerFuture = CompletableFuture<Broker?>()
+            // All known nodes (single "local" node in standalone mode). Nodes that currently do
+            // not answer metrics requests are still listed - their metrics resolvers report zeros.
+            val brokers = Monster.getClusterNodeIds(vertx).map { nodeId ->
+                Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted())
+            }.sortedBy { it.nodeId }
 
-                val metricsAddress = getMetricsAddress(nodeId)
-                vertx.eventBus().request<JsonObject>(metricsAddress, JsonObject()).onComplete { reply ->
-                    if (reply.succeeded()) {
-                        val nodeMetrics = reply.result().body()
-
-                        vertx.executeBlocking<BrokerMetrics>(java.util.concurrent.Callable {
-                            try {
-                                val clusterSessionCount = getClusterSessionCount()
-                                val queuedMessagesCount = getQueuedMessagesCount()
-
-                                BrokerMetrics(
-                                    messagesIn = nodeMetrics.getDouble("messagesInRate", 0.0),
-                                    messagesOut = nodeMetrics.getDouble("messagesOutRate", 0.0),
-                                    nodeSessionCount = nodeMetrics.getInteger("nodeSessionCount", 0),
-                                    clusterSessionCount = clusterSessionCount,
-                                    queuedMessagesCount = queuedMessagesCount,
-                                    subscriptionCount = nodeMetrics.getInteger("subscriptionCount", 0),
-                                    clientNodeMappingSize = nodeMetrics.getInteger("clientNodeMappingSize", 0),
-                                    topicNodeMappingSize = nodeMetrics.getInteger("topicNodeMappingSize", 0),
-                                    messageBusIn = nodeMetrics.getDouble("messageBusInRate", 0.0),
-                                    messageBusOut = nodeMetrics.getDouble("messageBusOutRate", 0.0),
-                                    mqttClientIn = 0.0,
-                                    mqttClientOut = 0.0,
-                                    opcUaClientIn = 0.0,
-                                    opcUaClientOut = 0.0,
-                                    kafkaClientIn = 0.0,
-                                    kafkaClientOut = 0.0,
-                                    winCCOaClientIn = 0.0,
-                                    winCCUaClientIn = 0.0,
-                                    natsClientIn = 0.0,
-                                    natsClientOut = 0.0,
-                                    redisClientIn = 0.0,
-                                    redisClientOut = 0.0,
-                                    neo4jClientIn = 0.0,
-                                    timestamp = TimestampConverter.currentTimeIsoString()
-                                )
-                            } catch (e: Exception) {
-                                logger.severe("Error getting cluster metrics: ${e.message}")
-                                throw e
-                            }
-                        }).onComplete { result ->
-                            if (result.succeeded()) {
-                                brokerFuture.complete(Broker(nodeId, Version.getVersion(), Monster.getEnabledFeaturesForNode(nodeId).sorted()))
-                            }
-                        }
-                    } else {
-                        logger.warning("Failed to get metrics from node $nodeId: ${reply.cause().message}")
-                        brokerFuture.complete(null)
-                    }
-                }
-
-                brokerFuture
-            }
-
-            CompletableFuture.allOf(*brokerFutures.toTypedArray()).thenApply {
-                val brokers = brokerFutures.mapNotNull { it.get() }.sortedBy { it.nodeId }
-                future.complete(brokers)
-                brokers
-            }
+            future.complete(brokers)
 
             future
         }
