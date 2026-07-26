@@ -5,65 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - NATS Client Detail</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .section-card { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); margin-bottom:2rem; box-shadow:var(--card-shadow); }
-        .section-header { display:flex; justify-content:space-between; align-items:center; padding:1.5rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:12px 12px 0 0; }
-        .section-title h2 { margin:0; color:var(--text-primary); font-size:1.25rem; font-weight:600; }
-        .section-content { padding:1.5rem; }
-        .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-        .status-badge { display:inline-flex; padding:0.4rem 0.8rem; border-radius:20px; font-size:0.7rem; font-weight:600; text-transform:uppercase; }
-        .status-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
-        .status-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
-        .page-header-content { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; }
-        .page-header-actions { display:flex; gap:0.75rem; align-items:center; }
-        .btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.75rem 1.5rem; border-radius:8px; font-weight:600; transition:all 0.2s ease; border:none; cursor:pointer; }
-        .btn-primary { background:linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color:white; }
-        .btn-secondary { background:var(--dark-surface-2); border:1px solid var(--dark-border); color:var(--text-primary); }
-        .btn.btn-secondary { white-space:nowrap; }
-        .btn-success { background:var(--monster-green); color:white; }
-        .btn-warning { background:var(--monster-orange); color:white; }
-        .btn-danger { background:var(--monster-red); color:white; }
-        .btn-danger:hover { filter:brightness(1.1); }
-        .modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:2rem; }
-        .modal-content { background:var(--dark-surface); border-radius:12px; border:1px solid var(--dark-border); max-width:600px; width:100%; max-height:90vh; overflow-y:auto; }
-        .modal-header { padding:1.5rem 2rem; border-bottom:1px solid var(--dark-border); display:flex; justify-content:space-between; align-items:center; }
-        .modal-header h3 { margin:0; color:var(--text-primary); }
-        .modal-close { background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer; }
-        .modal-body { padding:2rem; }
-        .modal-footer { padding:1.5rem 2rem; border-top:1px solid var(--dark-border); display:flex; justify-content:flex-end; gap:1rem; }
-        .form-group { margin-bottom:1.5rem; }
-        .form-group label { display:block; margin-bottom:0.5rem; color:var(--text-primary); font-weight:600; }
-        .form-control, input[type=text], input[type=password], input[type=number], select, textarea { width:100%; padding:0.75rem 1rem; background:var(--dark-bg); border:1px solid var(--dark-border); border-radius:8px; color:var(--text-primary); box-sizing:border-box; font-family:inherit; font-size:0.9rem; }
-        .form-control:focus, input:focus, select:focus, textarea:focus { outline:none; border-color:var(--monster-purple); }
-        .checkbox-group { display:flex; align-items:center; gap:0.5rem; }
-        .checkbox-group input[type=checkbox] { accent-color:var(--monster-purple); }
-        .json-hint { color:var(--text-muted); font-size:0.7rem; margin-top:0.4rem; display:block; }
-        .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-        .info-item { display:flex; flex-direction:column; padding:1rem; background:var(--dark-bg); border-radius:8px; border:1px solid var(--dark-border); }
-        .info-label { font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; margin-bottom:0.5rem; }
-        .info-value { color:var(--text-primary); font-weight:600; }
-        .auth-fields { display:none; }
-        /* Address table */
-        .addresses-table { width:100%; border-collapse:collapse; }
-        .addresses-table th, .addresses-table td { padding:0.75rem 1rem; border-bottom:1px solid var(--dark-border); text-align:left; }
-        .addresses-table th { font-weight:600; color:var(--text-primary); background:var(--dark-surface-2); }
-        .addresses-table tbody tr:hover { background:rgba(71,85,105,0.1); }
-        .mode-badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.25rem 0.6rem; border-radius:12px; font-size:0.7rem; font-weight:700; text-transform:uppercase; }
-        .mode-subscribe { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
-        .mode-publish { background:rgba(124,58,237,0.15); color:var(--monster-purple); border:1px solid rgba(124,58,237,0.3); }
-        .action-buttons { display:flex; gap:0.5rem; }
-.btn-icon.btn-delete { color:var(--monster-red); }
-        .btn-icon.btn-delete:hover { background:rgba(239,68,68,0.1); }
-        @media (max-width:1000px) { .form-grid, .info-grid { grid-template-columns:1fr; } }
-    </style>
-    <link rel="stylesheet" href="/assets/admin-edit-compact.css">
+        
+        .auth-fields { display: none; }
+
+        
+        .direction-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 0.75rem;
+            color: var(--monster-teal);
+        }</style>
 </head>
-<body class="admin-edit-page">
+<body>
     <ix-application force-breakpoint="lg">
     <ix-menu application-name="MonsterMQ" pinned start-expanded>
     </ix-menu>
@@ -72,17 +30,31 @@
         <div class="page-header">
             <div class="page-header-content">
                 <div>
+                    <nav class="breadcrumb" aria-label="Breadcrumb">
+                        <a href="/pages/nats-clients.html">NATS Clients</a>
+                        <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                        <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">New client</span>
+                    </nav>
                     <h1 class="page-title" id="page-title">NATS Client</h1>
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
+                <!-- Action order is fixed across every detail page:
+                     destructive first, primary last. -->
                 <div class="page-header-actions">
-                    <button class="btn btn-secondary btn-small" onclick="goBack()">← Back</button>
-                    <button class="btn btn-danger btn-small" id="delete-btn" onclick="showDeleteModal()">Delete</button>
-                    <button class="btn btn-primary btn-small" id="save-client-btn" onclick="saveClient()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
-                        Save Client
+                    <button class="btn btn-danger" id="delete-btn" onclick="showDeleteModal()" data-requires-auth>
+                        <ix-icon name="trashcan" size="16"></ix-icon> Delete
+                    </button>
+                    <button class="btn btn-primary" id="save-client-btn" onclick="saveClient()" data-requires-auth>
+                        <ix-icon name="disk" size="16"></ix-icon> Save Client
                     </button>
                 </div>
+            </div>
+        </div>
+
+        <div id="error-message" class="error-message" style="display:none;">
+            <div class="error-content">
+                <span class="error-icon">&#9888;</span>
+                <span class="error-text"></span>
             </div>
         </div>
 
@@ -90,7 +62,7 @@
         <div class="section-card" id="client-content" style="display:none;">
             <div class="section-header">
                 <div class="section-title"><h2>Connection Configuration</h2></div>
-                    <span class="status-badge status-enabled" id="client-status">ENABLED</span>
+                <span class="status-badge status-enabled" id="client-status">Enabled</span>
             </div>
             <div class="section-content">
                 <form id="client-form">
@@ -106,7 +78,7 @@
                         <div class="form-group" style="grid-column:1/-1;">
                             <label for="client-servers">NATS Servers *</label>
                             <input type="text" id="client-servers" required placeholder="nats://host1:4222, nats://host2:4222">
-                            <span class="json-hint">Comma-separated list of NATS server URLs.</span>
+                            <span class="form-hint">Comma-separated list of NATS server URLs.</span>
                         </div>
                         <div class="form-group">
                             <label for="client-node">Cluster Node *</label>
@@ -132,7 +104,7 @@
                             <div class="form-group">
                                 <label for="client-password">Password</label>
                                 <input type="password" id="client-password" placeholder="(unchanged)">
-                                <span class="json-hint">Leave blank to keep existing password.</span>
+                                <span class="form-hint">Leave blank to keep existing password.</span>
                             </div>
                         </div>
                     </div>
@@ -141,7 +113,7 @@
                             <div class="form-group">
                                 <label for="client-token">Token</label>
                                 <input type="password" id="client-token" placeholder="(unchanged)">
-                                <span class="json-hint">Leave blank to keep existing token.</span>
+                                <span class="form-hint">Leave blank to keep existing token.</span>
                             </div>
                         </div>
                     </div>
@@ -189,7 +161,7 @@
                         <div class="form-group">
                             <label for="client-max-reconnects">Max Reconnect Attempts</label>
                             <input type="number" id="client-max-reconnects" value="-1">
-                            <span class="json-hint">-1 = unlimited</span>
+                            <span class="form-hint">-1 = unlimited</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -200,8 +172,8 @@
                     </div>
                 </form>
 
-                <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--dark-border);" id="timestamps-row">
-                    <h3 style="color:var(--text-primary);margin-bottom:1rem;">Timestamps</h3>
+                <div class="form-section" id="timestamps-row">
+                    <h3 class="section-title">Timestamps</h3>
                     <div class="info-grid">
                         <div class="info-item"><div class="info-label">Created At</div><div class="info-value" id="client-created-at">-</div></div>
                         <div class="info-item"><div class="info-label">Updated At</div><div class="info-value" id="client-updated-at">-</div></div>
@@ -225,36 +197,34 @@
         <div class="section-card" id="addresses-section" style="display:none;">
             <div class="section-header">
                 <div class="section-title"><h2>Address Mappings</h2></div>
-                <button class="btn btn-primary" style="padding:0.5rem 1rem;font-size:0.85rem;" onclick="showAddAddressModal()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                    Add Mapping
+                <button class="btn btn-secondary btn-sm" onclick="showAddAddressModal()" data-requires-auth>
+                    <ix-icon name="add-circle" size="14"></ix-icon> Add Mapping
                 </button>
             </div>
-            <div class="section-content" style="padding:0;">
-                <table class="addresses-table">
-                    <thead>
-                        <tr>
-                            <th>Mode</th>
-                            <th>NATS Subject</th>
-                            <th>MQTT Topic</th>
-                            <th>QoS</th>
-                            <th>Auto-Convert</th>
-                            <th>Remove Path</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="addresses-table-body">
-                        <tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>
-                    </tbody>
-                </table>
+            <div class="section-content is-flush">
+                <div class="table-responsive">
+                    <table class="addresses-table">
+                        <thead>
+                            <tr>
+                                <th>Mode</th>
+                                <th>NATS Subject</th>
+                                <th>MQTT Topic</th>
+                                <th class="num">QoS</th>
+                                <th>Auto-Convert</th>
+                                <th>Remove Path</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="addresses-table-body">
+                            <tr><td class="empty-cell" colspan="7">No address mappings configured.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
         <div id="loading-indicator" class="loading-indicator" style="display:none;">
-            <div class="loading-spinner"></div><span>Loading NATS client…</span>
-        </div>
-        <div id="error-message" class="error-message" style="display:none;">
-            <div class="error-content"><span class="error-icon">⚠️</span><span class="error-text"></span></div>
+            <div class="loading-spinner"></div><span>Loading NATS client&hellip;</span>
         </div>
     </div>
 </div>
@@ -278,17 +248,17 @@
                 <div class="form-group">
                     <label for="addr-nats-subject">NATS Subject *</label>
                     <input type="text" id="addr-nats-subject" required placeholder="e.g. sensors.> or commands.*">
-                    <span class="json-hint">NATS wildcards: * (single token), > (multi-token)</span>
+                    <span class="form-hint">NATS wildcards: * (single token), > (multi-token)</span>
                 </div>
 
-                <div id="addr-topic-direction" style="display: flex; justify-content: center; align-items: center; margin-bottom: 1.5rem; font-size: 1.5rem; color: var(--monster-teal);">
-                    <span class="direction-arrow">⬇️</span>
+                <div id="addr-topic-direction" class="direction-indicator">
+                    <ix-icon class="direction-arrow" name="chevron-down" size="24"></ix-icon>
                 </div>
 
                 <div class="form-group">
                     <label for="addr-mqtt-topic">MQTT Topic *</label>
                     <input type="text" id="addr-mqtt-topic" required placeholder="e.g. sensors/# or commands/+">
-                    <span class="json-hint">MQTT wildcards: + (single level), # (multi-level)</span>
+                    <span class="form-hint">MQTT wildcards: + (single level), # (multi-level)</span>
                 </div>
                 <div class="form-group">
                     <label for="addr-qos">QoS Level</label>
@@ -315,24 +285,6 @@
         <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="hideAddAddressModal()">Cancel</button>
             <button type="button" id="save-address-btn" class="btn btn-primary" onclick="saveAddressMapping()">Save Mapping</button>
-        </div>
-    </div>
-</div>
-
-<!-- Delete Client Modal -->
-<div id="delete-client-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-        <div class="modal-header">
-            <h3>Confirm Delete</h3>
-            <button class="modal-close" onclick="hideDeleteModal()">×</button>
-        </div>
-        <div class="modal-body">
-            <p>Are you sure you want to delete the NATS client "<span id="delete-client-name"></span>"?</p>
-            <p>This action cannot be undone.</p>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="hideDeleteModal()">Cancel</button>
-            <button type="button" class="btn btn-danger" onclick="confirmDeleteClient()">Delete</button>
         </div>
     </div>
 </div>

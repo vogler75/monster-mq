@@ -151,14 +151,25 @@ For device integration guidance, see `dev/plans/DEVICE_INTEGRATION.md`.
   - `vite.config.js` - Build config, outputs to `dashboard/dist/`
   - `src/` - Dashboard source files
     - `js/ix-init.js` - iX component registration + `classic-dark` theme (ES module)
-    - `js/sidebar.js` - `SidebarManager` using `ix-menu` + `ix-menu-category` + `ix-menu-item` (add new pages here)
+    - `js/sidebar.js` - `SidebarManager` using `ix-menu` + `ix-menu-category` + `ix-menu-item` (add new pages here) + SPA router
+    - `js/ui.js` - Shared modals, confirms, toasts, loading/error/empty states (`window.ui`)
     - `js/storage.js` - localStorage wrapper
     - `js/graphql-client.js` - `GraphQLDashboardClient` class
     - `js/log-viewer.js` - Global log viewer component
-    - `assets/monster-theme.css` - Remaining custom styles (being progressively reduced)
-    - `assets/ix-app.css` - iX layout overrides
+    - `assets/components.css` - **The design system.** Every recurring UI element, defined once
+    - `assets/monster-theme.css` - Brand tokens, scrollbars, auth indicator, standalone login page
+    - `assets/ix-app.css` - iX layout overrides (layout only)
     - `pages/` - HTML pages (one per view), use `<ix-application>` + `<ix-menu>` shell
     - `js/` - Page-specific JavaScript
+
+**Read `dashboard/DESIGN.md` before adding or editing a dashboard page.** It
+defines the two page shapes (list / detail) and the rules that keep them
+consistent. The critical one: pages must not redefine shared components in a
+local `<style>` block — the SPA router injects page styles after the shared
+stylesheets, so a local copy silently overrides the design system and the
+component changes appearance as you navigate. Use `window.ui` instead of
+`alert()`/`confirm()`/hand-rolled toasts, and never load scripts from a CDN
+(air-gapped deployments — add to `VENDOR_BUNDLES` in `vite.config.js` instead).
   - `dist/` - Build output (gitignored)
 
 **IMPORTANT**: Always edit dashboard files in `dashboard/src/`, NOT in `broker/src/main/resources/dashboard/`. The Vite build (`npm run build` or `./run -build`) copies the built output to `broker/src/main/resources/dashboard/`, so any direct edits there will be overwritten.

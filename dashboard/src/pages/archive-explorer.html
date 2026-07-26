@@ -5,13 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Archive Explorer</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        /* Modern Glassmorphic and Premium Dashboard Styles */
+        
         .filter-bar {
             background: rgba(24, 38, 45, 0.6);
             border: 1px solid rgba(211, 236, 248, 0.12);
@@ -142,7 +141,7 @@
             flex: 1;
         }
 
-        /* Columns dropdown styling */
+        
         .columns-dropdown {
             position: relative;
         }
@@ -199,7 +198,7 @@
             cursor: pointer;
         }
 
-        /* Table redesign */
+        
         .explorer-layout {
             display: flex;
             gap: 0;
@@ -282,7 +281,7 @@
             border-bottom: none;
         }
 
-        /* Resizable column headers */
+        
         .col-resize-handle {
             position: absolute;
             right: 0;
@@ -305,7 +304,7 @@
             box-shadow: 0 0 8px var(--monster-purple);
         }
 
-        /* Detail panel */
+        
         .detail-panel {
             position: fixed;
             top: 48px;
@@ -441,17 +440,6 @@
             width: 35%;
         }
 
-        .qos-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.2rem 0.65rem;
-            border-radius: 20px;
-            font-size: 0.72rem;
-            font-weight: 700;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
-        }
-
         .qos-0 { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
         .qos-1 { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
         .qos-2 { background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); }
@@ -465,20 +453,13 @@
             background: rgba(15, 22, 25, 0.2);
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
         .loading-row td {
             text-align: center;
             padding: 3rem !important;
             color: var(--text-muted);
         }
 
-        /* Topic Browser Side Panel Redesign */
+        
         .topic-browser-side-panel {
             position: fixed;
             top: 48px;
@@ -523,7 +504,7 @@
             transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Premium sliding tab for topics panel toggle (Rotated Layout) */
+        
         .topic-browser-floating-toggle {
             position: fixed;
             right: 20px;
@@ -718,14 +699,12 @@
             margin-right: 0.35rem;
         }
 
-        /* Drop target highlight */
+        
         #topic-filter.drag-over {
             border-color: var(--monster-purple);
             box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3), inset 0 2px 4px rgba(0,0,0,0.1);
             background: rgba(124, 58, 237, 0.08);
-        }
-
-        @media (max-width: 992px) {
+        }@media (max-width: 992px) {
             .topic-browser-side-panel {
                 width: 100vw;
                 right: -100vw;
@@ -762,8 +741,7 @@
             .filter-spacer {
                 display: none;
             }
-        }
-    </style>
+}</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -781,7 +759,7 @@
                 <div class="filter-group">
                     <label>Archive:</label>
                     <select id="archive-group-select" class="filter-input">
-                        <option value="">Loading...</option>
+                        <option value="">Loading&hellip;</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -898,7 +876,7 @@
         <div class="topic-panel-archive-select">
             <label for="topic-panel-archive-group">Archive:</label>
             <select id="topic-panel-archive-group">
-                <option value="">Loading...</option>
+                <option value="">Loading&hellip;</option>
             </select>
         </div>
         <div class="topic-panel-tree">

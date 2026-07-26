@@ -138,12 +138,7 @@ class InfluxDBLoggersManager {
         }
     }
 
-    showError(msg) {
-        const errDiv = document.getElementById('error-message');
-        errDiv.querySelector('.error-text').textContent = msg;
-        errDiv.style.display = 'block';
-        setTimeout(() => errDiv.style.display = 'none', 5000);
-    }
+    showError(msg) { ui.showError(msg); }
 }
 
 window.influxdbLoggersManager = new InfluxDBLoggersManager();

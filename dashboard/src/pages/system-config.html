@@ -5,30 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - System Configuration</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .section-card { background:var(--dark-surface); border-radius:8px; border:1px solid var(--dark-border); margin-bottom:1.5rem; box-shadow:var(--card-shadow); }
-        .section-header { display:flex; align-items:center; gap:0.6rem; padding:1rem 1.25rem; background:var(--dark-bg); border-bottom:1px solid var(--dark-border); border-radius:8px 8px 0 0; }
-        .section-title { margin:0; color:var(--text-primary); font-size:1rem; font-weight:700; }
-        .section-content { padding:1.25rem; }
         .config-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:1rem; }
         .config-item { display:flex; flex-direction:column; padding:0.9rem 1.1rem; background:var(--dark-bg); border-radius:6px; border:1px solid var(--dark-border); gap:0.35rem; }
         .config-item .label { font-size:0.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700; }
         .config-item .value { color:var(--text-primary); font-weight:700; font-size:0.92rem; display:flex; align-items:center; gap:0.4rem; }
         .config-item .value.mono { font-family:'Courier New', monospace; font-size:0.82rem; word-break:break-all; }
-        .badge { display:inline-flex; align-items:center; gap:0.25rem; padding:0.2rem 0.6rem; border-radius:999px; font-size:0.72rem; font-weight:700; text-transform:uppercase; }
         .badge-enabled { background:rgba(16,185,129,0.15); color:var(--monster-green); border:1px solid rgba(16,185,129,0.3); }
         .badge-disabled { background:rgba(239,68,68,0.15); color:var(--monster-red); border:1px solid rgba(239,68,68,0.3); }
         .badge-port { background:rgba(124,58,237,0.15); color:var(--monster-light,#e2e8f0); border:1px solid rgba(124,58,237,0.3); }
-        .badge-info { background:rgba(59,130,246,0.15); color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
-        .port-disabled { color:var(--text-muted); font-size:0.82rem; font-style:italic; }
-        .loading-indicator { display:flex; align-items:center; gap:0.75rem; color:var(--text-muted); padding:1rem; border-radius:8px; background:var(--dark-surface); border:1px solid var(--dark-border); margin-bottom:1.5rem; }
-        .error-message { display:flex; align-items:center; gap:0.75rem; color:var(--monster-red); padding:1rem; border-radius:8px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); margin-bottom:1.5rem; }
-    </style>
+        .port-disabled { color:var(--text-muted); font-size:0.82rem; font-style:italic; }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -42,7 +32,7 @@
 
             <div id="loading-indicator" class="loading-indicator" style="display:none;">
                 <div class="loading-spinner"></div>
-                <span>Loading configuration...</span>
+                <span>Loading configuration&hellip;</span>
             </div>
 
             <div id="error-message" class="error-message" style="display:none;">

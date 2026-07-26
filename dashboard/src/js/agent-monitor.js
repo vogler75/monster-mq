@@ -486,21 +486,7 @@ class AgentMonitorManager {
         return div.innerHTML;
     }
 
-    showError(message) {
-        var existing = document.getElementById('error-toast');
-        if (existing) existing.remove();
-        var toast = document.createElement('div');
-        toast.id = 'error-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span>' + this.esc(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;">&times;</button>';
-        if (!document.getElementById('toast-anim-style')) {
-            var s = document.createElement('style'); s.id = 'toast-anim-style';
-            s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
-            document.head.appendChild(s);
-        }
-        document.body.appendChild(toast);
-        setTimeout(() => { if (toast.parentElement) toast.remove(); }, 8000);
-    }
+    showError(message) { ui.showError(message); }
 
     toggleDescriptions(show) {
         this.showDescriptions = show;

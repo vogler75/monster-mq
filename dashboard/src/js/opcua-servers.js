@@ -91,7 +91,6 @@ async function loadServers() {
     }
 }
 
-
 function updateServerTable() {
     const tbody = document.getElementById('servers-table-body');
     if (!tbody) return;
@@ -125,7 +124,7 @@ function createServerRow(server) {
             <div class="action-buttons">
                 <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
                 <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="primary" ghost size="24" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
-                <ix-icon-button icon="lock-closed" variant="primary" ghost size="24" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="certificate" variant="primary" ghost size="24" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
                 <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
             </div>
         </td>
@@ -185,7 +184,7 @@ async function startServer(serverName) {
 
     } catch (error) {
         console.error('Error starting server:', error);
-        alert('Failed to start server: ' + error.message);
+        ui.error('Failed to start server: ' + error.message);
     }
 }
 
@@ -218,7 +217,7 @@ async function stopServer(serverName) {
 
     } catch (error) {
         console.error('Error stopping server:', error);
-        alert('Failed to stop server: ' + error.message);
+        ui.error('Failed to stop server: ' + error.message);
     }
 }
 
@@ -272,20 +271,8 @@ function editServer(serverName) {
 }
 
 function showSuccessMessage(message) {
-    // Simple success notification - you can enhance this with a proper notification system
-    const errorDiv = document.getElementById('error-message');
-    const errorText = errorDiv.querySelector('.error-text');
-    const errorIcon = errorDiv.querySelector('.error-icon');
-
-    errorIcon.textContent = '✅';
-    errorText.textContent = message;
-    errorDiv.style.display = 'block';
-
-    setTimeout(() => {
-        errorDiv.style.display = 'none';
-    }, 3000);
+    ui.success(message);
 }
-
 
 // Utility functions
 function refreshServers() {
@@ -316,11 +303,6 @@ function hideErrorMessage() {
     if (errorDiv) {
         errorDiv.style.display = 'none';
     }
-}
-
-function showSuccessMessage(message) {
-    // TODO: Implement success notification
-    console.log('Success:', message);
 }
 
 function manageCertificates(serverName) {

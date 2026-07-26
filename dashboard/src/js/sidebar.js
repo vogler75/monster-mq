@@ -507,8 +507,10 @@ class SidebarManager {
             // Extract page-specific styles from <head>
             const newStyles = doc.querySelectorAll('head style');
 
-            // Extract page-specific stylesheets (not monster-theme or ix-app)
-            const sharedCSS = new Set(['/assets/monster-theme.css', '/assets/ix-app.css']);
+            // Extract page-specific stylesheets (shared ones are already in the shell)
+            const sharedCSS = new Set([
+                '/assets/monster-theme.css', '/assets/components.css', '/assets/ix-app.css'
+            ]);
             const newStylesheets = [];
             doc.querySelectorAll('head link[rel="stylesheet"]').forEach(link => {
                 const h = link.getAttribute('href');
@@ -518,26 +520,33 @@ class SidebarManager {
             // Extract page-specific scripts (skip shared ones)
             const sharedScripts = new Set([
                 '/js/storage.js', '/js/broker-manager.js', '/js/graphql-client.js',
-                '/js/sidebar.js', '/js/log-viewer.js', '/js/ix-init.js'
+                '/js/sidebar.js', '/js/log-viewer.js', '/js/ix-init.js', '/js/ui.js'
             ]);
+            // Third-party bundles under /js/vendor/ are loaded as plain <script>
+            // tags, like CDN scripts: _loadPageScript() rewrites let/const/class
+            // to var, which is fine for our own page scripts but must never be
+            // applied to a minified vendor bundle.
+            const isVendor = (src) => src.startsWith('/js/vendor/');
+
             const newScripts = [];
             doc.querySelectorAll('head script[src], body script[src]').forEach(s => {
                 const src = s.getAttribute('src');
                 if (!src) return;
                 if (s.getAttribute('type') === 'module') return;
-                if (src.includes('cdn.jsdelivr') || src.startsWith('http')) return;
+                if (src.includes('cdn.jsdelivr') || src.startsWith('http') || isVendor(src)) return;
                 const srcPath = src.split('?')[0];
                 if (sharedScripts.has(srcPath)) return;
                 newScripts.push(srcPath);
             });
 
-            // Extract CDN scripts
+            // Extract vendor and CDN scripts — these load first, and page
+            // scripts wait on them.
             const cdnScripts = [];
-            doc.querySelectorAll('head script[src]').forEach(s => {
+            doc.querySelectorAll('head script[src], body script[src]').forEach(s => {
                 const src = s.getAttribute('src');
-                if (src && (src.includes('cdn.jsdelivr') || src.startsWith('http'))) {
-                    if (!document.querySelector(`script[src="${src}"]`)) cdnScripts.push(src);
-                }
+                if (!src) return;
+                if (!(src.includes('cdn.jsdelivr') || src.startsWith('http') || isVendor(src))) return;
+                if (!document.querySelector(`script[src="${src}"]`)) cdnScripts.push(src);
             });
 
             // Extract extra elements outside #main-content (modals, panels, etc.)
@@ -556,10 +565,21 @@ class SidebarManager {
             const newTitle = doc.querySelector('title');
             if (newTitle) document.title = newTitle.textContent;
 
+            // Body classes declared by the page fragment. Only index.html's
+            // <body> exists at runtime, so without this a page's own class never
+            // lands and any CSS scoped to it is silently dead.
+            const newBodyClasses = Array.from(doc.body?.classList || [])
+                .filter(c => c !== 'theme-classic-dark');
+
             // --- Cleanup previous page ---
             this._cleanupPage();
 
             // --- Apply new page ---
+
+            // Swap body classes
+            (this._pageBodyClasses || []).forEach(c => document.body.classList.remove(c));
+            newBodyClasses.forEach(c => document.body.classList.add(c));
+            this._pageBodyClasses = newBodyClasses;
 
             // Swap styles
             document.querySelectorAll('style[data-page-style]').forEach(s => s.remove());
@@ -606,6 +626,9 @@ class SidebarManager {
             for (const src of cdnScripts) await this._loadCdnScript(src);
             for (const src of newScripts) await this._loadPageScript(src);
 
+            // Detail pages mirror their <h1> into the breadcrumb tail
+            if (window.ui) ui.syncBreadcrumb();
+
         } catch (error) {
             console.error('SPA navigation failed:', error);
             // Fallback: full page load
@@ -614,6 +637,9 @@ class SidebarManager {
     }
 
     _cleanupPage() {
+        // Dismiss any dialog the outgoing page left open
+        if (window.ui) window.ui.closeAllModals();
+
         // Run registered cleanup callbacks
         this._pageCleanups.forEach(fn => { try { fn(); } catch(e) {} });
         this._pageCleanups = [];

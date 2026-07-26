@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Workflows</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
@@ -98,60 +97,13 @@
             padding-top: 1rem;
             border-top: 1px solid var(--border-color);
         }
-.btn-icon:hover {
-            background: var(--background-secondary);
-            color: var(--primary-color);
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-        }
         .modal.active {
             display: flex;
-        }
-        .modal-content {
-            background: #1a1d28;
-            border-radius: 12px;
-            max-width: 95vw;
-            max-height: 95vh;
-            width: 1400px;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-        .modal-header {
-            padding: 1.5rem 2rem;
-            border-bottom: 1px solid #2d3142;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
         }
         .modal-title {
             font-size: 1.5rem;
             font-weight: 600;
             color: #e4e6eb;
-        }
-        .modal-body {
-            padding: 2rem;
-            overflow-y: auto;
-            flex: 1;
-            background: #1a1d28;
-        }
-        .modal-footer {
-            padding: 1.5rem 2rem;
-            border-top: 1px solid #2d3142;
-            display: flex;
-            justify-content: flex-end;
-            gap: 1rem;
-            background: #1a1d28;
         }
         .canvas-container {
             position: relative;
@@ -323,7 +275,7 @@
         table.mapping-table tbody tr:nth-child(even) { background: #181c24; }
     table.mapping-table tbody tr:hover { background: #242a35; }
         table.mapping-table input, table.mapping-table select { width: 100%; font-size: 0.8rem; padding: 0.3rem 0.4rem; }
-        /* Dark theme unify with .form-control (compact variant) */
+        
         table.mapping-table input, table.mapping-table select {
             background: var(--dark-bg);
             border: 1px solid var(--dark-border);
@@ -340,7 +292,6 @@
             box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
         }
     table.mapping-table input:focus, table.mapping-table select:focus { outline: 1px solid #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.35); }
-        .table-actions { display: flex; gap: 0.4rem; align-items: center; }
         .namespace-filter {
             display: inline-flex;
             align-items: center;
@@ -362,67 +313,22 @@
     .mapping-table-wrapper { position: relative; }
     .mapping-table-wrapper:before { content: ""; position: absolute; inset: 0; pointer-events:none; border-radius:6px; box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 4px 10px -2px rgba(0,0,0,0.4); }
     .shortcut-hint { font-size: 0.6rem; text-transform: uppercase; letter-spacing: .5px; color: #7d8492; margin: 4px 0 0; text-align: right; }
-    /* --- Full-width first table (Flow Classes) adjustments --- */
+    
     .main-content .container { max-width: 100%; }
     #classes-section { margin-right: 0; }
     #classes-section .table-wrapper { width: 100%; padding-right: 1.25rem; box-sizing: border-box; }
     #classes-section table.data-table { width: 100%; table-layout: auto; }
-    /* Ensure horizontal overflow handled gracefully */
+    
     #classes-section .table-wrapper { overflow-x: auto; }
-    /* Slight padding on header row so last column not glued to edge */
+    
     #classes-section table.data-table th:last-child,
     #classes-section table.data-table td:last-child { padding-right: 0.75rem; }
-    /* Mirror for Flow Instances table */
+    
     #instances-section { margin-right: 0; }
     #instances-section .table-wrapper { width: 100%; padding-right: 1.25rem; box-sizing: border-box; overflow-x:auto; }
     #instances-section table.data-table { width: 100%; table-layout: auto; }
     #instances-section table.data-table th:last-child,
     #instances-section table.data-table td:last-child { padding-right: 0.75rem; }
-
-    /* Table header styling to match OPC UA devices page */
-    .table-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1.5rem;
-        background: var(--dark-bg);
-        border-bottom: 1px solid var(--dark-border);
-        border-radius: 12px 12px 0 0;
-    }
-
-    .table-title h2 {
-        margin: 0;
-        color: var(--text-primary);
-        font-size: 1.25rem;
-        font-weight: 600;
-    }
-
-    .table-actions {
-        display: flex;
-        gap: 0.75rem;
-        align-items: center;
-    }
-.btn-icon svg {
-        margin: 0;
-    }
-
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        border-radius: 8px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        border: none;
-        cursor: pointer;
-        text-decoration: none;
-        padding: 0.6rem 1.25rem;
-        font-size: 0.875rem;
-    }
-
-    .btn svg {
-        flex-shrink: 0;
-    }
 
     .section-container {
         background: var(--dark-surface);
@@ -466,8 +372,7 @@
 
     .section-container tbody tr:last-child td {
         border-bottom: none;
-    }
-    </style>
+    }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">

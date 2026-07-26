@@ -119,7 +119,7 @@ class GenAiProviderManager {
             }
         } catch (e) {
             console.error('Delete error:', e);
-            alert('Failed to delete provider: ' + e.message);
+            ui.error('Failed to delete provider: ' + e.message);
         }
     }
 }

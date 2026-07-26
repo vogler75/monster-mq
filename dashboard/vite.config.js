@@ -19,6 +19,17 @@ function copyDir(src, dest) {
   }
 }
 
+// Third-party browser bundles, served from /js/vendor/ instead of a CDN.
+// The broker is routinely deployed into air-gapped plant networks where
+// jsdelivr is unreachable, so nothing may be fetched from the public internet
+// at runtime. Add an entry here and reference it as /js/vendor/<key>.
+const VENDOR_BUNDLES = {
+  'chart.umd.js': 'node_modules/chart.js/dist/chart.umd.js',
+  'chartjs-adapter-date-fns.js': 'node_modules/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js',
+  'echarts.min.js': 'node_modules/echarts/dist/echarts.min.js',
+  'marked.umd.js': 'node_modules/marked/lib/marked.umd.js'
+};
+
 const BROKERS_JSON_PATH = resolve(__dirname, 'src/config/brokers.json');
 const BROKER_DASHBOARD_CONFIG_PATH = resolve(__dirname, 'src/config/config.json');
 const BROKER_DASHBOARD_INSTANCE_CONFIG_PATH = resolve(__dirname, 'src/config/config-instance.json');
@@ -312,6 +323,18 @@ export default defineConfig({
           }
         }
 
+        if (url.startsWith('/js/vendor/')) {
+          const entry = VENDOR_BUNDLES[url.slice('/js/vendor/'.length)];
+          if (!entry) {
+            res.statusCode = 404;
+            res.end();
+            return;
+          }
+          res.setHeader('Content-Type', 'application/javascript');
+          res.end(readFileSync(resolve(__dirname, entry)));
+          return;
+        }
+
         if (url.startsWith('/svg/') && url.endsWith('.svg')) {
           const fileName = decodeURIComponent(url.slice('/svg/'.length));
           const svgPath = resolve(svgRoot, fileName);
@@ -350,10 +373,21 @@ export default defineConfig({
       const svgSrc = resolve(__dirname, 'node_modules/@siemens/ix-icons/dist/ix-icons/svg');
       const svgDest = join(dest, 'svg');
       copyDir(svgSrc, svgDest);
+
+      // Vendored third-party bundles — see VENDOR_BUNDLES above for why.
+      const vendorDir = join(dest, 'js', 'vendor');
+      if (!existsSync(vendorDir)) mkdirSync(vendorDir, { recursive: true });
+      for (const [name, src] of Object.entries(VENDOR_BUNDLES)) {
+        copyFileSync(resolve(__dirname, src), join(vendorDir, name));
+      }
     }
   }],
   server: {
     port: 5173,
+    // run.sh --host sets VITE_EXPOSE=1. Vite otherwise rejects requests whose
+    // Host header it does not recognise (DNS-rebinding protection), so reaching
+    // the dev server by hostname fails even with --host.
+    allowedHosts: process.env.VITE_EXPOSE === '1' ? true : undefined,
     proxy: buildProxyConfig()
   }
 });

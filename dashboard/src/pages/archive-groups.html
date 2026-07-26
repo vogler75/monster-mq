@@ -5,40 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Archives</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .status-enabled {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--monster-green);
-        }
-
-        .status-disabled {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--monster-red);
-        }
-
-        .status-indicator {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: currentColor;
-        }
 
         .topic-filters {
             display: flex;
@@ -55,8 +26,6 @@
             font-size: 0.7rem;
             font-family: 'JetBrains Mono', monospace;
         }
-
-        .action-buttons { display:flex; gap:0.5rem; flex-wrap:wrap; }
 
         .connection-indicators {
             display: flex;
@@ -92,23 +61,7 @@
             font-size: 0.7rem;
             color: var(--text-secondary);
             font-weight: 500;
-        }
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            border-radius: 12px 12px 0 0;
-        }
-        .table-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
-        .table-actions { display: flex; gap: 0.75rem; align-items: center; }
-        .data-table {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -149,7 +102,7 @@
                     <tbody id="archive-groups-tbody">
                         <tr>
                             <td colspan="9" style="text-align: center; padding: 2rem;">
-                                Loading archive groups...
+                                Loading archive groups&hellip;
                             </td>
                         </tr>
                     </tbody>

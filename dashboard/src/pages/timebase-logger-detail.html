@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - TimeBase Logger Detail</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
@@ -13,29 +12,13 @@
     <style>
         .logger-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
         .json-schema-section { grid-column: 1 / -1; }
-        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); overflow: hidden; box-shadow: var(--card-shadow); transition: all 0.3s ease; }
-        .section-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4); }
-        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); }
-        .section-title { display: flex; align-items: center; gap: 0.75rem; }
         .section-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--gradient-primary); color: white; }
-        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
-        .section-content { padding: 1.5rem; }
-        .form-group { margin-bottom: 1.5rem; }
-        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; font-size: 0.875rem; }
         input[type="text"], input[type="password"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem; transition: all 0.2s ease; box-sizing: border-box; font-family: inherit; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1); }
-        textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
-        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 500; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
-        .btn-primary { background: var(--gradient-primary); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(124, 58, 237, 0.3); }
-        .btn-secondary { background: var(--dark-surface-2); color: var(--text-primary); border: 1px solid var(--dark-border); }
-        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
-        .checkbox-group label { margin-bottom: 0; cursor: pointer; }
-        small.form-hint { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.25rem; display: block; }
-        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-        @media (max-width: 1024px) { .logger-info-grid { grid-template-columns: 1fr; } }
+        textarea { resize: vertical; min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }@media (max-width: 1024px) { .logger-info-grid { grid-template-columns: 1fr; }
+}
 
-        /* Help Button & Modal */
+        
         .help-btn { background: none; border: none; color: var(--monster-purple); cursor: pointer; padding: 0.25rem; display: flex; align-items: center; transition: all 0.2s ease; }
         .help-btn:hover { color: var(--monster-teal); transform: scale(1.1); }
         .help-modal .modal-content { max-width: 900px; }
@@ -50,16 +33,8 @@
         .help-table td { color: var(--text-muted); }
         .help-example { background: rgba(124, 58, 237, 0.1); border-left: 3px solid var(--monster-purple); padding: 1rem; margin: 0.75rem 0; }
         .help-example-title { color: var(--monster-purple); font-weight: 600; margin-bottom: 0.5rem; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; padding: 2rem; box-sizing: border-box; }
-        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
-        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h3 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
-        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; padding: 0.25rem; line-height: 1; transition: color 0.2s ease; }
-        .modal-close:hover { color: var(--text-primary); }
-        .modal-body { padding: 2rem; }
-        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
 
-        /* AI Schema Generator */
+        
         .ai-schema-generator { margin-top: 1.5rem; padding: 1.25rem; background: rgba(124, 58, 237, 0.05); border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 10px; }
         .ai-generator-header { margin-bottom: 0.75rem; }
         .ai-generator-title { display: flex; align-items: center; gap: 0.5rem; color: var(--monster-purple); font-weight: 600; font-size: 0.875rem; }
@@ -72,11 +47,9 @@
         .ai-schema-status.success { color: var(--monster-green); }
         .ai-schema-status.error { color: var(--monster-red); }
         .ai-schema-status .loading-dots::after { content: ''; animation: dots 1.5s steps(4, end) infinite; }
-        @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
-    </style>
-    <link rel="stylesheet" href="/assets/admin-edit-compact.css">
+        @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }</style>
 </head>
-<body class="admin-edit-page">
+<body>
     <ix-application force-breakpoint="lg">
     <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
     <div class="main-content" id="main-content">
@@ -84,11 +57,15 @@
             <div class="page-header">
                 <div class="page-header-content">
                     <div>
+                        <nav class="breadcrumb" aria-label="Breadcrumb">
+                            <a href="/pages/timebase-loggers.html">TimeBase Loggers</a>
+                            <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                        </nav>
                         <h1 class="page-title">TimeBase Logger</h1>
                         <p class="page-subtitle">Configure TimeBase Historian data ingestion</p>
                     </div>
                     <div style="display: flex; gap: 0.75rem;">
-                        <button class="btn btn-secondary" onclick="window.spaLocation.href='/pages/timebase-loggers.html'">Back to Loggers</button>
                         <button class="btn btn-primary" onclick="timebaseLoggerDetail.save()">Save Logger</button>
                     </div>
                 </div>
@@ -174,7 +151,7 @@
                 <div class="section-card">
                     <div class="section-header">
                         <div class="section-title">
-                            <div class="section-icon"><ix-icon name="settings" size="20"></ix-icon></div>
+                            <div class="section-icon"><ix-icon name="cogwheel" size="20"></ix-icon></div>
                             <h2>Ingestion & Queuing</h2>
                         </div>
                     </div>

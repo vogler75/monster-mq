@@ -102,12 +102,7 @@ class TimeBaseLoggersManager {
         } catch (error) { this.showError('Failed to delete logger: ' + error.message); }
     }
 
-    showError(msg) {
-        const errDiv = document.getElementById('error-message');
-        errDiv.querySelector('.error-text').textContent = msg;
-        errDiv.style.display = 'block';
-        setTimeout(() => errDiv.style.display = 'none', 5000);
-    }
+    showError(msg) { ui.showError(msg); }
 }
 
 window.timebaseLoggersManager = new TimeBaseLoggersManager();

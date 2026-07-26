@@ -227,9 +227,7 @@ class ArchiveGroupsManager {
     }
 
     async deleteArchiveGroup(name) {
-        if (!confirm(`Are you sure you want to delete the archive group "${name}"?\n\nThis action cannot be undone.`)) {
-            return;
-        }
+        if (!await ui.confirmDelete(name, { title: 'Delete archive group' })) return;
 
         try {
             console.log('Deleting archive group:', name);
@@ -314,7 +312,7 @@ class ArchiveGroupsManager {
     }
 
     showError(message) {
-        alert('Error: ' + message);
+        ui.error(message);
     }
 
     escapeHtml(unsafe) {

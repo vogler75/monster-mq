@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OPC UA Browser - MonsterMQ</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
@@ -253,14 +252,6 @@
             gap: 0.5rem;
         }
 
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-group:last-child {
-            margin-bottom: 0;
-        }
-
         .form-label {
             display: block;
             color: var(--text-muted);
@@ -322,8 +313,7 @@
             border-radius: 8px;
             margin: 1rem 0;
             font-size: 0.9rem;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -347,7 +337,7 @@
                             <div class="config-group">
                                 <span class="config-label">UA Client:</span>
                                 <select id="server-select" class="search-input" style="cursor: pointer;">
-                                    <option value="">Loading...</option>
+                                    <option value="">Loading&hellip;</option>
                                 </select>
                             </div>
                         </div>

@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Scripts</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
@@ -41,76 +40,8 @@
             box-shadow: var(--card-shadow);
             margin-bottom: 2rem;
         }
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-        }
-        .table-title h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        .table-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            border: none;
-            cursor: pointer;
-            text-decoration: none;
-            padding: 0.6rem 1.25rem;
-            font-size: 0.875rem;
-        }
-        .btn svg {
-            flex-shrink: 0;
-        }
         .table-wrapper {
             overflow-x: auto;
-        }
-        table.data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.875rem;
-        }
-        table.data-table th {
-            background: var(--dark-surface-2);
-            padding: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            text-align: left;
-            border-bottom: 1px solid var(--dark-border);
-        }
-        table.data-table td {
-            padding: 1rem;
-            vertical-align: middle;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-            color: var(--text-secondary);
-        }
-        table.data-table tbody tr:hover {
-            background: rgba(71, 85, 105, 0.1);
-        }
-        table.data-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
         }
         .badge-topic {
             background: rgba(59, 130, 246, 0.15);
@@ -129,12 +60,7 @@
         .badge-error {
             background: rgba(239, 68, 68, 0.15);
             color: #f87171;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 0.5rem;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -188,7 +114,7 @@
                             <tbody>
                                 <tr>
                                     <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 3rem;">
-                                        Loading scripts...
+                                        Loading scripts&hellip;
                                     </td>
                                 </tr>
                             </tbody>

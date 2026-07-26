@@ -398,9 +398,7 @@ class UserManager {
     }
 
     async deleteUser(username) {
-        if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
-            return;
-        }
+        if (!await ui.confirmDelete(username, { title: 'Delete user' })) return;
 
         try {
             const result = await window.graphqlClient.deleteUser(username);
@@ -457,7 +455,7 @@ class UserManager {
     }
 
     async deleteAclRule(username, ruleId) {
-        if (!confirm('Delete this ACL rule?')) return;
+        if (!await ui.confirm({ title: 'Delete ACL rule', confirmLabel: 'Delete', danger: true })) return;
         try {
             const result = await window.graphqlClient.deleteAclRule(ruleId);
             if (result.success) {
@@ -637,8 +635,13 @@ class UserManager {
 
         if (ruleIds.length === 0) return;
 
-        const confirmMsg = `Delete ${ruleIds.length} selected ACL rule${ruleIds.length > 1 ? 's' : ''}?`;
-        if (!confirm(confirmMsg)) return;
+        const ok = await ui.confirm({
+            title: `Delete ${ruleIds.length} ACL rule${ruleIds.length > 1 ? 's' : ''}?`,
+            message: 'Affected clients lose the access these rules granted.',
+            confirmLabel: 'Delete',
+            danger: true
+        });
+        if (!ok) return;
 
         try {
             let successCount = 0;

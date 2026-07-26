@@ -337,16 +337,7 @@ class TopicSchemaPolicyDetailManager {
         }
     }
 
-    showError(message) {
-        const errorDiv = document.getElementById('error-message');
-        const errorText = errorDiv.querySelector('.error-text');
-        errorText.textContent = message;
-        errorDiv.style.display = 'block';
-
-        setTimeout(() => {
-            errorDiv.style.display = 'none';
-        }, 5000);
-    }
+    showError(message) { ui.showError(message); }
 
     escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return unsafe;

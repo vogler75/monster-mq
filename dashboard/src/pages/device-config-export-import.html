@@ -5,42 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Device Configuration Import/Export</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        /* Main Container */
+        
         .export-import-container {
             display: flex;
             flex-direction: column;
             gap: 2rem;
             margin-bottom: 2rem;
-        }
-
-        .section-card {
-            background: var(--dark-surface);
-            border: 1px solid var(--dark-border);
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: var(--card-shadow);
-        }
-
-        .section-header {
-            padding: 1rem 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .section-header h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-weight: 600;
         }
 
         .section-header-icon {
@@ -70,7 +45,7 @@
             min-width: 160px;
         }
 
-        /* Device Table */
+        
         .device-list {
             max-height: 360px;
             overflow-y: auto;
@@ -150,18 +125,6 @@
         .device-enabled { color: var(--monster-green); }
         .device-disabled { color: var(--text-muted); }
 
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 2rem 1rem;
-            color: var(--text-muted);
-        }
-
-        .empty-state-icon {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-        }
-
         .selection-info {
             color: var(--text-muted);
             font-size: 0.8rem;
@@ -173,7 +136,7 @@
             font-weight: 600;
         }
 
-        /* File Upload */
+        
         .file-upload-area {
             border: 2px dashed var(--dark-border);
             border-radius: 8px;
@@ -238,7 +201,7 @@
             font-size: 0.875rem;
         }
 
-        /* Import Progress */
+        
         .import-progress {
             width: 100%;
             background: var(--dark-bg);
@@ -305,24 +268,9 @@
         .import-result-text {
             flex: 1;
             font-size: 0.875rem;
-        }
-
-        /* Action Buttons */
-        .action-buttons {
-            display: flex;
-            gap: 0.75rem;
-            margin-top: 1.5rem;
-        }
-
-        .action-buttons .btn {
-            flex: 1;
-        }
-
-        @media (max-width: 768px) {
-            .action-buttons { flex-direction: column; }
+        }@media (max-width: 768px) {
             .section-controls { flex-wrap: wrap; }
-        }
-    </style>
+}</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -358,7 +306,7 @@
                         <div class="device-list" id="export-device-list">
                             <div class="empty-state">
                                 <div class="empty-state-icon">📦</div>
-                                <div>Loading devices...</div>
+                                <div>Loading devices&hellip;</div>
                             </div>
                         </div>
                     </div>
@@ -413,7 +361,7 @@
 
             <div id="error-message" class="error-message" style="display: none;">
                 <div class="error-content">
-                    <span class="error-icon">⚠️</span>
+                    <span class="error-icon">&#9888;</span>
                     <span class="error-text"></span>
                 </div>
             </div>

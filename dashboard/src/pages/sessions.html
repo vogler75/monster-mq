@@ -5,58 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Sessions</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/vendor/chart.umd.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
-    <style>
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        
-        .table-header-left {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        .table-header-right {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .table-responsive {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        @media (max-width: 768px) {
-            .table-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-            .table-header-right {
-                width: 100%;
-                justify-content: space-between;
-            }
-            .table-header-right select {
-                flex: 1;
-                min-width: 0 !important;
-            }
-        }
-    </style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -69,11 +22,18 @@
                 <p class="page-subtitle">Monitor and manage MQTT client sessions across your cluster</p>
             </div>
 
-            <div class="metrics-grid" style="margin-bottom: 2rem;">
+            <div id="error-message" class="error-message" style="display: none;">
+                <div class="error-content">
+                    <span class="error-icon">&#9888;</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Total Sessions</span>
-                        <div class="metric-icon">👥</div>
+                        <div class="metric-icon"><ix-icon name="user-management" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="total-sessions">0</div>
                     <div class="metric-label">All Nodes</div>
@@ -82,7 +42,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Connected</span>
-                        <div class="metric-icon">🟢</div>
+                        <div class="metric-icon is-ok"><ix-icon name="success" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="connected-sessions">0</div>
                     <div class="metric-label">Active Connections</div>
@@ -91,7 +51,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Disconnected</span>
-                        <div class="metric-icon">🔴</div>
+                        <div class="metric-icon is-err"><ix-icon name="error" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="disconnected-sessions">0</div>
                     <div class="metric-label">Persistent Sessions</div>
@@ -100,14 +60,14 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Queued Messages</span>
-                        <div class="metric-icon">⏳</div>
+                        <div class="metric-icon is-warn"><ix-icon name="clock" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="total-queued">0</div>
                     <div class="metric-label">Pending Delivery</div>
                 </div>
             </div>
 
-            <div class="chart-container" id="distribution-chart-container" style="margin-bottom: 2rem;">
+            <div class="chart-container" id="distribution-chart-container">
                 <div class="chart-header">
                     <h2 class="chart-title">Session Distribution by Node</h2>
                 </div>
@@ -117,22 +77,22 @@
             <div class="data-table">
                 <div class="table-header">
                     <div class="table-header-left">
-                        <h3 style="margin: 0; color: var(--text-primary);">Active Sessions</h3>
-                        <button id="remove-selected-sessions" class="btn btn-danger" style="display: none;">
+                        <h2>Active Sessions</h2>
+                        <button id="remove-selected-sessions" class="btn btn-danger btn-sm" style="display: none;" data-requires-auth>
                             Remove Selected (<span id="selected-count">0</span>)
                         </button>
                     </div>
                     <div class="table-header-right">
-                        <input type="text" id="client-id-filter" class="form-control" placeholder="Filter by Client ID..." style="width: auto; min-width: 180px;">
-                        <select id="node-filter" class="form-control" style="width: auto; min-width: 150px;">
+                        <input type="search" id="client-id-filter" class="form-control" placeholder="Filter by Client ID…">
+                        <select id="node-filter" class="form-control">
                             <option value="">All Nodes</option>
                         </select>
-                        <select id="connection-filter" class="form-control" style="width: auto; min-width: 150px;">
+                        <select id="connection-filter" class="form-control">
                             <option value="">All Sessions</option>
                             <option value="true">Connected Only</option>
                             <option value="false">Disconnected Only</option>
                         </select>
-                        <ix-icon-button id="refresh-sessions" icon="refresh" variant="secondary" ghost onclick="if(window.sessionManager)sessionManager.loadSessions()" title="Refresh"></ix-icon-button>
+                        <ix-icon-button id="refresh-sessions" icon="refresh" variant="secondary" ghost title="Refresh"></ix-icon-button>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -165,13 +125,13 @@
     </div>
 
     <!-- Session Detail Modal -->
-    <div id="session-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 10002; padding: 2rem;">
-        <div style="max-width: 1000px; margin: 0 auto; background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-height: 90vh; overflow-y: auto;">
-            <div style="padding: 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="margin: 0; color: var(--text-primary);" id="modal-title">Session Details</h2>
-                <button id="close-modal" class="btn btn-secondary">Close</button>
+    <div id="session-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-title">Session Details</h3>
+                <button id="close-modal" class="modal-close" aria-label="Close">&times;</button>
             </div>
-            <div style="padding: 2rem;">
+            <div class="modal-body">
                 <div id="session-detail-content">
                     <!-- Session details will be populated here -->
                 </div>

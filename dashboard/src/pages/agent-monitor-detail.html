@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Agent Detail Monitor</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
@@ -50,21 +49,8 @@
             font-size: 0.85rem;
             color: var(--text-muted);
         }
-
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .status-running { background: rgba(16,185,129,0.15); color: var(--monster-green); border: 1px solid rgba(16,185,129,0.3); }
         .status-ready { background: rgba(59,130,246,0.15); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.3); }
         .status-stopped { background: rgba(239,68,68,0.15); color: var(--monster-red); border: 1px solid rgba(239,68,68,0.3); }
-        .status-unknown { background: rgba(97,125,145,0.15); color: var(--text-muted); border: 1px solid rgba(97,125,145,0.3); }
 
         .type-badge {
             display: inline-flex;
@@ -93,13 +79,6 @@
         }
         .health-card .label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.4rem; }
         .health-card .value { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin: 1.5rem 0 1rem 0;
-        }
 
         .log-tabs {
             display: flex;
@@ -175,20 +154,6 @@
             outline: none;
             border-color: var(--monster-purple);
         }
-        .btn-primary {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.5rem 1rem;
-            background: var(--monster-purple);
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-        .btn-primary:hover { background: var(--monster-dark); }
 
         .history-table {
             background: var(--dark-surface);
@@ -350,23 +315,6 @@
             flex-wrap: wrap;
             margin-top: 1rem;
         }
-        .btn-secondary {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            padding: 0.5rem 1rem;
-            background: var(--dark-surface-2);
-            color: var(--text-primary);
-            border: 1px solid var(--dark-border);
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            font-size: 0.85rem;
-        }
-        .btn-secondary:hover {
-            border-color: var(--monster-purple);
-            color: var(--text-primary);
-        }
         .test-send-status {
             color: var(--text-muted);
             font-size: 0.8rem;
@@ -478,8 +426,7 @@
         }
         .response-section {
             margin-bottom: 1.5rem;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -487,13 +434,15 @@
     </ix-menu>
     <div class="main-content" id="main-content">
         <div class="container">
-            <a class="back-link" id="back-link" href="/pages/agent-monitor.html">
-                <ix-icon name="chevron-left" size="16"></ix-icon> Back to Agent Monitor
-            </a>
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+                <a href="/pages/agent-monitor.html">Agent Monitor</a>
+                <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+            </nav>
 
             <div class="agent-header" id="agent-header">
                 <div class="agent-header-left">
-                    <h1 id="agent-name">Loading...</h1>
+                    <h1 id="page-title">Loading&hellip;</h1>
                     <div id="agent-description" style="color:var(--text-muted); font-size:0.9rem;"></div>
                     <div class="agent-header-meta">
                         <span id="agent-org-site"></span>

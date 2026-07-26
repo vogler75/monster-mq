@@ -98,6 +98,7 @@ class NatsClientDetailManager {
     showNewClientForm() {
         document.getElementById('page-title').textContent = 'Add NATS Client';
         document.getElementById('page-subtitle').textContent = 'Create a new NATS consumer/producer client';
+        this.setText('breadcrumb-name', 'New client');
 
         document.getElementById('client-name').value = '';
         document.getElementById('client-name').disabled = false;
@@ -141,8 +142,9 @@ class NatsClientDetailManager {
         const d = this.clientData;
         const cfg = d.config;
 
-        document.getElementById('page-title').textContent = `NATS Client: ${d.name}`;
+        document.getElementById('page-title').textContent = d.name;
         document.getElementById('page-subtitle').textContent = `${d.namespace} — ${(cfg.servers || []).join(', ')}`;
+        this.setText('breadcrumb-name', d.name);
 
         document.getElementById('client-name').value = d.name;
         document.getElementById('client-name').disabled = true;
@@ -266,7 +268,7 @@ class NatsClientDetailManager {
         const mode = document.getElementById('addr-mode')?.value;
         const arrow = document.querySelector('#addr-topic-direction .direction-arrow');
         if (arrow) {
-            arrow.textContent = mode === 'SUBSCRIBE' ? '⬇️' : '⬆️';
+            arrow.setAttribute('name', mode === 'SUBSCRIBE' ? 'chevron-down' : 'chevron-up');
             arrow.title = mode === 'SUBSCRIBE' ? 'NATS → MQTT' : 'MQTT → NATS';
         }
     }
@@ -354,7 +356,13 @@ class NatsClientDetailManager {
     }
 
     async removeAddress(idx) {
-        if (!confirm('Delete this address mapping?')) return;
+        const confirmed = await ui.confirm({
+            title: 'Delete address mapping',
+            message: 'Remove this mapping? Traffic on it stops immediately.',
+            confirmLabel: 'Delete',
+            danger: true
+        });
+        if (!confirmed) return;
         const addr = this.addresses[idx];
         if (!addr) return;
         try {
@@ -583,66 +591,23 @@ class NatsClientDetailManager {
 
     // ─── Modal / UI helpers ──────────────────────────────────────────────────
 
-    showDeleteModal() {
-        const span = document.getElementById('delete-client-name');
-        if (span && this.clientData) span.textContent = this.clientData.name;
-        document.getElementById('delete-client-modal').style.display = 'flex';
+    async showDeleteModal() {
+        const name = this.clientData ? this.clientData.name : 'this client';
+        const confirmed = await ui.confirmDelete(name, {
+            title: 'Delete NATS client',
+            message: `Delete the NATS client “${name}”?\n` +
+                'Its address mappings will be removed and the bridge will stop. ' +
+                'This action cannot be undone.'
+        });
+        if (confirmed) this.deleteClient();
     }
-    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
-    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
     goBack() { this.cleanup(); window.spaLocation.href = '/pages/nats-clients.html'; }
 
-    showLoading(show) {
-        const el = document.getElementById('loading-indicator');
-        if (el) el.style.display = show ? 'flex' : 'none';
-    }
-    showError(message) {
-        // Also update the inline error div if present
-        var errorDiv = document.getElementById('error-message');
-        if (errorDiv) {
-            var errorText = errorDiv.querySelector('.error-text');
-            if (errorText) errorText.textContent = message;
-            errorDiv.style.display = 'flex';
-        }
-
-        // Show a fixed-position toast so the error is always visible
-        var existing = document.getElementById('error-toast');
-        if (existing) existing.remove();
-
-        var toast = document.createElement('div');
-        toast.id = 'error-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + message + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
-
-        // Add animation
-        if (!document.getElementById('error-toast-style')) {
-            var style = document.createElement('style');
-            style.id = 'error-toast-style';
-            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
-            document.head.appendChild(style);
-        }
-
-        document.body.appendChild(toast);
-
-        setTimeout(function() {
-            if (toast.parentElement) toast.remove();
-            if (errorDiv) errorDiv.style.display = 'none';
-        }, 8000);
-    }
-    hideError() {
-        const errorEl = document.getElementById('error-message');
-        if (errorEl) errorEl.style.display = 'none';
-    }
-    showSuccess(message) {
-        var existing = document.getElementById('success-toast'); if (existing) existing.remove();
-        var toast = document.createElement('div'); toast.id = 'success-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + this.escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
-        if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
-        document.body.appendChild(toast);
-        setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 3000);
-    }
-    escapeHtml(t) { const div = document.createElement('div'); div.textContent = t; return div.innerHTML; }
+    showLoading(show) { ui.setLoading(show); }
+    showError(message) { ui.showError(message); }
+    hideError() { ui.clearError(); }
+    showSuccess(message) { ui.success(message); }
+    escapeHtml(t) { return ui.escapeHtml(t); }
     setText(id, value) { const el = document.getElementById(id); if (el) el.textContent = value; }
 }
 
@@ -652,8 +617,6 @@ function saveClient() { natsDetailManager.saveClient(); }
 function toggleClient() { natsDetailManager.toggleClient(); }
 function goBack() { natsDetailManager.goBack(); }
 function showDeleteModal() { natsDetailManager.showDeleteModal(); }
-function hideDeleteModal() { natsDetailManager.hideDeleteModal(); }
-function confirmDeleteClient() { natsDetailManager.confirmDeleteClient(); }
 function showAddAddressModal() { natsDetailManager.showAddAddressModal(); }
 function hideAddAddressModal() { natsDetailManager.hideAddAddressModal(); }
 function saveAddressMapping() { natsDetailManager.saveAddressMapping(); }
@@ -664,8 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener('click', e => {
-    if (e.target.classList.contains('modal')) {
-        if (e.target.id === 'delete-client-modal') natsDetailManager.hideDeleteModal();
-        if (e.target.id === 'add-address-modal') natsDetailManager.hideAddAddressModal();
+    if (e.target.classList.contains('modal') && e.target.id === 'add-address-modal') {
+        natsDetailManager.hideAddAddressModal();
     }
 });

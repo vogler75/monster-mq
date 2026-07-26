@@ -5,7 +5,6 @@
   <title>MonsterMQ - Visual Flow Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script type="module" src="/js/ix-init.js"></script>
-  <link rel="stylesheet" href="/assets/monster-theme.css" />
   <link rel="stylesheet" href="/css/script-editor-modal.css" />
     <script src="/js/storage.js"></script>
   <script src="/js/graphql-client.js"></script>
@@ -20,33 +19,16 @@
       overflow: hidden;
     }
 
-    /* Page Header with Actions */
-    .page-header-content {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 1rem;
-      flex-wrap: wrap;
-      padding-bottom: 1rem;
-    }
-
     .page-header-info {
       flex: 1;
       min-width: 200px;
-    }
-
-    .page-header-actions {
-      display: flex;
-      gap: 0.75rem;
-      align-items: center;
-      flex-shrink: 0;
     }
 
     .status {
       display: none;
     }
 
-    /* Main editor layout */
+    
     .editor-layout {
       display: grid;
       grid-template-columns: 280px 1fr 340px;
@@ -56,7 +38,7 @@
       width: 100%;
     }
 
-    /* Ensure container and main-content use full space */
+    
     .main-content {
       height: 100vh;
       overflow: hidden;
@@ -72,22 +54,7 @@
       margin: 0;
     }
 
-    .page-header {
-      flex-shrink: 0;
-      padding: 1rem 1.5rem;
-      margin-bottom: 0;
-    }
-
-    .page-header .page-title {
-      margin: 0;
-    }
-
-    .page-header .page-subtitle {
-      margin: 0;
-      display: none;
-    }
-
-    /* Side panels */
+    
     .panel {
       background: var(--background-secondary);
       border: 1px solid var(--dark-border, var(--border-color));
@@ -150,7 +117,7 @@
       border-left: 3px solid var(--primary-color);
     }
 
-    /* Node Palette */
+    
     .palette-item {
       padding: 0.85rem;
       margin-bottom: 0.65rem;
@@ -248,7 +215,7 @@
       font-weight: 400;
     }
 
-    /* Canvas */
+    
     .canvas-wrapper {
       position: relative;
       overflow-x: auto;
@@ -282,7 +249,7 @@
       z-index: 10;
     }
 
-    /* Flow nodes */
+    
     .flow-node {
       position: absolute;
       min-width: 200px;
@@ -423,8 +390,8 @@
       filter: drop-shadow(0 0 8px rgba(255,176,32,0.6));
     }
 
-    /* Toolbar */
-    .toolbar {
+    
+    .canvas-toolbar {
       position: absolute;
       top: 1.5rem;
       left: 50%;
@@ -440,29 +407,31 @@
       z-index: 100;
     }
 
-    .toolbar button {
-      background: var(--background-tertiary);
-      border: 1px solid var(--border-color);
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      color: var(--text-secondary);
-      cursor: pointer;
+    /* Square icon buttons floating over the canvas. Scoped to .canvas-toolbar
+       so they do not collide with the shared .toolbar filter row. */
+    .canvas-toolbar button {
       display: flex;
       align-items: center;
       justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: var(--background-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-secondary);
       font-size: 1rem;
+      cursor: pointer;
       transition: all 0.2s;
     }
 
-    .toolbar button:hover {
+    .canvas-toolbar button:hover {
       background: var(--background-hover);
       color: var(--text-primary);
       border-color: var(--primary-color);
       transform: translateY(-2px);
     }
 
-    .toolbar button:active {
+    .canvas-toolbar button:active {
       transform: translateY(0);
     }
 
@@ -474,22 +443,6 @@
       padding: 0 0.75rem;
       color: var(--text-secondary);
       font-weight: 500;
-    }
-
-    /* Forms */
-    .form-group {
-      margin-bottom: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.6rem;
-      padding: 0.75rem;
-      background: rgba(0, 0, 0, 0.15);
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.03);
-    }
-
-    .form-group:last-child {
-      margin-bottom: 0;
     }
 
     .form-label {
@@ -661,19 +614,11 @@
       color: #ff4757;
     }
 
-    .empty-state {
-      padding: 2rem 1rem;
-      text-align: center;
-      color: var(--text-secondary);
-      font-size: 0.8rem;
-    }
-
     .divider {
       height: 1px;
       background: var(--border-color);
       margin: 1rem 0;
-    }
-  </style>
+    }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -685,12 +630,16 @@
       <div class="page-header">
         <div class="page-header-content">
           <div class="page-header-info">
+            <nav class="breadcrumb" aria-label="Breadcrumb">
+                <a href="/pages/workflows.html">Workflows</a>
+                <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+            </nav>
             <h1 class="page-title" id="page-title">Visual Flow Editor</h1>
             <p class="page-subtitle" id="page-subtitle"></p>
             <span class="status" id="status-text">Ready</span>
           </div>
           <div class="page-header-actions">
-            <button class="btn btn-secondary btn-small" onclick="window.spaLocation.href = '/pages/workflows.html'">Back</button>
             <button class="btn btn-secondary btn-small" id="instance-btn" style="display:none;" onclick="VisualFlow.handleInstanceButton()">Create Instance</button>
             <div style="display:none; flex-direction: row; gap:0.5rem; align-items:center;" id="restart-controls">
               <select id="restart-instance-select" style="padding:0.5rem; border:1px solid #ddd; border-radius:4px;">
@@ -761,7 +710,7 @@
 
     <!-- Center: Canvas -->
     <div class="canvas-wrapper canvas-grid" id="canvas-wrapper">
-      <div class="toolbar">
+      <div class="canvas-toolbar">
         <button title="Zoom In (+)" onclick="VisualFlow.keyboardZoom(1)">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>

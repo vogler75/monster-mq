@@ -5,76 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Agent Monitor</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .table-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            border-radius: 12px 12px 0 0;
-        }
-        .table-title h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        .table-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-        }
-        .data-table {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            border: 1px solid var(--dark-border);
-            overflow-x: auto;
-            box-shadow: var(--card-shadow);
-        }
-        .data-table table {
-            margin: 0;
-            border-radius: 0;
-            border: none;
-            background: transparent;
-        }
-        .data-table thead th {
-            background: var(--dark-surface-2);
-            padding: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            border-bottom: 1px solid var(--dark-border);
-        }
-        .data-table tbody td {
-            padding: 1rem;
-            vertical-align: middle;
-            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
-        }
-        .data-table tbody tr:hover {
-            background: rgba(71, 85, 105, 0.1);
-            cursor: pointer;
-        }
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .status-running {
-            background: rgba(16, 185, 129, 0.15);
-            color: var(--monster-green);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
         .status-ready {
             background: rgba(59, 130, 246, 0.15);
             color: var(--accent-blue);
@@ -84,11 +19,6 @@
             background: rgba(239, 68, 68, 0.15);
             color: var(--monster-red);
             border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-        .status-unknown {
-            background: rgba(97, 125, 145, 0.15);
-            color: var(--text-muted);
-            border: 1px solid rgba(97, 125, 145, 0.3);
         }
         .type-badge {
             display: inline-flex;
@@ -221,8 +151,7 @@
             color: var(--text-primary);
             font-size: 0.72rem;
             white-space: nowrap;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -329,12 +258,12 @@
 
             <div id="loading-indicator" class="loading-indicator" style="display: none;">
                 <div class="loading-spinner"></div>
-                <span>Loading agents...</span>
+                <span>Loading agents&hellip;</span>
             </div>
 
             <div id="error-message" class="error-message" style="display: none;">
                 <div class="error-content">
-                    <span class="error-icon"></span>
+                    <span class="error-icon">&#9888;</span>
                     <span class="error-text"></span>
                 </div>
             </div>

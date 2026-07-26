@@ -154,14 +154,7 @@ class SystemConfigManager {
         if (el) el.style.display = show ? 'flex' : 'none';
     }
 
-    showError(message) {
-        const e = document.getElementById('error-message');
-        const t = document.querySelector('#error-message .error-text');
-        if (e && t) {
-            t.textContent = message;
-            e.style.display = 'flex';
-        }
-    }
+    showError(message) { ui.showError(message); }
 
     hideError() {
         const e = document.getElementById('error-message');

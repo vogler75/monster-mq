@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Agent Graph</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="/js/vendor/echarts.min.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
@@ -152,8 +151,7 @@
             background: var(--text-muted);
         }
         .ws-dot.connected { background: var(--monster-green); }
-        .ws-dot.connecting { background: var(--monster-orange); }
-    </style>
+        .ws-dot.connecting { background: var(--monster-orange); }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">

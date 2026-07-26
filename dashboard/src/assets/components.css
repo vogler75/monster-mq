@@ -1,0 +1,1454 @@
+/* =============================================================================
+   MonsterMQ Dashboard — Shared Component Layer
+   =============================================================================
+
+   The single definition of every recurring UI element in the dashboard.
+   Pages must NOT redefine these classes in a local <style> block: the SPA
+   hoists page styles into <head> after this file, so a local copy silently
+   wins and the component changes size/colour as you navigate.
+
+   Loaded once from index.html, after monster-theme.css.
+
+   Contents
+     1. Tokens
+     2. Page shell      .page-header .breadcrumb .toolbar
+     3. Cards           .card .section-card .metric-card
+     4. Tables          .data-table .table-header
+     5. Forms           .form-group .form-control .checkbox-group .form-grid
+     6. Buttons         .btn .btn-icon
+     7. Badges          .status-badge .mode-badge .protocol-badge
+     8. States          .loading-indicator .error-message .empty-state
+     9. Modals          .modal (see also js/ui.js)
+    10. Toasts          .toast-stack (owned by js/ui.js)
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- 1. Tokens */
+
+:root {
+    /* Radii — three steps, no more */
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
+
+    /* Control heights — every interactive element lands on one of these */
+    --h-sm: 28px;
+    --h-md: 34px;
+    --h-lg: 40px;
+
+    /* Spacing */
+    --sp-1: 0.25rem;
+    --sp-2: 0.5rem;
+    --sp-3: 0.75rem;
+    --sp-4: 1rem;
+    --sp-5: 1.5rem;
+    --sp-6: 2rem;
+
+    /* Elevation — flat by default, cards earn depth only on hover */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+    /* Semantic colours, derived from the brand palette in monster-theme.css */
+    --c-ok: var(--monster-green);
+    --c-warn: var(--monster-orange);
+    --c-err: var(--monster-red);
+    --c-info: var(--accent-blue);
+    --c-accent: var(--monster-purple);
+
+    --c-ok-bg: rgba(16, 185, 129, 0.14);
+    --c-ok-bd: rgba(16, 185, 129, 0.32);
+    --c-warn-bg: rgba(249, 115, 22, 0.14);
+    --c-warn-bd: rgba(249, 115, 22, 0.32);
+    --c-err-bg: rgba(239, 68, 68, 0.14);
+    --c-err-bd: rgba(239, 68, 68, 0.32);
+    --c-info-bg: rgba(59, 130, 246, 0.14);
+    --c-info-bd: rgba(59, 130, 246, 0.32);
+    --c-accent-bg: rgba(124, 58, 237, 0.14);
+    --c-accent-bd: rgba(124, 58, 237, 0.32);
+
+    /* Tabular figures for every number in a table or metric */
+    --font-num: 'Siemens Sans', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Numbers must not jitter as they tick. */
+.metric-value,
+.data-table td,
+.info-value,
+.stat-value {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------- 2. Page shell */
+
+.container {
+    max-width: 1720px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-5);
+}
+
+.page-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    width: 100%;
+}
+
+.page-header-actions {
+    display: flex;
+    gap: var(--sp-2);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.page-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-primary);
+    margin: 0 0 0.15rem 0;
+}
+
+.page-subtitle {
+    font-size: 0.85rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Breadcrumb — every detail page opens with one; it replaces ad-hoc Back buttons */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-size: 0.8rem;
+    margin-bottom: var(--sp-2);
+    color: var(--text-muted);
+}
+
+.breadcrumb a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: var(--r-sm);
+    padding: 0.1rem 0.25rem;
+    margin-left: -0.25rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.breadcrumb a:hover {
+    color: var(--text-primary);
+    background: var(--dark-surface-2);
+}
+
+.breadcrumb .breadcrumb-sep {
+    opacity: 0.5;
+    user-select: none;
+}
+
+.breadcrumb .breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Toolbar — filters and actions above a table or below a page header */
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-4);
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
+.section-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 var(--sp-3) 0;
+}
+
+/* ---------------------------------------------------------------- 3. Cards */
+
+.card,
+.section-card {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-lg);
+    margin-bottom: var(--sp-4);
+    overflow: hidden;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+    min-height: 48px;
+}
+
+.section-title-group,
+.section-header .section-title {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: 0;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.section-header h2,
+.section-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.section-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+
+.section-content {
+    padding: var(--sp-4);
+}
+
+.section-content.is-flush {
+    padding: 0;
+}
+
+/* Metric cards -------------------------------------------------------------
+   Deliberately flat. A grid of eight cards each wearing a gradient top bar
+   reads as eight competing alerts; the accent now lives only in the icon. */
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-5);
+}
+
+.metrics-grid-compact {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--sp-2);
+}
+
+.metric-card {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-md);
+    padding: var(--sp-3) var(--sp-4);
+    box-shadow: none;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.metric-card:hover {
+    border-color: var(--c-accent-bd);
+}
+
+/* The old gradient rule; neutralised for any page still carrying the markup */
+.metric-card::before {
+    content: none;
+}
+
+.metric-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+}
+
+.metric-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+.metric-icon {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: var(--r-sm);
+    background: var(--c-accent-bg);
+    color: var(--c-accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.metric-icon.is-ok    { background: var(--c-ok-bg);   color: var(--c-ok); }
+.metric-icon.is-warn  { background: var(--c-warn-bg); color: var(--c-warn); }
+.metric-icon.is-err   { background: var(--c-err-bg);  color: var(--c-err); }
+.metric-icon.is-info  { background: var(--c-info-bg); color: var(--c-info); }
+
+.metric-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+.metric-trend {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: 0.72rem;
+    margin-top: var(--sp-1);
+}
+
+.trend-up   { color: var(--c-ok); }
+.trend-down { color: var(--c-err); }
+
+/* MQTT v5 highlight variant */
+.mqtt5-metric {
+    border-color: var(--c-accent-bd);
+}
+
+.mqtt5-metric .metric-icon {
+    background: var(--c-accent-bg);
+    color: var(--c-accent);
+}
+
+.mqtt5-metric .metric-title {
+    color: var(--monster-light);
+}
+
+/* A labelled band of metric cards */
+.logger-section {
+    margin-bottom: var(--sp-5);
+}
+
+/* Info grid — read-only key/value pairs on detail pages */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--sp-2);
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--dark-bg);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-sm);
+}
+
+.info-label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    font-size: 0.7rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+/* Accent any icon a page puts in front of an info label */
+.info-label svg,
+.info-label ix-icon {
+    color: var(--c-accent);
+    opacity: 0.7;
+    flex: 0 0 auto;
+}
+
+.info-value {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+/* Charts */
+/* Charts run with `maintainAspectRatio: false`, which makes Chart.js resize its
+   canvas to fill the parent. If the parent has no fixed height, that growth
+   enlarges the parent, which triggers another resize, and the chart expands
+   without bound. Both the box and the canvas must therefore be capped. */
+.chart-container {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-lg);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-container > .chart-header {
+    flex: 0 0 auto;
+}
+
+/* !important is required: Chart.js writes width/height directly onto the
+   canvas element's style attribute on every resize. */
+.chart-container canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100% !important;
+    max-width: 100% !important;
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--sp-3);
+}
+
+.chart-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.chart-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+}
+
+/* Segmented control for chart timeframes */
+.chart-controls button {
+    height: var(--h-sm);
+    padding: 0 var(--sp-3);
+    background: transparent;
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.chart-controls button:hover {
+    color: var(--text-primary);
+    border-color: var(--c-accent-bd);
+    background: var(--c-accent-bg);
+}
+
+.chart-controls button.active {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+    color: #fff;
+}
+
+/* --------------------------------------------------------------- 4. Tables */
+
+.data-table {
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-lg);
+    margin-bottom: var(--sp-4);
+    /* Wide tables scroll inside the card. Not `overflow: hidden` — a table
+       wider than the card would then be silently clipped, and not every page
+       wraps its table in .table-responsive. */
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* Horizontal overflow scrolls inside the card, never the page body. */
+.table-responsive,
+.data-table > table {
+    width: 100%;
+}
+
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-table table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent;
+}
+
+/* Not sticky: .data-table / .table-responsive are horizontal scroll containers,
+   which makes them the scrollport for `position: sticky` and stops a sticky
+   header from tracking the page scroll at all. Horizontal scrolling matters
+   more here than a pinned header. */
+.data-table thead th,
+.data-table th {
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    white-space: nowrap;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.data-table tbody td,
+.data-table td {
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    vertical-align: middle;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--dark-border);
+    /* Long topic strings and node IDs wrap instead of blowing out the layout */
+    overflow-wrap: anywhere;
+}
+
+/* Fixed column widths — for tables whose cells hold long free-form values
+   (address mappings, tag lists) and would otherwise size unpredictably. */
+.data-table.is-fixed table {
+    table-layout: fixed;
+}
+
+.data-table tbody tr {
+    transition: background-color 0.12s ease;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(124, 58, 237, 0.06);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* A bare <table> inside a card section gets the same treatment as .data-table,
+   so sub-tables on detail pages (address mappings, subscriptions, certificates)
+   match the list pages without each page restyling them. */
+.section-content > table,
+.section-content > .table-responsive > table,
+table.addresses-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: transparent;
+}
+
+.section-content > table th,
+.section-content > .table-responsive > table th,
+table.addresses-table th {
+    padding: var(--sp-2) var(--sp-3);
+    text-align: left;
+    white-space: nowrap;
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.section-content > table td,
+.section-content > .table-responsive > table td,
+table.addresses-table td {
+    padding: var(--sp-2) var(--sp-3);
+    vertical-align: middle;
+    font-size: 0.82rem;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--dark-border);
+}
+
+.section-content > table tbody tr:hover,
+.section-content > .table-responsive > table tbody tr:hover,
+table.addresses-table tbody tr:hover {
+    background: rgba(124, 58, 237, 0.06);
+}
+
+.section-content > table tbody tr:last-child td,
+.section-content > .table-responsive > table tbody tr:last-child td,
+table.addresses-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* A titled subdivision inside a card section */
+.form-section {
+    margin-top: var(--sp-4);
+    padding-top: var(--sp-4);
+    border-top: 1px solid var(--dark-border);
+}
+
+/* Key column of a two-column key/value table */
+.data-table td.kv-key {
+    width: 210px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Right-align numeric columns so magnitudes line up */
+.data-table td.num,
+.data-table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Table header bar — title left, filters and actions right */
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+    min-height: 48px;
+}
+
+.table-header .table-title h2,
+.table-header .table-title h3,
+.table-header h2,
+.table-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.table-header-left,
+.table-header .table-actions,
+.table-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
+/* Per-row action buttons */
+.action-buttons {
+    display: flex;
+    gap: var(--sp-1);
+    align-items: center;
+}
+
+.action-buttons ix-icon-button {
+    --ix-icon-button-height: 28px;
+    --ix-icon-button-width: 28px;
+}
+
+/* ---------------------------------------------------------------- 5. Forms */
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--sp-3);
+    align-items: start;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    margin-bottom: var(--sp-3);
+}
+
+.form-grid > .form-group {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.form-group.full-width,
+.form-group.span-all {
+    grid-column: 1 / -1;
+}
+
+.form-control,
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="email"],
+input[type="search"],
+input[type="url"],
+select,
+textarea {
+    width: 100%;
+    min-height: var(--h-md);
+    padding: 0.4rem 0.6rem;
+    background: var(--dark-bg);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 0.82rem;
+    line-height: 1.25;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-control:hover:not(:disabled),
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+    border-color: var(--text-muted);
+}
+
+.form-control:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--c-accent);
+    box-shadow: 0 0 0 3px var(--c-accent-bg);
+}
+
+.form-control:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.form-control::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+textarea {
+    min-height: 72px;
+    resize: vertical;
+}
+
+/* Field hint text — one class, replacing .json-hint / .form-hint / bare <small> */
+.form-hint,
+.json-hint,
+.form-group small {
+    display: block;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+.form-group.has-error .form-control,
+.form-group.has-error input,
+.form-group.has-error select {
+    border-color: var(--c-err);
+}
+
+.form-error {
+    font-size: 0.72rem;
+    color: var(--c-err);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    min-height: var(--h-md);
+}
+
+.checkbox-group label {
+    margin: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.checkbox-group input[type="checkbox"],
+.checkbox-group input[type="radio"] {
+    width: 15px;
+    height: 15px;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--c-accent);
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+/* Inputs sitting in a toolbar shrink to content width */
+.toolbar .form-control,
+.table-header .form-control {
+    width: auto;
+    min-width: 170px;
+}
+
+/* -------------------------------------------------------------- 6. Buttons */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    height: var(--h-md);
+    padding: 0 var(--sp-3);
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* One primary action per view. Flat, not gradient — the gradient was competing
+   with the metric cards and the sidebar for attention. */
+.btn-primary {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+    color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--monster-dark);
+    border-color: var(--monster-dark);
+}
+
+.btn-secondary {
+    background: var(--dark-surface-2);
+    border-color: var(--dark-border);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--dark-border);
+}
+
+.btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background: var(--dark-surface-2);
+    color: var(--text-primary);
+}
+
+.btn-danger {
+    background: transparent;
+    border-color: var(--c-err-bd);
+    color: var(--c-err);
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: var(--c-err-bg);
+    border-color: var(--c-err);
+}
+
+/* Destructive confirmation inside a modal — filled, because it is the primary
+   action of that dialog and must not read as the quiet option. */
+.btn-danger-solid {
+    background: var(--c-err);
+    border-color: var(--c-err);
+    color: #fff;
+}
+
+.btn-danger-solid:hover:not(:disabled) {
+    filter: brightness(1.1);
+}
+
+.btn-success {
+    background: var(--c-ok);
+    border-color: var(--c-ok);
+    color: #06281e;
+}
+
+.btn-warning {
+    background: var(--c-warn);
+    border-color: var(--c-warn);
+    color: #2b1204;
+}
+
+.btn-sm,
+.btn-small {
+    height: var(--h-sm);
+    padding: 0 var(--sp-2);
+    font-size: 0.75rem;
+}
+
+.btn-lg {
+    height: var(--h-lg);
+    padding: 0 var(--sp-4);
+    font-size: 0.9rem;
+}
+
+.btn-block {
+    width: 100%;
+}
+
+.btn:disabled,
+.btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn ix-icon,
+.btn svg {
+    flex: 0 0 auto;
+}
+
+/* Icon-only buttons */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--h-md);
+    height: var(--h-md);
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--r-sm);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-icon:hover:not(:disabled) {
+    background: var(--dark-surface-2);
+    color: var(--text-primary);
+}
+
+.btn-icon.small,
+.btn-icon.btn-sm {
+    width: var(--h-sm);
+    height: var(--h-sm);
+}
+
+.btn-icon.btn-view   { color: var(--c-accent); }
+.btn-icon.btn-play   { color: var(--c-ok); }
+.btn-icon.btn-pause  { color: var(--c-warn); }
+.btn-icon.btn-cert   { color: var(--c-info); }
+.btn-icon.btn-edit   { color: var(--c-info); }
+.btn-icon.btn-delete { color: var(--c-err); }
+
+.btn-icon.btn-view:hover   { background: var(--c-accent-bg); }
+.btn-icon.btn-play:hover   { background: var(--c-ok-bg); }
+.btn-icon.btn-pause:hover  { background: var(--c-warn-bg); }
+.btn-icon.btn-cert:hover,
+.btn-icon.btn-edit:hover   { background: var(--c-info-bg); }
+.btn-icon.btn-delete:hover { background: var(--c-err-bg); color: #f87171; }
+
+/* Legacy compact action button, kept so unmigrated pages stay coherent */
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-1);
+    height: var(--h-sm);
+    padding: 0 var(--sp-2);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-sm);
+    background: var(--dark-surface-2);
+    color: var(--text-primary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.btn-action:hover { background: var(--dark-border); }
+.btn-action.btn-edit   { background: var(--c-info-bg);   border-color: var(--c-info-bd);   color: var(--c-info); }
+.btn-action.btn-delete { background: var(--c-err-bg);    border-color: var(--c-err-bd);    color: var(--c-err); }
+.btn-action.btn-visual { background: var(--c-accent-bg); border-color: var(--c-accent-bd); color: var(--c-accent); }
+
+/* --------------------------------------------------------------- 7. Badges */
+
+.status-badge,
+.mode-badge,
+.protocol-badge,
+.qos-badge,
+.sub-option-badge,
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    height: 20px;
+    padding: 0 var(--sp-2);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1;
+}
+
+/* Semantic states. Every enabled/connected/running variant resolves to one
+   of these four, so green always means the same thing across pages. */
+.status-enabled,
+.status-connected,
+.status-online,
+.status-ok,
+.status-running,
+.badge-ok {
+    background: var(--c-ok-bg);
+    border-color: var(--c-ok-bd);
+    color: var(--c-ok);
+}
+
+.status-disabled,
+.status-disconnected,
+.status-offline,
+.status-error,
+.status-failed,
+.badge-err {
+    background: var(--c-err-bg);
+    border-color: var(--c-err-bd);
+    color: var(--c-err);
+}
+
+.status-pending,
+.status-warning,
+.status-paused,
+.badge-warn {
+    background: var(--c-warn-bg);
+    border-color: var(--c-warn-bd);
+    color: var(--c-warn);
+}
+
+.status-info,
+.badge-info {
+    background: var(--c-info-bg);
+    border-color: var(--c-info-bd);
+    color: var(--c-info);
+}
+
+.badge-neutral,
+.status-unknown {
+    background: var(--dark-surface-2);
+    border-color: var(--dark-border);
+    color: var(--text-secondary);
+}
+
+/* Direction badges on address-mapping tables */
+.mode-subscribe { background: var(--c-ok-bg);     border-color: var(--c-ok-bd);     color: var(--c-ok); }
+.mode-publish   { background: var(--c-accent-bg); border-color: var(--c-accent-bd); color: var(--c-accent); }
+
+/* Protocol badges. The bare class carries the accent tint, so a page that
+   labels a protocol without a version variant (PLC4X) still reads correctly. */
+.protocol-badge {
+    background: var(--c-accent-bg);
+    border-color: var(--c-accent-bd);
+    color: var(--monster-light);
+}
+
+.protocol-v5 { background: var(--c-accent-bg); border-color: var(--c-accent-bd); color: var(--monster-light); }
+.protocol-v3 { background: var(--c-info-bg);   border-color: var(--c-info-bd);   color: #60a5fa; }
+
+/* MQTT v5 subscription options */
+.sub-no-local        { background: var(--c-err-bg);    border-color: var(--c-err-bd);    color: #fca5a5; }
+.sub-retain-handling { background: var(--c-info-bg);   border-color: var(--c-info-bd);   color: #93c5fd; }
+.sub-rap             { background: var(--c-accent-bg); border-color: var(--c-accent-bd); color: #c4b5fd; }
+
+/* Inline status with a dot, used inside table cells */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-1);
+    height: 20px;
+    padding: 0 var(--sp-2);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+/* ---------------------------------------------------------------- 8. States
+
+   Loading, error and empty are the three states every data view needs. All
+   three were previously markup-only on most pages: 42 of 45 pages shipped an
+   .error-message div that no stylesheet ever styled. Page scripts toggle these
+   with inline display:flex/none, so no display rule is set here. */
+
+.loading-indicator {
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: var(--sp-6) var(--sp-4);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 2px solid var(--dark-border);
+    border-top-color: var(--c-accent);
+    border-radius: 50%;
+    animation: mmq-spin 0.8s linear infinite;
+}
+
+@keyframes mmq-spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4);
+    margin-bottom: var(--sp-4);
+    background: var(--c-err-bg);
+    border: 1px solid var(--c-err-bd);
+    border-radius: var(--r-md);
+    color: #fecaca;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.error-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    flex: 1;
+    min-width: 0;
+}
+
+.error-icon {
+    flex: 0 0 auto;
+    color: var(--c-err);
+    line-height: 1.4;
+}
+
+.error-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
+/* Empty state — use for "no rows yet", inside a table cell or a card */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    padding: var(--sp-6) var(--sp-4);
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.empty-state-icon,
+.empty-state svg {
+    font-size: 1.75rem;
+    opacity: 0.45;
+    line-height: 1;
+}
+
+.empty-state-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.empty-state-hint {
+    font-size: 0.8rem;
+    max-width: 42ch;
+    line-height: 1.4;
+}
+
+/* Empty row inside a table */
+td.empty-cell,
+.no-data {
+    text-align: center;
+    padding: var(--sp-5) var(--sp-4) !important;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* Legacy inline alerts */
+.alert {
+    padding: var(--sp-3) var(--sp-4);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    margin-bottom: var(--sp-3);
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.alert-error   { background: var(--c-err-bg);  border-color: var(--c-err-bd);  color: #fecaca; }
+.alert-success { background: var(--c-ok-bg);   border-color: var(--c-ok-bd);   color: #a7f3d0; }
+.alert-warning { background: var(--c-warn-bg); border-color: var(--c-warn-bd); color: #fed7aa; }
+.alert-info    { background: var(--c-info-bg); border-color: var(--c-info-bd); color: #bfdbfe; }
+
+/* --------------------------------------------------------------- 9. Modals
+
+   Structural styles for both hand-written modal markup and the dialogs built
+   by js/ui.js, so the two are indistinguishable. */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--sp-6) var(--sp-4);
+    background: rgba(3, 7, 10, 0.72);
+    backdrop-filter: blur(2px);
+}
+
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 560px;
+    max-height: min(85vh, 780px);
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.modal-content.modal-lg { max-width: 880px; }
+.modal-content.modal-sm { max-width: 420px; }
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--sp-3);
+    flex: 0 0 auto;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--dark-bg);
+    border-bottom: 1px solid var(--dark-border);
+}
+
+.modal-header h2,
+.modal-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--h-sm);
+    height: var(--h-sm);
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: var(--r-sm);
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.modal-close:hover {
+    background: var(--dark-surface-2);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    flex: 1 1 auto;
+    padding: var(--sp-4);
+    overflow-y: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.modal-body p { margin: 0 0 var(--sp-2) 0; }
+.modal-body p:last-child { margin-bottom: 0; }
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--dark-bg);
+    border-top: 1px solid var(--dark-border);
+}
+
+/* --------------------------------------------------------------- 10. Toasts
+
+   Owned by js/ui.js. Anchored bottom-right, above the log viewer bar. */
+
+.toast-stack {
+    position: fixed;
+    right: var(--sp-4);
+    bottom: var(--sp-4);
+    z-index: 10100;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    pointer-events: none;
+    max-width: min(400px, calc(100vw - 2rem));
+}
+
+.toast {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    background: var(--dark-surface);
+    border: 1px solid var(--dark-border);
+    border-left-width: 3px;
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    line-height: 1.4;
+    pointer-events: auto;
+    animation: mmq-toast-in 0.18s ease-out;
+}
+
+.toast.is-leaving {
+    animation: mmq-toast-out 0.15s ease-in forwards;
+}
+
+.toast-success { border-left-color: var(--c-ok); }
+.toast-error   { border-left-color: var(--c-err); }
+.toast-warning { border-left-color: var(--c-warn); }
+.toast-info    { border-left-color: var(--c-info); }
+
+.toast-icon {
+    flex: 0 0 auto;
+    line-height: 1.4;
+}
+
+.toast-success .toast-icon { color: var(--c-ok); }
+.toast-error   .toast-icon { color: var(--c-err); }
+.toast-warning .toast-icon { color: var(--c-warn); }
+.toast-info    .toast-icon { color: var(--c-info); }
+
+.toast-text {
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+}
+
+.toast-close {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.toast-close:hover { color: var(--text-primary); }
+
+@keyframes mmq-toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mmq-toast-out {
+    to { opacity: 0; transform: translateY(8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast,
+    .toast.is-leaving { animation: none; }
+    .loading-spinner { animation-duration: 2s; }
+}
+
+/* ------------------------------------------------------------- Responsive */
+
+@media (max-width: 1000px) {
+    .form-grid,
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .page-header,
+    .page-header-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .table-header,
+    .section-header,
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .action-buttons {
+        flex-wrap: wrap;
+    }
+
+    .toolbar .form-control,
+    .table-header .form-control {
+        width: 100%;
+        min-width: 0;
+    }
+}

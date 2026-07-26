@@ -5,13 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Users</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        /* Topic Tree Styles */
+        
         .tree-node {
             margin: 0;
             padding: 0;
@@ -102,7 +101,7 @@
             color: var(--monster-green);
         }
 
-        /* Drag & Drop Styles */
+        
         .acl-drop-zone {
             transition: all 0.3s ease;
         }
@@ -125,7 +124,7 @@
             opacity: 0.9;
         }
 
-        /* Loading and Error States */
+        
         .loading {
             display: flex;
             align-items: center;
@@ -141,8 +140,7 @@
             border: 1px solid rgba(239, 68, 68, 0.3);
             border-radius: 8px;
             margin: 1rem;
-        }
-    </style>
+        }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -170,7 +168,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Total Users</span>
-                        <div class="metric-icon">👤</div>
+                        <div class="metric-icon"><ix-icon name="user-profile" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="total-users">0</div>
                     <div class="metric-label">System Users</div>
@@ -179,7 +177,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Active Users</span>
-                        <div class="metric-icon">🟢</div>
+                        <div class="metric-icon is-ok"><ix-icon name="success" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="active-users">0</div>
                     <div class="metric-label">Enabled Accounts</div>
@@ -188,7 +186,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">Admin Users</span>
-                        <div class="metric-icon">⚡</div>
+                        <div class="metric-icon is-warn"><ix-icon name="electrical-energy" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="admin-users">0</div>
                     <div class="metric-label">Administrator Access</div>
@@ -197,7 +195,7 @@
                 <div class="metric-card">
                     <div class="metric-header">
                         <span class="metric-title">ACL Rules</span>
-                        <div class="metric-icon">🔐</div>
+                        <div class="metric-icon is-info"><ix-icon name="lock" size="12"></ix-icon></div>
                     </div>
                     <div class="metric-value" id="total-acl-rules">0</div>
                     <div class="metric-label">Access Control Rules</div>
@@ -215,7 +213,7 @@
                         <button id="add-user-btn" class="btn btn-primary">
                             Add New User
                         </button>
-                        <ix-icon-button id="refresh-users" icon="refresh" variant="secondary" ghost onclick="if(window.usersManager)usersManager.loadUsers()" title="Refresh"></ix-icon-button>
+                        <ix-icon-button id="refresh-users" icon="refresh" variant="secondary" ghost title="Refresh"></ix-icon-button>
                     </div>
                 </div>
                 <table>
@@ -382,7 +380,7 @@
                                 Archive:
                             </label>
                             <select id="acl-archive-group-select" style="padding: 0.4rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 4px; color: var(--text-primary); cursor: pointer; font-size: 0.875rem;">
-                                <option value="">Loading...</option>
+                                <option value="">Loading&hellip;</option>
                             </select>
                         </div>
                         <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--text-primary); cursor: pointer;">

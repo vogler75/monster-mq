@@ -256,6 +256,33 @@ class DashboardManager {
         }
     }
 
+    /**
+     * One metric card. `value` may contain markup (the In/Out pairs do);
+     * `icon` is an ix-icon name — see node_modules/@siemens/ix-icons/…/svg.
+     */
+    metricCard(title, icon, value, label) {
+        return `<div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-title">${title}</span>
+                <div class="metric-icon"><ix-icon name="${icon}" size="12"></ix-icon></div>
+            </div>
+            <div class="metric-value">${value}</div>
+            <div class="metric-label">${label}</div>
+        </div>`;
+    }
+
+    /** Read / written pair shown on every logger card. */
+    loggerIo(cIn, totalIn, totalOut) {
+        return `<span style="color: ${cIn};">${this.formatNumber(totalIn)}</span>` +
+            `<span style="color: var(--text-muted); font-weight: 400;"> / </span>` +
+            `<span style="color: #6366F1;">${this.formatNumber(totalOut)}</span>`;
+    }
+
+    /** Refresh button target; also the entry point used by the polling loop. */
+    async loadDashboardData() {
+        await this.loadRealtimeUpdate();
+    }
+
     async loadRealtimeUpdate() {
         try {
             if (!this.liveUpdatesEnabled) return;
@@ -270,8 +297,11 @@ class DashboardManager {
                     this.addArchiveGroupsRealtimeDataPoint(archiveGroups);
                 }
             }
+            if (window.ui) ui.clearError();
         } catch (error) {
             console.error('Failed to load real-time data:', error);
+            // Surface it: a dashboard that silently stops updating looks live.
+            if (window.ui) ui.showError('Failed to load broker data: ' + error.message);
         }
     }
 
@@ -474,54 +504,37 @@ class DashboardManager {
         const overallIn = clusterTotals.messagesIn + clusterTotals.mqttClientIn + clusterTotals.kafkaClientIn + clusterTotals.opcUaClientIn + (clusterTotals.winCCOaClientIn || 0) + (clusterTotals.winCCUaClientIn || 0) + clusterTotals.natsClientIn + clusterTotals.redisClientIn;
         const overallOut = clusterTotals.messagesOut + clusterTotals.mqttClientOut + clusterTotals.kafkaClientOut + clusterTotals.opcUaClientOut + clusterTotals.natsClientOut + clusterTotals.redisClientOut;
 
+        // In/Out pair, rendered identically on every card that has one.
+        const io = (inVal, outVal) => outVal == null
+            ? `<span style="color: ${cIn};">${this.formatNumber(inVal)}</span>`
+            : `<span style="color: ${cIn};">${this.formatNumber(inVal)}</span>` +
+              `<span style="color: var(--text-muted); font-weight: 400;"> / </span>` +
+              `<span style="color: ${cOut};">${this.formatNumber(outVal)}</span>`;
+
         const cards = [
-            `<div class="metric-card"><div class="metric-header"><span class="metric-title">Active Sessions</span><div class="metric-icon">👥</div></div><div class="metric-value">${clusterTotals.totalSessions}</div><div class="metric-label">${brokers.length} Node${brokers.length !== 1 ? 's' : ''}</div></div>`,
-            `<div class="metric-card"><div class="metric-header"><span class="metric-title">Queued Messages</span><div class="metric-icon">⏳</div></div><div class="metric-value">${this.formatNumber(clusterTotals.queuedMessages)}</div><div class="metric-label">Pending Delivery</div></div>`,
-            `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">Overall Messages</span><div class="metric-icon">📊</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(overallIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(overallOut)}</span></div>
-                <div class="metric-label">In / Out (all sources)</div>
-            </div>`,
-            `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">MQTT Messages</span><div class="metric-icon">📨</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.messagesIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.messagesOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>`,
-            isEnabled('MqttClient') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">MQTT Bridges</span><div class="metric-icon">🌉</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.mqttClientIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.mqttClientOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>` : '',
-            isEnabled('Kafka') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">Kafka Bridges</span><div class="metric-icon">📦</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.kafkaClientIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.kafkaClientOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>` : '',
-            (isEnabled('OpcUa') || isEnabled('OpcUaServer')) ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">OPC UA Clients</span><div class="metric-icon">⚙️</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.opcUaClientIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.opcUaClientOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>` : '',
-            isEnabled('WinCCOa') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">WinCC OA Clients</span><div class="metric-icon">🏭</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.winCCOaClientIn || 0)}</span></div>
-                <div class="metric-label">In</div>
-            </div>` : '',
-            isEnabled('WinCCUa') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">WinCC UA Clients</span><div class="metric-icon">🔧</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.winCCUaClientIn || 0)}</span></div>
-                <div class="metric-label">In</div>
-            </div>` : '',
-            isEnabled('Nats') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">NATS Bridges</span><div class="metric-icon">📡</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.natsClientIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.natsClientOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>` : '',
-            isEnabled('Redis') ? `<div class="metric-card">
-                <div class="metric-header"><span class="metric-title">Redis Bridges</span><div class="metric-icon">🗄️</div></div>
-                <div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(clusterTotals.redisClientIn)}</span> / <span style="color: ${cOut};">${this.formatNumber(clusterTotals.redisClientOut)}</span></div>
-                <div class="metric-label">In / Out</div>
-            </div>` : '',
+            this.metricCard('Active Sessions', 'user-management', clusterTotals.totalSessions,
+                `${brokers.length} Node${brokers.length !== 1 ? 's' : ''}`),
+            this.metricCard('Queued Messages', 'clock', this.formatNumber(clusterTotals.queuedMessages),
+                'Pending Delivery'),
+            this.metricCard('Overall Messages', 'barchart',
+                io(overallIn, overallOut), 'In / Out (all sources)'),
+            this.metricCard('MQTT Messages', 'mail',
+                io(clusterTotals.messagesIn, clusterTotals.messagesOut), 'In / Out'),
+
+            isEnabled('MqttClient') ? this.metricCard('MQTT Bridges', 'link',
+                io(clusterTotals.mqttClientIn, clusterTotals.mqttClientOut), 'In / Out') : '',
+            isEnabled('Kafka') ? this.metricCard('Kafka Bridges', 'package',
+                io(clusterTotals.kafkaClientIn, clusterTotals.kafkaClientOut), 'In / Out') : '',
+            (isEnabled('OpcUa') || isEnabled('OpcUaServer')) ? this.metricCard('OPC UA Clients', 'screen',
+                io(clusterTotals.opcUaClientIn, clusterTotals.opcUaClientOut), 'In / Out') : '',
+            isEnabled('WinCCOa') ? this.metricCard('WinCC OA Clients', 'rack-ipc',
+                io(clusterTotals.winCCOaClientIn || 0), 'In') : '',
+            isEnabled('WinCCUa') ? this.metricCard('WinCC UA Clients', 'rack-ipc',
+                io(clusterTotals.winCCUaClientIn || 0), 'In') : '',
+            isEnabled('Nats') ? this.metricCard('NATS Bridges', 'distribution',
+                io(clusterTotals.natsClientIn, clusterTotals.natsClientOut), 'In / Out') : '',
+            isEnabled('Redis') ? this.metricCard('Redis Bridges', 'storage',
+                io(clusterTotals.redisClientIn, clusterTotals.redisClientOut), 'In / Out') : ''
         ];
 
         overviewContainer.innerHTML = cards.join('');
@@ -549,7 +562,8 @@ class DashboardManager {
                     const loggers = result.jdbcLoggers || [];
                     const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.[0]?.messagesIn || 0), 0);
                     const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.[0]?.messagesWritten || 0), 0);
-                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">JDBC Loggers</span><div class="metric-icon">🗃️</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                    if (loggers.length > 0) loggerCards.push(this.metricCard('JDBC Loggers', 'database',
+                        this.loggerIo(cIn, totalIn, totalOut), `In / Written (${loggers.length})`));
                 } catch (e) { /* ignore */ }
             }
 
@@ -560,7 +574,8 @@ class DashboardManager {
                     const loggers = result.influxdbLoggers || [];
                     const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.messagesIn || 0), 0);
                     const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.messagesWritten || 0), 0);
-                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">InfluxDB Loggers</span><div class="metric-icon">📈</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                    if (loggers.length > 0) loggerCards.push(this.metricCard('InfluxDB Loggers', 'areachart',
+                        this.loggerIo(cIn, totalIn, totalOut), `In / Written (${loggers.length})`));
                 } catch (e) { /* ignore */ }
             }
 
@@ -571,7 +586,8 @@ class DashboardManager {
                     const loggers = result.timebaseLoggers || [];
                     const totalIn = loggers.reduce((sum, l) => sum + (l.metrics?.messagesIn || 0), 0);
                     const totalOut = loggers.reduce((sum, l) => sum + (l.metrics?.messagesWritten || 0), 0);
-                    if (loggers.length > 0) loggerCards.push(`<div class="metric-card"><div class="metric-header"><span class="metric-title">TimeBase Loggers</span><div class="metric-icon">⏱️</div></div><div class="metric-value"><span style="color: ${cIn};">${this.formatNumber(totalIn)}</span> / <span style="color: #6366F1;">${this.formatNumber(totalOut)}</span></div><div class="metric-label">In / Written (${loggers.length})</div></div>`);
+                    if (loggers.length > 0) loggerCards.push(this.metricCard('TimeBase Loggers', 'clock',
+                        this.loggerIo(cIn, totalIn, totalOut), `In / Written (${loggers.length})`));
                 } catch (e) { /* ignore */ }
             }
 
@@ -666,10 +682,12 @@ class DashboardManager {
             const version = broker?.version || 'unknown';
             const nodeId = broker?.nodeId || (window.brokerManager ? window.brokerManager.getDisplayName() : '');
             const title = nodeId ? `Selected broker: ${nodeId}` : 'Selected broker';
-            versionElement.innerHTML = `<div style="color: var(--text-secondary);">${title}</div><div style="font-family: 'Courier New', monospace; color: var(--text-primary); font-weight: 500;">${version}</div>`;
+            versionElement.innerHTML =
+                `<span class="status-badge badge-neutral" title="${title}">${nodeId || 'broker'}</span>` +
+                `<span class="status-badge badge-info">v${version}</span>`;
         } catch (error) {
             console.warn('Failed to load selected broker version:', error);
-            versionElement.innerHTML = `<div style="color: var(--text-secondary);">MonsterMQ</div><div style="font-family: 'Courier New', monospace; color: var(--text-tertiary); font-weight: 500;">unknown</div>`;
+            versionElement.innerHTML = `<span class="status-badge badge-neutral">version unknown</span>`;
         }
     }
 
@@ -768,4 +786,6 @@ class DashboardManager {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => { new DashboardManager(); });
+document.addEventListener('DOMContentLoaded', () => {
+    window.dashboardManager = new DashboardManager();
+});

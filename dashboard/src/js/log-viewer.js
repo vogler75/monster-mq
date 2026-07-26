@@ -582,7 +582,7 @@ class LogViewer {
         const startInput = this.elements.historyStart.value;
         const endInput = this.elements.historyEnd.value;
         if (!startInput || !endInput) {
-          alert('Please select both start and end times');
+          ui.warning('Please select both start and end times');
           return;
         }
         startTime = new Date(startInput).toISOString();

@@ -39,7 +39,7 @@ class OPCUABrowserManager {
 
         browseRootBtn.addEventListener('click', () => {
             if (!this.selectedServerId) {
-                alert('Please select an OPC UA Client device first.');
+                ui.warning('Please select an OPC UA Client device first.');
                 return;
             }
             this.selectedNode = null;

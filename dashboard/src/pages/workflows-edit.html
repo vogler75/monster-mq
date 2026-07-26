@@ -21,7 +21,6 @@
         }
     </script>
     <script type="module" src="/js/ix-init.js"></script>
-  <link rel="stylesheet" href="/assets/monster-theme.css" />
     <link rel="stylesheet" href="/css/script-editor-modal.css" />
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
@@ -29,58 +28,13 @@
     <script src="/js/script-editor-modal.js"></script>
     <script src="/js/help-modal.js"></script>
     <style>
-        /* Section Card Styling */
-        .section-card {
-            background: var(--dark-surface, var(--background-secondary));
-            border-radius: 12px;
-            border: 1px solid var(--dark-border, var(--border-color));
-            overflow: hidden;
-            margin-bottom: 1.5rem;
-            box-shadow: var(--card-shadow);
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.5rem;
-            background: var(--dark-bg, var(--background-primary));
-            border-bottom: 1px solid var(--dark-border, var(--border-color));
-        }
-
-        .section-header h2 {
-            margin: 0;
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .section-content {
-            padding: 1.5rem;
-        }
-
-        /* Page Header with Actions */
-        .page-header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
 
         .page-header-info {
             flex: 1;
             min-width: 200px;
         }
 
-        .page-header-actions {
-            display: flex;
-            gap: 0.75rem;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        /* Header Checkbox Styling */
+        
         .header-checkbox-wrapper {
             margin-right: 1rem;
         }
@@ -107,49 +61,7 @@
             font-weight: 500;
         }
 
-        /* Form Styling */
-        .form-grid {
-            display: grid;
-            gap: 1.25rem;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .form-group label {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .form-control,
-        input[type="text"],
-        textarea,
-        select {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--dark-bg, var(--background-primary));
-            border: 1px solid var(--dark-border, var(--border-color));
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            transition: all 0.2s ease;
-            box-sizing: border-box;
-        }
-
-        .form-control:focus,
-        input[type="text"]:focus,
-        textarea:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--monster-purple, var(--primary-color));
-        }
-
-        /* Script Editor */
+        
         textarea.script {
             font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
             font-size: 0.9rem;
@@ -171,43 +83,12 @@
             border-color: var(--monster-purple, var(--primary-color));
         }
 
-        /* Table Styling */
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-        }
-
-        .data-table th,
-        .data-table td {
-            padding: 1rem;
-            border-bottom: 1px solid var(--dark-border, var(--border-color));
-            text-align: left;
-        }
-
-        .data-table th {
-            background: var(--dark-surface-2, var(--background-primary));
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .data-table tbody tr:hover {
-            background: rgba(71, 85, 105, 0.1);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 0.5rem;
-            justify-content: center;
-            align-items: center;
-        }
-
         .keyvalue-table td input {
             width: 100%;
             box-sizing: border-box;
         }
 
-        /* Inline Editor */
+        
         .inline-editor {
             background: var(--dark-bg, var(--background-primary));
             padding: 1.5rem;
@@ -216,7 +97,7 @@
             margin-top: 1rem;
         }
 
-        /* Topic Browser Side Panel */
+        
         .topic-browser-side-panel {
             position: fixed;
             top: 48px;
@@ -240,7 +121,7 @@
             right: 0;
         }
 
-        /* Resize handle */
+        
         .topic-panel-resize-handle {
             position: absolute;
             left: -5px;
@@ -260,12 +141,12 @@
             background: rgba(124, 58, 237, 0.5);
         }
 
-        /* Main content adjustment when panel is open */
+        
         body.topic-panel-open .main-content {
             transition: margin-right 0.3s ease;
         }
 
-        /* Floating toggle button */
+        
         .topic-browser-floating-toggle {
             position: fixed;
             right: 20px;
@@ -306,10 +187,7 @@
 
         .topic-browser-floating-toggle.active .toggle-icon {
             transform: rotate(180deg);
-        }
-
-        /* Responsive design for smaller screens */
-        @media (max-width: 1024px) {
+        }@media (max-width: 1024px) {
             .topic-browser-side-panel {
                 width: 320px;
                 min-width: 280px;
@@ -320,9 +198,7 @@
                 padding: 0.6rem 1.2rem;
                 font-size: 0.8rem;
             }
-        }
-
-        @media (max-width: 768px) {
+}@media (max-width: 768px) {
             .topic-browser-side-panel {
                 width: 100vw;
                 right: -100vw;
@@ -339,7 +215,7 @@
                 margin-right: 0;
                 display: none;
             }
-        }
+}
 
         .topic-panel-header {
             padding: 1rem;
@@ -541,7 +417,7 @@
             background: var(--monster-dark);
         }
 
-        /* Drop zone styling for inputs */
+        
         .drop-zone {
             border: 2px dashed transparent;
             transition: border-color 0.2s;
@@ -552,23 +428,12 @@
             background: rgba(34, 197, 94, 0.1);
         }
 
-        /* Badges */
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.65rem;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: 600;
-        }
-
         .badge-node {
             background: #24352d;
             color: #46e08c;
         }
 
-        /* Utility Classes */
+        
         .section {
             margin-top: 2rem;
         }
@@ -589,37 +454,9 @@
 
         .danger {
             color: #ff4757;
-        }
-
-        /* Toolbar inside sections */
-        .toolbar {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 0.75rem;
-            align-items: center;
-        }
-
-        .toolbar h2 {
-            flex: 1;
-            margin: 0;
-        }
-
-        /* Use global .btn-icon styles from monster-theme.css */
-        /* Only add contextual color for btn-edit which is not in global stylesheet */
-        .btn-icon.btn-edit {
-            color: var(--monster-teal);
-        }
-
-        .btn-icon.btn-edit:hover {
-            background: rgba(20, 184, 166, 0.1);
-            border-color: var(--monster-teal);
-        }
-
-        /* Global .btn-icon.btn-delete styles apply from monster-theme.css */
-    </style>
-    <link rel="stylesheet" href="/assets/admin-edit-compact.css">
+        }</style>
 </head>
-<body class="admin-edit-page">
+<body>
     <ix-application force-breakpoint="lg">
     <ix-menu application-name="MonsterMQ" pinned start-expanded>
     </ix-menu>
@@ -629,11 +466,15 @@
         <div class="page-header">
             <div class="page-header-content">
                 <div class="page-header-info">
+                    <nav class="breadcrumb" aria-label="Breadcrumb">
+                        <a href="/pages/workflows.html">Workflows</a>
+                        <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                        <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                    </nav>
                     <h1 class="page-title" id="page-title">Edit Flow</h1>
                     <p class="page-subtitle" id="page-subtitle"></p>
                 </div>
                 <div class="page-header-actions" id="header-actions" style="display:none;">
-                    <button class="btn btn-secondary btn-small" onclick="window.spaLocation.href = '/pages/workflows.html'">Back</button>
                     <button class="btn btn-primary btn-small" style="min-width:90px;" onclick="FlowEdit.save()">Save</button>
                     <button class="btn btn-danger btn-small" id="delete-button" style="display:none;" onclick="FlowEdit.deleteItem()">Delete</button>
                 </div>
@@ -744,7 +585,7 @@
         <div class="topic-panel-archive-select">
             <label for="topic-panel-archive-group">Archive:</label>
             <select id="topic-panel-archive-group">
-                <option value="">Loading...</option>
+                <option value="">Loading&hellip;</option>
             </select>
         </div>
         <div class="topic-panel-tree">

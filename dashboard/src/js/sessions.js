@@ -377,74 +377,49 @@ class SessionManager {
         const isV5 = session.protocolVersion === 5;
 
         document.getElementById('modal-title').textContent = `Session: ${session.clientId}`;
+        const card = (title, icon, value, label, tone) => `
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">${title}</span>
+                        <div class="metric-icon${tone ? ' ' + tone : ''}"><ix-icon name="${icon}" size="12"></ix-icon></div>
+                    </div>
+                    <div class="metric-value">${value}</div>
+                    <div class="metric-label">${label}</div>
+                </div>`;
+
+        const inFlight = session.connected
+            ? `${metrics.inFlightMessagesSnd ?? 0} / ${metrics.inFlightMessagesRcv ?? 0}`
+            : 'N/A';
+
         document.getElementById('session-detail-content').innerHTML = `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Messages In</span>
-                        <div class="metric-icon">📥</div>
-                    </div>
-                    <div class="metric-value">${this.formatNumber(metrics.messagesIn)}</div>
-                    <div class="metric-label">Total Received</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Messages Out</span>
-                        <div class="metric-icon">📤</div>
-                    </div>
-                    <div class="metric-value">${this.formatNumber(metrics.messagesOut)}</div>
-                    <div class="metric-label">Total Sent</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Queue Depth</span>
-                        <div class="metric-icon">⏳</div>
-                    </div>
-                    <div class="metric-value">${this.formatNumber(session.queuedMessageCount || 0)}</div>
-                    <div class="metric-label">Pending Messages</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">Subscriptions</span>
-                        <div class="metric-icon">📋</div>
-                    </div>
-                    <div class="metric-value">${subscriptions.length}</div>
-                    <div class="metric-label">Active Topics</div>
-                </div>
-
-                <div class="metric-card">
-                    <div class="metric-header">
-                        <span class="metric-title">In-Flight (Snd/Rcv)</span>
-                        <div class="metric-icon">✈️</div>
-                    </div>
-                    <div class="metric-value">${session.connected ? `${metrics.inFlightMessagesSnd !== undefined && metrics.inFlightMessagesSnd !== null ? metrics.inFlightMessagesSnd : 0} / ${metrics.inFlightMessagesRcv !== undefined && metrics.inFlightMessagesRcv !== null ? metrics.inFlightMessagesRcv : 0}` : 'N/A'}</div>
-                    <div class="metric-label">Active Transmissions</div>
-                </div>
+            <div class="metrics-grid metrics-grid-compact">
+                ${card('Messages In', 'download', this.formatNumber(metrics.messagesIn), 'Total Received', 'is-ok')}
+                ${card('Messages Out', 'cloud-upload', this.formatNumber(metrics.messagesOut), 'Total Sent', 'is-info')}
+                ${card('Queue Depth', 'clock', this.formatNumber(session.queuedMessageCount || 0), 'Pending Messages', 'is-warn')}
+                ${card('Subscriptions', 'list', subscriptions.length, 'Active Topics')}
+                ${card('In-Flight (Snd/Rcv)', 'connector', inFlight, 'Active Transmissions')}
             </div>
 
             <div class="data-table">
-                <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <h3 style="margin: 0; color: var(--text-primary);">Session Information</h3>
+                <div class="table-header">
+                    <h2>Session Information</h2>
                 </div>
                 <table>
                     <tbody>
                         <tr>
-                            <td style="font-weight: 600; width: 200px;">Client ID</td>
+                            <td class="kv-key">Client ID</td>
                             <td>${this.escapeHtml(session.clientId)}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Node ID</td>
+                            <td class="kv-key">Node ID</td>
                             <td>${this.escapeHtml(session.nodeId)}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Protocol Version</td>
+                            <td class="kv-key">Protocol Version</td>
                             <td>${this.getProtocolBadge(session.protocolVersion, session.clientId)}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Status</td>
+                            <td class="kv-key">Status</td>
                             <td>
                                 <span class="status-indicator ${session.connected ? 'status-online' : 'status-offline'}">
                                     <span class="status-dot"></span>
@@ -453,15 +428,15 @@ class SessionManager {
                             </td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Clean Session</td>
+                            <td class="kv-key">Clean Session</td>
                             <td>${session.cleanSession ? 'Yes' : 'No'}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Session Expiry</td>
+                            <td class="kv-key">Session Expiry</td>
                             <td>${session.sessionExpiryInterval || 0} seconds</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Client Address</td>
+                            <td class="kv-key">Client Address</td>
                             <td>${this.escapeHtml(session.clientAddress || 'N/A')}</td>
                         </tr>
                     </tbody>
@@ -469,27 +444,27 @@ class SessionManager {
             </div>
 
             ${isV5 ? `
-            <div class="data-table" style="margin-top: 1.5rem;">
-                <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); display: flex; align-items: center; gap: 0.5rem;">
-                    <h3 style="margin: 0; color: var(--text-primary);">MQTT v5 Connection Properties</h3>
+            <div class="data-table">
+                <div class="table-header">
+                    <h2>MQTT v5 Connection Properties</h2>
                     <span class="protocol-badge protocol-v5">v5.0</span>
                 </div>
                 <table>
                     <tbody>
                         <tr>
-                            <td style="font-weight: 600; width: 200px;">Receive Maximum</td>
+                            <td class="kv-key">Receive Maximum</td>
                             <td>${session.receiveMaximum !== null && session.receiveMaximum !== undefined ? session.receiveMaximum : 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Outbound In-Flight</td>
+                            <td class="kv-key">Outbound In-Flight</td>
                             <td>${metrics.inFlightMessagesSnd !== null && metrics.inFlightMessagesSnd !== undefined ? metrics.inFlightMessagesSnd : 0}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Maximum Packet Size</td>
+                            <td class="kv-key">Maximum Packet Size</td>
                             <td>${session.maximumPacketSize !== null && session.maximumPacketSize !== undefined ? this.formatBytes(session.maximumPacketSize) : 'N/A'}</td>
                         </tr>
                         <tr>
-                            <td style="font-weight: 600;">Topic Alias Maximum</td>
+                            <td class="kv-key">Topic Alias Maximum</td>
                             <td>${session.topicAliasMaximum !== null && session.topicAliasMaximum !== undefined ? session.topicAliasMaximum : 'N/A'}</td>
                         </tr>
                     </tbody>
@@ -498,9 +473,9 @@ class SessionManager {
             ` : ''}
 
             ${session.information ? `
-            <div class="data-table" style="margin-top: 1.5rem;">
-                <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <h3 style="margin: 0; color: var(--text-primary);">Connection Information</h3>
+            <div class="data-table">
+                <div class="table-header">
+                    <h2>Connection Information</h2>
                 </div>
                 <div style="padding: 1rem;">
                     <pre style="background: var(--dark-card); padding: 1rem; border-radius: 6px; margin: 0; overflow-x: auto; font-size: 0.9rem; color: var(--text-primary);">${this.formatJson(session.information)}</pre>
@@ -510,8 +485,8 @@ class SessionManager {
 
             ${subscriptions.length > 0 ? `
                 <div class="data-table" style="margin-top: 2rem;">
-                    <div style="padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                        <h3 style="margin: 0; color: var(--text-primary);">Subscriptions (${subscriptions.length})</h3>
+                    <div class="table-header">
+                        <h2>Subscriptions (${subscriptions.length})</h2>
                     </div>
                     <table>
                         <thead>
@@ -539,7 +514,8 @@ class SessionManager {
             ` : ''}
         `;
 
-        document.getElementById('session-modal').style.display = 'block';
+        // 'flex', not 'block': .modal centres its content with flexbox.
+        document.getElementById('session-modal').style.display = 'flex';
     }
 
     formatNumber(num) {
@@ -564,9 +540,8 @@ class SessionManager {
     }
 
     showError(message) {
-        // Simple error display - could be enhanced with toast notifications
         console.error(message);
-        alert(message);
+        ui.showError(message);
     }
 
     updateRemoveButton() {
@@ -587,11 +562,17 @@ class SessionManager {
         }
 
         const clientIds = Array.from(this.selectedSessions);
-        const confirmMessage = `Are you sure you want to remove ${clientIds.length} session(s)?\n\nThis will:\n- Disconnect active sessions\n- Remove persistent session data from the database\n\nClient IDs:\n${clientIds.join('\n')}`;
+        const preview = clientIds.slice(0, 10).join(', ') +
+            (clientIds.length > 10 ? `, and ${clientIds.length - 10} more` : '');
 
-        if (!confirm(confirmMessage)) {
-            return;
-        }
+        const confirmed = await ui.confirm({
+            title: `Remove ${clientIds.length} session${clientIds.length === 1 ? '' : 's'}?`,
+            message: 'Active sessions will be disconnected and persistent session ' +
+                'data will be removed from the database.\n' + preview,
+            confirmLabel: 'Remove sessions',
+            danger: true
+        });
+        if (!confirmed) return;
 
         try {
             const mutation = `
@@ -630,17 +611,13 @@ class SessionManager {
 
             const removalResult = result.data.session.removeSessions;
 
-            // Show detailed results
             const failedRemovals = removalResult.results.filter(r => !r.success);
-            let message = removalResult.message;
-
             if (failedRemovals.length > 0) {
-                message += '\n\nFailed removals:\n' + failedRemovals.map(r =>
-                    `- ${r.clientId}: ${r.error}`
-                ).join('\n');
+                ui.error(removalResult.message + ' — failed: ' +
+                    failedRemovals.map(r => `${r.clientId} (${r.error})`).join(', '));
+            } else {
+                ui.success(removalResult.message);
             }
-
-            alert(message);
 
             // Clear selection and reload sessions
             this.selectedSessions.clear();

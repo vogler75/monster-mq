@@ -187,7 +187,7 @@ class DatabaseConnectionsManager {
     }
 
     async deleteConnection(name) {
-        if (!confirm(`Delete database connection "${name}"?`)) return;
+        if (!await ui.confirmDelete(name, { title: 'Delete database connection' })) return;
         try {
             const result = await window.graphqlClient.query(`
                 mutation DeleteDatabaseConnection($name: String!) {
@@ -215,13 +215,7 @@ class DatabaseConnectionsManager {
         if (el) el.style.display = show ? 'flex' : 'none';
     }
 
-    showError(message) {
-        const el = document.getElementById('error-message');
-        if (el) {
-            el.querySelector('.error-text').textContent = message;
-            el.style.display = 'block';
-        }
-    }
+    showError(message) { ui.showError(message); }
 
     hideError() {
         const el = document.getElementById('error-message');

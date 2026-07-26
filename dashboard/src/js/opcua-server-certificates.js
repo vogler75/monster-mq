@@ -295,22 +295,28 @@ function trustSelectedCertificates() {
         });
 }
 
-function deleteSelectedRejectedCertificates() {
+async function deleteSelectedRejectedCertificates() {
     if (selectedRejected.size === 0) return;
 
-    if (!confirm(`Are you sure you want to delete ${selectedRejected.size} rejected certificate(s)? This action cannot be undone.`)) {
-        return;
-    }
+    const ok = await ui.confirm({
+        title: `Delete ${selectedRejected.size} rejected certificate(s)?`,
+        message: 'This action cannot be undone.',
+        confirmLabel: 'Delete', danger: true
+    });
+    if (!ok) return;
 
     deleteCertificates(Array.from(selectedRejected), 'rejected');
 }
 
-function deleteSelectedTrustedCertificates() {
+async function deleteSelectedTrustedCertificates() {
     if (selectedTrusted.size === 0) return;
 
-    if (!confirm(`Are you sure you want to delete ${selectedTrusted.size} trusted certificate(s)? This action cannot be undone.`)) {
-        return;
-    }
+    const ok = await ui.confirm({
+        title: `Delete ${selectedTrusted.size} trusted certificate(s)?`,
+        message: 'Clients presenting these certificates will no longer be trusted. This action cannot be undone.',
+        confirmLabel: 'Delete', danger: true
+    });
+    if (!ok) return;
 
     deleteCertificates(Array.from(selectedTrusted), 'trusted');
 }

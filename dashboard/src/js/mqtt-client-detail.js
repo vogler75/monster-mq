@@ -706,10 +706,13 @@ class MqttClientDetailManager {
         this.editAddressOriginalRemoteTopic = null;
     }
 
-    deleteAddress(remoteTopic) {
+    async deleteAddress(remoteTopic) {
         this.deleteAddressRemoteTopic = remoteTopic;
-        document.getElementById('delete-address-name').textContent = remoteTopic;
-        this.showConfirmDeleteAddressModal();
+        if (await ui.confirmDelete(remoteTopic, { title: 'Delete address mapping' })) {
+            await this.confirmDeleteAddress();
+        } else {
+            this.deleteAddressRemoteTopic = null;
+        }
     }
 
     async confirmDeleteAddress() {
@@ -733,7 +736,6 @@ class MqttClientDetailManager {
             });
 
             if (result.mqttClient.deleteAddress.success) {
-                this.hideConfirmDeleteAddressModal();
                 await this.loadClientData();
                 this.showSuccess('Address mapping deleted successfully');
             } else {
@@ -770,14 +772,6 @@ class MqttClientDetailManager {
         document.getElementById('edit-address-modal').style.display = 'none';
     }
 
-    showConfirmDeleteAddressModal() {
-        document.getElementById('confirm-delete-address-modal').style.display = 'flex';
-    }
-
-    hideConfirmDeleteAddressModal() {
-        document.getElementById('confirm-delete-address-modal').style.display = 'none';
-    }
-
     showLoading(show) {
         const indicator = document.getElementById('loading-indicator');
         if (indicator) {
@@ -785,39 +779,7 @@ class MqttClientDetailManager {
         }
     }
 
-    showError(message) {
-        // Also update the inline error div if present
-        var errorDiv = document.getElementById('error-message');
-        if (errorDiv) {
-            var errorText = errorDiv.querySelector('.error-text');
-            if (errorText) errorText.textContent = message;
-            errorDiv.style.display = 'flex';
-        }
-
-        // Show a fixed-position toast so the error is always visible
-        var existing = document.getElementById('error-toast');
-        if (existing) existing.remove();
-
-        var toast = document.createElement('div');
-        toast.id = 'error-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + message + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
-
-        // Add animation
-        if (!document.getElementById('error-toast-style')) {
-            var style = document.createElement('style');
-            style.id = 'error-toast-style';
-            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
-            document.head.appendChild(style);
-        }
-
-        document.body.appendChild(toast);
-
-        setTimeout(function() {
-            if (toast.parentElement) toast.remove();
-            if (errorDiv) errorDiv.style.display = 'none';
-        }, 8000);
-    }
+    showError(message) { ui.showError(message); }
 
     hideError() {
         const errorEl = document.getElementById('error-message');
@@ -826,17 +788,7 @@ class MqttClientDetailManager {
         }
     }
 
-    showSuccess(message) {
-        var existing = document.getElementById('success-toast');
-        if (existing) existing.remove();
-        var toast = document.createElement('div');
-        toast.id = 'success-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + this.escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
-        if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); }
-        document.body.appendChild(toast);
-        setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 3000);
-    }
+    showSuccess(message) { ui.success(message); }
 
     escapeHtml(text) {
         const div = document.createElement('div');
@@ -865,13 +817,12 @@ class MqttClientDetailManager {
         }
     }
 
-    showDeleteModal() {
-        const span = document.getElementById('delete-client-name');
-        if (span && this.clientData) span.textContent = this.clientData.name;
-        document.getElementById('delete-client-modal').style.display = 'flex';
+    async showDeleteModal() {
+        const name = this.clientData ? this.clientData.name : 'this item';
+        if (await ui.confirmDelete(name, { title: 'Delete MQTT bridge' })) {
+            this.deleteClient();
+        }
     }
-    hideDeleteModal() { document.getElementById('delete-client-modal').style.display = 'none'; }
-    confirmDeleteClient() { this.hideDeleteModal(); this.deleteClient(); }
 
     goBack() {
         window.spaLocation.href = '/pages/mqtt-clients.html';
@@ -911,10 +862,6 @@ function hideEditAddressModal() {
 
 function updateAddress() {
     mqttClientDetailManager.updateAddress();
-}
-
-function hideConfirmDeleteAddressModal() {
-    mqttClientDetailManager.hideConfirmDeleteAddressModal();
 }
 
 function confirmDeleteAddress() {
@@ -1013,34 +960,29 @@ function updateTopicDirection() {
 }
 
 // User Properties Management for Add Address Modal
-function addUserProperty() {
-    const list = document.getElementById('address-user-properties-list');
-    const index = list.children.length;
-    
+// The Add and Edit address modals keep separate lists with separate input
+// classes, because saveAddress()/saveEditedAddress() read them independently.
+function userPropertyRow(keyClass, valueClass) {
     const row = document.createElement('div');
     row.className = 'user-property-row';
-    row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
     row.innerHTML = `
-        <input type="text" placeholder="Key" style="flex: 1;" class="user-property-key">
-        <input type="text" placeholder="Value" style="flex: 1;" class="user-property-value">
+        <input type="text" placeholder="Key" class="${keyClass}">
+        <input type="text" placeholder="Value" class="${valueClass}">
         <button type="button" class="btn-icon btn-delete" onclick="this.parentElement.remove()" title="Remove">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
+            <ix-icon name="trashcan" size="16"></ix-icon>
         </button>
     `;
+    return row;
+}
 
-    row.style.cssText = 'display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center;';
-    row.innerHTML = `
-        <input type="text" placeholder="Key" style="flex: 1;" class="edit-user-property-key">
-        <input type="text" placeholder="Value" style="flex: 1;" class="edit-user-property-value">
-        <button type="button" class="btn-icon btn-delete" onclick="this.parentElement.remove()" title="Remove">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-        </button>
-    `;
-    list.appendChild(row);
+function addUserProperty() {
+    document.getElementById('address-user-properties-list')
+        .appendChild(userPropertyRow('user-property-key', 'user-property-value'));
+}
+
+function addEditUserProperty() {
+    document.getElementById('edit-address-user-properties-list')
+        .appendChild(userPropertyRow('edit-user-property-key', 'edit-user-property-value'));
 }
 
 function goBack() {
@@ -1048,8 +990,6 @@ function goBack() {
 }
 
 function showDeleteModal() { mqttClientDetailManager.showDeleteModal(); }
-function hideDeleteModal() { mqttClientDetailManager.hideDeleteModal(); }
-function confirmDeleteClient() { mqttClientDetailManager.confirmDeleteClient(); }
 function generateClientId() { mqttClientDetailManager.generateClientId(); }
 
 // Initialize
@@ -1064,10 +1004,6 @@ document.addEventListener('click', (e) => {
             mqttClientDetailManager.hideAddAddressModal();
         } else if (e.target.id === 'edit-address-modal') {
             mqttClientDetailManager.hideEditAddressModal();
-        } else if (e.target.id === 'confirm-delete-address-modal') {
-            mqttClientDetailManager.hideConfirmDeleteAddressModal();
-        } else if (e.target.id === 'delete-client-modal') {
-            mqttClientDetailManager.hideDeleteModal();
         }
     }
 });

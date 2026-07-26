@@ -5,14 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Topic Visualizer</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <script src="/js/vendor/chart.umd.js"></script>
+    <script src="/js/vendor/chartjs-adapter-date-fns.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        /* Chart Container */
+        
         .chart-wrapper {
             background: var(--dark-surface, var(--background-secondary));
             border-radius: 12px;
@@ -32,7 +31,7 @@
             height: 100% !important;
         }
 
-        /* Time Controls */
+        
         .time-controls {
             background: var(--dark-surface, var(--background-secondary));
             border-radius: 12px;
@@ -94,7 +93,7 @@
             margin-left: auto;
         }
 
-        /* Topics Panel */
+        
         .topics-panel {
             background: var(--dark-surface, var(--background-secondary));
             border-radius: 12px;
@@ -228,14 +227,7 @@
             color: #EF4444;
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        /* Topic Browser Side Panel Styles */
+        
         .topic-browser-side-panel {
             position: fixed;
             top: 48px;
@@ -456,7 +448,7 @@
             color: var(--monster-green);
         }
 
-        /* JSON Field Modal */
+        
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -474,51 +466,13 @@
             display: none;
         }
 
-        .modal-content {
-            background: var(--dark-surface);
-            border-radius: 12px;
-            padding: 1.5rem;
-            max-width: 400px;
-            width: 90%;
-            border: 1px solid var(--dark-border);
-        }
-
-        .modal-content h3 {
-            margin: 0 0 1rem 0;
-            font-size: 1.1rem;
-            color: var(--text-primary);
-        }
-
-        .modal-content p {
-            margin: 0 0 1rem 0;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-        }
-
-        .modal-content input {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            margin-bottom: 1rem;
-            box-sizing: border-box;
-        }
-
-        .modal-content input:focus {
-            outline: none;
-            border-color: var(--monster-purple);
-        }
-
         .modal-actions {
             display: flex;
             gap: 0.75rem;
             justify-content: flex-end;
         }
 
-        /* JSON Viewer in Modal */
+        
         .json-viewer {
             background: var(--dark-bg);
             border: 1px solid var(--dark-border);
@@ -598,9 +552,7 @@
 
         .hidden {
             display: none !important;
-        }
-
-        @media (max-width: 768px) {
+        }@media (max-width: 768px) {
             .topic-browser-side-panel {
                 width: 100vw;
                 right: -100vw;
@@ -621,8 +573,7 @@
                 margin-left: 0;
                 text-align: center;
             }
-        }
-    </style>
+}</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -668,7 +619,7 @@
                 <div class="time-controls-group">
                     <label>Archive:</label>
                     <select class="time-range-select" id="archive-group-select">
-                        <option value="">Loading...</option>
+                        <option value="">Loading&hellip;</option>
                     </select>
                 </div>
                 <div class="time-controls-group">
@@ -730,7 +681,7 @@
         <div class="topic-panel-archive-select">
             <label for="topic-panel-archive-group">Archive:</label>
             <select id="topic-panel-archive-group">
-                <option value="">Loading...</option>
+                <option value="">Loading&hellip;</option>
             </select>
         </div>
         <div class="topic-panel-tree">
@@ -747,7 +698,7 @@
 
             <!-- Loading state -->
             <div id="modal-loading" class="modal-loading hidden">
-                Loading topic value...
+                Loading topic value&hellip;
             </div>
 
             <!-- JSON viewer (shown when payload is JSON object) -->

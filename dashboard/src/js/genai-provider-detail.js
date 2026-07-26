@@ -197,7 +197,7 @@ class GenAiProviderDetailManager {
     }
 
     async deleteProvider() {
-        if (!confirm('Delete provider "' + this.providerName + '"? This cannot be undone.')) return;
+        if (!await ui.confirmDelete(this.providerName, { title: 'Delete AI provider' })) return;
         try {
             const result = await this.client.query(`
                 mutation DeleteProvider($name: String!) {

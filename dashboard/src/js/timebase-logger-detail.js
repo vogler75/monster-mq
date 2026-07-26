@@ -75,7 +75,7 @@ class TimeBaseLoggerDetail {
         const nameVal = document.getElementById('name').value.trim();
         const nameError = window.validateNameInput(nameVal, 'Logger');
         if (this.isNew && nameError) {
-            alert(nameError);
+            ui.error(nameError);
             return;
         }
         try {
@@ -120,10 +120,10 @@ class TimeBaseLoggerDetail {
             if (res.success) {
                 window.spaLocation.href = '/pages/timebase-loggers.html';
             } else {
-                alert('Error: ' + res.errors.join(', '));
+                ui.error(res.errors.join(', '));
             }
         } catch (e) {
-            alert('Error: ' + e.message);
+            ui.error(e.message);
         }
     }
 }

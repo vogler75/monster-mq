@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Kafka Topics</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
@@ -138,7 +137,7 @@
             font-weight: bold;
         }
 
-        /* Table layout */
+        
         .explorer-layout {
             display: flex;
             gap: 0;
@@ -222,7 +221,7 @@
             border-bottom: none;
         }
 
-        /* Detail panel */
+        
         .detail-panel {
             position: fixed;
             top: 48px;
@@ -344,20 +343,11 @@
             background: rgba(15, 22, 25, 0.2);
         }
 
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
         .loading-row td {
             text-align: center;
             padding: 3rem !important;
             color: var(--text-muted);
-        }
-
-        @media (max-width: 992px) {
+        }@media (max-width: 992px) {
             .filter-bar {
                 flex-direction: column;
                 align-items: stretch;
@@ -380,8 +370,7 @@
                 width: 100vw;
                 right: -100vw;
             }
-        }
-    </style>
+}</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">

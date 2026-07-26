@@ -5,61 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Archive Group Detail</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="/js/vendor/echarts.min.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .section-card { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); margin-bottom: 2rem; box-shadow: var(--card-shadow); }
-        .section-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border); border-radius: 12px 12px 0 0; }
-        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1.25rem; font-weight: 600; }
-        .section-content { padding: 1.5rem; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .form-group { margin-bottom: 1.5rem; }
-        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 600; }
-        .form-group small { display: block; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.8rem; }
-        .form-control, input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 0.75rem 1rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; color: var(--text-primary); box-sizing: border-box; font-family: inherit; font-size: 0.875rem; }
-        .form-control:focus, input:focus, select:focus, textarea:focus { outline: none; border-color: var(--monster-purple); }
         textarea { resize: vertical; min-height: 100px; font-family: 'JetBrains Mono', monospace; }
         input:disabled, select:disabled { opacity: 0.6; cursor: not-allowed; }
-        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem; background: var(--dark-bg); border: 1px solid var(--dark-border); border-radius: 8px; }
-        .checkbox-group input[type="checkbox"] { accent-color: var(--monster-purple); width: 16px; height: 16px; }
-        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .info-item { display: flex; flex-direction: column; padding: 1rem; background: var(--dark-bg); border-radius: 8px; border: 1px solid var(--dark-border); }
-        .info-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.5rem; }
-        .info-value { color: var(--text-primary); font-weight: 600; }
-        .status-badge { display: inline-flex; padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
-        .status-enabled { background: rgba(16, 185, 129, 0.15); color: var(--monster-green); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .status-disabled { background: rgba(239, 68, 68, 0.15); color: var(--monster-red); border: 1px solid rgba(239, 68, 68, 0.3); }
-        .page-header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
-        .page-header-actions { display: flex; gap: 0.75rem; align-items: center; }
-        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: 600; transition: all 0.2s ease; border: none; cursor: pointer; text-decoration: none; }
-        .btn-primary { background: linear-gradient(135deg, var(--monster-purple), var(--monster-teal)); color: white; }
-        .btn-secondary { background: var(--dark-surface-2); border: 1px solid var(--dark-border); color: var(--text-primary); }
-        .btn-danger { background: var(--monster-red); color: white; }
-        .btn-success { background: var(--monster-green); color: white; }
-        .btn-warning { background: var(--monster-orange); color: white; }
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .modal-content { background: var(--dark-surface); border-radius: 12px; border: 1px solid var(--dark-border); max-width: 480px; width: 100%; }
-        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--dark-border); display: flex; justify-content: space-between; align-items: center; }
-        .modal-header h3 { margin: 0; color: var(--text-primary); }
-        .modal-close { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
-        .modal-body { padding: 2rem; color: var(--text-secondary); }
-        .modal-footer { padding: 1.5rem 2rem; border-top: 1px solid var(--dark-border); display: flex; justify-content: flex-end; gap: 1rem; }
-        .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--monster-green); color: white; padding: 1rem 1.5rem; border-radius: 8px; z-index: 9999; display: none; font-weight: 600; box-shadow: var(--card-shadow); }
         .connection-indicators { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem; }
         .connection-item { display: flex; align-items: center; gap: 0.25rem; }
         .connection-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
         .connection-dot.connected { background-color: var(--monster-green); box-shadow: 0 0 4px rgba(16,185,129,0.5); }
         .connection-dot.disconnected { background-color: var(--monster-red); box-shadow: 0 0 4px rgba(239,68,68,0.5); }
-        .connection-label { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; }
-        @media (max-width: 1000px) { .form-grid, .info-grid { grid-template-columns: 1fr; } }
-    </style>
-    <link rel="stylesheet" href="/assets/admin-edit-compact.css">
+        .connection-label { font-size: 0.7rem; color: var(--text-secondary); font-weight: 500; }</style>
 </head>
-<body class="admin-edit-page">
+<body>
     <ix-application force-breakpoint="lg">
     <ix-menu application-name="MonsterMQ" pinned start-expanded>
     </ix-menu>
@@ -68,11 +29,15 @@
             <div class="page-header">
                 <div class="page-header-content">
                     <div>
+                        <nav class="breadcrumb" aria-label="Breadcrumb">
+                            <a href="/pages/archive-groups.html">Archives</a>
+                            <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                        </nav>
                         <h1 class="page-title" id="page-title">Archive Group</h1>
                         <p class="page-subtitle" id="page-subtitle"></p>
                     </div>
                     <div class="page-header-actions">
-                        <button class="btn btn-secondary" style="white-space:nowrap;" onclick="archiveGroupDetail.goBack()">← Back to Archives</button>
                         <button class="btn btn-danger" id="delete-btn" onclick="archiveGroupDetail.showDeleteModal()" style="display:none;">Delete</button>
                         <button class="btn btn-warning" id="toggle-btn" onclick="archiveGroupDetail.toggleEnabled()" style="display:none;">Enable</button>
                         <button class="btn btn-primary" onclick="archiveGroupDetail.saveGroup()" id="save-btn">
@@ -87,7 +52,7 @@
 
             <div id="error-message" class="error-message" style="display: none;">
                 <div class="error-content">
-                    <span class="error-icon">⚠️</span>
+                    <span class="error-icon">&#9888;</span>
                     <span class="error-text"></span>
                 </div>
             </div>
@@ -285,7 +250,7 @@
 
             <div id="loading-indicator" class="loading-indicator" style="display: none;">
                 <div class="loading-spinner"></div>
-                <span>Loading...</span>
+                <span>Loading&hellip;</span>
             </div>
         </div>
     </div>
@@ -307,9 +272,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Success Toast -->
-    <div id="success-toast" class="toast"></div>
 
     <script src="/js/archive-group-detail.js"></script>
     </ix-application>

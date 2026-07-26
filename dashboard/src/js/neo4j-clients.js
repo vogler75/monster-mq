@@ -112,10 +112,13 @@ class Neo4jClientManager {
         }
     }
 
-    deleteClient(clientName) {
+    async deleteClient(clientName) {
         this.deleteClientName = clientName;
-        document.getElementById('delete-neo4j-client-name').textContent = clientName;
-        this.showConfirmDeleteModal();
+        if (await ui.confirmDelete(clientName, { title: 'Delete Neo4j client' })) {
+            await this.confirmDeleteClient();
+        } else {
+            this.deleteClientName = null;
+        }
     }
 
     async confirmDeleteClient() {
@@ -124,7 +127,6 @@ class Neo4jClientManager {
             const mutation = `mutation DeleteNeo4jClient($name: String!) { neo4jClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
             if (result.neo4jClient.delete) {
-                this.hideConfirmDeleteModal();
                 await this.loadClients();
                 this.showSuccess(`Neo4j client "${this.deleteClientName}" deleted successfully`);
             } else {
@@ -142,45 +144,11 @@ class Neo4jClientManager {
     }
 
     // UI helpers
-    showConfirmDeleteModal() { document.getElementById('confirm-delete-neo4j-client-modal').style.display = 'flex'; }
-    hideConfirmDeleteModal() { document.getElementById('confirm-delete-neo4j-client-modal').style.display = 'none'; }
 
     showLoading(show) { const el = document.getElementById('loading-indicator'); if (el) el.style.display = show ? 'flex' : 'none'; }
-    showError(message) {
-        // Also update the inline error div if present
-        var errorDiv = document.getElementById('error-message');
-        if (errorDiv) {
-            var errorText = errorDiv.querySelector('.error-text');
-            if (errorText) errorText.textContent = message;
-            errorDiv.style.display = 'flex';
-        }
-
-        // Show a fixed-position toast so the error is always visible
-        var existing = document.getElementById('error-toast');
-        if (existing) existing.remove();
-
-        var toast = document.createElement('div');
-        toast.id = 'error-toast';
-        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-red,#EF4444);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;';
-        toast.innerHTML = '<span style="font-size:1.2rem;">&#9888;</span><span>' + message + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>';
-
-        // Add animation
-        if (!document.getElementById('error-toast-style')) {
-            var style = document.createElement('style');
-            style.id = 'error-toast-style';
-            style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}';
-            document.head.appendChild(style);
-        }
-
-        document.body.appendChild(toast);
-
-        setTimeout(function() {
-            if (toast.parentElement) toast.remove();
-            if (errorDiv) errorDiv.style.display = 'none';
-        }, 8000);
-    }
+    showError(message) { ui.showError(message); }
     hideError() { const errorEl = document.getElementById('error-message'); if (errorEl) errorEl.style.display='none'; }
-    showSuccess(message) { var existing = document.getElementById('success-toast'); if (existing) existing.remove(); var toast = document.createElement('div'); toast.id = 'success-toast'; toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--monster-green,#10B981);color:#fff;padding:14px 24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.4);z-index:10000;font-size:0.9rem;max-width:600px;display:flex;align-items:center;gap:10px;animation:slideDown 0.3s ease-out;'; toast.innerHTML = '<span style="font-size:1.2rem;">&#10003;</span><span>' + this.escapeHtml(message) + '</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;margin-left:auto;font-size:1.1rem;line-height:1;padding:0 4px;">&times;</button>'; if (!document.getElementById('toast-anim-style')) { var s = document.createElement('style'); s.id = 'toast-anim-style'; s.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100%);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes fadeOut{from{opacity:1;}to{opacity:0;}}'; document.head.appendChild(s); } document.body.appendChild(toast); setTimeout(function() { if (toast.parentElement) { toast.style.animation = 'fadeOut 0.3s ease-out forwards'; setTimeout(function() { if (toast.parentElement) toast.remove(); }, 300); } }, 3000); }
+    showSuccess(message) { ui.success(message); }
     escapeHtml(text) { const div=document.createElement('div'); div.textContent=text; return div.innerHTML; }
 
     async refreshClients() { await this.loadClients(); }
@@ -188,11 +156,8 @@ class Neo4jClientManager {
 
 // Global wrappers
 function refreshNeo4jClients() { neo4jClientManager.refreshClients(); }
-function hideConfirmDeleteNeo4jClientModal() { neo4jClientManager.hideConfirmDeleteModal(); }
-function confirmDeleteNeo4jClient() { neo4jClientManager.confirmDeleteClient(); }
 
 // Initialize
 let neo4jClientManager;
 document.addEventListener('DOMContentLoaded', () => { neo4jClientManager = new Neo4jClientManager(); });
 
-document.addEventListener('click', e => { if (e.target.classList.contains('modal') && e.target.id === 'confirm-delete-neo4j-client-modal') neo4jClientManager.hideConfirmDeleteModal(); });

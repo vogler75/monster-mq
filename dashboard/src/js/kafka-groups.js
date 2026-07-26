@@ -249,13 +249,7 @@ class KafkaGroupsManager {
         }
     }
 
-    showError(msg) {
-        const errorEl = document.getElementById('error-message');
-        if (errorEl) {
-            errorEl.querySelector('.error-text').textContent = msg;
-            errorEl.style.display = 'flex';
-        }
-    }
+    showError(msg) { ui.showError(msg); }
 
     hideError() {
         const errorEl = document.getElementById('error-message');

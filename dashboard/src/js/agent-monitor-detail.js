@@ -36,11 +36,11 @@ class AgentDetailMonitorManager {
 
     async init() {
         if (!this.agentName) {
-            document.getElementById('agent-name').textContent = 'No agent specified';
+            document.getElementById('page-title').textContent = 'No agent specified';
             return;
         }
 
-        document.getElementById('agent-name').textContent = this.agentName;
+        document.getElementById('page-title').textContent = this.agentName;
         this.setupLogTabs();
         this.setupTestConsole();
         this.setDefaultHistoryDates();
@@ -115,7 +115,7 @@ class AgentDetailMonitorManager {
 
     renderHeader(card) {
         const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        setEl('agent-name', card.name || this.agentName);
+        setEl('page-title', card.name || this.agentName);
         setEl('agent-description', card.description || '');
         setEl('agent-org-site', `${this.org} / ${this.site}`);
         setEl('agent-version', card.version ? `v${card.version}` : '');

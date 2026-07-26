@@ -66,39 +66,8 @@
             flex-direction: column;
             justify-content: center;
         }
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--theme-color-std-text);
-            font-weight: 500;
-        }
-        .form-control {
-            width: 100%;
-            padding: 0.68rem 0.9rem;
-            background: var(--theme-color-1);
-            border: 1px solid var(--theme-color-soft-bdr);
-            border-radius: 8px;
-            color: var(--theme-color-std-text);
-            font-size: 0.95rem;
-            box-sizing: border-box;
-            min-height: 42px;
-        }
-        .form-control::placeholder {
-            color: var(--theme-color-soft-text);
-        }
-        .form-control:focus {
-            outline: none;
-            border-color: var(--theme-color-primary);
-        }
-        select.form-control {
-            appearance: auto;
-            cursor: pointer;
-        }
 
-        /* Broker section */
+        
         .broker-section {
             margin-bottom: 1.15rem;
             padding-bottom: 1.15rem;
@@ -216,8 +185,7 @@
         }
         #guest-access {
             margin-top: 0 !important;
-        }
-        @media (max-width: 820px) {
+        }@media (max-width: 820px) {
             .login-container {
                 align-items: flex-start;
                 padding: 1rem;
@@ -251,8 +219,7 @@
                 grid-template-columns: 1fr;
                 gap: 0.75rem;
             }
-        }
-    </style>
+}</style>
 </head>
 <body>
     <div class="login-container">
@@ -271,7 +238,7 @@
                 </div>
                 <div class="form-group" style="margin-bottom: 0.75rem;">
                     <select id="broker-select" class="form-control">
-                        <option value="" disabled selected>Loading brokers...</option>
+                        <option value="" disabled selected>Loading brokers&hellip;</option>
                     </select>
                 </div>
                 <div id="broker-status" class="broker-status" style="display:none;">

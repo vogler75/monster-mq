@@ -113,22 +113,7 @@ class BrokerConfigManager {
         if (loading) loading.style.display = show ? 'flex' : 'none';
     }
 
-    showError(message) {
-        var container = document.getElementById('error-message');
-        if (!container) return;
-        if (!message) {
-            container.style.display = 'none';
-            return;
-        }
-
-        var body = container.querySelector('.error-text');
-        if (body) body.textContent = message;
-        container.style.display = 'flex';
-
-        setTimeout(function() {
-            if (container) container.style.display = 'none';
-        }, 8000);
-    }
+    showError(message) { ui.showError(message); }
 
     clearStatus() {
         this.showStatus('');

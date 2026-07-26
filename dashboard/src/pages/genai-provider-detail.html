@@ -5,46 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - AI Provider</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
-        .section-card {
-            background: var(--dark-surface);
-            border: 1px solid var(--dark-border);
-            border-radius: 12px;
-            margin-bottom: 1.5rem;
-            box-shadow: var(--card-shadow);
-        }
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--dark-border);
-        }
-        .section-title h2 { margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; }
-        .section-content { padding: 1.5rem; }
-        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
-        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
-        .form-group label { color: var(--text-secondary); font-size: 0.85rem; font-weight: 500; }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            padding: 0.5rem 0.75rem;
-            font-size: 0.9rem;
-            transition: border-color 0.2s;
-        }
-        .form-group input:focus,
-        .form-group select:focus { outline: none; border-color: var(--monster-purple); }
-        .form-group input:disabled,
-        .form-group select:disabled { opacity: 0.6; cursor: not-allowed; }
         .form-group select option { background: var(--dark-surface-2); }
         .action-bar {
             display: flex;
@@ -52,30 +17,6 @@
             align-items: center;
             padding: 1.5rem 0;
         }
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1.25rem;
-            border-radius: 8px;
-            font-weight: 500;
-            font-size: 0.875rem;
-            border: none;
-            cursor: pointer;
-        }
-        .btn-primary   { background: var(--monster-purple); color: white; }
-        .btn-primary:hover { background: var(--monster-dark); }
-        .btn-secondary { background: var(--dark-surface-2); color: var(--text-primary); border: 1px solid var(--dark-border); }
-        .btn-secondary:hover { background: var(--dark-border); }
-        .btn-danger    { background: var(--monster-red); color: white; }
-        .alert {
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: 0.875rem;
-        }
-        .alert-success { background: rgba(16,185,129,0.15); color: var(--monster-green); border: 1px solid rgba(16,185,129,0.3); }
-        .alert-error   { background: rgba(239,68,68,0.15); color: var(--monster-red);   border: 1px solid rgba(239,68,68,0.3);  }
         .source-notice {
             padding: 0.75rem 1rem;
             border-radius: 8px;
@@ -84,16 +25,19 @@
             border: 1px solid rgba(245,158,11,0.3);
             font-size: 0.875rem;
             margin-bottom: 1rem;
-        }
-    </style>
-    <link rel="stylesheet" href="/assets/admin-edit-compact.css">
+        }</style>
 </head>
-<body class="admin-edit-page">
+<body>
     <ix-application force-breakpoint="lg">
     <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
+                <nav class="breadcrumb" aria-label="Breadcrumb">
+                    <a href="/pages/genai-providers.html">AI Providers</a>
+                    <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                    <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                </nav>
                 <h1 class="page-title" id="page-title">AI Provider</h1>
                 <p class="page-subtitle" id="page-subtitle">Configure a GenAI provider</p>
             </div>

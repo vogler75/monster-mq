@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MonsterMQ - Script Editor</title>
     <script type="module" src="/js/ix-init.js"></script>
-    <link rel="stylesheet" href="/assets/monster-theme.css">
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
     <script src="/js/sidebar.js"></script>
@@ -16,65 +15,6 @@
             display: flex;
             flex-direction: column;
             gap: 1.5rem;
-        }
-        .section-card {
-            background: var(--dark-surface);
-            border: 1px solid var(--dark-border);
-            border-radius: 12px;
-            box-shadow: var(--card-shadow);
-            overflow: hidden;
-        }
-        .section-header {
-            padding: 1.25rem 1.5rem;
-            background: var(--dark-bg);
-            border-bottom: 1px solid var(--dark-border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .section-header h2 {
-            margin: 0;
-            color: var(--text-primary);
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
-        .section-content {
-            padding: 1.5rem;
-        }
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.25rem;
-        }
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-        .form-group label {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-        .form-control {
-            background: var(--dark-bg);
-            border: 1px solid var(--dark-border);
-            color: var(--text-primary);
-            border-radius: 8px;
-            padding: 0.6rem 1rem;
-            font-size: 0.875rem;
-            outline: none;
-            transition: all 0.2s;
-        }
-        .form-control:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
-        }
-        .form-control:disabled {
-            background: rgba(71, 85, 105, 0.1);
-            color: var(--text-muted);
-            cursor: not-allowed;
-            border-color: rgba(71, 85, 105, 0.2);
         }
         .header-checkbox-wrapper {
             display: flex;
@@ -163,37 +103,6 @@
             border-radius: 8px;
             background: rgba(71, 85, 105, 0.08);
         }
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            border: 1px solid transparent;
-            cursor: pointer;
-            text-decoration: none;
-            padding: 0.6rem 1.25rem;
-            font-size: 0.875rem;
-        }
-        .btn svg {
-            flex-shrink: 0;
-        }
-        .btn-danger {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-        .btn-danger:hover {
-            background: #ef4444;
-            color: white;
-        }
-        .btn-small {
-            padding: 0.35rem 0.75rem;
-            font-size: 0.75rem;
-            border-radius: 6px;
-        }
         .code-actions-bar {
             display: flex;
             justify-content: space-between;
@@ -245,7 +154,7 @@
             border: 1px solid rgba(245, 158, 11, 0.25);
         }
         
-        /* Inline AI Generator Panel */
+        
         .ai-assistant-card {
             background: rgba(124, 58, 237, 0.05);
             border: 1px solid rgba(124, 58, 237, 0.2);
@@ -325,7 +234,7 @@
             color: #f87171;
         }
         
-        /* CSS styling rules for Shared Script Editor Modal styling overrides */
+        
         .script-editor-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); z-index: 15000;
@@ -385,8 +294,7 @@
         .script-editor-ai-feedback.loading { color: #94a3b8; }
         .script-editor-ai-feedback.success { color: #34d399; }
         .script-editor-ai-feedback.error { color: #f87171; }
-        .ai-explanation { margin-top: 4px; color: #94a3b8; font-style: italic; white-space: pre-line; }
-    </style>
+        .ai-explanation { margin-top: 4px; color: #94a3b8; font-style: italic; white-space: pre-line; }</style>
 </head>
 <body>
     <ix-application force-breakpoint="lg">
@@ -399,6 +307,11 @@
                 <div class="page-header">
                     <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
                         <div>
+                            <nav class="breadcrumb" aria-label="Breadcrumb">
+                                <a href="/pages/scripts.html">Scripts</a>
+                                <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                                <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                            </nav>
                             <h1 class="page-title" id="editor-title">New Script</h1>
                             <p class="page-subtitle" id="editor-subtitle">Create a simple, standalone script executed in the background</p>
                         </div>
