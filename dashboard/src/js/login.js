@@ -12,6 +12,10 @@
             this.guestAccess = document.getElementById('guest-access');
             this.guestLink = document.getElementById('guest-link');
             this.brokerConfigAccess = document.getElementById('broker-config-access');
+            this.rememberCredentialsWrap = document.getElementById('remember-credentials-wrap');
+            this.rememberCredentialsInput = document.getElementById('remember-credentials');
+            this.credentialStorageNote = document.getElementById('credential-storage-note');
+            this.credentialStorageAvailable = false;
             this.pendingLogin = false;
 
             this.bindEvents();
@@ -75,6 +79,8 @@
                 await window.brokerManager.ready();
                 await this.checkBrokerConfigApiAvailable();
                 this.populateBrokerSelect();
+                await this.initCredentialStorage();
+                await this.loadRememberedCredentials();
                 await this.checkUserManagementEnabled();
                 if (loginMessage) {
                     this.showAlert(loginMessage);
@@ -102,13 +108,67 @@
             });
         }
 
-        onBrokerSelectChange() {
+        async onBrokerSelectChange() {
             window.brokerManager.switchBroker(this.brokerSelect.value);
             this.hideGuestAccess();
             this.clearAlert();
+            await this.loadRememberedCredentials();
+            await this.checkUserManagementEnabled();
+        }
+
+        async initCredentialStorage() {
+            var credentialsApi = window.ElectronAPI?.credentials;
+            if (!window.isElectron || !credentialsApi) return;
+
+            try {
+                var status = await credentialsApi.status();
+                this.credentialStorageAvailable = status?.available === true;
+                if (this.credentialStorageAvailable) {
+                    this.rememberCredentialsWrap.style.display = 'flex';
+                    this.credentialStorageNote.style.display = 'none';
+                } else if (status?.message) {
+                    this.credentialStorageNote.textContent = status.message;
+                    this.credentialStorageNote.style.display = 'block';
+                }
+            } catch (error) {
+                console.warn('Secure credential storage is unavailable:', error);
+            }
+        }
+
+        async loadRememberedCredentials() {
             this.usernameInput.value = '';
             this.passwordInput.value = '';
-            this.checkUserManagementEnabled();
+            if (this.rememberCredentialsInput) {
+                this.rememberCredentialsInput.checked = false;
+            }
+
+            if (!this.credentialStorageAvailable) return;
+
+            var brokerName = this.brokerSelect.value;
+            if (!brokerName) return;
+
+            try {
+                var credentials = await window.ElectronAPI.credentials.read(brokerName);
+                if (!credentials) return;
+                this.usernameInput.value = credentials.username || '';
+                this.passwordInput.value = credentials.password || '';
+                this.rememberCredentialsInput.checked = true;
+            } catch (error) {
+                console.warn('Could not load remembered credentials:', error);
+            }
+        }
+
+        async persistCredentialChoice(username, password) {
+            if (!this.credentialStorageAvailable) return;
+
+            var brokerName = this.brokerSelect.value;
+            if (!brokerName) return;
+
+            if (this.rememberCredentialsInput.checked && username && password) {
+                await window.ElectronAPI.credentials.save(brokerName, username, password);
+            } else {
+                await window.ElectronAPI.credentials.remove(brokerName);
+            }
         }
 
         getGraphqlEndpoint() {
@@ -361,6 +421,12 @@
                 safeStorage.setItem('monstermq_isAdmin', result.token === null ? 'false' : String(result.isAdmin));
                 safeStorage.setItem('monstermq_userManagementEnabled', result.token === null ? 'false' : 'true');
                 window.brokerManager.saveAuthForBroker();
+
+                try {
+                    await this.persistCredentialChoice(username, password);
+                } catch (error) {
+                    console.warn('Login succeeded, but credentials could not be remembered:', error);
+                }
 
                 this.showAlert(result.token === null ? 'Authentication disabled. Opening dashboard...' : 'Login successful. Opening dashboard...', 'success');
                 setTimeout(function() {

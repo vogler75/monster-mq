@@ -124,6 +124,28 @@
             opacity: 0.7;
             cursor: wait;
         }
+        .remember-credentials {
+            align-items: center;
+            gap: 0.55rem;
+            margin: -0.15rem 0 1rem;
+            color: var(--theme-color-soft-text);
+            font-size: 0.82rem;
+        }
+        .remember-credentials input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            accent-color: var(--theme-color-primary);
+        }
+        .remember-credentials label {
+            cursor: pointer;
+        }
+        .credential-storage-note {
+            margin: -0.15rem 0 1rem;
+            color: var(--theme-color-soft-text);
+            font-size: 0.78rem;
+            line-height: 1.4;
+        }
         .guest-separator {
             color: var(--theme-color-soft-text);
             font-size: 0.8rem;
@@ -259,6 +281,13 @@
                     <label for="password">Password</label>
                     <input type="password" id="password" name="password" class="form-control" autocomplete="current-password" placeholder="Password">
                 </div>
+
+                <div id="remember-credentials-wrap" class="remember-credentials" style="display:none;">
+                    <input type="checkbox" id="remember-credentials">
+                    <label for="remember-credentials">Remember credentials securely on this device</label>
+                </div>
+
+                <p id="credential-storage-note" class="credential-storage-note" style="display:none;"></p>
 
                 <button type="submit" id="login-btn" class="login-submit">Sign In</button>
             </form>

@@ -1,9 +1,52 @@
-const { app, BrowserWindow, protocol, ipcMain } = require('electron');
+const { app, BrowserWindow, protocol, ipcMain, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const getConfigPath = () => {
   return path.join(app.getPath('userData'), 'config.json');
+};
+
+const getCredentialsPath = () => {
+  return path.join(app.getPath('userData'), 'credentials.json');
+};
+
+const isTrustedRendererUrl = (rawUrl) => {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol === 'app:' && url.hostname === 'dist') {
+      return true;
+    }
+    return isDev &&
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      url.port === '5173';
+  } catch (_) {
+    return false;
+  }
+};
+
+const assertTrustedIpcSender = (event) => {
+  const senderUrl = event.senderFrame?.url || event.sender?.getURL() || '';
+  if (!isTrustedRendererUrl(senderUrl)) {
+    throw new Error('IPC request rejected from an untrusted renderer');
+  }
+};
+
+const assertLoginIpcSender = (event) => {
+  assertTrustedIpcSender(event);
+  const senderUrl = event.senderFrame?.url || event.sender?.getURL() || '';
+  if (new URL(senderUrl).pathname !== '/pages/login.html') {
+    throw new Error('Credential request rejected outside the login page');
+  }
+};
+
+const validateBrokerName = (name) => {
+  if (typeof name !== 'string' || !name.trim() || name.length > 128) {
+    throw new Error('Invalid broker name');
+  }
+  return name.trim();
 };
 
 const readConfig = () => {
@@ -39,19 +82,183 @@ const writeConfig = (config) => {
   }
 };
 
+const getCredentialStorageStatus = () => {
+  if (!safeStorage.isEncryptionAvailable()) {
+    return {
+      available: false,
+      message: 'Operating-system credential encryption is not available.'
+    };
+  }
+
+  const backend = process.platform === 'linux' &&
+    typeof safeStorage.getSelectedStorageBackend === 'function'
+    ? safeStorage.getSelectedStorageBackend()
+    : null;
+
+  if (backend === 'basic_text') {
+    return {
+      available: false,
+      message: 'No Linux secret store is available; plaintext fallback is disabled.'
+    };
+  }
+
+  return { available: true, backend };
+};
+
+const readCredentialStore = () => {
+  const filePath = getCredentialsPath();
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { version: 1, entries: [] };
+    }
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (parsed?.version !== 1 || !Array.isArray(parsed.entries)) {
+      throw new Error('Unsupported credential store format');
+    }
+    return {
+      version: 1,
+      entries: parsed.entries.filter((entry) =>
+        entry &&
+        typeof entry.broker === 'string' &&
+        typeof entry.encrypted === 'string'
+      )
+    };
+  } catch (error) {
+    console.error('Error reading encrypted desktop credentials:', error);
+    return { version: 1, entries: [] };
+  }
+};
+
+const writeCredentialStore = (store) => {
+  const filePath = getCredentialsPath();
+  const dir = path.dirname(filePath);
+  const tempPath = `${filePath}.${process.pid}.tmp`;
+
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  }
+
+  try {
+    fs.writeFileSync(tempPath, JSON.stringify(store, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    fs.renameSync(tempPath, filePath);
+    fs.chmodSync(filePath, 0o600);
+  } finally {
+    if (fs.existsSync(tempPath)) {
+      fs.unlinkSync(tempPath);
+    }
+  }
+};
+
+const readCredential = (brokerName) => {
+  const status = getCredentialStorageStatus();
+  if (!status.available) return null;
+
+  const broker = validateBrokerName(brokerName);
+  const entry = readCredentialStore().entries.find((item) => item.broker === broker);
+  if (!entry) return null;
+
+  try {
+    const decrypted = safeStorage.decryptString(Buffer.from(entry.encrypted, 'base64'));
+    const credentials = JSON.parse(decrypted);
+    if (
+      typeof credentials.username !== 'string' ||
+      typeof credentials.password !== 'string'
+    ) {
+      throw new Error('Invalid credential payload');
+    }
+    return credentials;
+  } catch (error) {
+    console.error(`Could not decrypt credentials for broker "${broker}":`, error);
+    return null;
+  }
+};
+
+const saveCredential = (brokerName, credentials) => {
+  const status = getCredentialStorageStatus();
+  if (!status.available) {
+    throw new Error(status.message);
+  }
+
+  const broker = validateBrokerName(brokerName);
+  if (
+    !credentials ||
+    typeof credentials.username !== 'string' ||
+    typeof credentials.password !== 'string' ||
+    credentials.username.length > 1024 ||
+    credentials.password.length > 4096
+  ) {
+    throw new Error('Invalid credentials');
+  }
+
+  const encrypted = safeStorage
+    .encryptString(JSON.stringify({
+      username: credentials.username,
+      password: credentials.password
+    }))
+    .toString('base64');
+  const store = readCredentialStore();
+  const existingIndex = store.entries.findIndex((entry) => entry.broker === broker);
+  const entry = { broker, encrypted };
+
+  if (existingIndex >= 0) {
+    store.entries[existingIndex] = entry;
+  } else {
+    store.entries.push(entry);
+  }
+  writeCredentialStore(store);
+  return true;
+};
+
+const removeCredential = (brokerName) => {
+  const broker = validateBrokerName(brokerName);
+  const store = readCredentialStore();
+  const entries = store.entries.filter((entry) => entry.broker !== broker);
+  if (entries.length !== store.entries.length) {
+    store.entries = entries;
+    writeCredentialStore(store);
+  }
+  return true;
+};
+
 // Register IPC handlers for configuration management
-ipcMain.handle('desktop-config:read', () => {
+ipcMain.handle('desktop-config:read', (event) => {
+  assertTrustedIpcSender(event);
   return readConfig();
 });
 
 ipcMain.handle('desktop-config:write', (event, config) => {
+  assertTrustedIpcSender(event);
   return writeConfig(config);
 });
 
 ipcMain.handle('desktop-config:set-active-broker', (event, name) => {
+  assertTrustedIpcSender(event);
   const config = readConfig();
-  config.activeBroker = name;
+  config.activeBroker = validateBrokerName(name);
   return writeConfig(config);
+});
+
+ipcMain.handle('desktop-credentials:status', (event) => {
+  assertLoginIpcSender(event);
+  return getCredentialStorageStatus();
+});
+
+ipcMain.handle('desktop-credentials:read', (event, brokerName) => {
+  assertLoginIpcSender(event);
+  return readCredential(brokerName);
+});
+
+ipcMain.handle('desktop-credentials:save', (event, brokerName, credentials) => {
+  assertLoginIpcSender(event);
+  return saveCredential(brokerName, credentials);
+});
+
+ipcMain.handle('desktop-credentials:remove', (event, brokerName) => {
+  assertLoginIpcSender(event);
+  return removeCredential(brokerName);
 });
 
 // Register 'app' as a standard and secure scheme
@@ -68,11 +275,20 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false
     }
   });
 
-  const isDev = process.env.NODE_ENV === 'development';
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!isTrustedRendererUrl(targetUrl)) {
+      event.preventDefault();
+    }
+  });
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
@@ -116,11 +332,12 @@ app.whenReady().then(() => {
     }
 
     // Resolve full path relative to the dashboard directory
-    const filePath = path.normalize(path.join(__dirname, '../dist', relativePath));
-    const distDir = path.normalize(path.join(__dirname, '../dist'));
+    const distDir = path.resolve(__dirname, '../dist');
+    const filePath = path.resolve(distDir, relativePath);
+    const pathWithinDist = path.relative(distDir, filePath);
 
     // Prevent directory traversal attacks
-    if (!filePath.startsWith(distDir)) {
+    if (pathWithinDist.startsWith('..') || path.isAbsolute(pathWithinDist)) {
       return new Response('Access Denied', { status: 403 });
     }
 

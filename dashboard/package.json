@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "electron": "^42.4.1",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.15.7",
     "vite": "^6.4.2"
   },
   "build": {
