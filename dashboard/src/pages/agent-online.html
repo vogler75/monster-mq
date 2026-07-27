@@ -14,46 +14,55 @@
     <style>
         .graph-controls {
             display: flex;
-            gap: 1rem;
-            align-items: center;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        .graph-controls label {
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-right: 0.3rem;
-        }
-        .graph-controls select, .graph-controls button {
-            padding: 0.4rem 0.8rem;
+            align-items: flex-end;
+            gap: var(--sp-3);
+            margin-bottom: var(--sp-3);
+            padding: var(--sp-3) var(--sp-4);
             background: var(--dark-surface);
             border: 1px solid var(--dark-border);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.85rem;
-            cursor: pointer;
+            border-radius: var(--r-md);
+            flex-wrap: wrap;
         }
-        .graph-controls select:focus { outline: none; border-color: var(--monster-purple); }
-        .graph-controls button:hover { background: var(--dark-surface-2); }
+
+        .graph-control,
         .tag-filter-group {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: var(--sp-1);
+        }
+
+        .graph-control label,
+        .tag-filter-group > label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .graph-control select { min-width: 116px; }
+
+        .tag-filter-group {
+            flex: 1 1 320px;
+            min-width: 280px;
+        }
+
+        .tag-filter-row {
+            display: flex;
             align-items: center;
-            gap: 0.5rem;
-            min-width: 240px;
+            gap: var(--sp-2);
+            min-width: 0;
         }
-        .namespace-filter {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-        }
-        .namespace-filter select {
-            min-width: 110px;
-        }
+
+        .tag-filter-row select { width: 88px; flex: 0 0 auto; }
+
         .tag-chip-list {
             display: flex;
+            align-items: center;
             flex-wrap: wrap;
-            gap: 0.4rem;
+            gap: var(--sp-1);
+            flex: 1 1 auto;
+            min-height: var(--h-md);
         }
         .graph-controls .tag-chip {
             display: inline-flex;
@@ -144,6 +153,23 @@
             font-size: 0.8rem;
             color: var(--text-muted);
             margin-left: auto;
+            min-height: var(--h-md);
+            padding-left: var(--sp-2);
+        }
+
+        @media (max-width: 820px) {
+            .graph-controls { align-items: stretch; }
+            .tag-filter-group { flex-basis: 100%; }
+            .ws-status { margin-left: 0; }
+        }
+
+        @media (max-width: 560px) {
+            .graph-controls { padding: var(--sp-3); }
+            .graph-control,
+            .tag-filter-group { flex: 1 1 100%; }
+            .graph-control select { width: 100%; }
+            .tag-filter-row { flex-wrap: wrap; }
+            .tag-filter-row select { width: 100%; }
         }
         .ws-dot {
             width: 8px;
@@ -166,20 +192,20 @@
             </div>
 
             <div class="graph-controls">
-                <div>
+                <div class="graph-control">
                     <label for="layout-type">Layout:</label>
                     <select id="layout-type" onchange="agentGraph.onLayoutChange()">
                         <option value="force">Force</option>
                         <option value="circular" selected>Circular</option>
                     </select>
                 </div>
-                <div class="namespace-filter">
+                <div class="graph-control">
                     <label for="org-filter">Org:</label>
                     <select id="org-filter" onchange="agentGraph.onNamespaceFilterChange()">
                         <option value="">All</option>
                     </select>
                 </div>
-                <div class="namespace-filter">
+                <div class="graph-control">
                     <label for="site-filter">Site:</label>
                     <select id="site-filter" onchange="agentGraph.onNamespaceFilterChange()">
                         <option value="">All</option>
@@ -187,16 +213,18 @@
                 </div>
                 <div class="tag-filter-group">
                     <label for="tag-filter-mode">Tags:</label>
-                    <select id="tag-filter-mode" onchange="agentGraph.onTagFilterModeChange(this.value)">
-                        <option value="OR">OR</option>
-                        <option value="AND">AND</option>
-                    </select>
-                    <div id="tag-filter-list" class="tag-chip-list">
-                        <span style="color: var(--text-muted); font-size: 0.85rem;">No tags</span>
+                    <div class="tag-filter-row">
+                        <select id="tag-filter-mode" onchange="agentGraph.onTagFilterModeChange(this.value)">
+                            <option value="OR">OR</option>
+                            <option value="AND">AND</option>
+                        </select>
+                        <div id="tag-filter-list" class="tag-chip-list">
+                            <span style="color: var(--text-muted); font-size: 0.85rem;">No tags</span>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-small" onclick="agentGraph.clearTagFilters()">Clear</button>
                     </div>
-                    <button type="button" onclick="agentGraph.clearTagFilters()">Clear</button>
                 </div>
-                <button onclick="agentGraph.refresh()">
+                <button class="btn btn-secondary" onclick="agentGraph.refresh()">
                     <ix-icon name="refresh" size="16"></ix-icon> Refresh
                 </button>
                 <span class="ws-status" id="ws-status">
