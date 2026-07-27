@@ -1,0 +1,31 @@
+Release v1.8.25
+Built from commit: 3bd79a89
+Date: 2026-07-27 11:01:32
+
+Changes since v1.8.24:
+---
+3bd79a89 Update PostgreSQL JDBC driver
+2871da6c Secure Electron credential storage
+0bcb3d96 Fix empty broker config error banner
+767387c6 Move topic browser controls to headers
+33419758 Improve topic browser controls
+0ce23a71 Add broker switcher logout
+a879407e Standardize dashboard empty states
+d416e9c1 Update opcua-servers.js
+898dca99 Fix OPC UA server hostname fallback
+ca57befa Align agent network filter controls
+8646b964 Standardize primary action styling
+718020f3 Merge remote-tracking branch 'origin/feature/dashboard-design-system'
+623aa9b4 Polish broker configuration page
+3c188a06 fix(dashboard): make buttons, saves and deletes consistent across pages
+cf6f83e8 Merge branch 'main' into feature/dashboard-design-system
+f020fe33 fix(graphql): do not require a live metrics reply to list brokers
+326d4cfc refactor(dashboard): unify pages on a shared design system
+b7f75b41 feat(zenoh): add support for Zenoh queryables with consolidated wildcard replies and fix standalone node metrics address
+3dfe205e Merge branch 'develop-zenoh' into develop
+33d292d6 Rename Zenoh Prefix to RemotePrefix for LocalPrefix configuration symmetry
+54562924 Add LocalPrefix translation and optional empty Prefix support to Zenoh federation
+e96f5522 Refactor Zenoh federation to adopt modular design and subscription optimizations
+5f1b2119 Implement Eclipse Zenoh message federation transport and loop prevention
+ac342b46 Revert "Require docker buildx in build script and remove legacy fallback"
+47ddd9e0 Require docker buildx in build script and remove legacy fallback
