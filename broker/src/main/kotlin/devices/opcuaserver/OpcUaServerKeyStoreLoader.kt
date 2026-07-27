@@ -3,7 +3,6 @@ package at.rocworks.devices.opcuaserver
 import at.rocworks.Utils
 import org.eclipse.milo.opcua.stack.core.util.SelfSignedCertificateBuilder
 import org.eclipse.milo.opcua.stack.core.util.SelfSignedCertificateGenerator
-import java.net.InetAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -15,7 +14,8 @@ import java.util.regex.Pattern
  * Handles loading and generation of certificates for OPC UA Server
  */
 class OpcUaServerKeyStoreLoader(
-    private val config: OpcUaServerConfig
+    private val config: OpcUaServerConfig,
+    private val endpointHostname: String
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -78,33 +78,14 @@ class OpcUaServerKeyStoreLoader(
                 .addDnsName("localhost")
                 .addIpAddress("127.0.0.1")
 
-            // Add all local hostnames and IP addresses
-            val localHost = InetAddress.getLocalHost()
-            builder.addDnsName(localHost.hostName)
-            builder.addIpAddress(localHost.hostAddress)
+            addSubjectAlternativeName(builder, endpointHostname)
 
-            // Get all network interfaces
-            try {
-                val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
-                while (interfaces.hasMoreElements()) {
-                    val networkInterface = interfaces.nextElement()
-                    if (networkInterface.isUp && !networkInterface.isLoopback) {
-                        val addresses = networkInterface.inetAddresses
-                        while (addresses.hasMoreElements()) {
-                            val address = addresses.nextElement()
-                            val hostAddress = address.hostAddress
-                            // Skip IPv6 link-local addresses
-                            if (!hostAddress.contains("%")) {
-                                if (IP_ADDR_PATTERN.matcher(hostAddress).matches()) {
-                                    logger.info("Adding IP to certificate: $hostAddress")
-                                    builder.addIpAddress(hostAddress)
-                                }
-                            }
-                        }
-                    }
+            OpcUaServerNetworkIdentity.getLocalAddresses().forEach { address ->
+                val hostAddress = address.hostAddress
+                if (IP_ADDR_PATTERN.matcher(hostAddress).matches()) {
+                    logger.info("Adding IP to certificate: $hostAddress")
+                    builder.addIpAddress(hostAddress)
                 }
-            } catch (e: Exception) {
-                logger.warning("Error getting network interfaces: ${e.message}")
             }
 
             val certificate = builder.build()
@@ -137,5 +118,16 @@ class OpcUaServerKeyStoreLoader(
 
         logger.info("Certificate loaded successfully for OPC UA Server '${config.name}'.")
         return this
+    }
+
+    private fun addSubjectAlternativeName(
+        builder: SelfSignedCertificateBuilder,
+        hostname: String
+    ) {
+        if (IP_ADDR_PATTERN.matcher(hostname).matches() || hostname.contains(":")) {
+            builder.addIpAddress(hostname)
+        } else if (hostname != "localhost") {
+            builder.addDnsName(hostname)
+        }
     }
 }

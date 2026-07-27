@@ -16,7 +16,6 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
 import org.eclipse.milo.opcua.stack.transport.server.OpcServerTransportFactory
 import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransport
 import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransportConfig
-import java.net.InetAddress
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -142,10 +141,20 @@ class OpcUaServerInstance(
      * Create OPC UA server configuration with security support
      */
     private fun createServerConfig(): org.eclipse.milo.opcua.sdk.server.OpcUaServerConfig {
+        val hostnameResolution = OpcUaServerNetworkIdentity.resolve(config.hostname)
+        val hostname = hostnameResolution.hostname
+        hostnameResolution.autoDetectionError?.let { error ->
+            logger.warning(
+                "Unable to resolve the system hostname for OPC UA endpoint: $error. " +
+                    "Using '$hostname' instead. Configure 'hostname' explicitly if clients " +
+                    "cannot reach this address."
+            )
+        }
+
         // Load certificates if security is enabled
         val certificateInfo = if (config.security.securityPolicies.any { it != "None" }) {
             try {
-                keyStoreLoader = OpcUaServerKeyStoreLoader(config)
+                keyStoreLoader = OpcUaServerKeyStoreLoader(config, hostname)
                 keyStoreLoader?.load()
                 Triple(
                     keyStoreLoader?.serverCertificate,
@@ -164,7 +173,6 @@ class OpcUaServerInstance(
 
         // Build endpoints based on security configuration
         val endpoints = mutableSetOf<EndpointConfig>()
-        val hostname = config.hostname ?: InetAddress.getLocalHost().hostName
         val bindAddress = config.bindAddress ?: "0.0.0.0"
         val path = "/${config.path}"
 
