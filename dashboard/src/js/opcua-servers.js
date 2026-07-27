@@ -108,6 +108,7 @@ function createServerRow(server) {
 
     const serverStatus = server.status ? server.status.status : (server.enabled ? 'UNKNOWN' : 'DISABLED');
     const statusBadge = createStatusBadge(serverStatus);
+    const nodeIndicator = server.isOnCurrentNode ? '📍 ' : '';
 
     row.innerHTML = `
         <td>
@@ -117,7 +118,9 @@ function createServerRow(server) {
         <td>${server.port}</td>
         <td>${escapeHtml(server.namespace || 'N/A')}</td>
         <td>
-            <span class="node-badge">${escapeHtml(server.nodeId)}</span>
+            <div class="node-assignment">
+                ${nodeIndicator}${escapeHtml(server.nodeId)}
+            </div>
         </td>
         <td>${statusBadge}</td>
         <td>
