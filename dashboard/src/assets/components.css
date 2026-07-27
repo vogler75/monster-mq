@@ -852,8 +852,11 @@ textarea {
 /* One primary action per view. Flat, not gradient — the gradient was competing
    with the metric cards and the sidebar for attention. */
 .btn-primary {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
+    /* Primary actions should read as confident, not fluorescent. A muted
+       industrial blue carries the create/save affordance without competing
+       with status colours or the purple brand accents elsewhere. */
+    background: #286d8e;
+    border-color: #286d8e;
     /* Pages inject their local styles after this sheet. Keep the foreground
        legible even when a legacy link or icon rule sets an accent colour. */
     color: #fff !important;
@@ -866,8 +869,13 @@ textarea {
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: var(--monster-dark);
-    border-color: var(--monster-dark);
+    background: #205b77;
+    border-color: #205b77;
+}
+
+.btn-primary:focus-visible {
+    outline: 2px solid rgba(82, 181, 225, 0.85);
+    outline-offset: 2px;
 }
 
 .btn-secondary {
