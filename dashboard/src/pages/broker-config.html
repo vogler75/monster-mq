@@ -6,6 +6,8 @@
     <title>MonsterMQ - Broker Configuration</title>
     <script type="module" src="/js/ix-init.js"></script>
     <link rel="stylesheet" href="/assets/ix-init.css">
+    <link rel="stylesheet" href="/assets/monster-theme.css">
+    <link rel="stylesheet" href="/assets/components.css">
     <script src="/js/storage.js"></script>
     <script src="/js/broker-manager.js"></script>
     <style>
@@ -16,18 +18,20 @@
         body {
             margin: 0;
             min-height: 100vh;
-            background: var(--theme-color-1);
-            color: var(--theme-color-std-text);
+            background:
+                radial-gradient(circle at top right, rgba(124, 58, 237, 0.13), transparent 32rem),
+                var(--dark-bg);
+            color: var(--text-primary);
         }
 
         .broker-config-page {
             min-height: 100vh;
-            padding: 1.5rem;
+            padding: 2rem 1.5rem 3rem;
             box-sizing: border-box;
         }
 
         .broker-config-shell {
-            max-width: 1120px;
+            max-width: 1060px;
             margin: 0 auto;
         }
 
@@ -36,22 +40,55 @@
             align-items: center;
             justify-content: space-between;
             gap: 1rem;
-            margin-bottom: 1rem;
+            margin-bottom: 2.5rem;
         }
 
         .page-back-link {
-            color: var(--theme-color-soft-text);
+            color: var(--text-secondary);
             text-decoration: none;
-            font-size: 0.875rem;
+            font-size: 0.82rem;
+            font-weight: 600;
             display: inline-flex;
             align-items: center;
             gap: 0.45rem;
-            min-height: 36px;
+            min-height: var(--h-md);
+            padding: 0 var(--sp-2);
+            border-radius: var(--r-sm);
+            transition: color 0.15s ease, background-color 0.15s ease;
         }
 
         .page-back-link:hover {
-            color: var(--theme-color-primary);
-            text-decoration: underline;
+            color: var(--text-primary);
+            text-decoration: none;
+            background: var(--dark-surface-2);
+        }
+
+        .broker-config-heading {
+            max-width: 680px;
+            margin-bottom: 2rem;
+        }
+
+        .broker-config-heading .page-title {
+            font-size: clamp(1.7rem, 3vw, 2.25rem);
+            letter-spacing: -0.02em;
+        }
+
+        .broker-config-heading .page-subtitle {
+            max-width: 62ch;
+            font-size: 0.95rem;
+            margin-top: var(--sp-2);
+        }
+
+        .config-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--sp-2);
+            margin-bottom: var(--sp-3);
+            color: var(--monster-light);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .settings-grid {
@@ -219,12 +256,20 @@
 
         .lock-notice {
             margin: 0 0 1rem 0;
-            padding: 1rem;
-            background: var(--theme-color-2);
-            border: 1px dashed var(--theme-color-soft-bdr);
-            border-radius: 8px;
-            color: var(--theme-color-soft-text);
-            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: var(--sp-2);
+            padding: var(--sp-3) var(--sp-4);
+            background: var(--c-accent-bg);
+            border: 1px solid var(--c-accent-bd);
+            border-radius: var(--r-md);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .lock-notice ix-icon {
+            color: var(--monster-light);
+            flex: 0 0 auto;
         }@media (max-width: 1180px) {
             .broker-row {
                 grid-template-columns: 1fr;
@@ -240,8 +285,6 @@
             .broker-config-page {
                 padding: 1rem;
             }
-            .page-topbar,
-            .section-header,
             .settings-grid {
                 align-items: stretch;
                 flex-direction: column;
@@ -263,7 +306,7 @@
             .broker-actions .btn {
                 width: 100%;
             }
-}</style>
+        }</style>
 </head>
 <body>
     <div class="broker-config-page">
@@ -275,7 +318,8 @@
                 </a>
             </div>
 
-            <div class="page-header">
+            <div class="broker-config-heading">
+                <div class="config-eyebrow"><ix-icon name="lock" size="16"></ix-icon> Dashboard setup</div>
                 <h1 class="page-title">Broker Configuration</h1>
                 <p class="page-subtitle">Manage broker endpoints used by this dashboard instance. The editor is locked until the admin token is verified.</p>
             </div>
@@ -296,14 +340,15 @@
                             <div class="helper-text">Required to unlock this page. The broker list is not loaded into the editor until the token is verified.</div>
                         </div>
                         <div class="token-actions">
-                            <button id="save-token-btn" class="btn btn-secondary" disabled>Unlock configuration</button>
+                            <button id="save-token-btn" class="btn btn-primary" disabled><ix-icon name="lock" size="16"></ix-icon> Unlock configuration</button>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div id="broker-editor-lock-notice" class="lock-notice">
-                Enter the admin token to unlock broker configuration.
+                <ix-icon name="lock" size="18"></ix-icon>
+                <span>Enter the admin token to unlock broker configuration.</span>
             </div>
 
             <div id="broker-editor" style="display:none;">
@@ -311,8 +356,8 @@
                     <div class="section-header">
                         <h2>Broker List</h2>
                         <div class="section-header-actions">
-                            <button id="refresh-brokers-btn" class="btn btn-secondary">Refresh</button>
-                            <button id="add-broker-btn" class="btn btn-secondary">Add Broker</button>
+                            <button id="refresh-brokers-btn" class="btn btn-secondary"><ix-icon name="refresh" size="16"></ix-icon> Refresh</button>
+                            <button id="add-broker-btn" class="btn btn-secondary"><ix-icon name="add-circle" size="16"></ix-icon> Add Broker</button>
                         </div>
                     </div>
                     <div class="section-content">

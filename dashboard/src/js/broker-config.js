@@ -113,7 +113,20 @@ class BrokerConfigManager {
         if (loading) loading.style.display = show ? 'flex' : 'none';
     }
 
-    showError(message) { ui.showError(message); }
+    showError(message) {
+        // This page can be opened outside the dashboard SPA, where ui.js is
+        // deliberately not loaded. Fall back to its own error banner there.
+        if (window.ui && typeof window.ui.showError === 'function') {
+            window.ui.showError(message);
+            return;
+        }
+
+        var banner = document.getElementById('error-message');
+        if (!banner) return;
+        var text = banner.querySelector('.error-text');
+        if (text) text.textContent = message || '';
+        banner.style.display = message ? 'block' : 'none';
+    }
 
     clearStatus() {
         this.showStatus('');
