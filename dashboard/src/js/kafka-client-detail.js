@@ -271,7 +271,7 @@ class KafkaClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.kafkaClient.create.success) {
                     this.showSuccess(`Kafka client "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/kafka-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/kafka-client-detail.html?client=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     const errors = result.kafkaClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create Kafka client: ' + errors.join(', '));

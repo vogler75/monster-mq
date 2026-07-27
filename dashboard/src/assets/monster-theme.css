@@ -101,7 +101,7 @@ body {
 
 /* ================================ Login page ============================= */
 /* login.html is served standalone, outside the SPA shell, and loads only this
-   stylesheet — so it keeps its own form and button primitives. */
+   stylesheet — so it keeps its own form primitives. */
 
 .login-container {
     display: flex;
@@ -150,8 +150,11 @@ body {
     font-size: 0.875rem;
 }
 
-/* Form and button primitives for the login page. Inside the SPA these are
-   superseded by components.css. */
+/* Form primitives for the login page. Inside the SPA these are superseded by
+   components.css. No .btn rules here: login.html styles its own submit button
+   (.login-submit), and a .btn rule in this file leaks into every SPA page —
+   properties components.css does not happen to redefine (width, border) win,
+   which is what made .btn-primary render full-width on the table headers. */
 
 .form-group {
     margin-bottom: 1.5rem;
@@ -179,38 +182,6 @@ body {
     outline: none;
     border-color: var(--monster-purple);
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
-}
-
-.btn {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.3s;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.btn-primary {
-    background: var(--gradient-primary);
-    color: white;
-    width: 100%;
-}
-
-.btn-secondary {
-    background: var(--dark-surface-2);
-    color: var(--text-primary);
-    border: 1px solid var(--dark-border);
-}
-
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
 }
 
 .alert {

@@ -429,8 +429,13 @@ async function saveDecoder(event) {
         const response = isEditMode ? result.sparkplugBDecoder?.update : result.sparkplugBDecoder?.create;
 
         if (response?.success) {
-            showSuccess('Decoder saved successfully');
-            setTimeout(() => { window.spaLocation.href = '/pages/sparkplugb-decoders.html'; }, 800);
+            if (isEditMode) {
+                showSuccess('Decoder updated successfully');
+                await loadDecoder();
+            } else {
+                showSuccess(`Decoder "${input.name}" created successfully`);
+                setTimeout(() => { window.spaLocation.href = `/pages/sparkplugb-decoder-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
+            }
         } else {
             showError('Failed to save decoder: ' + (response?.errors?.join(', ') || 'Unknown error'));
         }

@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     
@@ -61,8 +62,8 @@
                 <div class="table-header">
                     <div class="table-title"><h2>Kafka Clients</h2></div>
                     <div class="table-actions">
-                        <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshKafkaClients()" title="Refresh clients"></ix-icon-button>
-                        <a href="/pages/kafka-client-detail.html?new=true" class="btn btn-primary" style="text-decoration:none;"><ix-icon name="add-circle" size="16"></ix-icon> Add Client</a>
+                        <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="refreshKafkaClients()" title="Refresh clients"></ix-icon-button>
+                        <a href="/pages/kafka-client-detail.html?new=true" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add Client</a>
                     </div>
                 </div>
                 <table>

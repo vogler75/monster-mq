@@ -421,8 +421,8 @@ class OpcUaDeviceDetailManager {
                 </td>
                 <td>
                     <div class="action-buttons" style="display:flex; gap:0.25rem;">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="deviceDetailManager.editAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="deviceDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="16" title="Edit Address" onclick="deviceDetailManager.editAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="16" class="btn-delete" title="Delete Address" onclick="deviceDetailManager.deleteAddress('${this.escapeHtml(address.address)}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -465,11 +465,11 @@ class OpcUaDeviceDetailManager {
                 ${start.toLocaleString()}&ndash;${end.toLocaleString()} of ${totalItems.toLocaleString()} addresses
             </span>
             <span style="display:flex;gap:0.25rem;align-items:center;">
-                <ix-icon-button icon="chevron-left-small" ghost size="16" title="Previous page"
+                <ix-icon-button variant="subtle-tertiary" icon="chevron-left-small" size="16" title="Previous page"
                     ${current === 0 ? 'disabled' : ''}
                     onclick="deviceDetailManager.goToAddressPage(${current - 1})"></ix-icon-button>
                 ${pageButtons}
-                <ix-icon-button icon="chevron-right-small" ghost size="16" title="Next page"
+                <ix-icon-button variant="subtle-tertiary" icon="chevron-right-small" size="16" title="Next page"
                     ${current >= totalPages - 1 ? 'disabled' : ''}
                     onclick="deviceDetailManager.goToAddressPage(${current + 1})"></ix-icon-button>
             </span>
@@ -777,7 +777,7 @@ class OpcUaDeviceDetailManager {
                 const result = await this.client.query(mutation, { input: deviceData });
                 if (result.opcUaDevice.add.success) {
                     this.showSuccess(`Device "${deviceData.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/opcua-devices.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/opcua-device-detail.html?device=${encodeURIComponent(deviceData.name)}`; }, 800);
                 } else {
                     const errors = result.opcUaDevice.add.errors || ['Unknown error'];
                     this.showError('Failed to create device: ' + errors.join(', '));

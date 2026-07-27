@@ -65,12 +65,12 @@ function renderDecoders(decoders) {
                 <td class="metric-value-table">${formatNumber(metrics.messagesSkipped || 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit" onclick="viewDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit" onclick="viewDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
                         ${decoder.enabled
-                            ? `<ix-icon-button icon="pause" variant="primary" ghost size="24" title="Disable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)"></ix-icon-button>`
-                            : `<ix-icon-button icon="play" variant="primary" ghost size="24" title="Enable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)"></ix-icon-button>`
+                            ? `<ix-icon-button icon="pause" variant="subtle-tertiary" size="24" title="Disable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', false)"></ix-icon-button>`
+                            : `<ix-icon-button icon="play" variant="subtle-tertiary" size="24" title="Enable Decoder" onclick="toggleDecoder('${escapeHtml(decoder.name)}', true)"></ix-icon-button>`
                         }
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="deleteDecoder('${escapeHtml(decoder.name)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>

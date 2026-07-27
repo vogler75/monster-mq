@@ -151,7 +151,7 @@ class KafkaGroupsManager {
                 <td>${dateStr}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Remove consumer group" onclick="kafkaGroupsManager.deleteGroup('${group.groupId}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Remove consumer group" onclick="kafkaGroupsManager.deleteGroup('${group.groupId}')"></ix-icon-button>
                     </div>
                 </td>
             `;

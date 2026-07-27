@@ -195,8 +195,8 @@ class RedisClientDetailManager {
                 <td>${patternInfo}</td>
                 <td>${addr.removePath ? '\u2713' : '\u2014'}</td>
                 <td><div class="action-buttons">
-                    <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit" onclick="redisDetailManager.showEditAddressModal(${idx})"></ix-icon-button>
-                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete" onclick="redisDetailManager.removeAddress(${idx})"></ix-icon-button>
+                    <ix-icon-button icon="pen" variant="subtle-tertiary" size="16" title="Edit" onclick="redisDetailManager.showEditAddressModal(${idx})"></ix-icon-button>
+                    <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="16" class="btn-delete" title="Delete" onclick="redisDetailManager.removeAddress(${idx})"></ix-icon-button>
                 </div></td>
             </tr>`;
         }).join('');
@@ -453,7 +453,7 @@ class RedisClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.redisClient.create.success) {
                     this.showSuccess(`Redis client "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/redis-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/redis-client-detail.html?client=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     this.showError('Failed to create Redis client: ' + (result.redisClient.create.errors || []).join(', '));
                 }

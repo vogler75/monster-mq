@@ -122,10 +122,10 @@ function createServerRow(server) {
         <td>${statusBadge}</td>
         <td>
             <div class="action-buttons">
-                <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
-                <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="primary" ghost size="24" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
-                <ix-icon-button icon="certificate" variant="primary" ghost size="24" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
-                <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Server" onclick="editServer('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'play' : 'pause'}" variant="subtle-tertiary" size="24" title="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? 'Start Server' : 'Stop Server'}" onclick="${serverStatus === 'STOPPED' || serverStatus === 'DISABLED' || serverStatus === 'UNKNOWN' ? `startServer('${escapeHtml(server.name)}')` : `stopServer('${escapeHtml(server.name)}')`}"></ix-icon-button>
+                <ix-icon-button icon="certificate" variant="subtle-tertiary" size="24" title="Manage Certificates" onclick="manageCertificates('${escapeHtml(server.name)}')"></ix-icon-button>
+                <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server" onclick="deleteServer('${escapeHtml(server.name)}')"></ix-icon-button>
             </div>
         </td>
     `;

@@ -53,8 +53,8 @@ class GenAiProviderManager {
             const actions = isConfig
                 ? '<span class="text-muted">Read-only</span>'
                 : `<div class="action-buttons">
-                       <ix-icon-button icon="pen" ghost variant="primary" title="Edit" data-name="${p.name}"></ix-icon-button>
-                       <ix-icon-button icon="trashcan" ghost variant="secondary" title="Delete" data-name="${p.name}" data-action="delete"></ix-icon-button>
+                       <ix-icon-button icon="pen" variant="subtle-tertiary" title="Edit" data-name="${p.name}"></ix-icon-button>
+                       <ix-icon-button icon="trashcan" variant="subtle-tertiary" title="Delete" data-name="${p.name}" data-action="delete"></ix-icon-button>
                    </div>`;
 
             const tr = document.createElement('tr');

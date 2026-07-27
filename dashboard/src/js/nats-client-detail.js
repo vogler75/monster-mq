@@ -221,8 +221,8 @@ class NatsClientDetailManager {
                     <td>${addr.autoConvert ? '✓' : '—'}</td>
                     <td>${addr.removePath ? '✓' : '—'}</td>
                     <td><div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit" onclick="natsDetailManager.showEditAddressModal(${idx})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete" onclick="natsDetailManager.removeAddress(${idx})"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="16" title="Edit" onclick="natsDetailManager.showEditAddressModal(${idx})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="16" class="btn-delete" title="Delete" onclick="natsDetailManager.removeAddress(${idx})"></ix-icon-button>
                     </div></td>
                 </tr>
             `;
@@ -481,7 +481,7 @@ class NatsClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.natsClient.create.success) {
                     this.showSuccess(`NATS client "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/nats-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/nats-client-detail.html?client=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     const errors = result.natsClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create NATS client: ' + errors.join(', '));

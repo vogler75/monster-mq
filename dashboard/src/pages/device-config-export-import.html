@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
@@ -295,12 +296,12 @@
                             <select id="type-filter" onchange="filterDeviceList()">
                                 <option value="">All Types</option>
                             </select>
-                            <button class="btn btn-secondary" onclick="selectAllDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Select All</button>
-                            <button class="btn btn-secondary" onclick="deselectAllDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Deselect All</button>
+                            <button class="btn btn-secondary btn-sm" onclick="selectAllDevices()">Select All</button>
+                            <button class="btn btn-secondary btn-sm" onclick="deselectAllDevices()">Deselect All</button>
                             <div id="export-selection-info" class="selection-info" style="display: none;"><span id="export-selected-count">0</span> selected</div>
-                            <div style="margin-left: auto; display: flex; gap: 0.5rem;">
-                                <button class="btn btn-secondary" onclick="loadExportDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Refresh</button>
-                                <button class="btn btn-primary" onclick="exportSelectedDevices()" style="padding: 0.3rem 0.75rem; font-size: 0.8rem;">Export as JSON</button>
+                            <div style="margin-left: auto; display: flex; gap: 0.5rem; align-items: center;">
+                                <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="loadExportDevices()" title="Refresh"></ix-icon-button>
+                                <button class="btn btn-primary btn-sm" onclick="exportSelectedDevices()"><ix-icon name="download" size="16"></ix-icon> Export as JSON</button>
                             </div>
                         </div>
                         <div class="device-list" id="export-device-list">

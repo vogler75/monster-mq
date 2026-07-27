@@ -75,12 +75,12 @@ class RedisClientManager {
                 <td class="num">${Math.round(metrics.messagesOut)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="24" title="Edit client"
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit client"
                             onclick="redisClientManager.viewClient('${name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24"
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24"
                             title="${c.enabled ? 'Disable' : 'Enable'}" data-requires-auth
                             onclick="redisClientManager.toggleClient('${name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete"
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete"
                             title="Delete" data-requires-auth
                             onclick="redisClientManager.deleteClient('${name}')"></ix-icon-button>
                     </div>

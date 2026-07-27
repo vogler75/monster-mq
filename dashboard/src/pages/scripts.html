@@ -71,15 +71,17 @@
             <div class="container">
                 <!-- Page Header -->
                 <div class="page-header">
-                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                    <div class="page-header-content">
                         <div>
                             <h1 class="page-title">Scripts</h1>
                             <p class="page-subtitle">Write simple, standalone JavaScript code blocks triggered by MQTT topics or timers</p>
                         </div>
-                        <button onclick="openHelp('script-api')" class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem;" title="Open Scripts Help">
-                            <ix-icon name="info" size="16"></ix-icon>
-                            API Reference
-                        </button>
+                        <div class="page-header-actions">
+                            <button onclick="openHelp('script-api')" class="btn btn-secondary" title="Open Scripts Help">
+                                <ix-icon name="info" size="16"></ix-icon>
+                                API Reference
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -90,7 +92,7 @@
                             <input type="text" id="script-search" class="search-input" placeholder="Search scripts by name or description...">
                         </div>
                         <div class="table-actions">
-                            <ix-icon-button icon="refresh" variant="secondary" ghost onclick="loadScriptsList()" title="Refresh scripts"></ix-icon-button>
+                            <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="loadScriptsList()" title="Refresh scripts"></ix-icon-button>
                             <button class="btn btn-primary" onclick="window.spaLocation.href = '/pages/script-detail.html'">
                                 <ix-icon name="add-circle" size="16"></ix-icon>
                                 New Script
@@ -124,6 +126,7 @@
             </div>
         </div>
 
+        <script src="/js/ui.js"></script>
         <script src="/js/log-viewer.js"></script>
         <script src="/js/scripts.js"></script>
         <script>

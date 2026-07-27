@@ -210,8 +210,8 @@ class OpcUaServerDetailManager {
                 <td>${this.escapeHtml(addr.dataType || '')}</td>
                 <td>${this.escapeHtml(addr.accessLevel || '')}</td>
                 <td>
-                    <ix-icon-button icon="pen" variant="primary" ghost size="16" class="btn-edit" title="Edit Address" onclick="event.stopPropagation(); showEditAddressModal(${index})"></ix-icon-button>
-                    <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="event.stopPropagation(); deleteAddress(${index})"></ix-icon-button>
+                    <ix-icon-button icon="pen" variant="subtle-tertiary" size="16" class="btn-edit" title="Edit Address" onclick="event.stopPropagation(); showEditAddressModal(${index})"></ix-icon-button>
+                    <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="16" class="btn-delete" title="Delete Address" onclick="event.stopPropagation(); deleteAddress(${index})"></ix-icon-button>
                 </td>
             `;
             row.addEventListener('click', () => showEditAddressModal(index));
@@ -277,7 +277,7 @@ class OpcUaServerDetailManager {
                 const result = await this.client.query(mutation, { config: serverInput });
                 if (result.opcUaServer.create.success) {
                     this.showSuccess(`OPC UA server "${serverInput.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/opcua-servers.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/opcua-server-detail.html?server=${encodeURIComponent(serverInput.name)}`; }, 800);
                 } else {
                     this.showError('Failed to create OPC UA server: ' + (result.opcUaServer.create.message || 'Unknown error'));
                 }

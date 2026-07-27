@@ -810,7 +810,7 @@ class AgentDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.agent.create) {
                     this.showSuccess(`Agent "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/agents.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/agent-detail.html?agent=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     this.showError('Failed to create agent');
                 }

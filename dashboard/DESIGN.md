@@ -39,14 +39,29 @@ duplicates anyway.
 ### List page
 
 ```
-page-header          title + subtitle left, primary action right
+page-header          block wrapper — never a flex row itself
+  page-header-content  title + subtitle left; actions right, if any
 error-message        hidden banner, driven by ui.showError()
 metrics-grid         4–6 metric-cards, iX icons (never emoji)
 data-table
-  table-header       table title left, filters + refresh right
+  table-header       table title left, table-actions right
   table-responsive   the table scrolls here, never the page body
 loading-indicator    hidden, driven by ui.setLoading()
 ```
+
+A list page's create action lives in `table-actions`, last in the cluster,
+after the filters and the refresh button — it acts on the table below it, and
+a page with two tables needs one per table. The page header carries the title
+only. (Detail pages are the other way round: their actions are page-level, so
+they go in `page-header-actions`.)
+
+The cluster class depends on the bar it sits in: `table-actions` inside a
+`table-header`, `section-header-actions` inside a `section-header`. Both are a
+plain right-aligned row. `toolbar` is not one of them — it is a standalone
+strip that sits *above* a card, so it carries `justify-content: space-between`
+and a bottom margin. Nest it in a header bar and the controls spread apart and
+sit off-centre, which is how one page's create button ended up looking unlike
+every other page's.
 
 ### Detail page
 
@@ -64,6 +79,35 @@ loading-indicator
 
 Detail pages have no Back button. The breadcrumb is the way back, and its last
 segment is set from the loaded entity (`setText('breadcrumb-name', …)`).
+
+#### After a save
+
+Save never navigates to the list. Create and update end the same way — on the
+detail page, showing the entity that was just saved:
+
+```js
+if (this.isNew) {
+    ui.success(`Thing "${input.name}" created successfully`);
+    setTimeout(() => { window.spaLocation.href =
+        `/pages/thing-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
+} else {
+    ui.success('Thing updated successfully');
+    await this.loadThing();
+}
+```
+
+Create redirects to its own detail URL so the page comes back in edit mode
+bound to the new entity — sub-resource editors (address mappings, queries,
+streams) need a saved entity to attach to, and bouncing to the list forced the
+user to re-open the row to reach them. Update reloads in place; if the page
+lets the name change, retarget `this.<entity>Name` and `history.replaceState`
+the URL first, or the reload reads the old record.
+
+Only delete and cancel return to the list, and the breadcrumb is always there.
+
+`page-header` is a block, so a page that writes a bare `h1 + p` inside it still
+stacks correctly. Anything that needs a title row with actions wraps them in
+`page-header-content` — don't hand-roll that row with inline flex styles.
 
 ## Interaction
 
@@ -89,6 +133,46 @@ before using it; a wrong name renders as nothing.
 
 Metric card icons take a tone class: `is-ok`, `is-warn`, `is-err`, `is-info`,
 or none for the default accent. Green must always mean the same thing.
+
+## Buttons
+
+`.btn` carries size, radius, weight and gap; a variant class carries colour.
+Never set `padding`, `font-size`, `width` or `background` on a button inline or
+in a page `<style>` block — use `.btn-sm` / `.btn-lg` for size and `.btn-block`
+for full width. `components.css` is the only place that styles `.btn`; a `.btn`
+rule anywhere else wins on whatever property `components.css` happens not to
+restate, which is how a primary button once ended up full-width on every table
+header.
+
+The create action of a list is always the same button, and always last in its
+cluster:
+
+```html
+<a href="/pages/thing-detail.html?new=true" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add Thing</a>
+```
+
+`add-circle` at `size="16"`, a verb-plus-noun label, and no inline style — `.btn`
+already sets `text-decoration: none` for the anchor form. Use a `<button>` with
+the same classes and icon when the action opens a modal instead of navigating.
+Refresh beside it is an icon button, never a `Refresh` text button.
+
+## Icon buttons
+
+```html
+<ix-icon-button icon="refresh" variant="subtle-tertiary" title="Refresh"></ix-icon-button>
+```
+
+`subtle-tertiary` is the only variant to use — it is the borderless button.
+iX 4 removed the `ghost` attribute that used to produce that look, and a
+leftover `ghost` silently renders a solid, bordered button that fights with
+every `.btn` beside it. Do not set a `variant` of `primary` or `secondary`.
+
+Size, radius and colour come from `components.css`: an icon button in a
+`.page-header-actions`, `.table-actions`, `.section-header`, `.toolbar` or
+`.action-buttons` cluster is pinned to the same control height as `.btn`, so
+the two button systems line up. Tint one with the same class hooks the
+`.btn-icon` variants use — `btn-delete`, `btn-edit`, `btn-view`, `btn-play`,
+`btn-pause`, `btn-cert`.
 
 ## Status colours
 

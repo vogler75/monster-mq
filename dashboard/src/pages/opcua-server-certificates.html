@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
@@ -154,7 +155,7 @@
                         </svg>
                         Delete Selected
                     </button>
-                    <ix-icon-button icon="refresh" variant="secondary" ghost onclick="refreshCertificates()" title="Refresh certificates"></ix-icon-button>
+                    <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="refreshCertificates()" title="Refresh certificates"></ix-icon-button>
                 </div>
 
                 <div id="rejected-certificates-table" class="data-table">

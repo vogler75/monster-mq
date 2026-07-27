@@ -142,10 +142,10 @@ function renderClassesTable(){
         <td style="text-align:right;">${r.nodes.length}</td>
         <td style="text-align:right;">${r.connections.length}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
-          <td onclick="event.stopPropagation();"><div style="display:flex; gap:.4rem;">
-              <button class="btn-action btn-edit" onclick="window.spaLocation.href = '/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'">Edit</button>
-              <button class="btn-action btn-secondary" title="Restart all instances of this class" onclick="restartAllInstancesOfClass('${escapeHtml(r.name)}')">Restart All</button>
-              <button class="btn-action btn-delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')">Delete</button>
+          <td onclick="event.stopPropagation();"><div class="action-buttons">
+              <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit" onclick="window.spaLocation.href = '/pages/workflows-visual.html?name=${encodeURIComponent(r.name)}'"></ix-icon-button>
+              <ix-icon-button icon="refresh" variant="subtle-tertiary" size="24" title="Restart all instances of this class" onclick="restartAllInstancesOfClass('${escapeHtml(r.name)}')"></ix-icon-button>
+              <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="listPageDeleteFlowClass('${escapeHtml(r.name)}')"></ix-icon-button>
           </div></td>
     </tr>`).join('');
 }
@@ -164,8 +164,8 @@ function renderInstancesTable(){
     }
     tbody.innerHTML = rows.map(r=>{
         const startStopBtn = r.enabled
-            ? `<button class="btn-icon" title="Stop" onclick="listPageStopFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>`
-            : `<button class="btn-icon" title="Start" onclick="listPageStartFlowInstance('${escapeHtml(r.name)}')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></button>`;
+            ? `<ix-icon-button icon="pause" variant="subtle-tertiary" size="24" title="Stop" onclick="listPageStopFlowInstance('${escapeHtml(r.name)}')"></ix-icon-button>`
+            : `<ix-icon-button icon="play" variant="subtle-tertiary" size="24" title="Start" onclick="listPageStartFlowInstance('${escapeHtml(r.name)}')"></ix-icon-button>`;
         return `<tr>
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>
@@ -175,10 +175,10 @@ function renderInstancesTable(){
         <td style="text-align:right;">${r.outputMappings.length}</td>
         <td>${r.enabled?'<span style="color:#2ed573;">Yes</span>':'<span style="color:#ff4757;">No</span>'}</td>
         <td>${formatDateTime(r.updatedAt)}</td>
-    <td><div style="display:flex; gap:.4rem;">
+    <td><div class="action-buttons">
         ${startStopBtn}
-        <button class="btn-action btn-edit" onclick="window.spaLocation.href = '/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'">Edit</button>
-        <button class="btn-action btn-delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')">Delete</button>
+        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit" onclick="window.spaLocation.href = '/pages/workflows-edit-instance.html?type=instance&name=${encodeURIComponent(r.name)}&flowClassId=${encodeURIComponent(r.flowClassId)}'"></ix-icon-button>
+        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="listPageDeleteFlowInstance('${escapeHtml(r.name)}')"></ix-icon-button>
     </div></td>
     </tr>`; }).join('');
 }

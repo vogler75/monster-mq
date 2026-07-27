@@ -172,7 +172,7 @@ function addTopicRow(value = '') {
     const html = `
         <div class="topic-row" id="${rowId}">
             <input type="text" class="form-control topic-input-field" placeholder="e.g. sensor/temp" value="${escapeHtml(value)}" required style="flex: 1;">
-            <ix-icon-button icon="trashcan" variant="primary" ghost size="24" title="Remove topic" onclick="removeTopicRow('${rowId}')"></ix-icon-button>
+            <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" title="Remove topic" onclick="removeTopicRow('${rowId}')"></ix-icon-button>
         </div>
     `;
     
@@ -223,7 +223,7 @@ function addDatabaseNode(node = null) {
         <div class="database-node-card" id="${cardId}">
             <div class="database-node-header">
                 <div class="database-node-title">JDBC Database</div>
-                <ix-icon-button icon="trashcan" variant="primary" ghost size="24" title="Remove database node" onclick="removeDatabaseNode('${cardId}')"></ix-icon-button>
+                <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" title="Remove database node" onclick="removeDatabaseNode('${cardId}')"></ix-icon-button>
             </div>
             <div class="database-node-body">
                 <div class="form-group">
@@ -717,10 +717,24 @@ async function saveScript() {
         const instanceVars = isActuallyUpdate ? { name: instanceId, input: instanceInput } : { input: instanceInput };
         await graphqlQuery(instanceMutation, instanceVars);
 
-        showNotification('Script saved successfully!', 'success');
-        
-        // Return to scripts list
-        setTimeout(goBackToScriptsList, 800);
+        if (isUpdate) {
+            showNotification('Script updated successfully', 'success');
+            if (editingScriptName !== instanceId) {
+                // The old-format migration above re-creates the script under a new
+                // id, so retarget the page before reloading or it reads the record
+                // we just deleted.
+                editingScriptName = instanceId;
+                const url = new URL(window.location.href);
+                url.searchParams.set('name', instanceId);
+                window.history.replaceState({}, '', url.toString());
+            }
+            await loadScriptForEditing();
+        } else {
+            showNotification(`Script "${displayName}" created successfully`, 'success');
+            setTimeout(() => {
+                window.spaLocation.href = `/pages/script-detail.html?name=${encodeURIComponent(instanceId)}`;
+            }, 800);
+        }
 
     } catch (e) {
         console.error('Failed to save script:', e);

@@ -58,12 +58,12 @@ class TimeBaseLoggersManager {
                 <td>${Math.round(logger.metrics?.messagesIn || 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <a href="/pages/timebase-logger-detail.html?name=${encodeURIComponent(logger.name)}"><ix-icon-button icon="pen" variant="primary" ghost size="24" title="Edit logger"></ix-icon-button></a>
+                        <a href="/pages/timebase-logger-detail.html?name=${encodeURIComponent(logger.name)}"><ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit logger"></ix-icon-button></a>
                         ${logger.enabled ?
-                            `<ix-icon-button icon="pause" variant="primary" ghost size="24" title="Stop logger" onclick="timebaseLoggersManager.toggleLogger('${logger.name}', false)"></ix-icon-button>` :
-                            `<ix-icon-button icon="play" variant="primary" ghost size="24" title="Start logger" onclick="timebaseLoggersManager.toggleLogger('${logger.name}', true)"></ix-icon-button>`
+                            `<ix-icon-button icon="pause" variant="subtle-tertiary" size="24" title="Stop logger" onclick="timebaseLoggersManager.toggleLogger('${logger.name}', false)"></ix-icon-button>` :
+                            `<ix-icon-button icon="play" variant="subtle-tertiary" size="24" title="Start logger" onclick="timebaseLoggersManager.toggleLogger('${logger.name}', true)"></ix-icon-button>`
                         }
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete logger" onclick="timebaseLoggersManager.showConfirmDeleteModal('${logger.name}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete logger" onclick="timebaseLoggersManager.showConfirmDeleteModal('${logger.name}')"></ix-icon-button>
                     </div>
                 </td>`;
             tbody.appendChild(tr);
