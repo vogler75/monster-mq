@@ -404,6 +404,9 @@ class SidebarManager {
             '<button class="broker-switcher-close">&times;</button>' +
             '</div>' +
             '<div class="broker-switcher-list">' + brokerListHtml + '</div>' +
+            '<div class="broker-switcher-footer">' +
+            '<button class="broker-switcher-logout" type="button">Sign out and choose broker</button>' +
+            '</div>' +
             '</div>';
 
         // Inject styles
@@ -416,6 +419,9 @@ class SidebarManager {
             '.broker-switcher-close { background:none;border:none;color:var(--text-muted,#94A3B8);font-size:1.5rem;cursor:pointer;padding:0;line-height:1; }',
             '.broker-switcher-close:hover { color:var(--text-primary,#F1F5F9); }',
             '.broker-switcher-list { overflow-y:auto;padding:0.5rem; }',
+            '.broker-switcher-footer { padding:0.75rem 1rem;border-top:1px solid var(--dark-border,#475569); }',
+            '.broker-switcher-logout { width:100%;padding:0.6rem 0.75rem;border:1px solid var(--dark-border,#475569);border-radius:6px;background:transparent;color:var(--text-secondary,#CBD5E1);font:inherit;font-size:0.85rem;font-weight:600;cursor:pointer; }',
+            '.broker-switcher-logout:hover { background:var(--dark-surface-2,#334155);color:var(--text-primary,#F1F5F9); }',
             '.broker-switcher-item { display:flex;align-items:center;padding:0.75rem 1rem;border-radius:8px;cursor:pointer;transition:background 0.15s; }',
             '.broker-switcher-item:hover { background:var(--dark-surface-2,#334155); }',
             '.broker-switcher-item.active { background:var(--dark-surface-2,#334155);border:1px solid var(--monster-purple,#7C3AED); }',
@@ -436,6 +442,10 @@ class SidebarManager {
         // Close button
         overlay.querySelector('.broker-switcher-close').addEventListener('click', () => {
             overlay.remove(); style.remove();
+        });
+
+        overlay.querySelector('.broker-switcher-logout').addEventListener('click', () => {
+            this.logout();
         });
 
         // Broker selection
@@ -738,15 +748,7 @@ ${exports}
 
     logout() {
         if (window.graphqlClient) window.graphqlClient.stopTokenExpirationCheck();
-        safeStorage.removeItem('monstermq_token');
-        safeStorage.removeItem('monstermq_username');
-        safeStorage.removeItem('monstermq_isAdmin');
-        safeStorage.removeItem('monstermq_guest');
-        if (window.clearPageSessionState) {
-            window.clearPageSessionState();
-        } else {
-            sessionStorage.clear();
-        }
+        this.clearAuthState();
         window.location.href = '/pages/login.html';
     }
 }
