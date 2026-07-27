@@ -97,13 +97,8 @@ class Plc4xClientManager {
         tbody.innerHTML = '';
 
         if (this.clients.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="no-data">
-                        No PLC4X clients configured. Click "Add Client" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(9, 'No PLC4X clients configured',
+                'Use “Add Client” to get started.');
             return;
         }
 
@@ -327,4 +322,3 @@ let plc4xManager;
 document.addEventListener('DOMContentLoaded', () => {
     plc4xManager = new Plc4xClientManager();
 });
-

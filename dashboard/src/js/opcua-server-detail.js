@@ -197,7 +197,7 @@ class OpcUaServerDetailManager {
 
         tbody.innerHTML = '';
         if (addresses.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:2rem;">No address mappings configured</td></tr>';
+            tbody.innerHTML = ui.emptyRow(5, 'No address mappings configured');
             return;
         }
 

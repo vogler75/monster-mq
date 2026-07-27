@@ -293,13 +293,7 @@ class SessionManager {
         this.updateRemoveButton();
 
         if (sessionsToRender.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                        No sessions found
-                    </td>
-                </tr>
-            `;
+            tableBody.innerHTML = ui.emptyRow(11, 'No sessions found');
             return;
         }
 

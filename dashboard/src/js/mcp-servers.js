@@ -68,13 +68,8 @@ class McpServerManager {
         tbody.innerHTML = '';
 
         if (this.servers.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" class="no-data">
-                        No MCP Servers configured. Click "Add MCP Server" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(5, 'No MCP servers configured',
+                'Use “Add MCP Server” to get started.');
             return;
         }
 

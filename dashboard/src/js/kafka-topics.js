@@ -250,7 +250,7 @@ class KafkaTopicMonitor {
         
         tbody.innerHTML = '';
         if (this.loadedMessages.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No messages found in this range.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(4, 'No messages found in this range');
             countBar.style.display = 'none';
             return;
         }

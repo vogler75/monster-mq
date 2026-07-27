@@ -205,13 +205,9 @@ function renderScriptsTable() {
     });
 
     if (rows.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="8" style="text-align: center; color: var(--text-secondary); padding: 3rem;">
-                    ${filterText ? 'No matching scripts found' : 'No scripts created yet. Click "New Script" to get started!'}
-                </td>
-            </tr>
-        `;
+        tbody.innerHTML = filterText
+            ? ui.emptyRow(8, 'No matching scripts found')
+            : ui.emptyRow(8, 'No scripts created yet', 'Use “New Script” to get started.');
         return;
     }
 

@@ -177,7 +177,7 @@ class RedisClientDetailManager {
         const tbody = document.getElementById('addresses-table-body');
         if (!tbody) return;
         if (this.addresses.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--text-muted);">No address mappings configured.</td></tr>';
+            tbody.innerHTML = ui.emptyRow(7, 'No address mappings configured');
             return;
         }
         tbody.innerHTML = this.addresses.map((addr, idx) => {

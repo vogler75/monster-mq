@@ -67,13 +67,8 @@ class TopicSchemaPoliciesManager {
         const tbody = document.getElementById('policies-table-body');
 
         if (this.policies.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No topic schema policies found. Create your first policy to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(5, 'No topic schema policies found',
+                'Create your first policy to get started.');
             return;
         }
 

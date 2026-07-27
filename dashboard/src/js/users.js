@@ -190,13 +190,7 @@ class UserManager {
         const tableBody = document.getElementById('users-table-body');
 
         if (this.users.length === 0) {
-            tableBody.innerHTML = `
-                <tr>
-                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                        No users found
-                    </td>
-                </tr>
-            `;
+            tableBody.innerHTML = ui.emptyRow(7, 'No users found');
             return;
         }
 

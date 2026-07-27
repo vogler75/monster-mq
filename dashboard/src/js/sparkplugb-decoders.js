@@ -42,7 +42,8 @@ function updateMetrics(decoders) {
 function renderDecoders(decoders) {
     const tbody = document.getElementById('decodersTableBody');
     if (decoders.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="no-data">No SparkplugB decoders configured. Click "Create Decoder" to get started.</td></tr>`;
+        tbody.innerHTML = ui.emptyRow(10, 'No SparkplugB decoders configured',
+            'Use “Create Decoder” to get started.');
         return;
     }
     tbody.innerHTML = decoders.map(decoder => {

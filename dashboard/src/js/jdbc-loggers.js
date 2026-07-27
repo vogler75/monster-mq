@@ -100,13 +100,8 @@ class JDBCLoggersManager {
         const tbody = document.getElementById('loggers-table-body');
 
         if (this.loggers.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No JDBC loggers found. Create your first logger to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(8, 'No JDBC loggers found',
+                'Create your first logger to get started.');
             return;
         }
 

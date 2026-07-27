@@ -134,7 +134,7 @@ function renderClassesTable(){
     rows = rows.filter(isVisibleByNamespace);
     if(filters.classes) rows = rows.filter(r => (r.name+" "+r.namespace).toLowerCase().includes(filters.classes));
     const { key, dir } = sortState.classes; rows.sort((a,b)=>compareValues(a,b,key,dir));
-    if(rows.length===0){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center; color:#6c757d;">No flow classes</td></tr>'; return; }
+    if(rows.length===0){ tbody.innerHTML=ui.emptyRow(7, 'No flow classes found'); return; }
     tbody.innerHTML = rows.map(r=>`<tr style="cursor:pointer; ${selectedFlowClassName === r.name ? 'background: var(--background-secondary); border-left: 3px solid var(--primary-color);' : ''}" onclick="selectFlowClass('${escapeHtml(r.name)}')">
         <td>${escapeHtml(r.name)}</td>
         <td>${escapeHtml(r.namespace||'')}</td>

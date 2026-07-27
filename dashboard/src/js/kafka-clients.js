@@ -55,7 +55,8 @@ class KafkaClientManager {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (this.clients.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="no-data">No Kafka clients configured. Click "Add Client" to get started.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(7, 'No Kafka clients configured',
+                'Use “Add Client” to get started.');
             return;
         }
         this.clients.forEach(client => {
@@ -153,4 +154,3 @@ function refreshKafkaClients() { kafkaClientManager.refreshClients(); }
 // Initialize
 let kafkaClientManager;
 document.addEventListener('DOMContentLoaded', () => { kafkaClientManager = new KafkaClientManager(); });
-

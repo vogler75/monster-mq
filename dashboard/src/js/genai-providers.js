@@ -34,7 +34,8 @@ class GenAiProviderManager {
     renderTable() {
         const tbody = document.getElementById('providers-tbody');
         if (this.providers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-muted); padding: 2rem;">No providers configured. Click <strong>Add Provider</strong> to create one, or add providers in <code>config.yaml</code>.</td></tr>';
+            tbody.innerHTML = ui.emptyRow(7, 'No providers configured',
+                'Use “Add Provider” to create one, or add providers in config.yaml.');
             return;
         }
 

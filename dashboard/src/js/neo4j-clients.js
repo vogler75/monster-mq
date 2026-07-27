@@ -59,7 +59,8 @@ class Neo4jClientManager {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (this.clients.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="no-data">No Neo4j clients configured. Click "Add Client" to get started.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(8, 'No Neo4j clients configured',
+                'Use “Add Client” to get started.');
             return;
         }
         this.clients.forEach(client => {
@@ -160,4 +161,3 @@ function refreshNeo4jClients() { neo4jClientManager.refreshClients(); }
 // Initialize
 let neo4jClientManager;
 document.addEventListener('DOMContentLoaded', () => { neo4jClientManager = new Neo4jClientManager(); });
-

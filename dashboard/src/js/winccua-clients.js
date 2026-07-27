@@ -128,13 +128,8 @@ class WinCCUaClientManager {
         tbody.innerHTML = '';
 
         if (this.clients.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="no-data">
-                        No WinCC Unified Clients configured. Click "Add Client" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(9, 'No WinCC Unified clients configured',
+                'Use “Add Client” to get started.');
             return;
         }
 

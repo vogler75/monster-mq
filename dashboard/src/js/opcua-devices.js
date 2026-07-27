@@ -110,13 +110,8 @@ class OpcUaDeviceManager {
         tbody.innerHTML = '';
 
         if (this.devices.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="8" class="no-data">
-                        No OPC UA devices configured. Click "Add Device" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(8, 'No OPC UA devices configured',
+                'Use “Add Device” to get started.');
             return;
         }
 

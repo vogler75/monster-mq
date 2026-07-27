@@ -137,13 +137,8 @@ class WinCCOaClientManager {
         tbody.innerHTML = '';
 
         if (this.clients.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="no-data">
-                        No WinCC OA Clients configured. Click "Add Bridge" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(9, 'No WinCC OA clients configured',
+                'Use “Add Bridge” to get started.');
             return;
         }
 

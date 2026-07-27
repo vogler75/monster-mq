@@ -45,7 +45,11 @@ class TimeBaseLoggersManager {
 
     renderLoggers() {
         const tbody = document.getElementById('loggers-table-body');
-        tbody.innerHTML = '';
+        if (this.loggers.length === 0) {
+            tbody.innerHTML = ui.emptyRow(8, 'No TimeBase loggers found',
+                'Create your first logger to get started.');
+            return;
+        }
         this.loggers.forEach(logger => {
             const tr = document.createElement('tr');
             tr.innerHTML = `

@@ -47,7 +47,8 @@ class DatabaseConnectionsManager {
         const tbody = document.getElementById('connections-tbody');
         if (!tbody) return;
         if (this.connections.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="color:var(--text-muted);padding:1rem;">No database connections available for this filter</td></tr>';
+            tbody.innerHTML = ui.emptyRow(7, 'No database connections available',
+                'Adjust the filter or create a connection.');
             return;
         }
 

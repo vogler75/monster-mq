@@ -233,13 +233,8 @@ class MqttClientDetailManager {
         tbody.innerHTML = '';
 
         if (this.clientData.config.addresses.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="no-data">
-                        No address mappings configured. Click "Add Address" to create one.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(6, 'No address mappings configured',
+                'Use “Add Address” to create one.');
             return;
         }
 

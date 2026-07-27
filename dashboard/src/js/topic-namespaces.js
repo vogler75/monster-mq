@@ -61,13 +61,8 @@ class TopicNamespacesManager {
         const tbody = document.getElementById('namespaces-table-body');
 
         if (this.namespaces.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No topic namespaces found. Create your first namespace to bind a topic filter to a schema policy.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(6, 'No topic namespaces found',
+                'Create your first namespace to bind a topic filter to a schema policy.');
             return;
         }
 

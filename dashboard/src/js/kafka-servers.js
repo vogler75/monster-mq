@@ -68,7 +68,8 @@ class KafkaServerManager {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (this.servers.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="no-data">No Kafka servers configured. Click "Add Server" to get started.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(6, 'No Kafka servers configured',
+                'Use “Add Server” to get started.');
             return;
         }
         this.servers.forEach(server => {
@@ -196,4 +197,3 @@ var confirmDeleteKafkaServer = () => kafkaServerManager.confirmDeleteServer();
 // Initialize
 var kafkaServerManager;
 document.addEventListener('DOMContentLoaded', () => { kafkaServerManager = new KafkaServerManager(); });
-

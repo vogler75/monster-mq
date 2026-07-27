@@ -65,7 +65,11 @@ class InfluxDBLoggersManager {
 
     renderLoggers() {
         const tbody = document.getElementById('loggers-table-body');
-        tbody.innerHTML = '';
+        if (this.loggers.length === 0) {
+            tbody.innerHTML = ui.emptyRow(8, 'No InfluxDB loggers found',
+                'Create your first logger to get started.');
+            return;
+        }
 
         this.loggers.forEach(logger => {
             const tr = document.createElement('tr');

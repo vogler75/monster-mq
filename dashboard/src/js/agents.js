@@ -148,13 +148,8 @@ class AgentManager {
         tbody.innerHTML = '';
 
         if (this.agents.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="10" class="no-data">
-                        No AI Agents configured. Click "Add Agent" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(10, 'No AI agents configured',
+                'Use “Add Agent” to get started.');
             return;
         }
 

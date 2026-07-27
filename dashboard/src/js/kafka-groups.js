@@ -113,7 +113,7 @@ class KafkaGroupsManager {
         tbody.innerHTML = '';
         
         if (this.filteredList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" class="no-data">No consumer groups found.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(5, 'No consumer groups found');
             return;
         }
 

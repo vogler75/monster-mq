@@ -297,7 +297,8 @@ class AgentMonitorManager {
         });
 
         if (agents.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="no-data">No agents discovered. Agents publish to a2a/v1/+/+/discovery/+ when started.</td></tr>';
+            tbody.innerHTML = ui.emptyRow(11, 'No agents discovered',
+                'Agents publish to a2a/v1/+/+/discovery/+ when started.');
             return;
         }
 

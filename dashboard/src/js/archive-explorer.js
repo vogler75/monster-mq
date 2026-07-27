@@ -253,7 +253,8 @@ var ArchiveExplorerManager = class ArchiveExplorerManager {
         const tbody = document.getElementById('table-body');
 
         if (this.messages.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="' + this.visibleColumns.size + '" class="empty-state">No messages found for the given filters.</td></tr>';
+            tbody.innerHTML = ui.emptyRow(this.visibleColumns.size, 'No messages found',
+                'Adjust the filters and try again.');
             return;
         }
 

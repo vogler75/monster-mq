@@ -52,7 +52,8 @@ class TelegramClientManager {
         if (!tbody) return;
         tbody.innerHTML = '';
         if (this.clients.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="no-data">No Telegram clients configured. Click "Add Client" to get started.</td></tr>`;
+            tbody.innerHTML = ui.emptyRow(8, 'No Telegram clients configured',
+                'Use “Add Client” to get started.');
             return;
         }
         this.clients.forEach(c => {

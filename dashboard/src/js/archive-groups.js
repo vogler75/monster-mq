@@ -104,13 +104,8 @@ class ArchiveGroupsManager {
         const tbody = document.getElementById('archive-groups-tbody');
 
         if (this.archiveGroups.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        No archive groups found. Create your first archive group to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(9, 'No archive groups found',
+                'Create your first archive group to get started.');
             return;
         }
 

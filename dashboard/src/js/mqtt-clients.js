@@ -94,13 +94,8 @@ class MqttClientManager {
         tbody.innerHTML = '';
 
         if (this.clients.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="9" class="no-data">
-                        No MQTT Clients configured. Click \"Add Bridge\" to get started.
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML = ui.emptyRow(9, 'No MQTT clients configured',
+                'Use “Add Bridge” to get started.');
             return;
         }
 
