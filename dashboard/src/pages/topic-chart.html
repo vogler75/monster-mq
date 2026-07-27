@@ -270,40 +270,6 @@
             transition: margin-right 0.3s ease;
         }
 
-        .topic-browser-floating-toggle {
-            position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%) rotate(-90deg);
-            background: var(--monster-purple);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px 8px 0 0;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            z-index: 999;
-            box-shadow: -2px -2px 8px rgba(0, 0, 0, 0.2);
-            transform-origin: center;
-        }
-
-        .topic-browser-floating-toggle:hover {
-            background: var(--monster-dark);
-            right: 15px;
-        }
-
-        .topic-browser-floating-toggle.active {
-            background: var(--monster-dark);
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-
         .topic-panel-header {
             padding: 1rem;
             background: var(--dark-surface-2);
@@ -582,8 +548,15 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">Topic Visualizer</h1>
-                <p class="page-subtitle">Visualize historical MQTT topic data as time-series charts</p>
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title">Topic Visualizer</h1>
+                        <p class="page-subtitle">Visualize historical MQTT topic data as time-series charts</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" id="topic-browser-floating-toggle" type="button" onclick="TopicChartSidePanel.toggle()"><ix-icon name="folder-open" size="16"></ix-icon> Browse topics</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Chart Area -->
@@ -657,14 +630,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Floating Topic Browser Toggle -->
-    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle" onclick="TopicChartSidePanel.toggle()">
-        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-        </svg>
-        Topics
-    </button>
 
     <!-- Topic Browser Side Panel -->
     <div class="topic-browser-side-panel" id="topic-browser-panel">

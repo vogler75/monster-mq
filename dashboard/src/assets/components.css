@@ -1264,6 +1264,7 @@ ix-icon-button.disabled {
     gap: var(--sp-2);
     padding: var(--sp-6) var(--sp-4);
     text-align: center;
+    white-space: normal;
     color: var(--text-muted);
 }
 

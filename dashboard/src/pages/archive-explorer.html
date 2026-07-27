@@ -506,40 +506,6 @@
         }
 
         
-        .topic-browser-floating-toggle {
-            position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%) rotate(-90deg);
-            transform-origin: center;
-            background: linear-gradient(135deg, var(--monster-purple) 0%, var(--monster-dark) 100%);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px 8px 0 0;
-            font-size: 0.875rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            z-index: 999;
-            box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-        }
-
-        .topic-browser-floating-toggle:hover {
-            background: linear-gradient(135deg, var(--monster-dark) 0%, #3b0764 100%);
-            right: 15px;
-            box-shadow: 0 -6px 20px rgba(124, 58, 237, 0.45);
-        }
-
-        .topic-browser-floating-toggle.active {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-
         .topic-panel-header {
             padding: 1.25rem;
             background: rgba(34, 50, 64, 0.5);
@@ -751,8 +717,15 @@
     <div class="main-content" id="main-content">
         <div class="container">
             <div class="page-header">
-                <h1 class="page-title">Archive Explorer</h1>
-                <p class="page-subtitle">Query and browse historical archived MQTT messages</p>
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title">Archive Explorer</h1>
+                        <p class="page-subtitle">Query and browse historical archived MQTT messages</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <button class="btn btn-secondary" id="topic-browser-floating-toggle" type="button"><ix-icon name="folder-open" size="16"></ix-icon> Browse topics</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Filter Bar -->
@@ -844,7 +817,7 @@
                                 </tr>
                             </thead>
                             <tbody id="table-body">
-                                <tr><td colspan="10" class="empty-state">Set filters and click Query to load archived messages.</td></tr>
+                                <tr><td colspan="10" class="empty-cell"><div class="empty-state"><div class="empty-state-title">Set filters and run a query</div><div class="empty-state-hint">Archived messages will appear here.</div></div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -853,14 +826,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Floating Topic Browser Toggle -->
-    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-        </svg>
-        Topics
-    </button>
 
     <!-- Topic Browser Side Panel -->
     <div class="topic-browser-side-panel" id="topic-browser-panel">

@@ -237,7 +237,7 @@ class KafkaTopicMonitor {
             this.showToast('Failed to fetch messages: ' + e.message, 'error');
             const tbody = document.getElementById('messages-table-body');
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Failed to load messages. Please retry.</td></tr>`;
+                tbody.innerHTML = ui.emptyRow(4, 'Failed to load messages', 'Please retry.');
             }
         } finally {
             this.showLoading(false);
