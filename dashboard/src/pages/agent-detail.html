@@ -117,6 +117,7 @@
                         <p class="page-subtitle" id="page-subtitle"></p>
                     </div>
                     <div class="page-header-actions">
+                        <button class="btn btn-secondary btn-small" id="topic-browser-floating-toggle" type="button" aria-expanded="false" onclick="TopicBrowserSidePanel.toggle()"><ix-icon name="folder-open" size="16"></ix-icon> Browse topics</button>
                         <button class="btn btn-danger btn-small" id="delete-btn" onclick="showDeleteModal()">Delete</button>
                         <button class="btn btn-primary btn-small" id="save-agent-btn" onclick="saveAgent()">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -530,14 +531,6 @@
     </div>
 
     <!-- Confirm Delete Modal -->
-
-    <!-- Floating Topic Browser Toggle -->
-    <button class="topic-browser-floating-toggle" id="topic-browser-floating-toggle" onclick="TopicBrowserSidePanel.toggle()">
-        <svg class="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-        </svg>
-        Topics
-    </button>
 
     <!-- Topic Browser Side Panel -->
     <div class="topic-browser-side-panel" id="topic-browser-panel">

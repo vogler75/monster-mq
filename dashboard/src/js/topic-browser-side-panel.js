@@ -176,14 +176,14 @@ class TopicBrowserSidePanel {
 
     open() {
         this.panel.classList.add('open');
-        this.toggleButton.classList.add('active');
+        this.toggleButton.setAttribute('aria-expanded', 'true');
         this.updateMainContentMargin();
         this.isOpen = true;
     }
 
     close() {
         this.panel.classList.remove('open');
-        this.toggleButton.classList.remove('active');
+        this.toggleButton.setAttribute('aria-expanded', 'false');
         // Reset main content margin
         const mainContent = document.querySelector('.main-content');
         if (mainContent) {
