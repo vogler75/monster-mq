@@ -117,7 +117,11 @@ class BrokerConfigManager {
         // This page can be opened outside the dashboard SPA, where ui.js is
         // deliberately not loaded. Fall back to its own error banner there.
         if (window.ui && typeof window.ui.showError === 'function') {
-            window.ui.showError(message);
+            if (message) {
+                window.ui.showError(message);
+            } else if (typeof window.ui.clearError === 'function') {
+                window.ui.clearError();
+            }
             return;
         }
 
