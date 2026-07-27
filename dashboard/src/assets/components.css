@@ -86,12 +86,12 @@
     padding: 0;
 }
 
+/* The header is a block: its children (breadcrumb, page-header-content) stack.
+   It must not be a flex row itself — pages that write a bare `h1 + p` inside it
+   would then have their subtitle flung to the opposite edge by space-between.
+   The title/action row is .page-header-content. */
 .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: var(--sp-3);
+    display: block;
     margin-bottom: var(--sp-5);
 }
 
@@ -104,8 +104,11 @@
     width: 100%;
 }
 
+/* Action clusters wrap from the right, so a cluster that runs out of room
+   drops its last button underneath the others instead of hanging ragged. */
 .page-header-actions {
     display: flex;
+    justify-content: flex-end;
     gap: var(--sp-2);
     align-items: center;
     flex-wrap: wrap;
@@ -652,10 +655,17 @@ table.addresses-table tbody tr:last-child td {
     color: var(--text-primary);
 }
 
-.table-header-left,
+.table-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex-wrap: wrap;
+}
+
 .table-header .table-actions,
 .table-header-right {
     display: flex;
+    justify-content: flex-end;
     align-items: center;
     gap: var(--sp-2);
     flex-wrap: wrap;
@@ -666,11 +676,6 @@ table.addresses-table tbody tr:last-child td {
     display: flex;
     gap: var(--sp-1);
     align-items: center;
-}
-
-.action-buttons ix-icon-button {
-    --ix-icon-button-height: 28px;
-    --ix-icon-button-width: 28px;
 }
 
 /* ---------------------------------------------------------------- 5. Forms */
@@ -817,7 +822,8 @@ textarea {
 
 /* Inputs sitting in a toolbar shrink to content width */
 .toolbar .form-control,
-.table-header .form-control {
+.table-header .form-control,
+.section-header .form-control {
     width: auto;
     min-width: 170px;
 }
@@ -981,6 +987,56 @@ textarea {
 .btn-icon.btn-cert:hover,
 .btn-icon.btn-edit:hover   { background: var(--c-info-bg); }
 .btn-icon.btn-delete:hover { background: var(--c-err-bg); color: #f87171; }
+
+/* iX icon buttons — the other half of the button system.
+   `variant="subtle-tertiary"` is the borderless look; the `ghost` attribute
+   that used to produce it was removed in iX 4, and a stale `ghost` renders a
+   solid, bordered button that clashes with every .btn next to it.
+   Their shadow DOM pins the box to 32/24/16px, which lands 2px off .btn in
+   every action cluster. Rules in this stylesheet beat the shadow tree's :host
+   rules, so the control heights are set here instead. */
+ix-icon-button {
+    --ix-icon-button-color: var(--text-secondary);
+    /* iX rounds buttons to 2px; the rest of the dashboard rounds to --r-sm,
+       and the difference shows the moment a hover background appears. */
+    --ix-button-border-radius-left: var(--r-sm);
+    --ix-button-border-radius-right: var(--r-sm);
+}
+
+.page-header-actions ix-icon-button,
+.table-header .table-actions ix-icon-button,
+.table-header-right ix-icon-button,
+.section-header ix-icon-button,
+.toolbar ix-icon-button,
+.action-buttons ix-icon-button {
+    width: var(--h-md);
+    height: var(--h-md);
+    min-width: var(--h-md);
+    min-height: var(--h-md);
+}
+
+.action-buttons ix-icon-button[size="16"],
+.action-buttons ix-icon-button[size="12"] {
+    width: var(--h-sm);
+    height: var(--h-sm);
+    min-width: var(--h-sm);
+    min-height: var(--h-sm);
+}
+
+/* Same semantic hooks as the .btn-icon variants above, so a trashcan is the
+   same red whichever button system drew it. */
+ix-icon-button.btn-view   { --ix-icon-button-color: var(--c-accent); }
+ix-icon-button.btn-play   { --ix-icon-button-color: var(--c-ok); }
+ix-icon-button.btn-pause  { --ix-icon-button-color: var(--c-warn); }
+ix-icon-button.btn-cert,
+ix-icon-button.btn-edit   { --ix-icon-button-color: var(--c-info); }
+ix-icon-button.btn-delete { --ix-icon-button-color: var(--c-err); }
+
+ix-icon-button[disabled],
+ix-icon-button.disabled {
+    --ix-icon-button-color: var(--text-muted);
+    opacity: 0.5;
+}
 
 /* Legacy compact action button, kept so unmigrated pages stay coherent */
 .btn-action {
@@ -1243,11 +1299,15 @@ td.empty-cell,
    Structural styles for both hand-written modal markup and the dialogs built
    by js/ui.js, so the two are indistinguishable. */
 
+/* Closed by default. Every open path — ui.js and the hand-written dialogs
+   alike — sets an inline `display: flex`, which wins over this rule, so a page
+   that forgets `style="display: none"` on its markup can no longer ship a
+   dialog that is already open when the page loads. */
 .modal {
     position: fixed;
     inset: 0;
     z-index: 10050;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     padding: var(--sp-6) var(--sp-4);
@@ -1429,7 +1489,6 @@ td.empty-cell,
         grid-template-columns: 1fr;
     }
 
-    .page-header,
     .page-header-content {
         flex-direction: column;
         align-items: stretch;

@@ -207,8 +207,8 @@ class TopicNamespaceDetailManager {
                 `, { input });
 
                 if (result.topicNamespace.create.success) {
-                    console.log('Namespace created successfully');
-                    window.spaLocation.href = '/pages/topic-namespaces.html';
+                    ui.success(`Namespace "${input.name}" created successfully`);
+                    setTimeout(() => { window.spaLocation.href = `/pages/topic-namespace-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
                 } else {
                     const errors = result.topicNamespace.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create namespace';
@@ -230,8 +230,8 @@ class TopicNamespaceDetailManager {
                 `, { name: this.namespaceName, input });
 
                 if (result.topicNamespace.update.success) {
-                    console.log('Namespace updated successfully');
-                    window.spaLocation.href = '/pages/topic-namespaces.html';
+                    ui.success('Namespace updated successfully');
+                    await this.loadNamespace();
                 } else {
                     const errors = result.topicNamespace.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update namespace';

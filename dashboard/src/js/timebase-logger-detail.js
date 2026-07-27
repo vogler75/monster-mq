@@ -118,7 +118,13 @@ class TimeBaseLoggerDetail {
             const res = this.isNew ? result.timebaseLogger.create : result.timebaseLogger.update;
 
             if (res.success) {
-                window.spaLocation.href = '/pages/timebase-loggers.html';
+                if (this.isNew) {
+                    ui.success(`Logger "${input.name}" created successfully`);
+                    setTimeout(() => { window.spaLocation.href = `/pages/timebase-logger-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
+                } else {
+                    ui.success('Logger updated successfully');
+                    await this.loadLogger();
+                }
             } else {
                 ui.error(res.errors.join(', '));
             }

@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/sidebar.js"></script>
     <script src="/js/help-modal.js"></script>
     <script src="/js/script-editor-modal.js"></script>
@@ -305,7 +306,7 @@
             <div class="container">
                 <!-- Page Header -->
                 <div class="page-header">
-                    <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+                    <div class="page-header-content">
                         <div>
                             <nav class="breadcrumb" aria-label="Breadcrumb">
                                 <a href="/pages/scripts.html">Scripts</a>
@@ -315,7 +316,7 @@
                             <h1 class="page-title" id="editor-title">New Script</h1>
                             <p class="page-subtitle" id="editor-subtitle">Create a simple, standalone script executed in the background</p>
                         </div>
-                        <div style="display: flex; gap: 0.75rem;">
+                        <div class="page-header-actions">
                             <button class="btn btn-secondary" onclick="goBackToScriptsList()">Cancel</button>
                             <button class="btn btn-danger" id="delete-btn" style="display: none;" onclick="deleteCurrentScript()">Delete</button>
                             <button class="btn btn-primary" onclick="saveScript()">Save Script</button>

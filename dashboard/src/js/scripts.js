@@ -226,7 +226,7 @@ function renderScriptsTable() {
 
         // "Play/Run" button triggers a manual run by publishing an empty message to the trigger topic
         const runManualBtn = r.triggerType === 'MQTT' && r.topics.length > 0
-            ? `<ix-icon-button icon="publish" variant="primary" ghost size="24" title="Manually trigger script (publish message to ${escapeHtml(r.topics[0])})" onclick="runScriptManually('${escapeHtml(r.rawName)}')"></ix-icon-button>`
+            ? `<ix-icon-button icon="publish" variant="subtle-tertiary" size="24" title="Manually trigger script (publish message to ${escapeHtml(r.topics[0])})" onclick="runScriptManually('${escapeHtml(r.rawName)}')"></ix-icon-button>`
             : '';
  
         return `
@@ -255,10 +255,10 @@ function renderScriptsTable() {
                 </td>
                 <td>
                     <div class="action-buttons" style="justify-content: center;">
-                        <ix-icon-button icon="${r.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${r.enabled ? 'Stop Script (Disable)' : 'Start Script (Enable)'}" onclick="toggleScriptState('${escapeHtml(r.rawName)}', ${!r.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="${r.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${r.enabled ? 'Stop Script (Disable)' : 'Start Script (Enable)'}" onclick="toggleScriptState('${escapeHtml(r.rawName)}', ${!r.enabled})"></ix-icon-button>
                         ${runManualBtn}
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit script" onclick="editScript('${escapeHtml(r.rawName)}')"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete script" onclick="deleteScript('${escapeHtml(r.rawName)}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit script" onclick="editScript('${escapeHtml(r.rawName)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete script" onclick="deleteScript('${escapeHtml(r.rawName)}')"></ix-icon-button>
                     </div>
                 </td>
             </tr>

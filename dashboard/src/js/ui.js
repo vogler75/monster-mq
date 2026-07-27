@@ -6,7 +6,12 @@
    re-invented per page: 42 hand-written confirm modals, 17 files calling the
    native alert()/confirm(), and a single page using a toast.
 
-   Loaded once from index.html; available everywhere as `window.ui`.
+   Available everywhere as `window.ui`. Every page loads it in its own <head>,
+   alongside storage.js / graphql-client.js / sidebar.js — a page opened
+   directly by URL or reloaded with F5 never runs index.html, so relying on the
+   shell to provide it left `ui` undefined and silently broke every confirm
+   dialog on that page. sidebar.js lists it in `sharedScripts`, so SPA
+   navigation does not load it a second time.
 
        await ui.confirm({ title: 'Delete client', message: '…', danger: true })
        ui.success('Client saved')

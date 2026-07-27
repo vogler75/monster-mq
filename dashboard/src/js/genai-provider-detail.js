@@ -178,7 +178,7 @@ class GenAiProviderDetailManager {
                 `, { name, input });
                 if (result.genAiProvider?.create) {
                     this.showAlert('Provider "' + name + '" created successfully.', 'success');
-                    setTimeout(() => window.navigateTo('/pages/genai-providers.html'), 800);
+                    setTimeout(() => window.navigateTo('/pages/genai-provider-detail.html?name=' + encodeURIComponent(name)), 800);
                 }
             } else {
                 const result = await this.client.query(`

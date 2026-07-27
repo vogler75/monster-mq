@@ -203,8 +203,8 @@ class TopicSchemaPolicyDetailManager {
                 `, { input });
 
                 if (result.topicSchemaPolicy.create.success) {
-                    console.log('Policy created successfully');
-                    window.spaLocation.href = '/pages/topic-schema-policies.html';
+                    ui.success(`Policy "${input.name}" created successfully`);
+                    setTimeout(() => { window.spaLocation.href = `/pages/topic-schema-policy-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
                 } else {
                     const errors = result.topicSchemaPolicy.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create policy';
@@ -226,8 +226,8 @@ class TopicSchemaPolicyDetailManager {
                 `, { name: this.policyName, input });
 
                 if (result.topicSchemaPolicy.update.success) {
-                    console.log('Policy updated successfully');
-                    window.spaLocation.href = '/pages/topic-schema-policies.html';
+                    ui.success('Policy updated successfully');
+                    await this.loadPolicy();
                 } else {
                     const errors = result.topicSchemaPolicy.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update policy';

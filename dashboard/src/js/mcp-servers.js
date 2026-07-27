@@ -98,8 +98,8 @@ class McpServerManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="24" title="Edit Server" onclick="event.stopPropagation(); window.spaLocation.href='/pages/mcp-server-detail.html?server=${encodeURIComponent(server.name)}'"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Server" onclick="event.stopPropagation(); mcpServerManager.deleteServer('${this.escapeHtml(server.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit Server" onclick="event.stopPropagation(); window.spaLocation.href='/pages/mcp-server-detail.html?server=${encodeURIComponent(server.name)}'"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server" onclick="event.stopPropagation(); mcpServerManager.deleteServer('${this.escapeHtml(server.name)}')"></ix-icon-button>
                     </div>
                 </td>
             `;

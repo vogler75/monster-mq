@@ -185,7 +185,7 @@ class McpServerDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.mcpServer.create) {
                     this.showSuccess(`MCP Server "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/mcp-servers.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/mcp-server-detail.html?server=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     this.showError('Failed to create MCP server');
                 }

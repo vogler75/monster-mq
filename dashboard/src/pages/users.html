@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
@@ -205,15 +206,13 @@
             <div id="alert-container" style="margin-bottom: 2rem;"></div>
 
             <div class="data-table">
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: var(--dark-bg); border-bottom: 1px solid var(--dark-border);">
-                    <div>
-                        <h3 style="margin: 0; color: var(--text-primary);">System Users</h3>
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>System Users</h2>
                     </div>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <button id="add-user-btn" class="btn btn-primary">
-                            Add New User
-                        </button>
-                        <ix-icon-button id="refresh-users" icon="refresh" variant="secondary" ghost title="Refresh"></ix-icon-button>
+                    <div class="table-actions">
+                        <ix-icon-button id="refresh-users" icon="refresh" variant="subtle-tertiary" title="Refresh"></ix-icon-button>
+                        <button id="add-user-btn" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add New User</button>
                     </div>
                 </div>
                 <table>

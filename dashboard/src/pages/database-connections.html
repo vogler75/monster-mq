@@ -7,6 +7,7 @@
     <script type="module" src="/js/ix-init.js"></script>
     <script src="/js/storage.js"></script>
     <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
     <script src="/js/log-viewer.js"></script>
     <script src="/js/sidebar.js"></script>
     <style>
@@ -37,15 +38,15 @@
             <div class="section-card">
                 <div class="section-header">
                     <h2 class="section-title">Connections</h2>
-                    <div class="toolbar">
-                        <select id="type-filter" class="form-control" style="width:170px;">
+                    <div class="section-header-actions">
+                        <select id="type-filter" class="form-control">
                             <option value="">All types</option>
                             <option value="POSTGRES">PostgreSQL</option>
                             <option value="MONGODB">MongoDB</option>
                             <option value="SQLITE">SQLite</option>
                         </select>
-                        <button class="btn btn-secondary" id="refresh-btn">Refresh</button>
-                        <button class="btn btn-primary" id="new-btn">New Connection</button>
+                        <ix-icon-button id="refresh-btn" icon="refresh" variant="subtle-tertiary" title="Refresh"></ix-icon-button>
+                        <button class="btn btn-primary" id="new-btn"><ix-icon name="add-circle" size="16"></ix-icon> New Connection</button>
                     </div>
                 </div>
                 <div class="section-content">

@@ -241,7 +241,7 @@ class TelegramClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.telegramClient.create.success) {
                     this.showSuccess(`Telegram client "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/telegram-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/telegram-client-detail.html?client=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     const errors = result.telegramClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create Telegram client: ' + errors.join(', '));

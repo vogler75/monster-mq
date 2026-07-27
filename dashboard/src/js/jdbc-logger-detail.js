@@ -610,8 +610,8 @@ class JDBCLoggerDetailManager {
                 `, { input });
 
                 if (result.jdbcLogger.create.success) {
-                    console.log('Logger created successfully');
-                    window.spaLocation.href = '/pages/jdbc-loggers.html';
+                    ui.success(`Logger "${input.name}" created successfully`);
+                    setTimeout(() => { window.spaLocation.href = `/pages/jdbc-logger-detail.html?name=${encodeURIComponent(input.name)}`; }, 800);
                 } else {
                     const errors = result.jdbcLogger.create.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to create logger';
@@ -635,8 +635,8 @@ class JDBCLoggerDetailManager {
                 `, { name: this.loggerName, input });
 
                 if (result.jdbcLogger.update.success) {
-                    console.log('Logger updated successfully');
-                    window.spaLocation.href = '/pages/jdbc-loggers.html';
+                    ui.success('Logger updated successfully');
+                    await this.loadLogger();
                 } else {
                     const errors = result.jdbcLogger.update.errors || [];
                     const errorMessage = errors.length > 0 ? errors.join(', ') : 'Failed to update logger';

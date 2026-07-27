@@ -76,9 +76,9 @@ class TelegramClientManager {
                 <td>${metricsOut}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit client" onclick="telegramClientManager.viewClient('${c.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="telegramClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete" onclick="telegramClientManager.deleteClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit client" onclick="telegramClientManager.viewClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="telegramClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="telegramClientManager.deleteClient('${c.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

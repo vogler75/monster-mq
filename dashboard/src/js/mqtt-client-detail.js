@@ -274,8 +274,8 @@ class MqttClientDetailManager {
                 <td><span class="qos-badge">${this.formatQos(address.qos)}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="primary" ghost size="16" title="Edit Address" onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="16" class="btn-delete" title="Delete Address" onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="16" title="Edit Address" onclick="mqttClientDetailManager.editAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="16" class="btn-delete" title="Delete Address" onclick="mqttClientDetailManager.deleteAddress('${this.escapeHtml(address.remoteTopic)}')"></ix-icon-button>
                     </div>
                 </td>
             `;
@@ -382,7 +382,7 @@ class MqttClientDetailManager {
                 const result = await this.client.query(mutation, { input: data });
                 if (result.mqttClient.create.success) {
                     this.showSuccess(`Bridge "${data.name}" created successfully`);
-                    setTimeout(() => { window.spaLocation.href = '/pages/mqtt-clients.html'; }, 800);
+                    setTimeout(() => { window.spaLocation.href = `/pages/mqtt-client-detail.html?client=${encodeURIComponent(data.name)}`; }, 800);
                 } else {
                     const errors = result.mqttClient.create.errors || ['Unknown error'];
                     this.showError('Failed to create bridge: ' + errors.join(', '));

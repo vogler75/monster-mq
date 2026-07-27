@@ -204,8 +204,7 @@ class AgentManager {
 
             const editBtn = document.createElement('ix-icon-button');
             editBtn.setAttribute('icon', 'pen');
-            editBtn.setAttribute('variant', 'primary');
-            editBtn.setAttribute('ghost', '');
+            editBtn.setAttribute('variant', 'subtle-tertiary');
             editBtn.setAttribute('size', '24');
             editBtn.setAttribute('title', 'Edit Agent');
             editBtn.addEventListener('click', (e) => { e.stopPropagation(); window.spaLocation.href = '/pages/agent-detail.html?agent=' + encodeURIComponent(agentName); });
@@ -213,8 +212,7 @@ class AgentManager {
 
             const toggleBtn = document.createElement('ix-icon-button');
             toggleBtn.setAttribute('icon', agent.enabled ? 'pause' : 'play');
-            toggleBtn.setAttribute('variant', 'primary');
-            toggleBtn.setAttribute('ghost', '');
+            toggleBtn.setAttribute('variant', 'subtle-tertiary');
             toggleBtn.setAttribute('size', '24');
             toggleBtn.setAttribute('title', agent.enabled ? 'Stop Agent' : 'Start Agent');
             toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); agentManager.toggleAgent(agentName, !agent.enabled); });
@@ -222,8 +220,7 @@ class AgentManager {
 
             const deleteBtn = document.createElement('ix-icon-button');
             deleteBtn.setAttribute('icon', 'trashcan');
-            deleteBtn.setAttribute('variant', 'primary');
-            deleteBtn.setAttribute('ghost', '');
+            deleteBtn.setAttribute('variant', 'subtle-tertiary');
             deleteBtn.setAttribute('size', '24');
             deleteBtn.className = 'btn-delete';
             deleteBtn.setAttribute('title', 'Delete Agent');

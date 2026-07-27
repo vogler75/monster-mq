@@ -188,7 +188,7 @@ class KafkaServerDetail {
                 <input type="checkbox" class="stream-allow-write" ${allowWrite ? 'checked' : ''} style="transform:scale(1.2); cursor:pointer; accent-color:var(--monster-purple);">
             </td>
             <td style="text-align:center; vertical-align:middle;">
-                <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Remove stream" onclick="removeStreamRow(this)"></ix-icon-button>
+                <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Remove stream" onclick="removeStreamRow(this)"></ix-icon-button>
             </td>
         `;
         
@@ -268,8 +268,13 @@ class KafkaServerDetail {
             }
 
             if (success) {
-                this.showSuccess(`Kafka server "${name}" saved successfully`);
-                setTimeout(() => window.navigateTo('/pages/kafka-servers.html'), 1500);
+                if (this.isNew) {
+                    this.showSuccess(`Kafka server "${name}" created successfully`);
+                    setTimeout(() => { window.spaLocation.href = `/pages/kafka-server-detail.html?server=${encodeURIComponent(name)}`; }, 800);
+                } else {
+                    this.showSuccess(`Kafka server "${name}" updated successfully`);
+                    await this.loadServerDetails();
+                }
             } else {
                 throw new Error(errors.join(', ') || 'Unknown mutation error');
             }

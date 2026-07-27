@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/assets/ix-init.css">
     <script src="/js/storage.js"></script>
     <script src="/js/broker-manager.js"></script>
+    <script src="/js/ui.js"></script>
     <style>
         :root {
             color-scheme: dark;
@@ -311,8 +312,8 @@
                     <div class="section-header">
                         <h2>Broker List</h2>
                         <div class="section-header-actions">
-                            <button id="refresh-brokers-btn" class="btn btn-secondary">Refresh</button>
-                            <button id="add-broker-btn" class="btn btn-secondary">Add Broker</button>
+                            <ix-icon-button id="refresh-brokers-btn" icon="refresh" variant="subtle-tertiary" title="Refresh"></ix-icon-button>
+                            <button id="add-broker-btn" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add Broker</button>
                         </div>
                     </div>
                     <div class="section-content">

@@ -89,9 +89,9 @@ class KafkaServerManager {
                 <td><span class="status-badge ${statusClass}">${this.escapeHtml(server.status)}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="primary" ghost size="24" title="Edit Server" onclick="kafkaServerManager.viewServer('${server.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${server.enabled ? 'pause' : 'play'}" variant="primary" ghost size="24" title="${server.enabled ? 'Disable Server' : 'Enable Server'}" onclick="kafkaServerManager.toggleServer('${server.name}', ${!server.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="primary" ghost size="24" class="btn-delete" title="Delete Server" onclick="kafkaServerManager.deleteServer('${server.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Server" onclick="kafkaServerManager.viewServer('${server.name}')"></ix-icon-button>
+                        <ix-icon-button icon="${server.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${server.enabled ? 'Disable Server' : 'Enable Server'}" onclick="kafkaServerManager.toggleServer('${server.name}', ${!server.enabled})"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server" onclick="kafkaServerManager.deleteServer('${server.name}')"></ix-icon-button>
                     </div>
                 </td>
             `;

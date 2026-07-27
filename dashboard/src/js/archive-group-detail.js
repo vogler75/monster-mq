@@ -397,7 +397,7 @@ class ArchiveGroupDetailManager {
 
                 if (result.archiveGroup.create.success) {
                     this.showSuccess('Archive group created successfully.');
-                    setTimeout(() => { window.spaLocation.href = '/pages/archive-group-detail.html?name=' + encodeURIComponent(data.name); }, 1000);
+                    setTimeout(() => { window.spaLocation.href = '/pages/archive-group-detail.html?name=' + encodeURIComponent(data.name); }, 800);
                 } else {
                     this.showError(result.archiveGroup.create.message || 'Failed to create archive group.');
                 }
