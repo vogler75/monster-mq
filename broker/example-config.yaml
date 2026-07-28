@@ -76,19 +76,19 @@ SQLite:
 
 # PostgreSQL configuration
 Postgres:
-  Url: jdbc:postgresql://linux5:5432/monster
+  Url: jdbc:postgresql://localhost:5432/monster
   User: system
   Pass: manager
 
 # CrateDB configuration
 CrateDB:
-  Url: jdbc:postgresql://linux5:5433/monster
+  Url: jdbc:postgresql://localhost:5433/monster
   User: crate
   Pass: ""
 
 # MongoDB configuration
 MongoDB:
-  Url: mongodb://system:manager@linux5:27017
+  Url: mongodb://system:manager@localhost:27017
   Database: monster
 
 # Kafka configuration
@@ -114,10 +114,10 @@ Zenoh:
     CacheSize: 100000             # Maximum unique message UUIDs stored in the deduplication cache
     TtlSeconds: 300               # Time-to-live for cache entries in seconds
 
-# MCP Server configuration
-MCP:
+GraphQL:
   Enabled: true
-  Port: 3000
+  Port: 4000
+  Path: /graphql
 
 # REST API (hosted on the same port as GraphQL)
 # Endpoints: /api/v1/topics/... (publish, read), /api/v1/write (bulk), /api/v1/subscribe (SSE)
@@ -125,22 +125,10 @@ MCP:
 RestApi:
   Enabled: true
 
-GraphQL:
+# MCP Server configuration
+MCP:
   Enabled: true
-  Port: 4000
-  Path: /graphql
-
-# Native WinCC OA Bridge (requires MonsterOA entry point)
-# Allows MQTT clients to interact with WinCC OA via !OA/<namespace>/<operation>/<name> topics
-# Operations: dps (dpConnect), dpt (dpTypeGet, future), sql (SQL query, future)
-# Example: !OA/s1/dps/ExampleDP_Arg1
-Oa4jBridge:
-  Enabled: false
-  Namespace: "s1"  # WinCC OA system namespace
-  Attributes:      # List of WinCC OA attributes to connect (JSON keys derived from attribute names)
-    - "_online.._value"   # -> "value" in JSON
-    - "_online.._stime"   # -> "stime" in JSON
-    - "_online.._status"  # -> "status" in JSON
+  Port: 3000
 
 # Archive group examples (import via -archiveConfigs/-archiveConfigsMerge or GraphQL mutations)
 ArchiveGroups:
