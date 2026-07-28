@@ -3,20 +3,21 @@ name: test-developer
 description: >
   Guide for writing Python integration tests for the MonsterMQ broker. Use this skill whenever
   the user wants to create, modify, or run test scripts for MonsterMQ. This covers MQTT protocol
-  tests (v3.1.1 and v5), GraphQL API tests, OPC UA tests, database backend tests, and any
-  other integration/functional testing. Trigger on mentions of "write a test", "add test cases",
-  "test MQTT", "test GraphQL", "pytest", "paho-mqtt", "test script", "integration test",
-  "test the broker", "verify behavior", or any work on files in the tests/ directory.
+  tests (v3.1.1 and v5), GraphQL API tests, OPC UA tests, database backend tests, flow engine tests,
+  REST API tests, Kafka tests, and latency/queuing tests. Trigger on mentions of "write a test",
+  "add test cases", "test MQTT", "test GraphQL", "pytest", "paho-mqtt", "test script",
+  "integration test", "test the broker", "verify behavior", or any work on files in the tests/ directory.
 ---
 
 # MonsterMQ Test Development Skill
 
-You are helping a developer write Python integration tests for the MonsterMQ broker.
-Tests run against a live broker instance and verify end-to-end behavior.
+This skill provides instructions, conventions, fixtures, and code examples for writing and executing Python integration tests against a running MonsterMQ broker.
 
-## Test Environment
+---
 
-### Setup
+## Test Environment Setup & Execution
+
+### Setup Virtual Environment
 ```bash
 cd tests
 python -m venv .venv
@@ -24,290 +25,215 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Running Tests
+### Running Tests (`pytest`)
+All integration tests are located in `tests/pytest_tests/`.
+
 ```bash
 cd tests
 
-# Run all tests
-pytest
+# Run all pytest integration tests
+pytest pytest_tests/
 
 # Run specific test categories
-pytest mqtt3/           # MQTT v3.1.1 tests
-pytest mqtt5/           # MQTT v5 tests
-pytest graphql/         # GraphQL API tests
-pytest opcua/           # OPC UA tests
-pytest database/        # Database backend tests
+pytest pytest_tests/mqtt3/          # MQTT v3.1.1 tests
+pytest pytest_tests/mqtt5/          # MQTT v5 tests
+pytest pytest_tests/graphql/        # GraphQL API tests
+pytest pytest_tests/opcua/          # OPC UA integration tests
+pytest pytest_tests/database/       # Database backend tests
+pytest pytest_tests/flow/           # Flow engine tests
+pytest pytest_tests/i3x/            # I3X API tests
+pytest pytest_tests/kafka/          # Kafka bridge tests
+pytest pytest_tests/queuing/        # Queue store tests
+pytest pytest_tests/rest/           # REST API tests
 
-# Run single file
-pytest mqtt3/test_basic_pubsub.py -v
+# Run a single test file
+pytest pytest_tests/mqtt3/test_basic_pubsub.py -v
 
-# Run single test
-pytest mqtt3/test_basic_pubsub.py::test_basic_pubsub_qos0 -v
+# Run a specific test function
+pytest pytest_tests/mqtt3/test_basic_pubsub.py::test_basic_pubsub_qos0 -v
 
-# Run by marker
-pytest -m mqtt5
-pytest -m "mqtt3 and not slow"
+# Run using convenience script
+./run.sh
 ```
 
-### Configuration
-Tests connect to the broker using environment variables with defaults:
-```
-MQTT_BROKER=localhost    MQTT_PORT=1883
-MQTT_USERNAME=Test       MQTT_PASSWORD=Test
+### Environment Configuration
+Tests read connection settings from environment variables with sensible defaults:
+```env
+MQTT_BROKER=localhost
+MQTT_PORT=1883
+MQTT_USERNAME=Test
+MQTT_PASSWORD=Test
 GRAPHQL_URL=http://localhost:4000/graphql
 ```
 
-### pytest.ini
-Located at `tests/pytest.ini`. Key settings:
-- Test paths: `mqtt3 mqtt5 opcua graphql database`
-- Markers: `mqtt3`, `mqtt5`, `asyncio`, `retain`, `qos`, `properties`, `slow`, `integration`
-- Output: verbose, short tracebacks, strict markers, color
+---
 
-## Project Structure
+## Directory Structure (`tests/pytest_tests/`)
 
 ```
 tests/
-  conftest.py               # Shared fixtures (broker_config, mqtt_client, etc.)
-  pytest.ini                # pytest configuration
-  requirements.txt          # Dependencies (paho-mqtt, asyncua, requests, pytest plugins)
-  mqtt3/
-    test_basic_pubsub.py    # Basic pub/sub at QoS 0, 1
-    test_basic_retained.py  # Retained message tests
-    test_live_messaging.py  # Live message delivery
-    test_mqtt_publish.py    # Publishing edge cases
-    test_mqtt_publish_bulk_retained.py
-    test_mqtt_publish_rejection.py    # ACL rejection tests
-    test_mqtt_subscription_rejection.py
-  mqtt5/
-    test_mqtt5_connection.py          # MQTT5 connect properties
-    test_mqtt5_properties.py          # User properties, content type, etc.
-    test_mqtt5_reason_codes.py        # Reason codes in CONNACK, SUBACK, etc.
-    test_mqtt5_topic_alias.py         # Topic alias support
-    test_mqtt5_will_delay.py          # Will delay interval
-    test_mqtt5_message_expiry.py      # Message expiry interval
-    test_mqtt5_no_local.py            # No Local subscription option
-    test_mqtt5_retain_handling.py     # Retain handling options
-    test_mqtt5_flow_control.py        # Receive maximum
-    test_mqtt5_request_response.py    # Request/response pattern
-    test_mqtt5_rap_pytest.py          # Retain as Published
-    ...
-  graphql/
-    test_graphql_publisher.py         # GraphQL publish mutation
-    test_graphql_topic_subscriptions.py
-    test_graphql_bulk_subscriptions.py
-    test_bulk_e2e.py
-    test_graphql_system_logs.py
-  opcua/
-    test_opcua_connection.py          # OPC UA server connection
-    test_opcua_browse.py              # Node browsing
-    test_opcua_subscription_basic.py  # Data subscriptions
-    test_opcua_write.py               # Write operations
-    test_node_ids.py
-    test_display_names.py
-    test_access_level_enforcement.py
-    test_live_subscription.py
-  database/
-    test_all_backends_phase5.py       # Multi-backend tests
+  requirements.txt               # Dependencies (paho-mqtt, asyncua, requests, pytest)
+  pytest.ini                     # Global pytest settings & markers
+  run.sh                         # Test execution helper script
+  pytest_tests/
+    conftest.py                  # Shared fixtures (broker_config, mqtt_client, message_collector)
+    mqtt3/                       # MQTT v3.1.1 protocol tests
+      test_basic_pubsub.py
+      test_basic_retained.py
+      test_live_messaging.py
+      test_mqtt_publish_rejection.py
+      test_mqtt_subscription_rejection.py
+    mqtt5/                       # MQTT v5 protocol & properties tests
+      test_mqtt5_connection.py
+      test_mqtt5_properties.py
+      test_mqtt5_reason_codes.py
+      test_mqtt5_topic_alias.py
+      test_mqtt5_message_expiry.py
+      test_mqtt5_no_local.py
+      test_mqtt5_retain_handling.py
+    graphql/                     # GraphQL query & mutation tests
+      test_graphql_publisher.py
+      test_graphql_topic_subscriptions.py
+      test_graphql_bulk_subscriptions.py
+      test_graphql_system_logs.py
+    opcua/                       # OPC UA integration tests
+      test_opcua_connection.py
+      test_opcua_browse.py
+      test_opcua_subscription_basic.py
+      test_opcua_write.py
+    database/                    # Multi-database backend tests (PostgreSQL, MongoDB, SQLite)
+      test_all_backends_phase5.py
+    flow/                        # Flow engine workflow tests
+    i3x/                         # CESMII I3X manufacturing API tests
+    kafka/                       # Kafka bridge tests
+    queuing/                     # Message queue & offline client tests
+    rest/                        # HTTP REST API & InfluxDB Line Protocol tests
+    latency/                     # Throughput & latency benchmarking
 ```
 
-## Shared Fixtures (conftest.py)
+---
 
-The `tests/conftest.py` provides these fixtures:
+## Shared Fixtures (`pytest_tests/conftest.py`)
 
 ### `broker_config`
-Returns dict with `host`, `port`, `username`, `password`.
+Returns dictionary containing `host`, `port`, `username`, and `password`.
 
 ### `mqtt_client`
-Provides a configured but **not connected** MQTT v5 client. Handles cleanup.
+Provides an un-connected paho MQTT v5 client pre-configured with authentication and clean session. Automatically handles cleanup on tear-down.
 
 ### `connected_client`
-Provides a **connected** MQTT v5 client with loop started. Waits for CONNACK.
+Provides an actively connected MQTT v5 client with background event loop running.
 
 ### `clean_topic`
-Factory fixture that registers topic names and clears their retained messages after the test.
+Factory fixture that registers topic names during a test and automatically deletes/clears retained messages from the broker after test completion.
+
 ```python
-def test_retained(connected_client, clean_topic):
+def test_retained_behavior(connected_client, clean_topic):
     topic = clean_topic("test/my_retained_topic")
-    connected_client.publish(topic, "hello", retain=True)
+    connected_client.publish(topic, b"hello", retain=True)
 ```
 
 ### `message_collector`
-Instance of `MessageCollector` class with helpers:
-- `.on_connect`, `.on_subscribe`, `.on_message` — assign as client callbacks
-- `.wait_for_connection(timeout)`, `.wait_for_subscription(timeout)`, `.wait_for_messages(count, timeout)`
-- `.messages` — list of received message dicts with `topic`, `payload`, `retain`, `qos`, `properties`
+Instance of `MessageCollector` with helper methods:
+- `.on_message` callback
+- `.wait_for_messages(count=1, timeout=3.0)`: Blocks until expected count of messages arrive.
+- `.messages`: List of received message dictionaries with `topic`, `payload`, `qos`, `retain`, `properties`.
 
-## Writing Tests
+---
 
-### MQTT v3.1.1 Tests
+## Writing Test Cases
 
+### MQTT v3.1.1 Test Pattern
 ```python
 import pytest
 import paho.mqtt.client as mqtt
 import threading
-import time
 import uuid
 
 pytestmark = pytest.mark.mqtt3
 
 def _make_client(client_id, broker_config):
-    """Create MQTTv311 client with threading events for CONNACK and SUBACK."""
     unique_id = f"{client_id}_{uuid.uuid4().hex[:8]}"
     c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, unique_id, protocol=mqtt.MQTTv311)
     c.username_pw_set(broker_config["username"], broker_config["password"])
     c._connack_event = threading.Event()
-    c._suback_event = threading.Event()
 
     def on_connect(client, userdata, flags, rc, properties=None):
         if rc == 0:
             client._connack_event.set()
 
-    def on_subscribe(client, userdata, mid, reason_code_list, properties=None):
-        client._suback_event.set()
-
     c.on_connect = on_connect
-    c.on_subscribe = on_subscribe
     return c
 
-def test_my_feature(broker_config):
-    """Test description."""
-    sub = _make_client("test_sub", broker_config)
-    pub = _make_client("test_pub", broker_config)
-    received = []
-
-    def on_message(c, u, msg):
-        received.append(msg.payload.decode())
-
-    sub.on_message = on_message
-
+def test_basic_publish(broker_config):
+    client = _make_client("test_pub", broker_config)
     try:
-        sub.connect(broker_config["host"], broker_config["port"])
-        sub.loop_start()
-        assert sub._connack_event.wait(5.0), "Subscriber failed to connect"
-
-        sub.subscribe("test/topic", qos=1)
-        assert sub._suback_event.wait(5.0), "Subscribe failed"
-        time.sleep(0.5)
-
-        pub.connect(broker_config["host"], broker_config["port"])
-        pub.loop_start()
-        assert pub._connack_event.wait(5.0), "Publisher failed to connect"
-
-        pub.publish("test/topic", b"test payload", qos=1)
-        time.sleep(2)
-
-        assert len(received) > 0, "No messages received"
-        assert received[0] == "test payload"
+        client.connect(broker_config["host"], broker_config["port"])
+        client.loop_start()
+        assert client._connack_event.wait(5.0), "Connection failed"
+        res = client.publish("sensors/temp", b"23.5", qos=0)
+        assert res.rc == mqtt.MQTT_ERR_SUCCESS
     finally:
-        pub.loop_stop()
-        pub.disconnect()
-        sub.loop_stop()
-        sub.disconnect()
+        client.loop_stop()
+        client.disconnect()
 ```
 
-### MQTT v5 Tests
-
-Use the fixtures from conftest.py:
-
+### MQTT v5 Test Pattern
 ```python
 import pytest
-import time
-
-pytestmark = pytest.mark.mqtt5
-
-def test_v5_feature(connected_client, message_collector, clean_topic):
-    """Test MQTT v5 feature."""
-    topic = clean_topic("test/v5/feature")
-
-    connected_client.on_message = message_collector.on_message
-    connected_client.subscribe(topic, qos=1)
-    time.sleep(0.5)
-
-    connected_client.publish(topic, b"v5 test", qos=1)
-
-    assert message_collector.wait_for_messages(1, timeout=3.0)
-    msg = message_collector.messages[0]
-    assert msg['payload'] == "v5 test"
-```
-
-For v5 properties:
-```python
 from paho.mqtt.properties import Properties
 from paho.mqtt.packettypes import PacketTypes
 
-properties = Properties(PacketTypes.PUBLISH)
-properties.MessageExpiryInterval = 60
-properties.ContentType = "application/json"
-connected_client.publish(topic, payload, qos=1, properties=properties)
+pytestmark = pytest.mark.mqtt5
+
+def test_user_properties(connected_client, message_collector, clean_topic):
+    topic = clean_topic("test/v5/props")
+    connected_client.on_message = message_collector.on_message
+    connected_client.subscribe(topic, qos=1)
+
+    props = Properties(PacketTypes.PUBLISH)
+    props.UserProperty = [("source", "sensor1"), ("quality", "good")]
+
+    connected_client.publish(topic, b"data", qos=1, properties=props)
+
+    assert message_collector.wait_for_messages(1, timeout=3.0)
+    msg = message_collector.messages[0]
+    assert msg['payload'] == "data"
 ```
 
-### GraphQL Tests
-
+### GraphQL API Test Pattern
 ```python
 import requests
 import pytest
 
 GRAPHQL_URL = "http://localhost:4000/graphql"
 
-def test_graphql_query():
-    """Test GraphQL query."""
+def test_query_broker_metrics():
     query = """
     query {
-        brokers {
-            nodeId
-            version
+      broker {
+        nodeId
+        version
+        isLeader
+        metrics {
+          messagesIn
+          messagesOut
         }
+      }
     }
     """
-    response = requests.post(GRAPHQL_URL, json={"query": query})
-    assert response.status_code == 200
-    data = response.json()
+    resp = requests.post(GRAPHQL_URL, json={"query": query})
+    assert resp.status_code == 200
+    data = resp.json()
     assert "errors" not in data
-    assert len(data["data"]["brokers"]) > 0
+    assert data["data"]["broker"]["version"] != ""
 ```
 
-### OPC UA Tests
+---
 
-```python
-import asyncio
-from asyncua import Client
+## Best Practices & Guidelines
 
-async def test_opcua_browse():
-    """Test OPC UA node browsing."""
-    client = Client(url="opc.tcp://localhost:4841/server", timeout=10)
-    await client.connect()
-    try:
-        objects = client.get_objects_node()
-        children = await objects.get_children()
-        assert len(children) > 0
-    finally:
-        await client.disconnect()
-```
-
-## Test Conventions
-
-1. **File naming**: `test_<feature>.py` — one file per feature area
-2. **Test naming**: `test_<specific_behavior>` — descriptive, not generic
-3. **Markers**: Apply `pytestmark = pytest.mark.<category>` at module level
-4. **Unique client IDs**: Append UUID suffix to avoid collisions between tests
-5. **Cleanup**: Always use try/finally to disconnect clients. Use `clean_topic` for retained messages.
-6. **Timeouts**: Use reasonable waits (2-5s for message delivery). Don't use `time.sleep` without a reason — prefer event-based waiting (threading.Event, MessageCollector).
-7. **Assertions**: Include descriptive failure messages: `assert condition, "what went wrong"`
-8. **Print output**: Include `print()` statements for debugging — pytest captures them and shows on failure
-
-## Dependencies
-
-From `tests/requirements.txt`:
-- `paho-mqtt>=2.0.0` — MQTT client (v2 callback API)
-- `asyncua>=1.1.3,<2.0.0` — OPC UA client
-- `requests` — HTTP/GraphQL tests
-- `websockets` — WebSocket tests
-- `pytest>=7.4.3` with plugins: `pytest-xdist`, `pytest-timeout`, `pytest-html`, `pytest-cov`, `pytest-mock`
-
-## Key paho-mqtt v2 Notes
-
-The project uses paho-mqtt v2 with `CallbackAPIVersion.VERSION2`:
-- Callbacks have signature: `(client, userdata, flags, reason_code, properties)`
-- `reason_code` may be a `ReasonCode` object — check `.value` attribute
-- Use `mqtt.MQTTv5` or `mqtt.MQTTv311` for protocol version
-- `client.subscribe()` returns `(result, mid)` — check `result == mqtt.MQTT_ERR_SUCCESS`
+1. **Clean Up State**: Always use `clean_topic` for retained messages and `try/finally` blocks to disconnect clients.
+2. **Unique Client IDs**: Always generate random suffixes for client IDs (`uuid.uuid4().hex[:8]`) to avoid session collisions.
+3. **Avoid Hardcoded Sleeping**: Use `threading.Event` or `message_collector.wait_for_messages()` instead of static `time.sleep()`.
+4. **Targeted Pytest Markers**: Apply `pytestmark = pytest.mark.mqtt5` or `pytestmark = pytest.mark.graphql` at the module level.
