@@ -87,7 +87,10 @@ class McpServer(
                             .putHeader("Content-Type", "application/json")
                             .end(
                                 JsonObject()
-                                    .put("error", ar.cause()?.message ?: "Unknown error")
+                                    .put("jsonrpc", "2.0")
+                                    .put("error", JsonObject()
+                                        .put("code", -32603)
+                                        .put("message", ar.cause()?.message ?: "Unknown error"))
                                     .encode()
                             )
                     }
@@ -152,18 +155,13 @@ class McpServer(
                 }
             }
 
-            // Send initial connection event
-            sendMessage(
-                connection, "connected", JsonObject().put("connectionId", connectionId)
-            )
+            // Send initial endpoint event as required by MCP SSE transport spec
+            response.write("event: endpoint\ndata: /mcp?sessionId=$connectionId\n\n")
 
-            // Send heartbeat every 30 seconds
+            // Send heartbeat every 30 seconds (using SSE comment syntax to keep-alive without JSON-RPC decoding errors)
             val timerId = vertx.setPeriodic(30000, Handler { id: Long? ->
                 if (connections.containsKey(connectionId)) {
-                    sendMessage(
-                        connection, "heartbeat", JsonObject()
-                            .put("timestamp", System.currentTimeMillis())
-                    )
+                    response.write(": heartbeat\n\n")
                 }
             })
 
@@ -205,17 +203,15 @@ class McpServer(
             }
     }
 
-    private fun sendMessage(
+    private fun sendJsonRpcMessage(
         connection: Connection,
-        string: String,
-        put: JsonObject
+        jsonRpcObj: JsonObject
     ) {
-        val message = JsonObject()
-            .put("event", string)
-            .put("data", put)
-
-        connection.response.write("data: ${message.encode()}\n\n")
-        logger.finer("Sent message to connection ${connection.connectionId}: $message")
+        if (!jsonRpcObj.containsKey("jsonrpc")) {
+            jsonRpcObj.put("jsonrpc", "2.0")
+        }
+        connection.response.write("event: message\ndata: ${jsonRpcObj.encode()}\n\n")
+        logger.finer("Sent JSON-RPC message to connection ${connection.connectionId}: $jsonRpcObj")
     }
 
     /**
