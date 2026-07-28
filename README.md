@@ -262,7 +262,7 @@ BulkMessaging:
 
 - Flow engine with reusable flow classes and deployed instances
 - JavaScript execution with GraalVM
-- GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md))
+- GraphQL queries, mutations, and subscriptions ([details](doc/graphql.md)) — supported by dedicated AI skills for [data retrieval](.agents/skills/graphql-data/SKILL.md) and [configuration](.agents/skills/graphql-config/SKILL.md)
 - REST API for publish, read, subscribe over HTTP, and high-throughput InfluxDB Line Protocol ingestion ([details](doc/rest-api.md))
 - MCP server for AI-oriented access ([details](doc/mcp.md))
 
@@ -278,6 +278,7 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 - **Agent-to-agent communication (A2A)**: Agents can delegate tasks to other agents via MQTT-based orchestration
 - **Conversation memory**: Configurable sliding-window chat memory with optional persistent state
 - **Context injection**: Automatically provide agents with last-value data, retained messages, or historical queries as context
+- **AI Agent Skills**: Includes specialized AI skills in `.agents/skills/` for GraphQL [data retrieval](.agents/skills/graphql-data/SKILL.md) and [broker configuration](.agents/skills/graphql-config/SKILL.md)
 
 ### Operations and UI
 
@@ -371,6 +372,8 @@ See `doc/` for full documentation:
 - [users.md](doc/users.md) - user management
 - [acl.md](doc/acl.md) - access control lists
 - [ai-agents.md](doc/ai-agents.md) - AI agents
+- [graphql-data](.agents/skills/graphql-data/SKILL.md) - AI skill for GraphQL data retrieval & archive inspection
+- [graphql-config](.agents/skills/graphql-config/SKILL.md) - AI skill for GraphQL configuration & mutations
 
 See also `dev/` for developer and AI coding documentation (iX guidelines, device integration guide, implementation plans). Start with [dev/INDEX.md](dev/INDEX.md).
 
