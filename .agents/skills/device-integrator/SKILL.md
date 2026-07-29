@@ -11,138 +11,86 @@ description: >
 
 # Device Integration Skill for MonsterMQ
 
-You are helping a developer integrate a new device type into the MonsterMQ broker.
-This is a full-stack task spanning Kotlin backend, GraphQL API, and JavaScript dashboard.
+This skill provides step-by-step instructions for adding a new device connector, industrial protocol bridge, or database logger into MonsterMQ across the Kotlin backend, GraphQL API, and Vite dashboard.
 
-## Before You Start
+---
 
-Read the comprehensive guide at `plans/DEVICE_INTEGRATION.md` — it contains the complete
-architecture overview, code templates, and checklist. Use it as your primary reference.
+## Architecture Blueprint & Core Reference
 
-Then study one existing implementation as a pattern. Good references by complexity:
+Read the primary specification guide at [`dev/plans/DEVICE_INTEGRATION.md`](file:///home/vogler/Workspace/monster-mq/dev/plans/DEVICE_INTEGRATION.md) — it contains the complete Extension + Connector architecture overview, code templates, and verification checklist.
 
-- **Simplest**: MQTT Client (`devices/mqttclient/`, `graphql/MqttClient*`, dashboard `mqtt-client*`)
-- **Medium**: PLC4X (`devices/plc4x/`, `graphql/Plc4x*`, dashboard `plc4x-*`)
-- **Full-featured**: WinCC Unified (`devices/winccua/`, `graphql/WinCCUa*`, dashboard `winccua-*`)
+### Reference Implementations by Complexity
+- **Simple Bridge**: MQTT Client (`devices/mqttclient/`, `graphql/MqttClient*`, dashboard `mqtt-client*`)
+- **Medium Protocol**: PLC4X (`devices/plc4x/`, `graphql/Plc4x*`, dashboard `plc4x-*`)
+- **Complex Industrial**: WinCC Unified (`devices/winccua/`, `graphql/WinCCUa*`, dashboard `winccua-*`)
 
-## Implementation Order
+---
 
-Follow this sequence — each step builds on the previous:
+## End-to-End Implementation Order
 
-### 1. Configuration Data Classes
+Follow this 9-step sequence:
+
+### 1. Configuration Data Class
 **Location**: `broker/src/main/kotlin/stores/devices/YourDeviceConfig.kt`
+- Define data class with `fromJsonObject()` companion and `toJsonObject()` method.
+- Support address/tag mappings if the device bridges external points to MQTT topics.
+- Include sensible defaults for timeouts, reconnect delays, and retry counts.
 
-- Create data class with `fromJsonObject()` companion and `toJsonObject()` method
-- Include an address/mapping list if the device maps external points to MQTT topics
-- Add sensible defaults for optional fields (reconnectDelay, timeouts, etc.)
-- Look at existing configs in `stores/devices/` for the pattern
-
-### 2. Connector Verticle
+### 2. Connector Verticle (Per-Device Instance)
 **Location**: `broker/src/main/kotlin/devices/yourdevice/YourDeviceConnector.kt`
+- Extends Vert.x `AbstractVerticle`.
+- Loads configuration from `config().getJsonObject("device")`.
+- Implements connection lifecycle: connect, disconnect, exponential backoff reconnect.
+- Publishes incoming messages to the message bus or Vert.x eventbus.
+- Tracks metrics (`messagesInCounter`, `messagesOutCounter`, `isConnected`) and responds to eventbus queries.
 
-- Extends `AbstractVerticle`
-- Loads config from `config().getJsonObject("device")`
-- Implements connection lifecycle: connect, disconnect, reconnect with backoff
-- Publishes incoming data as `BrokerMessage` to the extension's eventbus address
-- Tracks metrics: `messagesInCounter`, `messagesOutCounter`, `isConnected`
-- Responds to metrics queries on `"${Extension.ADDRESS_DEVICE_METRICS}.${deviceConfig.id}"`
-
-If the device needs to **receive MQTT messages** (commands, subscriptions):
-- Use `SessionHandler.subscribeInternalClient()` pattern
-- Register consumer on `EventBusAddresses.Client.messages(clientId)`
-- Handle both `BrokerMessage` and `BulkClientMessage` types
-- Unsubscribe and unregister on stop
-
-### 3. Extension Verticle
+### 3. Extension Verticle (Coordinator & Cluster Manager)
 **Location**: `broker/src/main/kotlin/devices/yourdevice/YourDeviceExtension.kt`
+- Manages connector verticles for this device type across the node.
+- Cluster-aware: checks `clusterManager.isLocalNodeResponsible(device.id)`.
+- Listens for configuration changes on `EventBusAddresses.Device.configChanged(TYPE)`.
+- Deploys/undeploys connector verticles via `vertx.deployVerticle()`.
 
-- Manages lifecycle of all connectors of this type
-- Cluster-aware: uses `clusterManager.isLocalNodeResponsible(device.id)`
-- Listens for config changes on `EventBusAddresses.Device.configChanged(TYPE)`
-- Deploys/undeploys connector verticles via `vertx.deployVerticle()`
-- Subscribes to the value publish address via `messageBus`
-
-### 4. Register in Monster.kt
+### 4. Register Verticle in Main (`Monster.kt`)
 **Location**: `broker/src/main/kotlin/Monster.kt`
+- Add top-level feature flag in `Features.kt` (`Features.YourDevice = "YourDevice"`).
+- Gate deployment in `Monster.kt` (`if (Monster.isFeatureEnabled(Features.YourDevice)) { ... }`).
 
-- Deploy extension verticle in the devices initialization block
-- Follow existing pattern: check if devices are enabled, deploy, log
-
-### 5. GraphQL Schema
-**Location**: `broker/src/main/resources/schema-types.graphqls` (types), `schema-queries.graphqls` (queries), `schema-mutations.graphqls` (mutations)
-
-- Define output types (for queries) and input types (for mutations) — always separate
-- Add metrics type with `messagesIn`, `messagesOut`, `connected`
-- Add query for live metrics
-- Add create/update mutations
+### 5. GraphQL Schema Definition
+**Location**: `broker/src/main/resources/`
+- Add schema types in `schema-types.graphqls`.
+- Add queries in `schema-queries.graphqls` and mutations in `schema-mutations.graphqls` (or dedicated `schema-yourdevice.graphqls`).
+- Always keep output Types and input InputTypes separate.
 
 ### 6. GraphQL Resolvers
 **Location**: `broker/src/main/kotlin/graphql/YourDeviceConfigQueries.kt` and `YourDeviceConfigMutations.kt`
-
-- Query resolver: fetch metrics via eventbus request with timeout
-- Mutation resolvers: create/update device configs via `IDeviceConfigStore`
-- Register in `GraphQLServer.kt`
-- Preserve existing password on update if not provided
+- Gate resolver methods with `if (!Monster.isFeatureEnabled(Features.YourDevice))`.
+- Query resolver fetches live metrics via EventBus.
+- Mutation resolver creates/updates/deletes device configuration via `IDeviceConfigStore`.
+- Preserve existing passwords on update if not provided in input.
 
 ### 7. Dashboard List Page
-**Location**: `dashboard/src/pages/yourdevice-clients.html` + `js/yourdevice-clients.js`
-
-- Follow the iX dashboard page template structure using `<ix-application>` + `<ix-menu>` shell
-- Table with columns: Name, Namespace, Status (connected indicator), Messages In/Out, Actions
-- Auto-refresh every 30 seconds
-- Use `GraphQLDashboardClient` for queries (instance at `window.graphqlClient`)
+**Location**: `dashboard/src/pages/yourdevice-clients.html` + `src/js/yourdevice-clients.js`
+- Build using **List Page Shape** (header, metric-cards, table with status indicators and action buttons).
+- Use `window.graphqlClient` for queries and `window.ui` for notifications.
 
 ### 8. Dashboard Detail Page
-**Location**: `dashboard/src/pages/yourdevice-client-detail.html` + `js/yourdevice-client-detail.js`
+**Location**: `dashboard/src/pages/yourdevice-client-detail.html` + `src/js/yourdevice-client-detail.js`
+- Build using **Detail Page Shape** (breadcrumb header, section-cards, form controls).
+- Read ID from URL params (`new URLSearchParams(window.location.search).get('id')`).
+- Handle both Create mode and Edit mode without clearing existing passwords.
 
-- Form for create/update with all config fields
-- Dynamic address list management (add/remove rows)
-- Load existing config when editing (id from URL query param)
-- Preserve password field behavior (don't clear on update)
-
-### 9. Add to Sidebar Menu
+### 9. Dashboard Sidebar Navigation
 **Location**: `dashboard/src/js/sidebar.js`
+- Add menu item to `getMenuConfig()` under the `Bridging` section with `feature: 'YourDevice'`.
 
-- Add entry to the `menuConfig` array in the `renderMenu()` method
-- Place in the "Bridging" section
-- Choose an appropriate iX icon
-
-## Key Patterns to Follow
-
-### Topic Naming
-```
-{namespace}/{function}/{device}/{datapoint}
-```
-Keep under 5 levels deep.
-
-### Logging Levels
-```kotlin
-logger.severe("...")   // Errors
-logger.warning("...")  // Warnings
-logger.info("...")     // Important events
-logger.fine("...")     // Debug details
-```
-
-### Error Handling
-Always use Vert.X Future pattern with `.onSuccess`/`.onFailure`. Schedule reconnect on failure.
-
-### Metrics
-- Use `AtomicLong` counters for thread safety
-- Always handle null metrics in frontend (device may be offline)
-- Return null from GraphQL resolver if eventbus request times out
-
-## Common Pitfalls
-
-Read the "Common UI and GraphQL Integration Pitfalls" section in `plans/DEVICE_INTEGRATION.md`.
-Key issues: password preservation on update, separate type vs input types, null metrics handling,
-always sending complete address list on update.
+---
 
 ## Verification Checklist
 
 After implementation, verify:
-- [ ] Device deploys successfully (check logs)
-- [ ] Metrics are collected and visible in dashboard
-- [ ] Create/update/delete works via dashboard
-- [ ] Reconnection works when external device restarts
-- [ ] Cluster-aware: device runs on correct node
-- [ ] Clean shutdown: timers cancelled, connections closed
+- [ ] Backend verticle starts cleanly when enabled via feature flag.
+- [ ] GraphQL query returns active device configuration and live metrics.
+- [ ] GraphQL mutation correctly creates, updates, and deletes devices.
+- [ ] Dashboard list and detail views function properly without CSS component overrides.
+- [ ] Reconnection logic handles external device disconnects smoothly.
