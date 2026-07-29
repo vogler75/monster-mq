@@ -38,11 +38,37 @@ Port:
   HTTP: 4000      # GraphQL API + Dashboard + REST API
   NATS: 4222      # Native NATS listener
 
+# Server Ports (Protocol & Service Servers)
+MCP:
+  Enabled: true
+  Port: 3000
+Prometheus:
+  Enabled: false
+  Port: 3001
+I3x:
+  Enabled: false
+  Port: 3002
+RedisServer:
+  Enabled: false
+  Port: 6379
+KafkaServer:
+  Enabled: false
+  Port: 9092
+
 # Storage backend defaults
+DefaultStoreType: POSTGRES | MONGODB | SQLITE # Global default for store types if not overridden
 SessionStoreType: POSTGRES | MONGODB | SQLITE | MEMORY
-RetainedStoreType: MEMORY | HAZELCAST | POSTGRES | CRATEDB
+RetainedStoreType: MEMORY | HAZELCAST | POSTGRES | CRATEDB | MONGODB | SQLITE
 LastValueStoreType: MEMORY | HAZELCAST | POSTGRES | CRATEDB
-QueueStoreType: POSTGRES | MONGODB | SQLITE    # Defaults to SessionStoreType. V2 single-table design by default.
+QueueStoreType: POSTGRES | MONGODB | SQLITE    # Defaults to DefaultStoreType or persistent SessionStoreType. V2 single-table design.
+
+# Zenoh Broker Federation (Optional)
+Zenoh:
+  Enabled: false
+  Mode: peer | client
+  Connect: []
+  RemotePrefix: "monstermq/mqtt"
+  LocalPrefix: ""
 
 # High-load performance batching
 BulkProcessing:
@@ -61,6 +87,7 @@ Postgres:
   Url: "jdbc:postgresql://localhost:5432/monster"
   User: "system"
   Password: "manager"
+  Schema: "public"            # Optional PostgreSQL schema name
 
 CrateDB:
   Url: "jdbc:postgresql://localhost:5433/monster"
@@ -88,18 +115,28 @@ Features:
   OpcUa: true                 # OPC UA Client bridge
   OpcUaServer: true           # Embedded OPC UA Server
   MqttClient: true            # Remote MQTT broker bridge
-  Kafka: true                 # Kafka bridge
+  Kafka: true                 # Kafka client bridge
+  KafkaServer: true           # Kafka-compatible server
   Nats: true                  # NATS bridge
   Redis: true                 # Redis Pub/Sub & KV bridge
+  RedisServer: true           # Redis-compatible protocol server
   Telegram: true              # Telegram bot bridge
   WinCCOa: true               # WinCC OA connector
   WinCCUa: true               # WinCC Unified connector
   Plc4x: true                 # PLC4X connector (S7, Modbus, AB)
   Neo4j: true                 # Neo4j graph database logger
   JdbcLogger: true            # JDBC SQL logger
+  InfluxDBLogger: true        # InfluxDB logger device
+  TimeBaseLogger: true        # TimeBase logger device
   SparkplugB: true            # SparkplugB decoder
   FlowEngine: true            # Visual flow engine
   Agents: true                # AI agent framework
+  GenAi: true                 # GenAI provider management
+  Mcp: true                   # MCP server management
+  SchemaPolicy: true          # Topic schema policy management
+  TopicNamespace: true        # Topic namespace management
+  DeviceImportExport: true    # Device configuration import/export
+  Zenoh: true                 # Zenoh broker federation transport
 
 # User Management & Auth
 Auth:
@@ -220,7 +257,7 @@ volumes:
 ### 1. Broker fails to start
 - Check YAML syntax against `broker/yaml-json-schema.json`.
 - Verify database connection strings and credentials.
-- Ensure ports (`1883`, `4000`, `4222`) are not occupied by other processes.
+- Ensure ports (`1883`, `4000`, `4222`, `3000`, `3001`, `3002`, `6379`, `9092`) are not occupied by other processes.
 
 ### 2. Feature Verticles not loading
 - Check the `Features` block in `config.yaml`. Verticles for disabled features (e.g. `OpcUa: false`) are skipped at startup.

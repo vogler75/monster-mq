@@ -51,16 +51,18 @@ Follow this 9-step sequence:
 - Listens for configuration changes on `EventBusAddresses.Device.configChanged(TYPE)`.
 - Deploys/undeploys connector verticles via `vertx.deployVerticle()`.
 
-### 4. Register Verticle in Main (`Monster.kt`)
-**Location**: `broker/src/main/kotlin/Monster.kt`
-- Add top-level feature flag in `Features.kt` (`Features.YourDevice = "YourDevice"`).
-- Gate deployment in `Monster.kt` (`if (Monster.isFeatureEnabled(Features.YourDevice)) { ... }`).
+### 4. Register Verticle in Main (`Monster.kt`) & Feature Flag
+**Location**: `broker/src/main/kotlin/Monster.kt` and `Features.kt`
+- Declare top-level feature flag constant in `broker/src/main/kotlin/Features.kt` (`const val YourDevice = "YourDevice"`) and append to `Features.all`.
+- Declare feature property under `properties.Features.properties` in `broker/yaml-json-schema.json`.
+- Gate verticle deployment in `Monster.kt` (`if (Monster.isFeatureEnabled(Features.YourDevice)) { ... }`).
+- Gate all GraphQL query and mutation resolver methods with `if (!Monster.isFeatureEnabled(Features.YourDevice))`.
 
 ### 5. GraphQL Schema Definition
-**Location**: `broker/src/main/resources/`
-- Add schema types in `schema-types.graphqls`.
-- Add queries in `schema-queries.graphqls` and mutations in `schema-mutations.graphqls` (or dedicated `schema-yourdevice.graphqls`).
-- Always keep output Types and input InputTypes separate.
+**Location**: `broker/src/main/resources/` (`schema-types.graphqls`, `schema-queries.graphqls`, `schema-mutations.graphqls`)
+- Add data types and status types in `schema-types.graphqls`.
+- Add query endpoints in `schema-queries.graphqls` and mutation endpoints in `schema-mutations.graphqls`.
+- Always keep query output `Type` models separate from mutation input `InputType` models.
 
 ### 6. GraphQL Resolvers
 **Location**: `broker/src/main/kotlin/graphql/YourDeviceConfigQueries.kt` and `YourDeviceConfigMutations.kt`
