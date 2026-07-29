@@ -1,5 +1,5 @@
 ---
-name: graphql-data
+name: monstermq-graphql-data
 description: >
   Guide for querying MonsterMQ broker data, telemetry, metrics, sessions, live topic values,
   retained messages, historical message archives, time-series aggregations, ArchiveGroups, OPC UA node browsing,

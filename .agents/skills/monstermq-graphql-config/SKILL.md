@@ -1,5 +1,5 @@
 ---
-name: graphql-config
+name: monstermq-graphql-config
 description: >
   Guide for configuring, managing, and mutating MonsterMQ settings, devices, flows, AI agents,
   users, loggers, archive groups, topic schemas, and publishing messages via the GraphQL API.

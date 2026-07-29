@@ -1,5 +1,5 @@
 ---
-name: dashboard-developer
+name: monstermq-dashboard-developer
 description: >
   Guide for developing the MonsterMQ web dashboard. Use this skill whenever the user wants to
   create, modify, or fix dashboard pages, UI components, styles, or JavaScript for the MonsterMQ

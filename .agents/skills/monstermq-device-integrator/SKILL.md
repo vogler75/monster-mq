@@ -1,5 +1,5 @@
 ---
-name: device-integrator
+name: monstermq-device-integrator
 description: >
   Guide for integrating new device types into the MonsterMQ broker. Use this skill whenever
   the user wants to add a new device connector, bridge, or protocol integration to MonsterMQ.

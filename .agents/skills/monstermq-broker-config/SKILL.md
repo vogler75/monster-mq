@@ -1,5 +1,5 @@
 ---
-name: broker-config
+name: monstermq-broker-config
 description: >
   Guide for configuring, deploying, and operating the MonsterMQ broker. Use this skill whenever
   the user needs help with YAML configuration (config.yaml), Docker deployment, clustering,
