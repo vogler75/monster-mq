@@ -1,7 +1,7 @@
 {
   "name": "monstermq-dashboard",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.8.25",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.monstermq.desktop",
-    "productName": "MonsterMQ",
+    "productName": "MonsterMQ-Dashboard",
     "publish": null,
     "directories": {
       "output": "dist-desktop"
@@ -43,14 +43,16 @@
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${arch}.${ext}"
     },
     "win": {
       "target": [
         "nsis",
         "zip"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "${productName}-${arch}.${ext}"
     }
   }
 }

@@ -39,9 +39,45 @@ fi
 
 echo "=== Building MonsterMQ Desktop App ==="
 
+# Sync package.json version with broker version in version.txt if available
+if [[ -f "../version.txt" ]]; then
+  BROKER_VERSION=$(head -n 1 "../version.txt" | tr -d '\r' | tr -d '\n' | cut -d'+' -f1)
+  if [[ -n "$BROKER_VERSION" ]]; then
+    echo "Syncing package.json version from ../version.txt: $BROKER_VERSION"
+    npm version "$BROKER_VERSION" --no-git-tag-version --allow-same-version > /dev/null
+  fi
+elif [[ -f "version.txt" ]]; then
+  BROKER_VERSION=$(head -n 1 "version.txt" | tr -d '\r' | tr -d '\n' | cut -d'+' -f1)
+  if [[ -n "$BROKER_VERSION" ]]; then
+    echo "Syncing package.json version from version.txt: $BROKER_VERSION"
+    npm version "$BROKER_VERSION" --no-git-tag-version --allow-same-version > /dev/null
+  fi
+fi
+
 # Copy the app logo if available
 mkdir -p build
-if [[ -f ../logos/Logo-v2.png ]]; then
+if [[ -f appicon.png ]]; then
+  cp appicon.png build/icon.png
+  echo "Application icon copied from dashboard/appicon.png to dashboard/build/icon.png"
+  if command -v sips &> /dev/null; then
+    sips -z 512 512 build/icon.png &> /dev/null
+    echo "Resized application icon to 512x512 pixels"
+  fi
+elif [[ -f appicon-option1.png ]]; then
+  cp appicon-option1.png build/icon.png
+  echo "Application icon copied from dashboard/appicon-option1.png to dashboard/build/icon.png"
+  if command -v sips &> /dev/null; then
+    sips -z 512 512 build/icon.png &> /dev/null
+    echo "Resized application icon to 512x512 pixels"
+  fi
+elif [[ -f ../logos/appicon.png ]]; then
+  cp ../logos/appicon.png build/icon.png
+  echo "Application icon copied from logos/appicon.png to dashboard/build/icon.png"
+  if command -v sips &> /dev/null; then
+    sips -z 512 512 build/icon.png &> /dev/null
+    echo "Resized application icon to 512x512 pixels"
+  fi
+elif [[ -f ../logos/Logo-v2.png ]]; then
   cp ../logos/Logo-v2.png build/icon.png
   echo "Application icon copied to dashboard/build/icon.png"
   if command -v sips &> /dev/null; then
@@ -68,23 +104,49 @@ fi
 echo "Packaging desktop app with flags: $BUILD_FLAGS"
 npx electron-builder $BUILD_FLAGS
 
-# Post-processing rename for x64 macOS files to be clearly labeled for Intel/x64 (old macs)
+# Post-processing rename for macOS and Windows build artifacts for consistency (without version numbers)
 if [[ "$BUILD_MAC" = true ]]; then
-  echo "Renaming macOS x64 build artifacts for clarity..."
-  VERSION=$(node -e "console.log(require('./package.json').version)")
-  if [[ -f "dist-desktop/MonsterMQ-${VERSION}.dmg" ]]; then
-    mv "dist-desktop/MonsterMQ-${VERSION}.dmg" "dist-desktop/MonsterMQ-${VERSION}-intel-x64.dmg"
-    echo "Renamed dist-desktop/MonsterMQ-${VERSION}.dmg to dist-desktop/MonsterMQ-${VERSION}-intel-x64.dmg"
+  echo "Renaming macOS build artifacts for clarity..."
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.dmg" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-x64.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-x64.dmg to dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
+  elif [[ -f "dist-desktop/MonsterMQ-Dashboard.dmg" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard.dmg to dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
   fi
-  if [[ -f "dist-desktop/MonsterMQ-${VERSION}-mac.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-${VERSION}-mac.zip" "dist-desktop/MonsterMQ-${VERSION}-intel-x64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-${VERSION}-mac.zip to dist-desktop/MonsterMQ-${VERSION}-intel-x64.zip"
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.zip" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-x64.zip" "dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-x64.zip to dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
+  elif [[ -f "dist-desktop/MonsterMQ-Dashboard-mac.zip" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-mac.zip" "dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-mac.zip to dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
   fi
-  if [[ -f "dist-desktop/MonsterMQ-${VERSION}.dmg.blockmap" ]]; then
-    mv "dist-desktop/MonsterMQ-${VERSION}.dmg.blockmap" "dist-desktop/MonsterMQ-${VERSION}-intel-x64.dmg.blockmap"
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64.dmg" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-arm64.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-arm64.dmg"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64.dmg to dist-desktop/MonsterMQ-Dashboard-mac-arm64.dmg"
   fi
-  if [[ -f "dist-desktop/MonsterMQ-${VERSION}-mac.zip.blockmap" ]]; then
-    mv "dist-desktop/MonsterMQ-${VERSION}-mac.zip.blockmap" "dist-desktop/MonsterMQ-${VERSION}-intel-x64.zip.blockmap"
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip" "dist-desktop/MonsterMQ-Dashboard-mac-arm64.zip"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip to dist-desktop/MonsterMQ-Dashboard-mac-arm64.zip"
+  fi
+fi
+
+if [[ "$BUILD_WIN" = true ]]; then
+  echo "Renaming Windows build artifacts for clarity..."
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard Setup.exe" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard Setup.exe" "dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
+    echo "Renamed Setup exe to dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
+  elif [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.exe" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-x64.exe" "dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
+    echo "Renamed Setup exe to dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
+  fi
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-win.zip" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-win.zip" "dist-desktop/MonsterMQ-Dashboard-win-x64.zip"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-win.zip to dist-desktop/MonsterMQ-Dashboard-win-x64.zip"
+  fi
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64-win.zip" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard-arm64-win.zip" "dist-desktop/MonsterMQ-Dashboard-win-arm64.zip"
+    echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64-win.zip to dist-desktop/MonsterMQ-Dashboard-win-arm64.zip"
   fi
 fi
 
