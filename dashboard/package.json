@@ -25,6 +25,11 @@
     "electron-builder": "^26.15.7",
     "vite": "^6.4.2"
   },
+  "overrides": {
+    "glob": "^10.4.5",
+    "rimraf": "^5.0.10",
+    "brace-expansion": "^2.0.1"
+  },
   "build": {
     "appId": "com.monstermq.desktop",
     "productName": "MonsterMQ-Dashboard",
