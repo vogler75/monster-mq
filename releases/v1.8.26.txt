@@ -1,0 +1,28 @@
+Release v1.8.26
+Built from commit: a17cbb7c
+Date: 2026-08-11 19:26:58
+
+Changes since v1.8.25:
+---
+a17cbb7c Update .gitignore
+568f9cc7 fix(archive): preserve Store-and-Forward configuration in recreateArchiveGroup
+65692056 Fix archive group queue type persistence and dashboard delete buttons
+1ec8bdad fix(archive): rethrow exceptions in addHistory across store backends and refine logging
+cb7196a1 fix(dashboard): update package-lock.json after resolving npm deprecations
+ee9e9782 fix(dashboard): update glob override to ^13.0.6
+75a2235b fix(dashboard): update glob to ^11.0.0 and replace boolean with is-boolean
+bfb2a437 fix(dashboard): resolve deprecated npm packages via overrides
+1449006a feat(archive): add Store-and-Forward configuration with unbuffered default
+ef68f57a fix(dashboard): style database connection form inputs and add missing form-control selectors
+de52341c Delete upload-release.sh
+80905945 feat(dashboard): update desktop app name to MonsterMQ-Dashboard, add release upload script, and update app icon
+896fdd23 Expand broker config docs and device integrator guide
+709439ba Rename agent skills to monstermq-* prefix and remove test-developer skill
+af2d8017 Merge branch 'develop'
+b8a1f502 Add build-desktop.bat for building Electron desktop app on Windows
+1ca2c19d docs: update broker-config, dashboard, device-integrator, and test-developer AI skills
+ec0de059 docs: add GraphQL AI skills for data retrieval and configuration
+8c41676d Merge branch 'main' into develop
+e6475368 docs(config): reorder GraphQL, RestApi, MCP sections and remove deprecated Oa4jBridge
+95bae04a fix(mcp): conform SSE transport protocol to spec and fix JSON-RPC version tag
+9ae2028f Create CODE_ANALYSIS.md
