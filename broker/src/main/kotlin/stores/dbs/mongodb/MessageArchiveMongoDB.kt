@@ -234,14 +234,11 @@ class MessageArchiveMongoDB(
                 .ordered(false)  // Continue on error
                 .bypassDocumentValidation(true)  // Faster inserts
 
-            getActiveCollection()?.insertMany(documents, options) ?: run {
-                if (!disconnectedLogged) {
-                    disconnectedLogged = true
-                    logger.warning("MongoDB not connected, skipping batch insert for [$name]")
-                }
-            }
+            val col = getActiveCollection() ?: throw IllegalStateException("MongoDB not connected for [$name]")
+            col.insertMany(documents, options)
         } catch (e: Exception) {
             logger.warning("Error inserting batch data: ${e.message}")
+            throw e
         }
     }
 

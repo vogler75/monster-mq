@@ -268,22 +268,23 @@ class MessageHandler(
                 }
 
                 if (blockSize > 0 && polledMessages.isNotEmpty()) {
-                    var success = false
                     try {
                         archiveGroup.archiveStore?.addHistory(polledMessages)
-                        success = true
+                        queue.pollCommit()
+                        archiveWriteCounters[archiveGroup.name]?.addAndGet(polledMessages.size.toLong())
                     } catch (e: Exception) {
                         val now = System.currentTimeMillis()
                         if (now - lastErrorLog > 5000) {
-                            logger.warning("Error writing batch to archive [$threadName]: ${e.message}. Retrying batch...")
+                            if (archiveGroup.queueType == "NONE") {
+                                logger.warning("Error writing batch to archive [$threadName]: ${e.message} (Store-and-Forward disabled)")
+                            } else {
+                                logger.warning("Error writing batch to archive [$threadName]: ${e.message}. Retrying batch via Store-and-Forward...")
+                            }
                             lastErrorLog = now
                         }
-                        Thread.sleep(1000)
-                    }
-
-                    if (success) {
-                        queue.pollCommit()
-                        archiveWriteCounters[archiveGroup.name]?.addAndGet(polledMessages.size.toLong())
+                        if (archiveGroup.queueType != "NONE") {
+                            Thread.sleep(1000)
+                        }
                     }
                 }
             } catch (e: Exception) {

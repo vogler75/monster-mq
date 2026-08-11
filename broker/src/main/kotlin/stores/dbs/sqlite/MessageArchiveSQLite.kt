@@ -102,12 +102,12 @@ class MessageArchiveSQLite(
             batchParams.add(params)
         }
 
-        sqlClient.executeBatch(sql, batchParams).onComplete { result ->
-            if (result.failed()) {
-                logger.warning("Error inserting batch history data: ${result.cause()?.message}")
-            } else {
-                logger.finer { "Added ${messages.size} messages to archive" }
-            }
+        try {
+            sqlClient.executeBatchSync(sql, batchParams)
+            logger.finer { "Added ${messages.size} messages to archive" }
+        } catch (e: Exception) {
+            logger.warning("Error inserting batch history data: ${e.message}")
+            throw e
         }
     }
 

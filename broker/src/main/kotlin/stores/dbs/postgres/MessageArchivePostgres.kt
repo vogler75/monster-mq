@@ -73,42 +73,43 @@ class MessageArchivePostgres (
                 "ON CONFLICT (topic, time) DO NOTHING" // TODO: ignore duplicates, what if time resolution is not enough?
 
         try {
-            db.connection?.let { connection ->
-                val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
+            val connection = db.connection ?: throw SQLException("Database connection not available")
+            val preparedStatement: PreparedStatement = connection.prepareStatement(sql)
 
-                messages.forEach { message ->
-                    preparedStatement.setString(1, message.topicName)
-                    preparedStatement.setTimestamp(2, Timestamp.from(message.time))
+            messages.forEach { message ->
+                preparedStatement.setString(1, message.topicName)
+                preparedStatement.setTimestamp(2, Timestamp.from(message.time))
 
-                    // Only try JSON conversion if payloadFormat is JSON
-                    if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
-                        val payloadJson = message.getPayloadAsJson()
-                        if (payloadJson != null) {
-                            preparedStatement.setNull(3, Types.BINARY)
-                            preparedStatement.setString(4, payloadJson)
-                        } else {
-                            // JSON format requested but payload is not valid JSON - store as binary
-                            preparedStatement.setBytes(3, message.payload)
-                            preparedStatement.setNull(4, Types.VARCHAR)
-                        }
+                // Only try JSON conversion if payloadFormat is JSON
+                if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
+                    val payloadJson = message.getPayloadAsJson()
+                    if (payloadJson != null) {
+                        preparedStatement.setNull(3, Types.BINARY)
+                        preparedStatement.setString(4, payloadJson)
                     } else {
-                        // DEFAULT format - store as binary only
+                        // JSON format requested but payload is not valid JSON - store as binary
                         preparedStatement.setBytes(3, message.payload)
                         preparedStatement.setNull(4, Types.VARCHAR)
                     }
-
-                    preparedStatement.setInt(5, message.qosLevel)
-                    preparedStatement.setBoolean(6, message.isRetain)
-                    preparedStatement.setString(7, message.clientId)
-                    preparedStatement.setString(8, message.messageUuid)
-                    preparedStatement.addBatch()
+                } else {
+                    // DEFAULT format - store as binary only
+                    preparedStatement.setBytes(3, message.payload)
+                    preparedStatement.setNull(4, Types.VARCHAR)
                 }
 
-                preparedStatement.executeBatch()
-                connection.commit()
+                preparedStatement.setInt(5, message.qosLevel)
+                preparedStatement.setBoolean(6, message.isRetain)
+                preparedStatement.setString(7, message.clientId)
+                preparedStatement.setString(8, message.messageUuid)
+                preparedStatement.addBatch()
             }
+
+            preparedStatement.executeBatch()
+            connection.commit()
         } catch (e: SQLException) {
             logger.warning("Error inserting batch data [${e.errorCode}] [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            try { db.connection?.rollback() } catch (_: Exception) {}
+            throw e
         }
     }
 
