@@ -1,7 +1,7 @@
 {
   "name": "monstermq-dashboard",
   "private": true,
-  "version": "1.8.25",
+  "version": "1.8.26",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -28,7 +28,6 @@
   "overrides": {
     "glob": "^13.0.6",
     "rimraf": "^5.0.10",
-    "brace-expansion": "^2.0.1",
     "boolean": "npm:is-boolean@^1.0.0"
   },
   "build": {
