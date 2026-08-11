@@ -713,12 +713,16 @@ table.addresses-table tbody tr:last-child td {
 }
 
 .form-control,
+input:not([type]),
 input[type="text"],
 input[type="password"],
 input[type="number"],
 input[type="email"],
 input[type="search"],
 input[type="url"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
 select,
 textarea {
     width: 100%;
