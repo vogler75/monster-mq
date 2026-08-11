@@ -90,12 +90,20 @@ class KafkaServerManager {
                 <td><span class="status-badge ${statusClass}">${this.escapeHtml(server.status)}</span></td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Server" onclick="kafkaServerManager.viewServer('${server.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${server.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${server.enabled ? 'Disable Server' : 'Enable Server'}" onclick="kafkaServerManager.toggleServer('${server.name}', ${!server.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server" onclick="kafkaServerManager.deleteServer('${server.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Server" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${server.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${server.enabled ? 'Disable Server' : 'Enable Server'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewServer(server.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleServer(server.name, !server.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteServer(server.name); });
+
             tbody.appendChild(row);
         });
 
@@ -128,12 +136,12 @@ class KafkaServerManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: serverName, enabled });
-            const toggleRes = result.kafkaServer.toggle;
-            if (toggleRes.success) {
+            const toggleRes = result && result.kafkaServer && result.kafkaServer.toggle;
+            if (toggleRes && toggleRes.success) {
                 await this.loadServers();
                 this.showSuccess(`Kafka server "${serverName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = toggleRes.errors || ['Unknown error'];
+                const errors = (toggleRes && toggleRes.errors) || ['Unknown error'];
                 this.showError('Failed to toggle Kafka server: ' + errors.join(', '));
             }
         } catch (e) {
@@ -162,7 +170,7 @@ class KafkaServerManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: this.deleteServerName });
-            if (result.kafkaServer.delete) {
+            if (result && result.kafkaServer && result.kafkaServer.delete) {
                 await this.loadServers();
                 this.showSuccess(`Kafka server "${this.deleteServerName}" deleted successfully`);
             } else {
@@ -176,7 +184,7 @@ class KafkaServerManager {
     }
 
     viewServer(serverName) {
-        window.navigateTo(`/pages/kafka-server-detail.html?server=${encodeURIComponent(serverName)}`);
+        window.spaLocation.href = `/pages/kafka-server-detail.html?server=${encodeURIComponent(serverName)}`;
     }
 
     // UI helpers
@@ -186,14 +194,26 @@ class KafkaServerManager {
     hideError() { const errorEl = document.getElementById('error-message'); if (errorEl) errorEl.style.display='none'; }
     showSuccess(message) { ui.success(message); }
     escapeHtml(text) { const div=document.createElement('div'); div.textContent=text; return div.innerHTML; }
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     async refreshServers() { await this.loadServers(); }
 }
 
 // Global wrappers
-function refreshKafkaServers() { kafkaServerManager.refreshServers(); }
-var confirmDeleteKafkaServer = () => kafkaServerManager.confirmDeleteServer();
+var kafkaServerManager;
+
+function refreshKafkaServers() {
+    if (window.kafkaServerManager) window.kafkaServerManager.refreshServers();
+}
+var confirmDeleteKafkaServer = () => {
+    if (window.kafkaServerManager) window.kafkaServerManager.confirmDeleteServer();
+};
 
 // Initialize
-var kafkaServerManager;
-document.addEventListener('DOMContentLoaded', () => { kafkaServerManager = new KafkaServerManager(); });
+document.addEventListener('DOMContentLoaded', () => {
+    kafkaServerManager = new KafkaServerManager();
+    window.kafkaServerManager = kafkaServerManager;
+});

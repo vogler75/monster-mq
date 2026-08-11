@@ -157,12 +157,19 @@ class Plc4xClientManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" onclick="plc4xManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="plc4xManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client" onclick="plc4xManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(client.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(client.name, !client.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(client.name); });
 
             tbody.appendChild(row);
         });
@@ -309,16 +316,18 @@ class Plc4xClientManager {
 }
 
 // Global functions for onclick handlers
+var plc4xManager;
+
 function confirmDeleteClient() {
-    plc4xManager.confirmDeleteClient();
+    if (window.plc4xManager) window.plc4xManager.confirmDeleteClient();
 }
 
 function refreshClients() {
-    plc4xManager.refreshClients();
+    if (window.plc4xManager) window.plc4xManager.refreshClients();
 }
 
 // Initialize when DOM is loaded
-let plc4xManager;
 document.addEventListener('DOMContentLoaded', () => {
     plc4xManager = new Plc4xClientManager();
+    window.plc4xManager = plc4xManager;
 });

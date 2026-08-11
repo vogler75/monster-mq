@@ -79,12 +79,20 @@ class NatsClientManager {
                 <td>${metricsOut}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit client" onclick="natsClientManager.viewClient('${c.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="natsClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="natsClientManager.deleteClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(c.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(c.name, !c.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(c.name); });
+
             tbody.appendChild(row);
         });
     }
@@ -97,11 +105,12 @@ class NatsClientManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.natsClient.toggle.success) {
+            if (result && result.natsClient && result.natsClient.toggle && result.natsClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`NATS client "${clientName}" ${enabled ? 'enabled' : 'disabled'}`);
             } else {
-                this.showError('Failed to toggle: ' + (result.natsClient.toggle.errors || []).join(', '));
+                const errors = (result && result.natsClient && result.natsClient.toggle && result.natsClient.toggle.errors) || [];
+                this.showError('Failed to toggle: ' + errors.join(', '));
             }
         } catch (e) {
             this.showError('Failed to toggle NATS client: ' + e.message);
@@ -122,7 +131,7 @@ class NatsClientManager {
         try {
             const mutation = `mutation DeleteNatsClient($name: String!) { natsClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
-            if (result.natsClient.delete) {
+            if (result && result.natsClient && result.natsClient.delete) {
                 await this.loadClients();
                 this.showSuccess(`NATS client "${this.deleteClientName}" deleted`);
             } else {
@@ -145,11 +154,21 @@ class NatsClientManager {
     hideError() { const e = document.getElementById('error-message'); if (e) e.style.display='none'; }
     showSuccess(message) { ui.success(message); }
     escapeHtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
     async refreshClients() { await this.loadClients(); }
 }
 
 // Global wrappers
-function refreshNatsClients()               { natsClientManager.refreshClients(); }
+var natsClientManager;
 
-let natsClientManager;
-document.addEventListener('DOMContentLoaded', () => { natsClientManager = new NatsClientManager(); });
+function refreshNatsClients() {
+    if (window.natsClientManager) window.natsClientManager.refreshClients();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    natsClientManager = new NatsClientManager();
+    window.natsClientManager = natsClientManager;
+});

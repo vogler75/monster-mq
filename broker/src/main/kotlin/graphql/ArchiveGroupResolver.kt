@@ -631,6 +631,12 @@ class ArchiveGroupResolver(
                 val databaseConnectionName = (input["databaseConnectionName"] as? String)?.takeIf { it.isNotBlank() }
                 val redisDbNumber = (input["redisDbNumber"] as? Number)?.toInt()
 
+                val queueType = input["queueType"] as? String ?: "NONE"
+                val queueSize = (input["queueSize"] as? Number)?.toInt() ?: 100000
+                val bulkSize = (input["bulkSize"] as? Number)?.toInt() ?: 4000
+                val bulkTimeoutMs = (input["bulkTimeoutMs"] as? Number)?.toLong() ?: 250L
+                val queueDiskPath = input["queueDiskPath"] as? String ?: "data/queue"
+
                 // Parse optional durations
                 val lastValRetention = input["lastValRetention"] as? String
                 val archiveRetention = input["archiveRetention"] as? String
@@ -704,6 +710,11 @@ class ArchiveGroupResolver(
                     purgeIntervalStr = purgeInterval,
                     databaseConnectionName = databaseConnectionName,
                     redisDbNumber = redisDbNumber,
+                    queueType = queueType,
+                    queueSize = queueSize,
+                    bulkSize = bulkSize,
+                    bulkTimeoutMs = bulkTimeoutMs,
+                    queueDiskPath = queueDiskPath,
                     databaseConfig = JsonObject() // Will be populated from config
                 )
 
@@ -736,7 +747,12 @@ class ArchiveGroupResolver(
                                     "payloadFormat" to payloadFormat.name,
                                     "lastValRetention" to lastValRetention,
                                     "archiveRetention" to archiveRetention,
-                                    "purgeInterval" to purgeInterval
+                                    "purgeInterval" to purgeInterval,
+                                    "queueType" to queueType,
+                                    "queueSize" to queueSize,
+                                    "bulkSize" to bulkSize,
+                                    "bulkTimeoutMs" to bulkTimeoutMs,
+                                    "queueDiskPath" to queueDiskPath
                                 )
                             ))
                         } else {
@@ -881,6 +897,32 @@ class ArchiveGroupResolver(
                                  existingArchiveGroup.getRedisDbNumber()
                              }
 
+                             val queueType = if (input.containsKey("queueType")) {
+                                 input["queueType"] as? String ?: existingArchiveGroup.queueType
+                             } else {
+                                 existingArchiveGroup.queueType
+                             }
+                             val queueSize = if (input.containsKey("queueSize")) {
+                                 (input["queueSize"] as? Number)?.toInt() ?: existingArchiveGroup.queueSize
+                             } else {
+                                 existingArchiveGroup.queueSize
+                             }
+                             val bulkSize = if (input.containsKey("bulkSize")) {
+                                 (input["bulkSize"] as? Number)?.toInt() ?: existingArchiveGroup.bulkSize
+                             } else {
+                                 existingArchiveGroup.bulkSize
+                             }
+                             val bulkTimeoutMs = if (input.containsKey("bulkTimeoutMs")) {
+                                 (input["bulkTimeoutMs"] as? Number)?.toLong() ?: existingArchiveGroup.bulkTimeoutMs
+                             } else {
+                                 existingArchiveGroup.bulkTimeoutMs
+                             }
+                             val queueDiskPath = if (input.containsKey("queueDiskPath")) {
+                                 input["queueDiskPath"] as? String ?: existingArchiveGroup.queueDiskPath
+                             } else {
+                                 existingArchiveGroup.queueDiskPath
+                             }
+
                              // Parse optional durations if provided, otherwise keep existing
                             val lastValRetention = input["lastValRetention"] as? String
                             val archiveRetention = input["archiveRetention"] as? String
@@ -942,6 +984,11 @@ class ArchiveGroupResolver(
                                  purgeIntervalStr = purgeInterval ?: existingArchiveGroup.getPurgeInterval(),
                                  databaseConnectionName = databaseConnectionName,
                                  redisDbNumber = redisDbNumber,
+                                 queueType = queueType,
+                                 queueSize = queueSize,
+                                 bulkSize = bulkSize,
+                                 bulkTimeoutMs = bulkTimeoutMs,
+                                 queueDiskPath = queueDiskPath,
                                  databaseConfig = JsonObject() // Will be populated from config
                              )
 
@@ -973,7 +1020,12 @@ class ArchiveGroupResolver(
                                                 "redisDbNumber" to redisDbNumber,
                                                 "lastValRetention" to lastValRetention,
                                                 "archiveRetention" to archiveRetention,
-                                                "purgeInterval" to purgeInterval
+                                                "purgeInterval" to purgeInterval,
+                                                "queueType" to queueType,
+                                                "queueSize" to queueSize,
+                                                "bulkSize" to bulkSize,
+                                                "bulkTimeoutMs" to bulkTimeoutMs,
+                                                "queueDiskPath" to queueDiskPath
                                             )
                                         ))
                                     } else {

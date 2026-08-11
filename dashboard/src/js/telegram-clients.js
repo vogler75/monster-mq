@@ -77,12 +77,20 @@ class TelegramClientManager {
                 <td>${metricsOut}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit client" onclick="telegramClientManager.viewClient('${c.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" onclick="telegramClientManager.toggleClient('${c.name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" onclick="telegramClientManager.deleteClient('${c.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(c.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(c.name, !c.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(c.name); });
+
             tbody.appendChild(row);
         });
     }
@@ -95,11 +103,12 @@ class TelegramClientManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.telegramClient.toggle.success) {
+            if (result && result.telegramClient && result.telegramClient.toggle && result.telegramClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Telegram client "${clientName}" ${enabled ? 'enabled' : 'disabled'}`);
             } else {
-                this.showError('Failed to toggle: ' + (result.telegramClient.toggle.errors || []).join(', '));
+                const errors = (result && result.telegramClient && result.telegramClient.toggle && result.telegramClient.toggle.errors) || [];
+                this.showError('Failed to toggle: ' + errors.join(', '));
             }
         } catch (e) {
             this.showError('Failed to toggle Telegram client: ' + e.message);
@@ -120,7 +129,7 @@ class TelegramClientManager {
         try {
             const mutation = `mutation DeleteTelegramClient($name: String!) { telegramClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
-            if (result.telegramClient.delete) {
+            if (result && result.telegramClient && result.telegramClient.delete) {
                 await this.loadClients();
                 this.showSuccess(`Telegram client "${this.deleteClientName}" deleted`);
             } else {
@@ -141,11 +150,21 @@ class TelegramClientManager {
     hideError() { const e = document.getElementById('error-message'); if (e) e.style.display='none'; }
     showSuccess(message) { ui.success(message); }
     escapeHtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
     async refreshClients() { await this.loadClients(); }
 }
 
 // Global wrappers
-function refreshTelegramClients()               { telegramClientManager.refreshClients(); }
+var telegramClientManager;
 
-let telegramClientManager;
-document.addEventListener('DOMContentLoaded', () => { telegramClientManager = new TelegramClientManager(); });
+function refreshTelegramClients() {
+    if (window.telegramClientManager) window.telegramClientManager.refreshClients();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    telegramClientManager = new TelegramClientManager();
+    window.telegramClientManager = telegramClientManager;
+});

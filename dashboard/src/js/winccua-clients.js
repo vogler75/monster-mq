@@ -184,12 +184,19 @@ class WinCCUaClientManager {
                 <td>${messagesIn}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" onclick="winCCUaClientManager.editClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Client' : 'Start Client'}" onclick="winCCUaClientManager.toggleClient('${this.escapeAttr(client.name)}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client" onclick="winCCUaClientManager.deleteClient('${this.escapeAttr(client.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Client' : 'Start Client'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.editClient(client.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(client.name, !client.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(client.name); });
 
             tbody.appendChild(row);
         });
@@ -312,16 +319,18 @@ class WinCCUaClientManager {
 }
 
 // Global functions for onclick handlers
+var winCCUaClientManager;
+
 function confirmDeleteClient() {
-    winCCUaClientManager.confirmDeleteClient();
+    if (window.winCCUaClientManager) window.winCCUaClientManager.confirmDeleteClient();
 }
 
 function refreshClients() {
-    winCCUaClientManager.refreshClients();
+    if (window.winCCUaClientManager) window.winCCUaClientManager.refreshClients();
 }
 
 // Initialize when DOM is loaded
-let winCCUaClientManager;
 document.addEventListener('DOMContentLoaded', () => {
     winCCUaClientManager = new WinCCUaClientManager();
+    window.winCCUaClientManager = winCCUaClientManager;
 });

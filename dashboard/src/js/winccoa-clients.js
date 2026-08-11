@@ -187,12 +187,19 @@ class WinCCOaClientManager {
                 <td>${messagesIn}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Bridge" onclick="winCCOaClientManager.editClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="winCCOaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Bridge" onclick="winCCOaClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Bridge" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Bridge"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.editClient(client.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(client.name, !client.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(client.name); });
 
             tbody.appendChild(row);
         });
@@ -315,16 +322,18 @@ class WinCCOaClientManager {
 }
 
 // Global functions for onclick handlers
+var winCCOaClientManager;
+
 function confirmDeleteClient() {
-    winCCOaClientManager.confirmDeleteClient();
+    if (window.winCCOaClientManager) window.winCCOaClientManager.confirmDeleteClient();
 }
 
 function refreshClients() {
-    winCCOaClientManager.refreshClients();
+    if (window.winCCOaClientManager) window.winCCOaClientManager.refreshClients();
 }
 
 // Initialize when DOM is loaded
-let winCCOaClientManager;
 document.addEventListener('DOMContentLoaded', () => {
     winCCOaClientManager = new WinCCOaClientManager();
+    window.winCCOaClientManager = winCCOaClientManager;
 });

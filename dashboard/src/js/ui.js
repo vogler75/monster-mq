@@ -157,6 +157,7 @@
         var previouslyFocused = document.activeElement;
 
         var overlay = el('div', 'modal');
+        overlay.style.display = 'flex';
         overlay.setAttribute('role', 'dialog');
         overlay.setAttribute('aria-modal', 'true');
 

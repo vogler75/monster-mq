@@ -33,6 +33,16 @@ class MqttClientDetailManager {
         try {
             await this.loadClusterNodes();
             await this.loadClientData();
+
+            const deleteBtn = document.getElementById('delete-btn');
+            if (deleteBtn) {
+                deleteBtn.style.display = 'inline-flex';
+                deleteBtn.onclick = null;
+                deleteBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.showDeleteModal();
+                });
+            }
         } catch (error) {
             this.showError('Failed to load bridge data: ' + error.message);
             document.getElementById('page-title').textContent = 'Error Loading Bridge';
@@ -797,10 +807,15 @@ class MqttClientDetailManager {
     }
 
     async deleteClient() {
+        const name = this.clientName || (this.clientData ? this.clientData.name : null);
+        if (!name) {
+            this.showError('No client specified to delete');
+            return;
+        }
         try {
             const mutation = `mutation DeleteMqttClient($name: String!) { mqttClient { delete(name: $name) } }`;
-            const result = await this.client.query(mutation, { name: this.clientName });
-            if (result.mqttClient.delete) {
+            const result = await this.client.query(mutation, { name: name });
+            if (result && result.mqttClient && result.mqttClient.delete) {
                 this.showSuccess('MQTT client deleted');
                 setTimeout(() => { window.spaLocation.href = '/pages/mqtt-clients.html'; }, 800);
             } else {
@@ -813,7 +828,7 @@ class MqttClientDetailManager {
     }
 
     async showDeleteModal() {
-        const name = this.clientData ? this.clientData.name : 'this item';
+        const name = this.clientName || (this.clientData ? this.clientData.name : 'this item');
         if (await ui.confirmDelete(name, { title: 'Delete MQTT bridge' })) {
             this.deleteClient();
         }
@@ -825,42 +840,64 @@ class MqttClientDetailManager {
 }
 
 // Global functions
-let mqttClientDetailManager;
+var mqttClientDetailManager;
 
 function saveClient() {
-    mqttClientDetailManager.saveClient();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.saveClient();
 }
 
 function toggleClient() {
-    mqttClientDetailManager.toggleClient();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.toggleClient();
 }
 
 function showAddAddressModal() {
-    mqttClientDetailManager.showAddAddressModal();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.showAddAddressModal();
 }
 
 function hideAddAddressModal() {
-    mqttClientDetailManager.hideAddAddressModal();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.hideAddAddressModal();
 }
 
-function addAddress() {
-    mqttClientDetailManager.addAddress();
-}
-
-function showEditAddressModal() {
-    mqttClientDetailManager.showEditAddressModal();
+function saveAddress() {
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.saveAddress();
 }
 
 function hideEditAddressModal() {
-    mqttClientDetailManager.hideEditAddressModal();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.hideEditAddressModal();
 }
 
 function updateAddress() {
-    mqttClientDetailManager.updateAddress();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.updateAddress();
 }
 
 function confirmDeleteAddress() {
-    mqttClientDetailManager.confirmDeleteAddress();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.confirmDeleteAddress();
+}
+
+function addAddressUserProperty() {
+    const container = document.getElementById('address-user-properties');
+    if (container && window.mqttClientDetailManager) {
+        container.appendChild(window.mqttClientDetailManager.userPropertyRow('address-user-property-key', 'address-user-property-value'));
+    }
+}
+
+function addEditAddressUserProperty() {
+    const container = document.getElementById('edit-address-user-properties');
+    if (container && window.mqttClientDetailManager) {
+        container.appendChild(window.mqttClientDetailManager.userPropertyRow('edit-user-property-key', 'edit-user-property-value'));
+    }
+}
+
+function goBack() {
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.goBack();
+}
+
+function showDeleteModal() {
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.showDeleteModal();
+}
+
+function generateClientId() {
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.generateClientId();
 }
 
 function toggleMqtt5Options() {

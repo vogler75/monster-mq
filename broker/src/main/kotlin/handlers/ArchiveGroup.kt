@@ -656,21 +656,23 @@ class ArchiveGroup(
 
     companion object {
         fun fromConfig(config: JsonObject, databaseConfig: JsonObject, isClustered: Boolean = false): ArchiveGroup {
-            val name = config.getString("Name", "ArchiveGroup")
-            val topicFilter = config.getJsonArray("TopicFilter").map { it as String }
-            val retainedOnly = config.getBoolean("RetainedOnly", false)
+            val name = config.getString("Name") ?: config.getString("name") ?: "ArchiveGroup"
+            val topicFilter = (config.getJsonArray("TopicFilter") ?: config.getJsonArray("topicFilter"))?.map { it as String } ?: emptyList()
+            val retainedOnly = config.getBoolean("RetainedOnly") ?: config.getBoolean("retainedOnly") ?: false
 
-            val lastValType = MessageStoreType.valueOf(config.getString("LastValType", "NONE"))
-            val archiveType = MessageArchiveType.valueOf(config.getString("ArchiveType", "NONE"))
+            val lastValTypeStr = config.getString("LastValType") ?: config.getString("lastValType") ?: "NONE"
+            val lastValType = MessageStoreType.valueOf(lastValTypeStr)
+            val archiveTypeStr = config.getString("ArchiveType") ?: config.getString("archiveType") ?: "NONE"
+            val archiveType = MessageArchiveType.valueOf(archiveTypeStr)
 
             // Validate database configuration requirements
             validateStoreConfiguration(name, lastValType, "LastValueStore", databaseConfig, isClustered)
             validateArchiveConfiguration(name, archiveType, "Archive", databaseConfig)
 
             // Parse retention configuration
-            val lastValRetentionStr = config.getString("LastValRetention")
-            val archiveRetentionStr = config.getString("ArchiveRetention")
-            val purgeIntervalStr = config.getString("PurgeInterval")
+            val lastValRetentionStr = config.getString("LastValRetention") ?: config.getString("lastValRetention")
+            val archiveRetentionStr = config.getString("ArchiveRetention") ?: config.getString("archiveRetention")
+            val purgeIntervalStr = config.getString("PurgeInterval") ?: config.getString("purgeInterval")
 
             val lastValRetentionMs = Utils.parseDuration(lastValRetentionStr)
             val archiveRetentionMs = Utils.parseDuration(archiveRetentionStr)
@@ -690,13 +692,16 @@ class ArchiveGroup(
                 null  // No retention configured, or time-based for non-memory stores
             }
 
-            val payloadFormat = PayloadFormat.parse(config.getString("PayloadFormat", "DEFAULT"))
+            val payloadFormatStr = config.getString("PayloadFormat") ?: config.getString("payloadFormat") ?: "DEFAULT"
+            val payloadFormat = PayloadFormat.parse(payloadFormatStr)
 
-            val queueType = config.getString("QueueType", "NONE").uppercase()
-            val queueSize = config.getInteger("QueueSize", 100000)
-            val bulkSize = config.getInteger("BulkSize", 4000)
-            val bulkTimeoutMs = config.getLong("BulkTimeoutMs", 250L)
-            val queueDiskPath = config.getString("QueueDiskPath", "data/queue")
+            val queueType = (config.getString("QueueType") ?: config.getString("queueType") ?: "NONE").uppercase()
+            val queueSize = config.getInteger("QueueSize") ?: config.getInteger("queueSize") ?: 100000
+            val bulkSize = config.getInteger("BulkSize") ?: config.getInteger("bulkSize") ?: 4000
+            val bulkTimeoutMs = config.getLong("BulkTimeoutMs") ?: config.getLong("bulkTimeoutMs") ?: 250L
+            val queueDiskPath = config.getString("QueueDiskPath") ?: config.getString("queueDiskPath") ?: "data/queue"
+            val databaseConnectionName = config.getString("DatabaseConnectionName") ?: config.getString("databaseConnectionName")
+            val redisDbNumber = config.getInteger("RedisDbNumber") ?: config.getInteger("redisDbNumber")
 
             return ArchiveGroup(
                 name = name,
@@ -712,8 +717,8 @@ class ArchiveGroup(
                 archiveRetentionStr = archiveRetentionStr,
                 purgeIntervalStr = purgeIntervalStr,
                 maxMemoryEntries = maxMemoryEntries,
-                databaseConnectionName = config.getString("DatabaseConnectionName"),
-                redisDbNumber = config.getInteger("RedisDbNumber"),
+                databaseConnectionName = databaseConnectionName,
+                redisDbNumber = redisDbNumber,
                 databaseConfig = databaseConfig,
                 queueType = queueType,
                 queueSize = queueSize,

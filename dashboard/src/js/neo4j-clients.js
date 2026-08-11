@@ -80,12 +80,20 @@ class Neo4jClientManager {
                 <td>${metrics ? metrics.pathQueueSize : 0}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" onclick="neo4jClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="neo4jClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client" onclick="neo4jClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(client.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(client.name, !client.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(client.name); });
+
             tbody.appendChild(row);
         });
     }
@@ -100,11 +108,11 @@ class Neo4jClientManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.neo4jClient.toggle.success) {
+            if (result && result.neo4jClient && result.neo4jClient.toggle && result.neo4jClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Neo4j client "${clientName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = result.neo4jClient.toggle.errors || ['Unknown error'];
+                const errors = (result && result.neo4jClient && result.neo4jClient.toggle && result.neo4jClient.toggle.errors) || ['Unknown error'];
                 this.showError('Failed to toggle Neo4j client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -127,7 +135,7 @@ class Neo4jClientManager {
         try {
             const mutation = `mutation DeleteNeo4jClient($name: String!) { neo4jClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
-            if (result.neo4jClient.delete) {
+            if (result && result.neo4jClient && result.neo4jClient.delete) {
                 await this.loadClients();
                 this.showSuccess(`Neo4j client "${this.deleteClientName}" deleted successfully`);
             } else {
@@ -151,13 +159,23 @@ class Neo4jClientManager {
     hideError() { const errorEl = document.getElementById('error-message'); if (errorEl) errorEl.style.display='none'; }
     showSuccess(message) { ui.success(message); }
     escapeHtml(text) { const div=document.createElement('div'); div.textContent=text; return div.innerHTML; }
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     async refreshClients() { await this.loadClients(); }
 }
 
 // Global wrappers
-function refreshNeo4jClients() { neo4jClientManager.refreshClients(); }
+var neo4jClientManager;
+
+function refreshNeo4jClients() {
+    if (window.neo4jClientManager) window.neo4jClientManager.refreshClients();
+}
 
 // Initialize
-let neo4jClientManager;
-document.addEventListener('DOMContentLoaded', () => { neo4jClientManager = new Neo4jClientManager(); });
+document.addEventListener('DOMContentLoaded', () => {
+    neo4jClientManager = new Neo4jClientManager();
+    window.neo4jClientManager = neo4jClientManager;
+});

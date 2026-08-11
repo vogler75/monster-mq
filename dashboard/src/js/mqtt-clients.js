@@ -136,12 +136,36 @@ class MqttClientManager {
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Bridge" onclick="mqttClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" onclick="mqttClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Bridge" onclick="mqttClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Bridge" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Stop Bridge' : 'Start Bridge'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Bridge"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.viewClient(client.name);
+                });
+            }
+
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.toggleClient(client.name, !client.enabled);
+                });
+            }
+
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteClient(client.name);
+                });
+            }
 
             tbody.appendChild(row);
         });
@@ -166,11 +190,11 @@ class MqttClientManager {
 
             const result = await this.client.query(mutation, { name: clientName, enabled });
 
-            if (result.mqttClient.toggle.success) {
+            if (result && result.mqttClient && result.mqttClient.toggle && result.mqttClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Bridge \"${clientName}\" ${enabled ? 'started' : 'stopped'} successfully`);
             } else {
-                const errors = result.mqttClient.toggle.errors || ['Unknown error'];
+                const errors = (result && result.mqttClient && result.mqttClient.toggle && result.mqttClient.toggle.errors) || ['Unknown error'];
                 this.showError('Failed to toggle bridge: ' + errors.join(', '));
             }
 
@@ -203,7 +227,7 @@ class MqttClientManager {
 
             const result = await this.client.query(mutation, { name: this.deleteClientName });
 
-            if (result.mqttClient.delete) {
+            if (result && result.mqttClient && result.mqttClient.delete) {
                 await this.loadClients();
                 this.showSuccess(`Bridge \"${this.deleteClientName}\" deleted successfully`);
             } else {
@@ -248,24 +272,36 @@ class MqttClientManager {
         return div.innerHTML;
     }
 
+    escapeAttr(text) {
+        if (!text) return '';
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
     async refreshClients() {
         await this.loadClients();
     }
 }
 
 // Global functions for onclick handlers
+var mqttClientManager;
+
 function confirmDeleteClient() {
-    mqttClientManager.confirmDeleteClient();
+    if (window.mqttClientManager) window.mqttClientManager.confirmDeleteClient();
 }
 
 function refreshClients() {
-    mqttClientManager.refreshClients();
+    if (window.mqttClientManager) window.mqttClientManager.refreshClients();
 }
 
 // Initialize when DOM is loaded
-let mqttClientManager;
 document.addEventListener('DOMContentLoaded', () => {
     mqttClientManager = new MqttClientManager();
+    window.mqttClientManager = mqttClientManager;
 });
 
 // Handle modal clicks

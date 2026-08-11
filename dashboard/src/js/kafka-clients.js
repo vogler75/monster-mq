@@ -73,12 +73,20 @@ class KafkaClientManager {
                 <td>${(client.metrics && client.metrics.length>0 ? Math.round(client.metrics[0].messagesOut) : 0)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" onclick="kafkaClientManager.viewClient('${client.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" onclick="kafkaClientManager.toggleClient('${client.name}', ${!client.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client" onclick="kafkaClientManager.deleteClient('${client.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${client.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${client.enabled ? 'Disable Client' : 'Enable Client'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Client"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(client.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(client.name, !client.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(client.name); });
+
             tbody.appendChild(row);
         });
     }
@@ -93,11 +101,11 @@ class KafkaClientManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.kafkaClient.toggle.success) {
+            if (result && result.kafkaClient && result.kafkaClient.toggle && result.kafkaClient.toggle.success) {
                 await this.loadClients();
                 this.showSuccess(`Kafka client "${clientName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = result.kafkaClient.toggle.errors || ['Unknown error'];
+                const errors = (result && result.kafkaClient && result.kafkaClient.toggle && result.kafkaClient.toggle.errors) || ['Unknown error'];
                 this.showError('Failed to toggle Kafka client: ' + errors.join(', '));
             }
         } catch (e) {
@@ -120,7 +128,7 @@ class KafkaClientManager {
         try {
             const mutation = `mutation DeleteKafkaClient($name: String!) { kafkaClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: this.deleteClientName });
-            if (result.kafkaClient.delete) {
+            if (result && result.kafkaClient && result.kafkaClient.delete) {
                 await this.loadClients();
                 this.showSuccess(`Kafka client "${this.deleteClientName}" deleted successfully`);
             } else {
@@ -144,13 +152,23 @@ class KafkaClientManager {
     hideError() { const errorEl = document.getElementById('error-message'); if (errorEl) errorEl.style.display='none'; }
     showSuccess(message) { ui.success(message); }
     escapeHtml(text) { const div=document.createElement('div'); div.textContent=text; return div.innerHTML; }
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
 
     async refreshClients() { await this.loadClients(); }
 }
 
 // Global wrappers
-function refreshKafkaClients() { kafkaClientManager.refreshClients(); }
+var kafkaClientManager;
+
+function refreshKafkaClients() {
+    if (window.kafkaClientManager) window.kafkaClientManager.refreshClients();
+}
 
 // Initialize
-let kafkaClientManager;
-document.addEventListener('DOMContentLoaded', () => { kafkaClientManager = new KafkaClientManager(); });
+document.addEventListener('DOMContentLoaded', () => {
+    kafkaClientManager = new KafkaClientManager();
+    window.kafkaClientManager = kafkaClientManager;
+});

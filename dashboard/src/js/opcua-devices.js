@@ -153,12 +153,19 @@ class OpcUaDeviceManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Device" onclick="opcuaManager.viewDevice('${device.name}')"></ix-icon-button>
-                        <ix-icon-button icon="${device.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${device.enabled ? 'Disable Device' : 'Enable Device'}" onclick="opcuaManager.toggleDevice('${device.name}', ${!device.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Device" onclick="opcuaManager.deleteDevice('${device.name}')"></ix-icon-button>
+                        <ix-icon-button icon="highlight" variant="subtle-tertiary" size="24" title="Edit Device" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${device.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${device.enabled ? 'Disable Device' : 'Enable Device'}" class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Device"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewDevice(device.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleDevice(device.name, !device.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteDevice(device.name); });
 
             tbody.appendChild(row);
         });
@@ -183,11 +190,11 @@ class OpcUaDeviceManager {
 
             const result = await this.client.query(mutation, { name: deviceName, enabled });
 
-            if (result.opcUaDevice.toggle.success) {
+            if (result && result.opcUaDevice && result.opcUaDevice.toggle && result.opcUaDevice.toggle.success) {
                 await this.loadDevices();
                 this.showSuccess(`Device "${deviceName}" ${enabled ? 'enabled' : 'disabled'} successfully`);
             } else {
-                const errors = result.opcUaDevice.toggle.errors || ['Unknown error'];
+                const errors = (result && result.opcUaDevice && result.opcUaDevice.toggle && result.opcUaDevice.toggle.errors) || ['Unknown error'];
                 this.showError('Failed to toggle device: ' + errors.join(', '));
             }
 
@@ -199,7 +206,7 @@ class OpcUaDeviceManager {
 
     async deleteDevice(deviceName) {
         this.deleteDeviceName = deviceName;
-        if (await ui.confirmDelete(deviceName, { title: 'Delete OPC UA client' })) {
+        if (await ui.confirmDelete(deviceName, { title: 'Delete OPC UA device' })) {
             await this.confirmDeleteDevice();
         } else {
             this.deleteDeviceName = null;
@@ -220,7 +227,7 @@ class OpcUaDeviceManager {
 
             const result = await this.client.query(mutation, { name: this.deleteDeviceName });
 
-            if (result.opcUaDevice.delete) {
+            if (result && result.opcUaDevice && result.opcUaDevice.delete) {
                 await this.loadDevices();
                 this.showSuccess(`Device "${this.deleteDeviceName}" deleted successfully`);
             } else {
@@ -266,24 +273,31 @@ class OpcUaDeviceManager {
         return div.innerHTML;
     }
 
+    escapeAttr(text) {
+        if (!text) return '';
+        return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
     async refreshDevices() {
         await this.loadDevices();
     }
 }
 
 // Global functions for onclick handlers
+var opcuaManager;
+
 function confirmDeleteDevice() {
-    opcuaManager.confirmDeleteDevice();
+    if (window.opcuaManager) window.opcuaManager.confirmDeleteDevice();
 }
 
 function refreshDevices() {
-    opcuaManager.refreshDevices();
+    if (window.opcuaManager) window.opcuaManager.refreshDevices();
 }
 
 // Initialize when DOM is loaded
-let opcuaManager;
 document.addEventListener('DOMContentLoaded', () => {
     opcuaManager = new OpcUaDeviceManager();
+    window.opcuaManager = opcuaManager;
 });
 
 // Handle modal clicks (close when clicking outside)

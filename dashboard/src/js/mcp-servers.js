@@ -93,11 +93,16 @@ class McpServerManager {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit Server" onclick="event.stopPropagation(); window.spaLocation.href='/pages/mcp-server-detail.html?server=${encodeURIComponent(server.name)}'"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server" onclick="event.stopPropagation(); mcpServerManager.deleteServer('${this.escapeHtml(server.name)}')"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit Server" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete Server"></ix-icon-button>
                     </div>
                 </td>
             `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); window.spaLocation.href = `/pages/mcp-server-detail.html?server=${encodeURIComponent(server.name)}`; });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteServer(server.name); });
 
             row.addEventListener('click', () => window.spaLocation.href = `/pages/mcp-server-detail.html?server=${encodeURIComponent(server.name)}`);
             tbody.appendChild(row);
@@ -174,18 +179,20 @@ class McpServerManager {
 }
 
 // Global functions for onclick handlers
+var mcpServerManager;
+
 function confirmDeleteServer() {
-    mcpServerManager.confirmDeleteServer();
+    if (window.mcpServerManager) window.mcpServerManager.confirmDeleteServer();
 }
 
 function refreshMcpServers() {
-    mcpServerManager.refreshMcpServers();
+    if (window.mcpServerManager) window.mcpServerManager.refreshMcpServers();
 }
 
 // Initialize when DOM is loaded
-let mcpServerManager;
 document.addEventListener('DOMContentLoaded', () => {
     mcpServerManager = new McpServerManager();
+    window.mcpServerManager = mcpServerManager;
 });
 
 // Handle modal clicks (close on backdrop click)

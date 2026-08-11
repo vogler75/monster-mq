@@ -56,16 +56,17 @@ class RedisClientManager {
             return;
         }
 
-        tbody.innerHTML = this.clients.map(c => {
+        tbody.innerHTML = '';
+        this.clients.forEach(c => {
             const cfg = c.config || {};
             const hostDisplay = (cfg.host || 'localhost') + ':' + (cfg.port || 6379) + '/' + (cfg.database || 0);
             const sslBadge = cfg.useSsl ? ' <span class="status-badge badge-ok">TLS</span>' : '';
             const addrCount = (cfg.addresses || []).length;
             const metrics = (c.metrics && c.metrics.length > 0) ? c.metrics[0] : { messagesIn: 0, messagesOut: 0 };
             const node = ui.escapeHtml(c.nodeId || '');
-            const name = c.name.replace(/'/g, "\\'");
 
-            return `<tr>
+            const row = document.createElement('tr');
+            row.innerHTML = `
                 <td><strong>${ui.escapeHtml(c.name)}</strong></td>
                 <td>${ui.escapeHtml(hostDisplay)}${sslBadge}</td>
                 <td>${c.isOnCurrentNode ? `${node} <span class="status-badge badge-info">this node</span>` : node}</td>
@@ -75,18 +76,22 @@ class RedisClientManager {
                 <td class="num">${Math.round(metrics.messagesOut)}</td>
                 <td>
                     <div class="action-buttons">
-                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit client"
-                            onclick="redisClientManager.viewClient('${name}')"></ix-icon-button>
-                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24"
-                            title="${c.enabled ? 'Disable' : 'Enable'}" data-requires-auth
-                            onclick="redisClientManager.toggleClient('${name}', ${!c.enabled})"></ix-icon-button>
-                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete"
-                            title="Delete" data-requires-auth
-                            onclick="redisClientManager.deleteClient('${name}')"></ix-icon-button>
+                        <ix-icon-button icon="pen" variant="subtle-tertiary" size="24" title="Edit client" class="btn-edit"></ix-icon-button>
+                        <ix-icon-button icon="${c.enabled ? 'pause' : 'play'}" variant="subtle-tertiary" size="24" title="${c.enabled ? 'Disable' : 'Enable'}" data-requires-auth class="btn-toggle"></ix-icon-button>
+                        <ix-icon-button icon="trashcan" variant="subtle-tertiary" size="24" class="btn-delete" title="Delete" data-requires-auth></ix-icon-button>
                     </div>
                 </td>
-            </tr>`;
-        }).join('');
+            `;
+
+            const editBtn = row.querySelector('.btn-edit');
+            if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); this.viewClient(c.name); });
+            const toggleBtn = row.querySelector('.btn-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); this.toggleClient(c.name, !c.enabled); });
+            const deleteBtn = row.querySelector('.btn-delete');
+            if (deleteBtn) deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); this.deleteClient(c.name); });
+
+            tbody.appendChild(row);
+        });
     }
 
     async toggleClient(clientName, enabled) {
@@ -97,11 +102,12 @@ class RedisClientManager {
                 }
             `;
             const result = await this.client.query(mutation, { name: clientName, enabled });
-            if (result.redisClient.toggle.success) {
+            if (result && result.redisClient && result.redisClient.toggle && result.redisClient.toggle.success) {
                 await this.loadClients();
                 ui.success(`Redis client “${clientName}” ${enabled ? 'enabled' : 'disabled'}`);
             } else {
-                ui.error('Failed to toggle: ' + (result.redisClient.toggle.errors || []).join(', '));
+                const errors = (result && result.redisClient && result.redisClient.toggle && result.redisClient.toggle.errors) || [];
+                ui.error('Failed to toggle: ' + errors.join(', '));
             }
         } catch (e) {
             ui.error('Failed to toggle Redis client: ' + e.message);
@@ -120,7 +126,7 @@ class RedisClientManager {
         try {
             const mutation = `mutation DeleteRedisClient($name: String!) { redisClient { delete(name: $name) } }`;
             const result = await this.client.query(mutation, { name: clientName });
-            if (result.redisClient.delete) {
+            if (result && result.redisClient && result.redisClient.delete) {
                 await this.loadClients();
                 ui.success(`Redis client “${clientName}” deleted`);
             } else {
@@ -138,7 +144,13 @@ class RedisClientManager {
     async refreshClients() { await this.loadClients(); }
 }
 
-function refreshRedisClients() { redisClientManager.refreshClients(); }
+var redisClientManager;
 
-let redisClientManager;
-document.addEventListener('DOMContentLoaded', () => { redisClientManager = new RedisClientManager(); });
+function refreshRedisClients() {
+    if (window.redisClientManager) window.redisClientManager.refreshClients();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    redisClientManager = new RedisClientManager();
+    window.redisClientManager = redisClientManager;
+});
