@@ -26,7 +26,7 @@
     "vite": "^6.4.2"
   },
   "overrides": {
-    "glob": "^11.0.0",
+    "glob": "^13.0.6",
     "rimraf": "^5.0.10",
     "brace-expansion": "^2.0.1",
     "boolean": "npm:is-boolean@^1.0.0"
