@@ -48,3 +48,4 @@ hazelcast.xml
 
 ### Environment ###
 .env
+data
