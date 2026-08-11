@@ -95,7 +95,12 @@ class ArchiveConfigStoreCrateDB(
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 payload_format STRING DEFAULT 'DEFAULT',
                 database_connection_name STRING,
-                redis_db_number INTEGER
+                redis_db_number INTEGER,
+                queue_type STRING DEFAULT 'NONE',
+                queue_size INTEGER DEFAULT 100000,
+                bulk_size INTEGER DEFAULT 4000,
+                bulk_timeout_ms BIGINT DEFAULT 250,
+                queue_disk_path STRING DEFAULT 'data/queue'
             )
         """.trimIndent()
 
@@ -208,8 +213,8 @@ class ArchiveConfigStoreCrateDB(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -222,6 +227,11 @@ class ArchiveConfigStoreCrateDB(
                     payload_format = EXCLUDED.payload_format,
                     database_connection_name = EXCLUDED.database_connection_name,
                     redis_db_number = EXCLUDED.redis_db_number,
+                    queue_type = EXCLUDED.queue_type,
+                    queue_size = EXCLUDED.queue_size,
+                    bulk_size = EXCLUDED.bulk_size,
+                    bulk_timeout_ms = EXCLUDED.bulk_timeout_ms,
+                    queue_disk_path = EXCLUDED.queue_disk_path,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -248,6 +258,11 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
                         preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
                         archiveGroup.getRedisDbNumber()?.let { preparedStatement.setInt(12, it) } ?: preparedStatement.setNull(12, Types.INTEGER)
+                        preparedStatement.setString(13, archiveGroup.queueType)
+                        preparedStatement.setInt(14, archiveGroup.queueSize)
+                        preparedStatement.setInt(15, archiveGroup.bulkSize)
+                        preparedStatement.setLong(16, archiveGroup.bulkTimeoutMs)
+                        preparedStatement.setString(17, archiveGroup.queueDiskPath)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -444,6 +459,12 @@ class ArchiveConfigStoreCrateDB(
         val payloadFormatStr = try { resultSet.getString("payload_format") } catch (e: Exception) { null }
         val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
 
+        val queueType = try { resultSet.getString("queue_type") } catch (e: Exception) { null } ?: "NONE"
+        val queueSize = try { resultSet.getInt("queue_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 100000 else it }
+        val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
+        val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
+        val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
@@ -456,7 +477,12 @@ class ArchiveConfigStoreCrateDB(
             purgeIntervalMs = purgeInterval?.let { Utils.parseDuration(it) },
             databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
             redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
-            databaseConfig = JsonObject() // Will be populated from config
+            databaseConfig = JsonObject(), // Will be populated from config
+            queueType = queueType,
+            queueSize = queueSize,
+            bulkSize = bulkSize,
+            bulkTimeoutMs = bulkTimeoutMs,
+            queueDiskPath = queueDiskPath
         )
     }
 

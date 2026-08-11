@@ -45,7 +45,12 @@ class ArchiveConfigStoreSQLite(
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 payload_format TEXT DEFAULT 'DEFAULT',
                 database_connection_name TEXT,
-                redis_db_number INTEGER
+                redis_db_number INTEGER,
+                queue_type TEXT DEFAULT 'NONE',
+                queue_size INTEGER DEFAULT 100000,
+                bulk_size INTEGER DEFAULT 4000,
+                bulk_timeout_ms INTEGER DEFAULT 250,
+                queue_disk_path TEXT DEFAULT 'data/queue'
             )
         """.trimIndent())
             .add("""
@@ -86,6 +91,21 @@ class ArchiveConfigStoreSQLite(
                 }
                 if (!columnNames.contains("redis_db_number")) {
                     migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN redis_db_number INTEGER")
+                }
+                if (!columnNames.contains("queue_type")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN queue_type TEXT DEFAULT 'NONE'")
+                }
+                if (!columnNames.contains("queue_size")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN queue_size INTEGER DEFAULT 100000")
+                }
+                if (!columnNames.contains("bulk_size")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN bulk_size INTEGER DEFAULT 4000")
+                }
+                if (!columnNames.contains("bulk_timeout_ms")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN bulk_timeout_ms INTEGER DEFAULT 250")
+                }
+                if (!columnNames.contains("queue_disk_path")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN queue_disk_path TEXT DEFAULT 'data/queue'")
                 }
 
                 if (migrationsNeeded.isEmpty) {
@@ -165,8 +185,8 @@ class ArchiveConfigStoreSQLite(
     override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         val sql = """
             INSERT OR REPLACE INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """.trimIndent()
 
         val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
@@ -183,6 +203,11 @@ class ArchiveConfigStoreSQLite(
             .add(archiveGroup.payloadFormat.name)
             .add(archiveGroup.getDatabaseConnectionName())
             .add(archiveGroup.getRedisDbNumber())
+            .add(archiveGroup.queueType)
+            .add(archiveGroup.queueSize)
+            .add(archiveGroup.bulkSize)
+            .add(archiveGroup.bulkTimeoutMs)
+            .add(archiveGroup.queueDiskPath)
 
         return sqliteClient.executeUpdate(sql, params).map { rowsAffected ->
             val success = rowsAffected > 0

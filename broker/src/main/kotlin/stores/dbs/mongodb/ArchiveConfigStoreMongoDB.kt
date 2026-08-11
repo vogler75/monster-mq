@@ -315,6 +315,12 @@ class ArchiveConfigStoreMongoDB(
         val payloadFormatStr = document.getString("payload_format")
         val payloadFormat = PayloadFormat.parse(payloadFormatStr)
 
+        val queueType = document.getString("queue_type") ?: "NONE"
+        val queueSize = document.getInteger("queue_size") ?: 100000
+        val bulkSize = document.getInteger("bulk_size") ?: 4000
+        val bulkTimeoutMs = document.getLong("bulk_timeout_ms") ?: 250L
+        val queueDiskPath = document.getString("queue_disk_path") ?: "data/queue"
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
@@ -330,7 +336,12 @@ class ArchiveConfigStoreMongoDB(
             purgeIntervalStr = purgeInterval,
             databaseConnectionName = document.getString("database_connection_name"),
             redisDbNumber = document.getInteger("redis_db_number"),
-            databaseConfig = JsonObject() // Will be populated from config
+            databaseConfig = JsonObject(), // Will be populated from config
+            queueType = queueType,
+            queueSize = queueSize,
+            bulkSize = bulkSize,
+            bulkTimeoutMs = bulkTimeoutMs,
+            queueDiskPath = queueDiskPath
         )
     }
 
@@ -345,6 +356,11 @@ class ArchiveConfigStoreMongoDB(
             .append("payload_format", archiveGroup.payloadFormat.name)
             .append("database_connection_name", archiveGroup.getDatabaseConnectionName())
             .append("redis_db_number", archiveGroup.getRedisDbNumber())
+            .append("queue_type", archiveGroup.queueType)
+            .append("queue_size", archiveGroup.queueSize)
+            .append("bulk_size", archiveGroup.bulkSize)
+            .append("bulk_timeout_ms", archiveGroup.bulkTimeoutMs)
+            .append("queue_disk_path", archiveGroup.queueDiskPath)
             .append("updated_at", Instant.now())
 
         // Add optional duration fields (preserve original string to avoid lossy roundtrip via formatDuration)

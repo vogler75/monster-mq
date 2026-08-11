@@ -10,6 +10,7 @@ set -euo pipefail
 #
 # Usage:
 #   ./run.sh                          # expose on all interfaces, port 5173
+#   ./run.sh -b                       # build dashboard before running dev server
 #   ./run.sh --port 8080              # ...on a different port
 #   ./run.sh --local                  # localhost only (Vite's default)
 #   VITE_LOCAL_GRAPHQL_TARGET=http://broker-host:4000 ./run.sh
@@ -17,11 +18,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+BUILD=false
 EXPOSE=true
 ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -b|--build)
+      BUILD=true
+      shift
+      ;;
     --local)
       EXPOSE=false
       shift
@@ -32,6 +38,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$BUILD" = true ]]; then
+  echo "Building dashboard..."
+  npm run build
+fi
 
 if [[ "$EXPOSE" = true ]]; then
   ARGS=(--host "${ARGS[@]+"${ARGS[@]}"}")

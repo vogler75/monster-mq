@@ -138,6 +138,44 @@
                         </div>
                     </div>
                 </div>
+            <!-- Store-and-Forward Settings -->
+            <div class="section-card">
+                <div class="section-header">
+                    <div class="section-title"><h2>Store-and-Forward Settings</h2></div>
+                </div>
+                <div class="section-content">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="group-queue-type">Queue Type</label>
+                            <select id="group-queue-type" onchange="archiveGroupDetail.updateQueueTypeVisibility()">
+                                <option value="NONE">None (unbuffered, store-and-forward disabled)</option>
+                                <option value="MEMORY">Memory (volatile RAM buffer)</option>
+                                <option value="DISK">Disk (persistent ring buffer file)</option>
+                            </select>
+                            <small>Buffering mechanism used during database outages</small>
+                        </div>
+                        <div class="form-group" id="queue-size-group">
+                            <label for="group-queue-size">Queue Capacity (messages)</label>
+                            <input type="number" id="group-queue-size" min="1" step="1000" placeholder="100000">
+                            <small>Maximum number of messages buffered in queue</small>
+                        </div>
+                        <div class="form-group" id="bulk-size-group">
+                            <label for="group-bulk-size">Batch Flush Size</label>
+                            <input type="number" id="group-bulk-size" min="1" step="100" placeholder="4000">
+                            <small>Maximum batch size per database write</small>
+                        </div>
+                        <div class="form-group" id="bulk-timeout-group">
+                            <label for="group-bulk-timeout-ms">Batch Timeout (ms)</label>
+                            <input type="number" id="group-bulk-timeout-ms" min="1" step="50" placeholder="250">
+                            <small>Timeout in milliseconds before flushing partial batch</small>
+                        </div>
+                        <div class="form-group" id="queue-disk-path-group">
+                            <label for="group-queue-disk-path">Queue Disk Path</label>
+                            <input type="text" id="group-queue-disk-path" placeholder="data/queue">
+                            <small>Directory for binary ring buffer files when Disk queue is enabled</small>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Retention Settings -->

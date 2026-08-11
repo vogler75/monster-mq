@@ -63,7 +63,12 @@ class ArchiveConfigStorePostgres(
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     payload_format VARCHAR(20) DEFAULT 'DEFAULT',
                     database_connection_name VARCHAR(255),
-                    redis_db_number INTEGER
+                    redis_db_number INTEGER,
+                    queue_type VARCHAR(50) DEFAULT 'NONE',
+                    queue_size INTEGER DEFAULT 100000,
+                    bulk_size INTEGER DEFAULT 4000,
+                    bulk_timeout_ms BIGINT DEFAULT 250,
+                    queue_disk_path VARCHAR(255) DEFAULT 'data/queue'
                 );
                 """.trimIndent()
 
@@ -71,6 +76,11 @@ class ArchiveConfigStorePostgres(
                     statement.executeUpdate(createTableSQL)
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS database_connection_name VARCHAR(255)")
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS redis_db_number INTEGER")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS queue_type VARCHAR(50) DEFAULT 'NONE'")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS queue_size INTEGER DEFAULT 100000")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS bulk_size INTEGER DEFAULT 4000")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS bulk_timeout_ms BIGINT DEFAULT 250")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS queue_disk_path VARCHAR(255) DEFAULT 'data/queue'")
                     statement.executeUpdate("""
                         CREATE TABLE IF NOT EXISTS $connectionTableName (
                             name VARCHAR(255) PRIMARY KEY,
@@ -105,7 +115,7 @@ class ArchiveConfigStorePostgres(
 
         vertx.executeBlocking(Callable {
             val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number FROM $configTableName ORDER BY name"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path FROM $configTableName ORDER BY name"
 
             try {
                 db.connection?.let { connection ->
@@ -123,15 +133,19 @@ class ArchiveConfigStorePostgres(
                             val purgeInterval = resultSet.getString("purge_interval")
 
                             val topicFilter = try {
-                                // Try to parse as direct array first (new format)
                                 JsonArray(topicFilterJson).list.map { it.toString() }
                             } catch (e: Exception) {
-                                // Fall back to old format with "filters" wrapper
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
                             val payloadFormatStr = resultSet.getString("payload_format")
                             val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
+
+                            val queueType = try { resultSet.getString("queue_type") } catch (e: Exception) { null } ?: "NONE"
+                            val queueSize = try { resultSet.getInt("queue_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 100000 else it }
+                            val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
+                            val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
+                            val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,
@@ -148,7 +162,12 @@ class ArchiveConfigStorePostgres(
                                 purgeIntervalStr = purgeInterval,
                                 databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
                                 redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
-                                databaseConfig = JsonObject()
+                                databaseConfig = JsonObject(),
+                                queueType = queueType,
+                                queueSize = queueSize,
+                                bulkSize = bulkSize,
+                                bulkTimeoutMs = bulkTimeoutMs,
+                                queueDiskPath = queueDiskPath
                             )
                             archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
                         }
@@ -179,7 +198,7 @@ class ArchiveConfigStorePostgres(
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number FROM $configTableName WHERE name = ?"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path FROM $configTableName WHERE name = ?"
 
             try {
                 db.connection?.let { connection ->
@@ -197,15 +216,19 @@ class ArchiveConfigStorePostgres(
                             val purgeInterval = resultSet.getString("purge_interval")
 
                             val topicFilter = try {
-                                // Try to parse as direct array first (new format)
                                 JsonArray(topicFilterJson).list.map { it.toString() }
                             } catch (e: Exception) {
-                                // Fall back to old format with "filters" wrapper
                                 JsonObject(topicFilterJson).getJsonArray("filters")?.list?.map { it.toString() } ?: emptyList()
                             }
 
                             val payloadFormatStr = resultSet.getString("payload_format")
                             val payloadFormat = at.rocworks.stores.PayloadFormat.parse(payloadFormatStr)
+
+                            val queueType = try { resultSet.getString("queue_type") } catch (e: Exception) { null } ?: "NONE"
+                            val queueSize = try { resultSet.getInt("queue_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 100000 else it }
+                            val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
+                            val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
+                            val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,
@@ -222,7 +245,12 @@ class ArchiveConfigStorePostgres(
                                 purgeIntervalStr = purgeInterval,
                                 databaseConnectionName = try { resultSet.getString("database_connection_name") } catch (e: Exception) { null },
                                 redisDbNumber = try { resultSet.getObject("redis_db_number") as? Int } catch (e: Exception) { null },
-                                databaseConfig = JsonObject()
+                                databaseConfig = JsonObject(),
+                                queueType = queueType,
+                                queueSize = queueSize,
+                                bulkSize = bulkSize,
+                                bulkTimeoutMs = bulkTimeoutMs,
+                                queueDiskPath = queueDiskPath
                             )
                             ArchiveGroupConfig(archiveGroup, enabled)
                         } else {
@@ -258,8 +286,8 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, updated_at)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -272,6 +300,11 @@ class ArchiveConfigStorePostgres(
                     payload_format = EXCLUDED.payload_format,
                     database_connection_name = EXCLUDED.database_connection_name,
                     redis_db_number = EXCLUDED.redis_db_number,
+                    queue_type = EXCLUDED.queue_type,
+                    queue_size = EXCLUDED.queue_size,
+                    bulk_size = EXCLUDED.bulk_size,
+                    bulk_timeout_ms = EXCLUDED.bulk_timeout_ms,
+                    queue_disk_path = EXCLUDED.queue_disk_path,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -280,7 +313,6 @@ class ArchiveConfigStorePostgres(
                     connection.prepareStatement(sql).use { preparedStatement ->
                         val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
 
-                        // Use the string retention values directly to preserve original format
                         val lastValRetention = archiveGroup.getLastValRetention()
                         val archiveRetention = archiveGroup.getArchiveRetention()
                         val purgeInterval = archiveGroup.getPurgeInterval()
@@ -297,6 +329,11 @@ class ArchiveConfigStorePostgres(
                         preparedStatement.setString(10, archiveGroup.payloadFormat.name)
                         preparedStatement.setString(11, archiveGroup.getDatabaseConnectionName())
                         archiveGroup.getRedisDbNumber()?.let { preparedStatement.setInt(12, it) } ?: preparedStatement.setNull(12, Types.INTEGER)
+                        preparedStatement.setString(13, archiveGroup.queueType)
+                        preparedStatement.setInt(14, archiveGroup.queueSize)
+                        preparedStatement.setInt(15, archiveGroup.bulkSize)
+                        preparedStatement.setLong(16, archiveGroup.bulkTimeoutMs)
+                        preparedStatement.setString(17, archiveGroup.queueDiskPath)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         connection.commit()

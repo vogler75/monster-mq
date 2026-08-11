@@ -90,6 +90,11 @@ class ArchiveGroupDetailManager {
                     lastValRetention
                     archiveRetention
                     purgeInterval
+                    queueType
+                    queueSize
+                    bulkSize
+                    bulkTimeoutMs
+                    queueDiskPath
                     createdAt
                     updatedAt
                     connectionStatus {
@@ -133,6 +138,14 @@ class ArchiveGroupDetailManager {
         document.getElementById('group-last-val-retention').value = g.lastValRetention || '';
         document.getElementById('group-archive-retention').value = g.archiveRetention || '';
         document.getElementById('group-purge-interval').value = g.purgeInterval || '';
+
+        // Store-and-Forward
+        document.getElementById('group-queue-type').value = g.queueType || 'NONE';
+        document.getElementById('group-queue-size').value = g.queueSize ?? 100000;
+        document.getElementById('group-bulk-size').value = g.bulkSize ?? 4000;
+        document.getElementById('group-bulk-timeout-ms').value = g.bulkTimeoutMs ?? 250;
+        document.getElementById('group-queue-disk-path').value = g.queueDiskPath || 'data/queue';
+        this.updateQueueTypeVisibility();
 
         this.updateLastValRetentionHelp();
 
@@ -309,6 +322,11 @@ class ArchiveGroupDetailManager {
             lastValRetention: document.getElementById('group-last-val-retention').value.trim() || null,
             archiveRetention: document.getElementById('group-archive-retention').value.trim() || null,
             purgeInterval: document.getElementById('group-purge-interval').value.trim() || null,
+            queueType: document.getElementById('group-queue-type').value,
+            queueSize: Number(document.getElementById('group-queue-size').value || 100000),
+            bulkSize: Number(document.getElementById('group-bulk-size').value || 4000),
+            bulkTimeoutMs: Number(document.getElementById('group-bulk-timeout-ms').value || 250),
+            queueDiskPath: document.getElementById('group-queue-disk-path').value.trim() || 'data/queue',
         };
 
         if (this.redisServerEnabled) {
@@ -367,7 +385,46 @@ class ArchiveGroupDetailManager {
                 return false;
             }
         }
+        if (data.queueType !== 'NONE') {
+            if (!Number.isInteger(data.queueSize) || data.queueSize <= 0) {
+                this.showError('Queue Capacity must be a positive integer.');
+                return false;
+            }
+            if (!Number.isInteger(data.bulkSize) || data.bulkSize <= 0) {
+                this.showError('Batch Flush Size must be a positive integer.');
+                return false;
+            }
+            if (!Number.isInteger(data.bulkTimeoutMs) || data.bulkTimeoutMs <= 0) {
+                this.showError('Batch Timeout must be a positive integer.');
+                return false;
+            }
+        }
+        if (data.queueType === 'DISK' && !data.queueDiskPath) {
+            this.showError('Queue Disk Path is required when Queue Type is DISK.');
+            return false;
+        }
         return true;
+    }
+
+    updateQueueTypeVisibility() {
+        const qType = document.getElementById('group-queue-type')?.value;
+        const diskGroup = document.getElementById('queue-disk-path-group');
+        const diskInput = document.getElementById('group-queue-disk-path');
+        const sizeGroup = document.getElementById('queue-size-group');
+        const bulkSizeGroup = document.getElementById('bulk-size-group');
+        const bulkTimeoutGroup = document.getElementById('bulk-timeout-group');
+
+        const isNone = qType === 'NONE';
+        const isDisk = qType === 'DISK';
+
+        if (sizeGroup) sizeGroup.style.display = isNone ? 'none' : '';
+        if (bulkSizeGroup) bulkSizeGroup.style.display = isNone ? 'none' : '';
+        if (bulkTimeoutGroup) bulkTimeoutGroup.style.display = isNone ? 'none' : '';
+
+        if (diskGroup && diskInput) {
+            diskGroup.style.display = isDisk ? '' : 'none';
+            diskInput.disabled = !isDisk;
+        }
     }
 
     async saveGroup() {

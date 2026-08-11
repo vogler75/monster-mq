@@ -48,7 +48,12 @@ class ArchiveGroup(
     private val maxMemoryEntries: Long? = null,
     private val databaseConnectionName: String? = null,
     private val redisDbNumber: Int? = null,
-    private val databaseConfig: JsonObject
+    private val databaseConfig: JsonObject,
+    val queueType: String = "NONE",
+    val queueSize: Int = 100000,
+    val bulkSize: Int = 4000,
+    val bulkTimeoutMs: Long = 250L,
+    val queueDiskPath: String = "data/queue"
 ) : AbstractVerticle() {
 
     private val logger = Utils.getLogger(this::class.java, name)
@@ -687,6 +692,12 @@ class ArchiveGroup(
 
             val payloadFormat = PayloadFormat.parse(config.getString("PayloadFormat", "DEFAULT"))
 
+            val queueType = config.getString("QueueType", "NONE").uppercase()
+            val queueSize = config.getInteger("QueueSize", 100000)
+            val bulkSize = config.getInteger("BulkSize", 4000)
+            val bulkTimeoutMs = config.getLong("BulkTimeoutMs", 250L)
+            val queueDiskPath = config.getString("QueueDiskPath", "data/queue")
+
             return ArchiveGroup(
                 name = name,
                 topicFilter = topicFilter,
@@ -703,7 +714,12 @@ class ArchiveGroup(
                 maxMemoryEntries = maxMemoryEntries,
                 databaseConnectionName = config.getString("DatabaseConnectionName"),
                 redisDbNumber = config.getInteger("RedisDbNumber"),
-                databaseConfig = databaseConfig
+                databaseConfig = databaseConfig,
+                queueType = queueType,
+                queueSize = queueSize,
+                bulkSize = bulkSize,
+                bulkTimeoutMs = bulkTimeoutMs,
+                queueDiskPath = queueDiskPath
             )
         }
 

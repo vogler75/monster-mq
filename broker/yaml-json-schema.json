@@ -773,7 +773,12 @@
           "LastValRetention": { "type": ["string","null"], "description": "Duration like 1h, 30m" },
           "ArchiveRetention": { "type": ["string","null"], "description": "Duration like 24h, 7d" },
           "PurgeInterval": { "type": ["string","null"], "description": "Purge interval duration" },
-          "PayloadFormat": { "type": "string", "enum": ["DEFAULT","JSON"], "default": "DEFAULT", "description": "Payload storage format" }
+          "PayloadFormat": { "type": "string", "enum": ["DEFAULT","JSON"], "default": "DEFAULT", "description": "Payload storage format" },
+          "QueueType": { "type": "string", "enum": ["NONE","MEMORY","DISK"], "default": "NONE", "description": "Store-and-Forward queue type: NONE (unbuffered), MEMORY, or DISK" },
+          "QueueSize": { "type": "integer", "default": 100000, "minimum": 1, "description": "Buffer queue capacity in messages" },
+          "BulkSize": { "type": "integer", "default": 4000, "minimum": 1, "description": "Batch write size before flushing to database" },
+          "BulkTimeoutMs": { "type": "integer", "default": 250, "minimum": 1, "description": "Batch write timeout in milliseconds" },
+          "QueueDiskPath": { "type": "string", "default": "data/queue", "description": "Disk buffer storage path when QueueType is DISK" }
         },
         "required": ["Name","TopicFilter","LastValType","ArchiveType"]
       }

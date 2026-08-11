@@ -268,6 +268,11 @@ input CreateArchiveGroupInput {
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
+    queueType: String = "NONE"
+    queueSize: Int = 100000
+    bulkSize: Int = 4000
+    bulkTimeoutMs: Long = 250
+    queueDiskPath: String = "data/queue"
 }
 
 input UpdateArchiveGroupInput {
@@ -282,6 +287,11 @@ input UpdateArchiveGroupInput {
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
+    queueType: String
+    queueSize: Int
+    bulkSize: Int
+    bulkTimeoutMs: Long
+    queueDiskPath: String
 }
 
 type ArchiveGroupResult {

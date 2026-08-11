@@ -173,7 +173,12 @@ class ArchiveGroupResolver(
                             "lastValRetention" to jsonObj.getString("lastValRetention"),
                             "archiveRetention" to jsonObj.getString("archiveRetention"),
                              "purgeInterval" to jsonObj.getString("purgeInterval"),
-                              "payloadFormat" to jsonObj.getString("payloadFormat", "DEFAULT")
+                              "payloadFormat" to jsonObj.getString("payloadFormat", "DEFAULT"),
+                              "queueType" to jsonObj.getString("queueType", "NONE"),
+                              "queueSize" to jsonObj.getInteger("queueSize", 100000),
+                              "bulkSize" to jsonObj.getInteger("bulkSize", 4000),
+                              "bulkTimeoutMs" to jsonObj.getLong("bulkTimeoutMs", 250L),
+                              "queueDiskPath" to jsonObj.getString("queueDiskPath", "data/queue")
                         )
                     }
 
@@ -212,7 +217,12 @@ class ArchiveGroupResolver(
                                         "lastValRetention" to config.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to config.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to config.archiveGroup.getPurgeInterval(),
-                                          "payloadFormat" to config.archiveGroup.payloadFormat.name
+                                         "payloadFormat" to config.archiveGroup.payloadFormat.name,
+                                         "queueType" to config.archiveGroup.queueType,
+                                         "queueSize" to config.archiveGroup.queueSize,
+                                         "bulkSize" to config.archiveGroup.bulkSize,
+                                         "bulkTimeoutMs" to config.archiveGroup.bulkTimeoutMs,
+                                         "queueDiskPath" to config.archiveGroup.queueDiskPath
                                     )
                                 }
 
@@ -273,7 +283,12 @@ class ArchiveGroupResolver(
                             "lastValRetention" to runtimeStatus.getString("lastValRetention"),
                             "archiveRetention" to runtimeStatus.getString("archiveRetention"),
                              "purgeInterval" to runtimeStatus.getString("purgeInterval"),
-                              "payloadFormat" to runtimeStatus.getString("payloadFormat", "DEFAULT")
+                              "payloadFormat" to runtimeStatus.getString("payloadFormat", "DEFAULT"),
+                              "queueType" to runtimeStatus.getString("queueType", "NONE"),
+                              "queueSize" to runtimeStatus.getInteger("queueSize", 100000),
+                              "bulkSize" to runtimeStatus.getInteger("bulkSize", 4000),
+                              "bulkTimeoutMs" to runtimeStatus.getLong("bulkTimeoutMs", 250L),
+                              "queueDiskPath" to runtimeStatus.getString("queueDiskPath", "data/queue")
                         )
                     } else {
                         null
@@ -301,7 +316,12 @@ class ArchiveGroupResolver(
                                         "lastValRetention" to archiveGroup.archiveGroup.getLastValRetention(),
                                         "archiveRetention" to archiveGroup.archiveGroup.getArchiveRetention(),
                                          "purgeInterval" to archiveGroup.archiveGroup.getPurgeInterval(),
-                                         "payloadFormat" to archiveGroup.archiveGroup.payloadFormat.name
+                                         "payloadFormat" to archiveGroup.archiveGroup.payloadFormat.name,
+                                         "queueType" to archiveGroup.archiveGroup.queueType,
+                                         "queueSize" to archiveGroup.archiveGroup.queueSize,
+                                         "bulkSize" to archiveGroup.archiveGroup.bulkSize,
+                                         "bulkTimeoutMs" to archiveGroup.archiveGroup.bulkTimeoutMs,
+                                         "queueDiskPath" to archiveGroup.archiveGroup.queueDiskPath
                                     )
                                 } else {
                                     null

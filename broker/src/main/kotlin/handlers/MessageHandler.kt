@@ -9,9 +9,14 @@ import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
+import at.rocworks.queue.IMessageQueue
+import at.rocworks.queue.MessageQueueDisk
+import at.rocworks.queue.MessageQueueMemory
+import at.rocworks.queue.MessageQueueNone
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
@@ -23,7 +28,8 @@ class MessageHandler(
 
     private val retainedQueueStore: ArrayBlockingQueue<BrokerMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
 
-    private val archiveQueues = mutableMapOf<String, ArrayBlockingQueue<BrokerMessage>>()
+    private val archiveQueues = mutableMapOf<String, IMessageQueue>()
+    private val archiveWriterThreadsStop = mutableMapOf<String, AtomicBoolean>()
 
     // Runtime list of active archive groups (includes both startup and dynamically added ones)
     private val activeArchiveGroups = mutableMapOf<String, ArchiveGroup>()
@@ -58,7 +64,7 @@ class MessageHandler(
 
     private fun sampleArchiveBufferSizes() {
         activeArchiveGroups.keys.forEach { groupName ->
-            val bufferSize = archiveQueues[groupName]?.size ?: 0
+            val bufferSize = archiveQueues[groupName]?.getSize() ?: 0
             archiveBufferSizeAccumulator[groupName]?.addAndGet(bufferSize.toLong())
             archiveBufferSampleCount[groupName]?.incrementAndGet()
         }
@@ -79,7 +85,7 @@ class MessageHandler(
             }
 
             vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupBufferSize(groupName)) { message ->
-                val bufferSize = archiveQueues[groupName]?.size ?: 0
+                val bufferSize = archiveQueues[groupName]?.getSize() ?: 0
                 message.reply(JsonObject().put("bufferSize", bufferSize))
             }
         }
@@ -109,7 +115,7 @@ class MessageHandler(
         val avgBufferSize = if (sampleCount > 0) {
             (bufferAccum.toDouble() / sampleCount.toDouble()).toInt()
         } else {
-            archiveQueues[groupName]?.size ?: 0
+            archiveQueues[groupName]?.getSize() ?: 0
         }
 
         // Update snapshots for next calculation
@@ -127,7 +133,7 @@ class MessageHandler(
      * Register an archive group for message routing (both startup and runtime)
      */
     fun registerArchiveGroup(archiveGroup: ArchiveGroup) {
-        logger.info("Registering archive group [${archiveGroup.name}] with MessageHandler")
+        logger.info("Registering archive group [${archiveGroup.name}] with MessageHandler (QueueType: ${archiveGroup.queueType})")
 
         // Add to active groups
         activeArchiveGroups[archiveGroup.name] = archiveGroup
@@ -141,16 +147,38 @@ class MessageHandler(
         archiveBufferSizeAccumulator[archiveGroup.name] = AtomicLong(0)
         archiveBufferSampleCount[archiveGroup.name] = AtomicLong(0)
 
-        // Create queue for this archive group
-        val queue = ArrayBlockingQueue<BrokerMessage>(100_000) // TODO: configurable
-        archiveQueues[archiveGroup.name] = queue
+        // Create queue and writer thread only if this archive group has an active archiveStore
+        if (archiveGroup.archiveStore != null) {
+            val queue: IMessageQueue = when (archiveGroup.queueType) {
+                "DISK" -> MessageQueueDisk(
+                    queueName = "archive",
+                    deviceName = archiveGroup.name,
+                    logger = logger,
+                    queueSize = archiveGroup.queueSize,
+                    blockSize = archiveGroup.bulkSize,
+                    pollTimeout = archiveGroup.bulkTimeoutMs,
+                    diskPath = archiveGroup.queueDiskPath
+                )
+                "MEMORY" -> MessageQueueMemory(
+                    logger = logger,
+                    queueSize = archiveGroup.queueSize,
+                    blockSize = archiveGroup.bulkSize,
+                    pollTimeout = archiveGroup.bulkTimeoutMs
+                )
+                else -> MessageQueueNone(
+                    logger = logger,
+                    queueSize = archiveGroup.queueSize,
+                    blockSize = archiveGroup.bulkSize,
+                    pollTimeout = archiveGroup.bulkTimeoutMs
+                )
+            }
+            archiveQueues[archiveGroup.name] = queue
 
-        // Start writer thread for this archive group
-        writerThread("AG-${archiveGroup.name}", queue) { list ->
-            archiveGroup.lastValStore?.addAll(getLastMessages(list))
-            archiveGroup.archiveStore?.addHistory(list)
-            // Track number of messages written
-            archiveWriteCounters[archiveGroup.name]?.addAndGet(list.size.toLong())
+            val stopFlag = AtomicBoolean(false)
+            archiveWriterThreadsStop[archiveGroup.name] = stopFlag
+
+            // Start writer thread for this archive group
+            archiveGroupWriterThread("AG-${archiveGroup.name}", archiveGroup, queue, stopFlag)
         }
 
         // Register event bus handlers for this archive group (for dynamically added groups)
@@ -161,7 +189,7 @@ class MessageHandler(
             }
 
             vertx.eventBus().consumer<JsonObject>(EventBusAddresses.Archive.groupBufferSize(archiveGroup.name)) { message ->
-                val bufferSize = archiveQueues[archiveGroup.name]?.size ?: 0
+                val bufferSize = archiveQueues[archiveGroup.name]?.getSize() ?: 0
                 message.reply(JsonObject().put("bufferSize", bufferSize))
             }
         }
@@ -187,8 +215,9 @@ class MessageHandler(
         archiveBufferSizeAccumulator.remove(archiveGroupName)
         archiveBufferSampleCount.remove(archiveGroupName)
 
-        // Remove queue (the writer thread will terminate when queue is empty and not used)
-        archiveQueues.remove(archiveGroupName)
+        // Stop thread and close queue
+        archiveWriterThreadsStop.remove(archiveGroupName)?.set(true)
+        archiveQueues.remove(archiveGroupName)?.close()
 
         logger.info("Archive group [$archiveGroupName] unregistered successfully")
     }
@@ -220,6 +249,48 @@ class MessageHandler(
             if (!map.containsKey(it.topicName)) map[it.topicName] = it
         }
         return map.values.toList()
+    }
+
+    private fun archiveGroupWriterThread(
+        threadName: String,
+        archiveGroup: ArchiveGroup,
+        queue: IMessageQueue,
+        stopFlag: AtomicBoolean
+    ) = thread(start = true, name = threadName) {
+        logger.fine("Start [$threadName] thread [${Utils.getCurrentFunctionName()}]")
+        var lastErrorLog = 0L
+
+        while (!stopFlag.get()) {
+            try {
+                val polledMessages = mutableListOf<BrokerMessage>()
+                val blockSize = queue.pollBlock { msg ->
+                    polledMessages.add(msg)
+                }
+
+                if (blockSize > 0 && polledMessages.isNotEmpty()) {
+                    var success = false
+                    try {
+                        archiveGroup.archiveStore?.addHistory(polledMessages)
+                        success = true
+                    } catch (e: Exception) {
+                        val now = System.currentTimeMillis()
+                        if (now - lastErrorLog > 5000) {
+                            logger.warning("Error writing batch to archive [$threadName]: ${e.message}. Retrying batch...")
+                            lastErrorLog = now
+                        }
+                        Thread.sleep(1000)
+                    }
+
+                    if (success) {
+                        queue.pollCommit()
+                        archiveWriteCounters[archiveGroup.name]?.addAndGet(polledMessages.size.toLong())
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warning("Error in archive writer thread [$threadName]: ${e.message}")
+                Thread.sleep(500)
+            }
+        }
     }
 
     private fun <T> writerThread(name: String, queue: ArrayBlockingQueue<T>, execute: (List<T>)->Unit)
@@ -259,13 +330,26 @@ class MessageHandler(
         }
 
         activeArchiveGroups.values.forEach { archiveGroup ->
-            val queue = archiveQueues[archiveGroup.name] ?: return@forEach
             if ((!archiveGroup.retainedOnly || message.isRetain) &&
                 (archiveGroup.topicFilter.isEmpty() || archiveGroup.filterTree.isTopicNameMatching(message.topicName))) {
-                try {
-                    queue.add(message)
-                } catch (e: IllegalStateException) {
-                    // TODO: handle exception
+                
+                archiveGroup.lastValStore?.let { lastValStore ->
+                    try {
+                        lastValStore.addAll(listOf(message))
+                    } catch (e: Exception) {
+                        logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
+                    }
+                }
+
+                if (archiveGroup.archiveStore != null) {
+                    val queue = archiveQueues[archiveGroup.name]
+                    if (queue != null) {
+                        try {
+                            queue.add(message)
+                        } catch (e: IllegalStateException) {
+                            // TODO: handle exception
+                        }
+                    }
                 }
             }
         }

@@ -391,6 +391,11 @@ type ArchiveGroupInfo {
     lastValRetention: String
     archiveRetention: String
     purgeInterval: String
+    queueType: String
+    queueSize: Int
+    bulkSize: Int
+    bulkTimeoutMs: Long
+    queueDiskPath: String
     createdAt: String
     updatedAt: String
     # Database connection status from all nodes in the cluster

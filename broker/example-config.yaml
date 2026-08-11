@@ -142,3 +142,8 @@ ArchiveGroups:
     LastValRetention: "7d"
     ArchiveRetention: "30d"
     PurgeInterval: "1h"
+    QueueType: NONE           # Store-and-Forward queue type: NONE (disabled), MEMORY, or DISK
+    QueueSize: 100000         # Queue capacity in messages
+    BulkSize: 4000            # Batch flush size
+    BulkTimeoutMs: 250        # Batch flush timeout in ms
+    QueueDiskPath: "data/queue" # Directory for disk queue file when QueueType is DISK
