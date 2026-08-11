@@ -584,6 +584,11 @@ class ArchiveHandler(
             purgeIntervalStr = ag.getPurgeInterval(),
             databaseConnectionName = ag.getDatabaseConnectionName(),
             redisDbNumber = ag.getRedisDbNumber(),
+            queueType = ag.queueType,
+            queueSize = ag.queueSize,
+            bulkSize = ag.bulkSize,
+            bulkTimeoutMs = ag.bulkTimeoutMs,
+            queueDiskPath = ag.queueDiskPath,
             databaseConfig = databaseConfig
         )
     }
