@@ -30,7 +30,6 @@ VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 BUILD_BROKER=false
 BUILD_DESKTOP=false
 BUILD_DOCKER=false
-PUBLISH=false
 CLEAN=false
 EXPLICIT_TARGET=false
 
@@ -42,7 +41,6 @@ usage() {
     echo "  --broker         Build standalone Java broker bundle (zip)"
     echo "  --desktop        Build Electron desktop dashboard apps (mac/win)"
     echo "  --docker         Build local Docker image (native platform)"
-    echo "  -p, --publish    Trigger ./publish.sh after building"
     echo "  --clean          Clean output build directories"
     echo "  -h, --help       Show this help message"
     echo ""
@@ -71,10 +69,6 @@ while [[ $# -gt 0 ]]; do
         --docker)
             BUILD_DOCKER=true
             EXPLICIT_TARGET=true
-            shift
-            ;;
-        -p|--publish)
-            PUBLISH=true
             shift
             ;;
         --clean)
@@ -199,8 +193,3 @@ if [ "$BUILD_DOCKER" = true ]; then
 fi
 
 echo -e "${GREEN}=== Build Complete ===${NC}"
-
-if [ "$PUBLISH" = true ]; then
-    echo -e "${YELLOW}Triggering release publication...${NC}"
-    ./publish.sh
-fi
