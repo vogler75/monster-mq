@@ -3,11 +3,10 @@
 # build.sh - Build script for MonsterMQ Main Broker, Desktop Apps, and Docker Images
 #
 # Usage:
-#   ./build.sh               Build all artifacts locally (broker zip, desktop apps, docker image)
-#   ./build.sh --broker      Build Java broker zip bundle only
-#   ./build.sh --desktop     Build Electron desktop apps only
-#   ./build.sh --docker      Build local Docker image only
-#   ./build.sh --publish     Build everything and publish to GitHub & Docker Hub
+#   ./build.sh --all          Build all artifacts locally (broker zip, desktop apps, docker image)
+#   ./build.sh --broker       Build Java broker zip bundle only
+#   ./build.sh --desktop      Build Electron desktop apps only
+#   ./build.sh --docker       Build local Docker image only
 
 set -e
 
@@ -37,7 +36,7 @@ usage() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --all            Build all artifacts (default)"
+    echo "  --all            Build all artifacts"
     echo "  --broker         Build standalone Java broker bundle (zip)"
     echo "  --desktop        Build Electron desktop dashboard apps (mac/win)"
     echo "  --docker         Build local Docker image (native platform)"
@@ -46,6 +45,10 @@ usage() {
     echo ""
     exit 0
 }
+
+if [ $# -eq 0 ]; then
+    usage
+fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
