@@ -116,7 +116,7 @@ if [ "$PUBLISH_GITHUB" = true ]; then
     # Gather release files
     RELEASE_FILES=()
 
-    BROKER_ZIP="releases/monstermq-broker-${VERSION}.zip"
+    BROKER_ZIP="dist/monstermq-broker-${VERSION}.zip"
     if [ -f "$BROKER_ZIP" ]; then
         RELEASE_FILES+=("$BROKER_ZIP")
     else

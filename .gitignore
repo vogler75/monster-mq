@@ -43,3 +43,4 @@ tests/.env
 
 ### Others ###
 .antigravitycli
+dist/

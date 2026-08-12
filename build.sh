@@ -105,7 +105,7 @@ if [ "$CLEAN" = true ]; then
     rm -rf broker/target
     rm -rf dashboard/dist
     rm -rf dashboard/dist-desktop
-    rm -rf releases/monstermq-broker-*.zip
+    rm -rf dist
     rm -rf docker/target
     echo -e "${GREEN}✓ Clean complete${NC}"
 fi
@@ -133,9 +133,9 @@ if [ "$BUILD_BROKER" = true ]; then
     (cd broker && mvn package -DskipTests)
     
     echo -e "${YELLOW}Packaging broker zip bundle...${NC}"
-    mkdir -p releases
+    mkdir -p dist
     BUNDLE_NAME="monstermq-broker-${VERSION}"
-    STAGE_DIR="releases/${BUNDLE_NAME}"
+    STAGE_DIR="dist/${BUNDLE_NAME}"
     rm -rf "$STAGE_DIR"
     mkdir -p "$STAGE_DIR"
     
@@ -176,9 +176,9 @@ Windows:
   run.bat
 EOF
 
-    ZIP_PATH="releases/${BUNDLE_NAME}.zip"
+    ZIP_PATH="dist/${BUNDLE_NAME}.zip"
     rm -f "$ZIP_PATH"
-    (cd releases && zip -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}")
+    (cd dist && zip -r "${BUNDLE_NAME}.zip" "${BUNDLE_NAME}")
     rm -rf "$STAGE_DIR"
     
     echo -e "${GREEN}✓ Broker bundle created: ${YELLOW}${ZIP_PATH}${NC}"
