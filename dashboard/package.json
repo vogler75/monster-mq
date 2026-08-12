@@ -47,7 +47,7 @@
         "dmg",
         "zip"
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.icns",
       "artifactName": "${productName}-${arch}.${ext}"
     },
     "win": {
@@ -55,7 +55,7 @@
         "nsis",
         "zip"
       ],
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "artifactName": "${productName}-${arch}.${ext}"
     }
   }

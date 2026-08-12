@@ -64,18 +64,20 @@ if defined VERSION_FILE (
 
 REM Copy the app logo if available
 if not exist "build" mkdir build
-if exist "appicon.png" (
-    copy /Y "appicon.png" "build\icon.png" >nul
-    echo Application icon copied from dashboard/appicon.png to dashboard/build/icon.png
-) else if exist "appicon-option1.png" (
-    copy /Y "appicon-option1.png" "build\icon.png" >nul
-    echo Application icon copied from dashboard/appicon-option1.png to dashboard/build/icon.png
-) else if exist "..\logos\appicon.png" (
-    copy /Y "..\logos\appicon.png" "build\icon.png" >nul
-    echo Application icon copied from logos/appicon.png to dashboard/build/icon.png
-) else if exist "..\logos\Logo-v2.png" (
-    copy /Y "..\logos\Logo-v2.png" "build\icon.png" >nul
-    echo Application icon copied to dashboard/build/icon.png
+if not exist "build\icon.png" (
+    if exist "appicon.png" (
+        copy /Y "appicon.png" "build\icon.png" >nul
+        echo Application icon copied from dashboard/appicon.png to dashboard/build/icon.png
+    ) else if exist "appicon-option1.png" (
+        copy /Y "appicon-option1.png" "build\icon.png" >nul
+        echo Application icon copied from dashboard/appicon-option1.png to dashboard/build/icon.png
+    ) else if exist "..\logos\appicon.png" (
+        copy /Y "..\logos\appicon.png" "build\icon.png" >nul
+        echo Application icon copied from logos/appicon.png to dashboard/build/icon.png
+    ) else if exist "..\logos\Logo-v2.png" (
+        copy /Y "..\logos\Logo-v2.png" "build\icon.png" >nul
+        echo Application icon copied to dashboard/build/icon.png
+    )
 )
 
 echo Installing npm dependencies...

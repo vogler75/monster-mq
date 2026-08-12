@@ -7,4 +7,7 @@ src/config/brokers.json
 src/config/config-instance.json
 .DS_Store
 dist-desktop/
-build/
+build/*
+!build/icon.png
+!build/icon.icns
+!build/icon.ico

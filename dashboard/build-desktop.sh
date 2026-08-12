@@ -54,33 +54,23 @@ elif [[ -f "version.txt" ]]; then
   fi
 fi
 
-# Copy the app logo if available
+# Copy the app logo if available and build/icon.png doesn't exist
 mkdir -p build
-if [[ -f appicon.png ]]; then
-  cp appicon.png build/icon.png
-  echo "Application icon copied from dashboard/appicon.png to dashboard/build/icon.png"
-  if command -v sips &> /dev/null; then
-    sips -z 512 512 build/icon.png &> /dev/null
-    echo "Resized application icon to 512x512 pixels"
+if [[ ! -f build/icon.png ]]; then
+  if [[ -f appicon.png ]]; then
+    cp appicon.png build/icon.png
+    echo "Application icon copied from dashboard/appicon.png to dashboard/build/icon.png"
+  elif [[ -f appicon-option1.png ]]; then
+    cp appicon-option1.png build/icon.png
+    echo "Application icon copied from dashboard/appicon-option1.png to dashboard/build/icon.png"
+  elif [[ -f ../logos/appicon.png ]]; then
+    cp ../logos/appicon.png build/icon.png
+    echo "Application icon copied from logos/appicon.png to dashboard/build/icon.png"
+  elif [[ -f ../logos/Logo-v2.png ]]; then
+    cp ../logos/Logo-v2.png build/icon.png
+    echo "Application icon copied to dashboard/build/icon.png"
   fi
-elif [[ -f appicon-option1.png ]]; then
-  cp appicon-option1.png build/icon.png
-  echo "Application icon copied from dashboard/appicon-option1.png to dashboard/build/icon.png"
-  if command -v sips &> /dev/null; then
-    sips -z 512 512 build/icon.png &> /dev/null
-    echo "Resized application icon to 512x512 pixels"
-  fi
-elif [[ -f ../logos/appicon.png ]]; then
-  cp ../logos/appicon.png build/icon.png
-  echo "Application icon copied from logos/appicon.png to dashboard/build/icon.png"
-  if command -v sips &> /dev/null; then
-    sips -z 512 512 build/icon.png &> /dev/null
-    echo "Resized application icon to 512x512 pixels"
-  fi
-elif [[ -f ../logos/Logo-v2.png ]]; then
-  cp ../logos/Logo-v2.png build/icon.png
-  echo "Application icon copied to dashboard/build/icon.png"
-  if command -v sips &> /dev/null; then
+  if [[ -f build/icon.png ]] && command -v sips &> /dev/null; then
     sips -z 512 512 build/icon.png &> /dev/null
     echo "Resized application icon to 512x512 pixels"
   fi
