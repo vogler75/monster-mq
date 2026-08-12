@@ -336,7 +336,11 @@ class MessageHandler(
                 
                 archiveGroup.lastValStore?.let { lastValStore ->
                     try {
-                        lastValStore.addAll(listOf(message))
+                        if (message.payload.isEmpty()) {
+                            lastValStore.delAll(listOf(message.topicName))
+                        } else {
+                            lastValStore.addAll(listOf(message))
+                        }
                     } catch (e: Exception) {
                         logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
                     }
