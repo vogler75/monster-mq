@@ -14,7 +14,8 @@ import java.util.LinkedHashMap
  * In-memory queue store with zero database lock contention.
  */
 class QueueStoreMemory(
-    private val visibilityTimeoutSeconds: Int = 30
+    private val visibilityTimeoutSeconds: Int = 30,
+    private val maxQueuedMessagesPerClient: Int = 10000
 ) : AbstractVerticle(), IQueueStoreSync {
 
     private val logger = Utils.getLogger(this::class.java)
@@ -67,6 +68,13 @@ class QueueStoreMemory(
             clientIds.forEach { clientId ->
                 val queue = queues.computeIfAbsent(clientId) { MemoryQueue() }
                 synchronized(queue) {
+                    if (maxQueuedMessagesPerClient > 0 && queue.messages.size >= maxQueuedMessagesPerClient) {
+                        val iterator = queue.messages.keys.iterator()
+                        if (iterator.hasNext()) {
+                            iterator.next()
+                            iterator.remove()
+                        }
+                    }
                     queue.messages[queuedMessage.messageUuid] = MemoryQueuedMessage(queuedMessage, now)
                 }
             }

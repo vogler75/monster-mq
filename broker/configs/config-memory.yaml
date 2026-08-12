@@ -13,6 +13,7 @@ MaxMessageSizeKb: 8
 SessionStoreType: MEMORY
 RetainedStoreType: MEMORY
 QueueStoreType: MEMORY
+MaxQueuedMessagesPerClient: 10000
 ConfigStoreType: SQLITE
 
 # Enable queued messages (stored in a dedicated in-memory SQLite queue DB)

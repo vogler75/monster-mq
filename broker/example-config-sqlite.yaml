@@ -10,6 +10,7 @@ DefaultStoreType: SQLITE
 # For flash-light edge mode, override runtime churn stores:
 # SessionStoreType: MEMORY
 # QueueStoreType: MEMORY
+# MaxQueuedMessagesPerClient: 10000
 
 # User Management configuration
 UserManagement:

@@ -1746,8 +1746,9 @@ MORE INFO:
 
         sqliteReady.compose { _ ->
             val vtSeconds = configJson.getInteger("QueueVisibilityTimeoutSeconds", 30)
+            val maxQueueSizePerClient = configJson.getInteger("MaxQueuedMessagesPerClient", 10000)
             val store: IQueueStoreSync = when (queueStoreType) {
-                QueueStoreType.MEMORY -> QueueStoreMemory(vtSeconds)
+                QueueStoreType.MEMORY -> QueueStoreMemory(vtSeconds, maxQueueSizePerClient)
                 QueueStoreType.POSTGRES -> QueueStorePostgres(
                     postgresConfig.url,
                     postgresConfig.user,

@@ -149,6 +149,11 @@
       "default": 30,
       "description": "Visibility timeout for persistent queue stores (seconds). Messages not ACKed within this time become visible again."
     },
+    "MaxQueuedMessagesPerClient": {
+      "type": "integer",
+      "default": 10000,
+      "description": "Maximum number of queued messages per client stored in QueueStoreMemory before dropping the oldest messages (0 = unlimited)."
+    },
     "RetainedStoreType": {
       "type": "string",
       "enum": [
