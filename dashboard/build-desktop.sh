@@ -37,6 +37,12 @@ if [[ "$BUILD_MAC" = false && "$BUILD_WIN" = false ]]; then
   BUILD_WIN=true
 fi
 
+# Skip macOS build if running on Linux (macOS DMG packaging requires macOS sips utility)
+if [[ "$BUILD_MAC" = true && "$(uname -s)" != "Darwin" ]]; then
+  echo "Notice: Skipping macOS desktop build on Linux (macOS DMG packaging requires macOS)."
+  BUILD_MAC=false
+fi
+
 echo "=== Building MonsterMQ Desktop App ==="
 
 # Sync package.json version with broker version in version.txt if available
@@ -89,6 +95,15 @@ if [[ "$BUILD_MAC" = true ]]; then
 fi
 if [[ "$BUILD_WIN" = true ]]; then
   BUILD_FLAGS="$BUILD_FLAGS --win"
+  if [[ "$(uname -s)" != "Darwin" ]] && ! command -v wine &> /dev/null; then
+    echo "Notice: wine not detected on Linux. Building Windows zip target."
+    BUILD_FLAGS="$BUILD_FLAGS --config.win.target=zip"
+  fi
+fi
+
+if [[ "$BUILD_MAC" = false && "$BUILD_WIN" = false ]]; then
+  echo "No target platforms enabled for desktop build."
+  exit 0
 fi
 
 echo "Packaging desktop app with flags: $BUILD_FLAGS"
