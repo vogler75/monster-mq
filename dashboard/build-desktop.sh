@@ -107,51 +107,30 @@ if [[ "$BUILD_MAC" = false && "$BUILD_WIN" = false ]]; then
 fi
 
 echo "Packaging desktop app with flags: $BUILD_FLAGS"
-npx electron-builder $BUILD_FLAGS
+CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder $BUILD_FLAGS
 
 # Post-processing rename for macOS and Windows build artifacts for consistency (without version numbers)
 if [[ "$BUILD_MAC" = true ]]; then
-  echo "Renaming macOS build artifacts for clarity..."
+  echo "Checking macOS build artifacts..."
   if [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.dmg" ]]; then
     mv "dist-desktop/MonsterMQ-Dashboard-x64.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
     echo "Renamed dist-desktop/MonsterMQ-Dashboard-x64.dmg to dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
-  elif [[ -f "dist-desktop/MonsterMQ-Dashboard.dmg" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard.dmg to dist-desktop/MonsterMQ-Dashboard-mac-x64.dmg"
-  fi
-  if [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-x64.zip" "dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard-x64.zip to dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
-  elif [[ -f "dist-desktop/MonsterMQ-Dashboard-mac.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-mac.zip" "dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard-mac.zip to dist-desktop/MonsterMQ-Dashboard-mac-x64.zip"
   fi
   if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64.dmg" ]]; then
     mv "dist-desktop/MonsterMQ-Dashboard-arm64.dmg" "dist-desktop/MonsterMQ-Dashboard-mac-arm64.dmg"
     echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64.dmg to dist-desktop/MonsterMQ-Dashboard-mac-arm64.dmg"
   fi
-  if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip" "dist-desktop/MonsterMQ-Dashboard-mac-arm64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64-mac.zip to dist-desktop/MonsterMQ-Dashboard-mac-arm64.zip"
-  fi
 fi
 
 if [[ "$BUILD_WIN" = true ]]; then
-  echo "Renaming Windows build artifacts for clarity..."
+  echo "Checking Windows build artifacts..."
   if [[ -f "dist-desktop/MonsterMQ-Dashboard Setup.exe" ]]; then
     mv "dist-desktop/MonsterMQ-Dashboard Setup.exe" "dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
     echo "Renamed Setup exe to dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
-  elif [[ -f "dist-desktop/MonsterMQ-Dashboard-x64.exe" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-x64.exe" "dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
-    echo "Renamed Setup exe to dist-desktop/MonsterMQ-Dashboard-win-x64-setup.exe"
   fi
-  if [[ -f "dist-desktop/MonsterMQ-Dashboard-win.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-win.zip" "dist-desktop/MonsterMQ-Dashboard-win-x64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard-win.zip to dist-desktop/MonsterMQ-Dashboard-win-x64.zip"
-  fi
-  if [[ -f "dist-desktop/MonsterMQ-Dashboard-arm64-win.zip" ]]; then
-    mv "dist-desktop/MonsterMQ-Dashboard-arm64-win.zip" "dist-desktop/MonsterMQ-Dashboard-win-arm64.zip"
-    echo "Renamed dist-desktop/MonsterMQ-Dashboard-arm64-win.zip to dist-desktop/MonsterMQ-Dashboard-win-arm64.zip"
+  if [[ -f "dist-desktop/MonsterMQ-Dashboard Setup arm64.exe" ]]; then
+    mv "dist-desktop/MonsterMQ-Dashboard Setup arm64.exe" "dist-desktop/MonsterMQ-Dashboard-win-arm64-setup.exe"
+    echo "Renamed Setup exe to dist-desktop/MonsterMQ-Dashboard-win-arm64-setup.exe"
   fi
 fi
 

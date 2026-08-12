@@ -44,19 +44,17 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "icon": "build/icon.icns",
-      "artifactName": "${productName}-${arch}.${ext}"
+      "artifactName": "${productName}-mac-${arch}.${ext}"
     },
     "win": {
       "target": [
-        "nsis",
-        "zip"
+        "nsis"
       ],
       "icon": "build/icon.ico",
-      "artifactName": "${productName}-${arch}.${ext}"
+      "artifactName": "${productName}-win-${arch}-setup.${ext}"
     }
   }
 }

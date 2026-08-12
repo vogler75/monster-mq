@@ -101,47 +101,26 @@ if errorlevel 1 goto error
 
 REM Post-processing rename for macOS and Windows build artifacts for consistency (without version numbers)
 if "%BUILD_MAC%"=="true" (
-    echo Renaming macOS build artifacts for clarity...
+    echo Checking macOS build artifacts...
     if exist "dist-desktop\MonsterMQ-Dashboard-x64.dmg" (
         ren "dist-desktop\MonsterMQ-Dashboard-x64.dmg" "MonsterMQ-Dashboard-mac-x64.dmg"
         echo Renamed dist-desktop\MonsterMQ-Dashboard-x64.dmg to dist-desktop\MonsterMQ-Dashboard-mac-x64.dmg
-    ) else if exist "dist-desktop\MonsterMQ-Dashboard.dmg" (
-        ren "dist-desktop\MonsterMQ-Dashboard.dmg" "MonsterMQ-Dashboard-mac-x64.dmg"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard.dmg to dist-desktop\MonsterMQ-Dashboard-mac-x64.dmg
-    )
-    if exist "dist-desktop\MonsterMQ-Dashboard-x64.zip" (
-        ren "dist-desktop\MonsterMQ-Dashboard-x64.zip" "MonsterMQ-Dashboard-mac-x64.zip"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard-x64.zip to dist-desktop\MonsterMQ-Dashboard-mac-x64.zip
-    ) else if exist "dist-desktop\MonsterMQ-Dashboard-mac.zip" (
-        ren "dist-desktop\MonsterMQ-Dashboard-mac.zip" "MonsterMQ-Dashboard-mac-x64.zip"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard-mac.zip to dist-desktop\MonsterMQ-Dashboard-mac-x64.zip
     )
     if exist "dist-desktop\MonsterMQ-Dashboard-arm64.dmg" (
         ren "dist-desktop\MonsterMQ-Dashboard-arm64.dmg" "MonsterMQ-Dashboard-mac-arm64.dmg"
         echo Renamed dist-desktop\MonsterMQ-Dashboard-arm64.dmg to dist-desktop\MonsterMQ-Dashboard-mac-arm64.dmg
     )
-    if exist "dist-desktop\MonsterMQ-Dashboard-arm64-mac.zip" (
-        ren "dist-desktop\MonsterMQ-Dashboard-arm64-mac.zip" "MonsterMQ-Dashboard-mac-arm64.zip"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard-arm64-mac.zip to dist-desktop\MonsterMQ-Dashboard-mac-arm64.zip
-    )
 )
 
 if "%BUILD_WIN%"=="true" (
-    echo Renaming Windows build artifacts for clarity...
+    echo Checking Windows build artifacts...
     if exist "dist-desktop\MonsterMQ-Dashboard Setup.exe" (
         ren "dist-desktop\MonsterMQ-Dashboard Setup.exe" "MonsterMQ-Dashboard-win-x64-setup.exe"
         echo Renamed Setup exe to dist-desktop\MonsterMQ-Dashboard-win-x64-setup.exe
-    ) else if exist "dist-desktop\MonsterMQ-Dashboard-x64.exe" (
-        ren "dist-desktop\MonsterMQ-Dashboard-x64.exe" "MonsterMQ-Dashboard-win-x64-setup.exe"
-        echo Renamed Setup exe to dist-desktop\MonsterMQ-Dashboard-win-x64-setup.exe
     )
-    if exist "dist-desktop\MonsterMQ-Dashboard-win.zip" (
-        ren "dist-desktop\MonsterMQ-Dashboard-win.zip" "MonsterMQ-Dashboard-win-x64.zip"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard-win.zip to dist-desktop\MonsterMQ-Dashboard-win-x64.zip
-    )
-    if exist "dist-desktop\MonsterMQ-Dashboard-arm64-win.zip" (
-        ren "dist-desktop\MonsterMQ-Dashboard-arm64-win.zip" "MonsterMQ-Dashboard-win-arm64.zip"
-        echo Renamed dist-desktop\MonsterMQ-Dashboard-arm64-win.zip to dist-desktop\MonsterMQ-Dashboard-win-arm64.zip
+    if exist "dist-desktop\MonsterMQ-Dashboard Setup arm64.exe" (
+        ren "dist-desktop\MonsterMQ-Dashboard Setup arm64.exe" "MonsterMQ-Dashboard-win-arm64-setup.exe"
+        echo Renamed Setup exe to dist-desktop\MonsterMQ-Dashboard-win-arm64-setup.exe
     )
 )
 
