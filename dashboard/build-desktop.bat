@@ -47,6 +47,21 @@ if "%BUILD_MAC%"=="false" if "%BUILD_WIN%"=="false" if "%BUILD_LINUX%"=="false" 
 
 echo === Building MonsterMQ Desktop App ===
 
+REM Sync package.json version with broker version in version.txt if available
+set "VERSION_FILE="
+if exist "..\version.txt" set "VERSION_FILE=..\version.txt"
+if not defined VERSION_FILE if exist "version.txt" set "VERSION_FILE=version.txt"
+
+if defined VERSION_FILE (
+    set /p RAW_BROKER_VERSION=<"!VERSION_FILE!"
+    for /f "tokens=1 delims=+" %%a in ("!RAW_BROKER_VERSION!") do set "BROKER_VERSION=%%a"
+    if defined BROKER_VERSION (
+        echo Syncing package.json version from !VERSION_FILE!: !BROKER_VERSION!
+        call npm version !BROKER_VERSION! --no-git-tag-version --allow-same-version >nul 2>&1
+    )
+)
+
+
 REM Copy the app logo if available
 if not exist "build" mkdir build
 if exist "appicon.png" (
