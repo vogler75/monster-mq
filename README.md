@@ -379,7 +379,7 @@ See also `dev/` for developer and AI coding documentation (iX guidelines, device
 
 ## Requirements
 
-- Java 21+
+- Java / GraalVM 21 LTS (or higher)
 - Maven 3.6+ for builds
 - PostgreSQL, MongoDB, CrateDB, SQLite, or another supported backend
 
