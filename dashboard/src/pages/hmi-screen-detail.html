@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - HMI Screen Detail</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <nav class="breadcrumb" aria-label="Breadcrumb">
+                            <a href="/pages/hmi-screens.html">HMI Screens</a>
+                            <span class="breadcrumb-sep" aria-hidden="true">/</span>
+                            <span class="breadcrumb-current" aria-current="page" id="breadcrumb-name">&hellip;</span>
+                        </nav>
+                        <h1 class="page-title" id="page-title">HMI Screen</h1>
+                        <p class="page-subtitle" id="page-subtitle">Configure application routing, metadata, and asset release files</p>
+                    </div>
+                    <div class="page-header-actions">
+                        <a id="launch-btn" href="#" target="_blank" class="btn btn-secondary btn-small" style="display:none;">Launch HMI</a>
+                        <button id="export-btn" class="btn btn-secondary btn-small" style="display:none;">Export ZIP</button>
+                        <button class="btn btn-danger btn-small" id="delete-btn" style="display:none;">Delete</button>
+                        <button class="btn btn-primary btn-small" id="save-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                            </svg>
+                            Save Screen
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">&#9888;</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+
+            <div class="form-container" style="display: flex; flex-direction: column; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- General Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="screen" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">General Settings</h2>
+                    </div>
+                    <div class="section-content">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+                            <div class="form-group">
+                                <label for="name-input" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Application Name *</label>
+                                <input type="text" id="name-input" class="form-control" placeholder="e.g. machine-hmi" required />
+                                <small style="color: var(--text-muted); font-size: 0.75rem;">Unique identifier for this HMI screen configuration.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="node-id-select" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Node Assignment</label>
+                                <select id="node-id-select" class="form-control">
+                                    <option value="local">local (Current Node)</option>
+                                </select>
+                                <small style="color: var(--text-muted); font-size: 0.75rem;">Target cluster node ID or "local" for local node.</small>
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; gap: 0.5rem;">
+                                <label style="font-weight: 600; font-size: 0.85rem;">Active Status</label>
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <input type="checkbox" id="enabled-toggle" checked style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--monster-purple);" />
+                                    <span style="font-size: 0.9rem;">Enable HMI Screen</span>
+                                </div>
+                            </div>
+                            <div class="form-group" style="display: flex; flex-direction: column; justify-content: center; gap: 0.5rem;">
+                                <label style="font-weight: 600; font-size: 0.85rem;">Main Application Role</label>
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <input type="checkbox" id="is-main-toggle" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--monster-purple);" />
+                                    <span style="font-size: 0.9rem;">Set as Main HMI (Serves at /hmi/)</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Routing & Metadata Section -->
+                <div class="section-card">
+                    <div class="section-header">
+                        <ix-icon name="cogwheel" size="18" style="color:var(--monster-purple);"></ix-icon>
+                        <h2 class="section-title">Routing &amp; Metadata</h2>
+                    </div>
+                    <div class="section-content">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+                            <div class="form-group">
+                                <label for="title-input" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Title</label>
+                                <input type="text" id="title-input" class="form-control" placeholder="e.g. Line 1 Control Dashboard" />
+                            </div>
+                            <div class="form-group">
+                                <label for="url-path-input" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">URL Subpath</label>
+                                <input type="text" id="url-path-input" class="form-control" placeholder="e.g. line-1 (served at /hmi/line-1/)" />
+                                <small style="color: var(--text-muted); font-size: 0.75rem;">Path segment when served (ignored if set as Main HMI).</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="entry-point-input" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Entry Point</label>
+                                <input type="text" id="entry-point-input" class="form-control" placeholder="index.html" value="index.html" />
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="description-input" class="form-label" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">Description</label>
+                                <textarea id="description-input" class="form-control" rows="2" placeholder="Brief summary of this HMI screen's purpose..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Files & Assets Section -->
+                <div class="section-card" id="files-section" style="display:none;">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <ix-icon name="list" size="18" style="color:var(--monster-purple);"></ix-icon>
+                            <h2 class="section-title">Application Package Files</h2>
+                        </div>
+                        <button id="upload-pkg-btn" class="btn btn-secondary btn-sm">
+                            <ix-icon name="upload" size="14"></ix-icon> Upload ZIP Package
+                        </button>
+                    </div>
+                    <div class="section-content">
+                        <div class="table-responsive">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>File Path</th>
+                                        <th class="num">Size</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="files-table-body">
+                                    <tr>
+                                        <td colspan="2" style="text-align:center; color:var(--text-muted); padding: 1.5rem;">No files uploaded yet.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading HMI screen configuration&hellip;</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for uploading zip -->
+    <input type="file" id="zip-file-input" accept=".zip" style="display:none;" />
+
+    <script src="/js/hmi-screen-detail.js"></script>
+    </ix-application>
+</body>
+</html>

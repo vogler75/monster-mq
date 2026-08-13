@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - HMI Screens</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded></ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div>
+                        <h1 class="page-title">HMI Screen Management</h1>
+                        <p class="page-subtitle">Configure, deploy, and host HTML/JS HMI screens and web dashboards</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-message" class="error-message" style="display:none;">
+                <div class="error-content">
+                    <span class="error-icon">&#9888;</span>
+                    <span class="error-text"></span>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Total Screens</span>
+                        <div class="metric-icon"><ix-icon name="screen" size="12"></ix-icon></div>
+                    </div>
+                    <div class="metric-value" id="total-hmis">0</div>
+                    <div class="metric-label">Configured Screens</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Enabled</span>
+                        <div class="metric-icon is-ok"><ix-icon name="success" size="12"></ix-icon></div>
+                    </div>
+                    <div class="metric-value" id="enabled-hmis">0</div>
+                    <div class="metric-label">Active Screens</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Main Screen</span>
+                        <div class="metric-icon is-info"><ix-icon name="project-server" size="12"></ix-icon></div>
+                    </div>
+                    <div class="metric-value" id="main-hmi" style="font-size: 1.1rem; word-break: break-all;">-</div>
+                    <div class="metric-label">Mounted at /hmi/</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">Local Screens</span>
+                        <div class="metric-icon"><ix-icon name="rack-ipc" size="12"></ix-icon></div>
+                    </div>
+                    <div class="metric-value" id="local-hmis">0</div>
+                    <div class="metric-label">On This Node</div>
+                </div>
+            </div>
+
+            <div id="hmis-table" class="data-table">
+                <div class="table-header">
+                    <div class="table-title">
+                        <h2>HMI Screens</h2>
+                    </div>
+                    <div class="table-actions">
+                        <ix-icon-button icon="refresh" variant="subtle-tertiary" id="refresh-btn" title="Refresh Screens"></ix-icon-button>
+                        <button id="upload-btn" class="btn btn-secondary">
+                            <ix-icon name="upload" size="16"></ix-icon> Upload ZIP
+                        </button>
+                        <a href="/pages/hmi-screen-detail.html?new=true" class="btn btn-primary">
+                            <ix-icon name="add-circle" size="16"></ix-icon> Add Screen
+                        </a>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Title / Path</th>
+                                <th>Node</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Files &amp; Size</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hmi-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display:none;">
+                <div class="loading-spinner"></div>
+                <span>Loading HMI screens&hellip;</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for quick ZIP upload -->
+    <input type="file" id="zip-file-input" accept=".zip" style="display:none;" />
+
+    <script src="/js/hmi-screens.js"></script>
+    </ix-application>
+</body>
+</html>

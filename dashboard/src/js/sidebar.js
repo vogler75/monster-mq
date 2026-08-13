@@ -192,7 +192,7 @@ class SidebarManager {
                     { href: '/pages/timebase-loggers.html', icon: 'database', text: 'TimeBase Loggers', feature: 'TimeBaseLogger' },
                     { href: '/pages/workflows.html', icon: 'ontology-filled', text: 'Workflows', feature: 'FlowEngine' },
                     { href: '/pages/scripts.html', icon: 'document', text: 'Scripts', feature: 'FlowEngine' },
-                    { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export', feature: 'DeviceImportExport' }
+                    { href: '/pages/hmi-screens.html', icon: 'screen', text: 'HMI Screens', feature: 'Hmi' }
                 ]
             },
             {
@@ -235,6 +235,7 @@ class SidebarManager {
                 section: 'System', sectionIcon: 'maintenance',
                 items: [
                     { href: '/pages/system-config.html', icon: 'cogwheel', text: 'System Config' },
+                    { href: '/pages/device-config-export-import.html', icon: 'upload', text: 'Import/Export', feature: 'DeviceImportExport' },
                     { href: '/pages/users.html', icon: 'user-settings', text: 'Users', id: 'users-nav-link', adminOnly: true },
                     { isUserItem: true }
                 ]

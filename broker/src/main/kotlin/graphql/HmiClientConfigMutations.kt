@@ -221,9 +221,10 @@ class HmiClientConfigMutations(
 
                 val zipBytes = java.util.Base64.getDecoder().decode(zipBase64)
                 val targetDir = java.io.File("./data/hmi/$name")
-                if (!targetDir.exists()) {
-                    targetDir.mkdirs()
+                if (targetDir.exists()) {
+                    targetDir.deleteRecursively()
                 }
+                targetDir.mkdirs()
 
                 val canonicalTargetDir = targetDir.canonicalFile
                 java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(zipBytes)).use { zis ->

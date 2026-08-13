@@ -319,6 +319,10 @@
      * Pass autoHideMs = 0 to keep it until cleared.
      */
     function showError(message, autoHideMs) {
+        if (!message) {
+            clearError();
+            return;
+        }
         var node = document.getElementById('error-message');
         if (!node) {
             toast(message, 'error');
