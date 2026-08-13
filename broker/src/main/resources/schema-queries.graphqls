@@ -740,6 +740,11 @@ extend type Query {
         # Filter by cluster node ID (optional)
         node: String
     ): [MqttClient!]!
+
+    hmis(name: String, nodeId: String): [Hmi!]!
+    hmi(name: String!): Hmi
+    hmiFiles(name: String!): [DashboardFile!]!
+    exportHmiZip(name: String!): String!
 }
 
 # MQTT Client Configuration Types

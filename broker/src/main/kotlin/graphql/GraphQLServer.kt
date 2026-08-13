@@ -24,6 +24,8 @@ import at.rocworks.graphql.OpcUaServerInfo
 import at.rocworks.graphql.OpcUaServerCertificateInfo
 import at.rocworks.graphql.MqttClientConfigQueries
 import at.rocworks.graphql.MqttClientConfigMutations
+import at.rocworks.graphql.HmiClientConfigQueries
+import at.rocworks.graphql.HmiClientConfigMutations
 import at.rocworks.graphql.KafkaClientConfigQueries
 import at.rocworks.graphql.KafkaClientConfigMutations
 import at.rocworks.graphql.WinCCOaClientConfigQueries
@@ -367,6 +369,10 @@ class GraphQLServer(
         val mqttClientQueries = deviceStore?.let { MqttClientConfigQueries(vertx, it) }
         val mqttClientMutations = deviceStore?.let { MqttClientConfigMutations(vertx, it) }
 
+        // Initialize HMI Client resolvers
+        val hmiQueries = deviceStore?.let { HmiClientConfigQueries(vertx, it) }
+        val hmiMutations = deviceStore?.let { HmiClientConfigMutations(vertx, it) }
+
         // Initialize Kafka Client resolvers
         val kafkaClientQueries = deviceStore?.let { KafkaClientConfigQueries(vertx, it) }
         val kafkaClientMutations = deviceStore?.let { KafkaClientConfigMutations(vertx, it) }
@@ -542,6 +548,13 @@ class GraphQLServer(
                     .apply {
                         mqttClientQueries?.let { resolver ->
                             dataFetcher("mqttClients", resolver.mqttClients())
+                        }
+                    }
+                    // HMI queries
+                    .apply {
+                        hmiQueries?.let { resolver ->
+                            dataFetcher("hmis", resolver.hmis())
+                            dataFetcher("hmi", resolver.hmi())
                         }
                     }
                     // Kafka Client queries
@@ -741,6 +754,16 @@ class GraphQLServer(
                     .apply {
                         mqttClientMutations?.let { _ ->
                             dataFetcher("mqttClient") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // HMI mutations - grouped under hmi
+                    .apply {
+                        hmiMutations?.let { _ ->
+                            dataFetcher("hmi") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -952,6 +975,20 @@ class GraphQLServer(
                         dataFetcher("addAddress", resolver.addMqttClientAddress())
                         dataFetcher("updateAddress", resolver.updateMqttClientAddress())
                         dataFetcher("deleteAddress", resolver.deleteMqttClientAddress())
+                    }
+                }
+            }
+            // Register HMI Mutations type
+            .type("HmiMutations") { builder ->
+                builder.apply {
+                    hmiMutations?.let { resolver ->
+                        dataFetcher("create", resolver.create())
+                        dataFetcher("update", resolver.update())
+                        dataFetcher("delete", resolver.delete())
+                        dataFetcher("start", resolver.start())
+                        dataFetcher("stop", resolver.stop())
+                        dataFetcher("toggle", resolver.toggle())
+                        dataFetcher("reassign", resolver.reassign())
                     }
                 }
             }

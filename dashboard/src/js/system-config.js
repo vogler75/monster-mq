@@ -30,6 +30,7 @@ class SystemConfigManager {
                         i3xEnabled i3xPort
                         graphqlEnabled graphqlPort
                         metricsEnabled
+                        hmiEnabled
                         genAiEnabled genAiProvider genAiModel
                         postgresUrl postgresUser
                         crateDbUrl crateDbUser
@@ -37,11 +38,14 @@ class SystemConfigManager {
                         sqlitePath
                         kafkaServers
                     }
+                    broker {
+                        enabledFeatures
+                    }
                 }
             `;
             const result = await window.graphqlClient.query(query);
             if (!result || !result.brokerConfig) throw new Error('Invalid response');
-            this.render(result.brokerConfig);
+            this.render(result.brokerConfig, result.broker?.enabledFeatures);
         } catch (e) {
             console.error('Error loading broker config:', e);
             this.showError('Failed to load configuration: ' + e.message);
@@ -50,7 +54,7 @@ class SystemConfigManager {
         }
     }
 
-    render(cfg) {
+    render(cfg, enabledFeatures) {
         // Node & Cluster
         this.setText('cfg-node-id', cfg.nodeId);
         this.setText('cfg-version', cfg.version);
@@ -93,6 +97,8 @@ class SystemConfigManager {
         this.setEl('cfg-mcp', this.enabledPortBadge(cfg.mcpEnabled, cfg.mcpPort));
         this.setEl('cfg-prometheus', this.enabledPortBadge(cfg.prometheusEnabled, cfg.prometheusPort));
         this.setEl('cfg-i3x', this.enabledPortBadge(cfg.i3xEnabled, cfg.i3xPort));
+        const isHmiEnabled = cfg.hmiEnabled ?? (Array.isArray(enabledFeatures) && enabledFeatures.includes('Hmi'));
+        this.setEl('cfg-hmi', this.enabledBadge(isHmiEnabled));
         this.setEl('cfg-metrics', this.enabledBadge(cfg.metricsEnabled));
         this.setText('cfg-kafka-servers', cfg.kafkaServers || '-');
 

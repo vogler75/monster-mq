@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.Version
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.Monster
+import at.rocworks.Features
 import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IMessageStore
@@ -1555,6 +1556,7 @@ class MetricsResolver(
         val graphqlEnabled: Boolean,
         val graphqlPort: Int,
         val metricsEnabled: Boolean,
+        val hmiEnabled: Boolean,
         val genAiEnabled: Boolean,
         val genAiProvider: String,
         val genAiModel: String,
@@ -1596,6 +1598,7 @@ class MetricsResolver(
                 graphqlEnabled = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
                 graphqlPort = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getInteger("Port", 4000),
                 metricsEnabled = config.getJsonObject("Metrics", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
+                hmiEnabled = Monster.isFeatureEnabled(Features.Hmi),
                 genAiEnabled = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
                 genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).let { genAi ->
                     genAi.getJsonObject("Assistant", null)?.getString("Provider") ?: genAi.getString("Provider", "")

@@ -137,6 +137,8 @@ type BrokerConfig {
     graphqlPort: Int!
     # Metrics
     metricsEnabled: Boolean!
+    # HMI
+    hmiEnabled: Boolean!
     # GenAI
     genAiEnabled: Boolean!
     genAiProvider: String!
@@ -151,6 +153,37 @@ type BrokerConfig {
     sqlitePath: String!
     # Kafka
     kafkaServers: String!
+}
+
+type HmiConfig {
+    urlPath: String!
+    isMain: Boolean!
+    title: String
+    description: String
+    entryPoint: String
+}
+
+type Hmi {
+    name: String!
+    nodeId: String!
+    enabled: Boolean!
+    config: HmiConfig!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    fileCount: Int
+    sizeBytes: Long
+}
+
+type HmiResult {
+    hmi: Hmi
+    success: Boolean!
+    message: String
+}
+
+type DashboardFile {
+    path: String!
+    sizeBytes: Long!
 }
 
 type CurrentUser {

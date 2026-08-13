@@ -38,7 +38,7 @@ class DeviceConfigStorePostgres(
                 node_id VARCHAR(255) NOT NULL,
                 config JSONB NOT NULL,
                 enabled BOOLEAN DEFAULT true,
-                type VARCHAR(255) DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
+                type VARCHAR(255),
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
                 CONSTRAINT deviceconfigs_name_format CHECK (name ~ '^[a-zA-Z0-9_-]+$')
@@ -56,7 +56,7 @@ class DeviceConfigStorePostgres(
             BEGIN
                 -- Add type column if it doesn't exist
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='$TABLE_NAME' AND column_name='type') THEN
-                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255) DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}';
+                    ALTER TABLE $TABLE_NAME ADD COLUMN type VARCHAR(255);
                 END IF;
 
                 -- Drop unique constraint on namespace if it exists

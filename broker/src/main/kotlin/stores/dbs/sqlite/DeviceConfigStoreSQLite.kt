@@ -41,7 +41,7 @@ class DeviceConfigStoreSQLite(
                 node_id TEXT NOT NULL,
                 config TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
-                type TEXT DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
+                type TEXT,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             )

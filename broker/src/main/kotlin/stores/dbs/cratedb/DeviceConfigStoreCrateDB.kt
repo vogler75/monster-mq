@@ -37,7 +37,7 @@ class DeviceConfigStoreCrateDB(
                 node_id STRING NOT NULL,
                 config VARCHAR NOT NULL,
                 enabled BOOLEAN DEFAULT TRUE,
-                type STRING DEFAULT '${DeviceConfig.DEVICE_TYPE_OPCUA_CLIENT}',
+                type STRING,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )

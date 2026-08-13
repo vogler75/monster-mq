@@ -759,6 +759,33 @@ extend type Mutation {
     # Access MQTT client management operations
     # Returns a MqttClientMutations type that provides grouped mutation operations
     mqttClient: MqttClientMutations!
+    hmi: HmiMutations!
+}
+
+input HmiConfigInput {
+    urlPath: String
+    isMain: Boolean
+    title: String
+    description: String
+    entryPoint: String
+}
+
+input HmiInput {
+    name: String!
+    nodeId: String
+    enabled: Boolean
+    config: HmiConfigInput!
+}
+
+type HmiMutations {
+    create(input: HmiInput!): HmiResult!
+    update(name: String!, input: HmiInput!): HmiResult!
+    delete(name: String!): HmiResult!
+    start(name: String!): HmiResult!
+    stop(name: String!): HmiResult!
+    toggle(name: String!, enabled: Boolean!): HmiResult!
+    reassign(name: String!, nodeId: String!): HmiResult!
+    uploadZip(name: String!, zipBase64: String!, setAsMain: Boolean): HmiResult!
 }
 
 # Result type for MQTT Client operations
