@@ -699,20 +699,13 @@ class QueryResolver(
             var count = 0
             var completed = false
             
-            // Convert pattern to topic filter format
-            val topicFilter = if (pattern.contains("*")) {
-                pattern.replace("*", "#")
-            } else if (!pattern.contains("#") && !pattern.contains("+")) {
-                "$pattern/#" // Search for topics starting with pattern
-            } else {
-                pattern
-            }
+            val matcher = compileSearchMatcher(pattern)
             
-            lastValueStore.findMatchingMessages(topicFilter) { message ->
+            lastValueStore.findMatchingMessages("#") { message ->
                 if (!completed && count < limit) {
                     val topicName = message.topicName
                     // Check if topic matches the search pattern
-                    if (matchesSearchPattern(topicName, pattern)) {
+                    if (matcher(topicName)) {
                         if (!topicNames.contains(topicName)) { // Avoid duplicates
                             topicNames.add(topicName)
                             count++
@@ -744,15 +737,32 @@ class QueryResolver(
     }
     
     /**
-     * Check if a topic name matches a search pattern
-     * Supports * as wildcard (converted to regex)
+     * Compiles a matcher function for topic search pattern matching.
+     * Supports wildcards:
+     * - '*' or '%' for zero or more characters
+     * - '?' or '_' for a single character
+     * - '+' or '#' for MQTT level wildcards
+     * If no wildcards are present, performs a case-insensitive substring search.
      */
-    private fun matchesSearchPattern(topicName: String, pattern: String): Boolean {
-        return if (pattern.contains("*")) {
-            val regex = pattern.replace("*", ".*").toRegex(RegexOption.IGNORE_CASE)
-            regex.matches(topicName)
+    private fun compileSearchMatcher(pattern: String): (String) -> Boolean {
+        if (pattern.isEmpty()) return { true }
+        val hasWildcard = pattern.contains("*") || pattern.contains("%") || pattern.contains("?") || pattern.contains("_") || pattern.contains("+") || pattern.contains("#")
+        if (hasWildcard) {
+            val regexStr = buildString {
+                for (ch in pattern) {
+                    when (ch) {
+                        '*', '%', '#' -> append(".*")
+                        '?', '_' -> append(".")
+                        '+' -> append("[^/]+")
+                        else -> append(Regex.escape(ch.toString()))
+                    }
+                }
+            }
+            val regex = Regex(regexStr, RegexOption.IGNORE_CASE)
+            return { topic: String -> regex.matches(topic) }
         } else {
-            topicName.contains(pattern, ignoreCase = true)
+            val lowerPattern = pattern.lowercase()
+            return { topic: String -> topic.lowercase().contains(lowerPattern) }
         }
     }
 

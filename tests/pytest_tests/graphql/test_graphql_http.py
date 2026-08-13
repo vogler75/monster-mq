@@ -354,3 +354,44 @@ def test_archive_stats_range_filtering(auth_headers):
         assert stats["minTimestamp"] is None
         assert len(stats["dailyCounts"]) == 0
 
+
+def test_search_topics_wildcards(auth_headers):
+    topic_prefix = f"test/search/{uuid.uuid4().hex[:6]}"
+    topics = [
+        f"{topic_prefix}/Watt/power",
+        f"{topic_prefix}/WattMeter",
+        f"{topic_prefix}/temperature",
+    ]
+    for t in topics:
+        _publish(t, '{"val": 100}', headers=auth_headers)
+
+    time.sleep(0.2)
+
+    # Search wildcard *Watt*
+    res_wildcard = _graphql(
+        """
+        query Search($p: String!) {
+            searchTopics(pattern: $p, archiveGroup: "Default")
+        }
+        """,
+        {"p": f"*{topic_prefix}*Watt*"},
+        headers=auth_headers,
+    )
+    found_wildcard = sorted(res_wildcard["data"]["searchTopics"])
+    expected_watt = sorted([f"{topic_prefix}/Watt/power", f"{topic_prefix}/WattMeter"])
+    assert found_wildcard == expected_watt, f"Expected {expected_watt}, got {found_wildcard}"
+
+    # Search substring without wildcards
+    res_sub = _graphql(
+        """
+        query Search($p: String!) {
+            searchTopics(pattern: $p, archiveGroup: "Default")
+        }
+        """,
+        {"p": f"{topic_prefix}/Watt"},
+        headers=auth_headers,
+    )
+    found_sub = sorted(res_sub["data"]["searchTopics"])
+    assert found_sub == expected_watt, f"Expected {expected_watt}, got {found_sub}"
+
+
