@@ -62,7 +62,10 @@ import at.rocworks.graphql.TopicSchemaQueries
 import at.rocworks.graphql.TopicSchemaMutations
 import at.rocworks.schema.TopicSchemaPolicyCache
 import at.rocworks.stores.DeviceConfigStoreFactory
+import at.rocworks.stores.DeviceConfig
+import at.rocworks.Features
 import at.rocworks.Monster
+import java.io.File
 import graphql.GraphQL
 import graphql.GraphQLException
 import graphql.scalars.ExtendedScalars
@@ -228,6 +231,9 @@ class GraphQLServer(
 
         // REST API routes (must be registered BEFORE the catch-all static handler)
         restApiServer?.registerRoutes(router)
+
+        // HMI static file serving (/hmi/*)
+        registerHmiRoutes(router)
 
         // Dashboard static file serving
         if (dashboardPath != null) {
@@ -555,6 +561,8 @@ class GraphQLServer(
                         hmiQueries?.let { resolver ->
                             dataFetcher("hmis", resolver.hmis())
                             dataFetcher("hmi", resolver.hmi())
+                            dataFetcher("hmiFiles", resolver.hmiFiles())
+                            dataFetcher("exportHmiZip", resolver.exportHmiZip())
                         }
                     }
                     // Kafka Client queries
@@ -989,6 +997,7 @@ class GraphQLServer(
                         dataFetcher("stop", resolver.stop())
                         dataFetcher("toggle", resolver.toggle())
                         dataFetcher("reassign", resolver.reassign())
+                        dataFetcher("uploadZip", resolver.uploadZip())
                     }
                 }
             }
@@ -1508,5 +1517,119 @@ class GraphQLServer(
                 }
             }
             .build()
+    }
+
+    private fun registerHmiRoutes(router: Router) {
+        val hmiConfig = config.getJsonObject("HMI")
+        val mountPath = (hmiConfig?.getString("MountPath") ?: "/hmi").trimEnd('/')
+        val basePath = hmiConfig?.getString("Path") ?: "./data/hmi"
+
+        val hmiRoute = if (mountPath.isEmpty()) "/*" else "$mountPath/*"
+
+        router.route(hmiRoute).handler { ctx ->
+            if (!Monster.isFeatureEnabled(Features.Hmi)) {
+                ctx.response().setStatusCode(404).putHeader("content-type", "text/plain").end("404 Not Found")
+                return@handler
+            }
+
+            val requestPath = ctx.request().path()
+            var relPath = requestPath
+            if (mountPath.isNotEmpty() && relPath.startsWith(mountPath)) {
+                relPath = relPath.substring(mountPath.length)
+            }
+            relPath = relPath.removePrefix("/")
+
+            val parts = relPath.split("/").filter { it.isNotEmpty() }
+            val firstSegment = parts.firstOrNull() ?: ""
+            val deviceStore = getEffectiveDeviceStore()
+
+            fun serveHmiDevice(device: DeviceConfig?, fallbackName: String, fileSubPath: String) {
+                val dashName = device?.name ?: fallbackName
+                val isEnabled = device?.enabled ?: false
+
+                if (device == null || !isEnabled) {
+                    ctx.response()
+                        .setStatusCode(404)
+                        .putHeader("content-type", "text/plain")
+                        .end("HMI dashboard '$dashName' is stopped or disabled")
+                    return
+                }
+
+                val deviceCfg = device.config
+                val entryPoint = deviceCfg.getString("entryPoint").takeIf { !it.isNullOrBlank() } ?: "index.html"
+
+                var targetSubPath = fileSubPath
+                if (targetSubPath.isEmpty() || targetSubPath.endsWith("/")) {
+                    targetSubPath = if (targetSubPath.isEmpty()) entryPoint else targetSubPath + entryPoint
+                }
+
+                val targetFile = File(basePath, "$dashName/$targetSubPath")
+
+                val baseDirFile = File(basePath).canonicalFile
+                val canonicalTarget = targetFile.canonicalFile
+                if (!canonicalTarget.path.startsWith(baseDirFile.path)) {
+                    ctx.response().setStatusCode(403).putHeader("content-type", "text/plain").end("403 Forbidden")
+                    return
+                }
+
+                if (canonicalTarget.exists() && canonicalTarget.isFile) {
+                    ctx.response().sendFile(canonicalTarget.path)
+                } else {
+                    ctx.response().setStatusCode(404).putHeader("content-type", "text/plain").end("404 Not Found")
+                }
+            }
+
+            if (firstSegment.isNotEmpty() && deviceStore != null) {
+                deviceStore.getDevice(firstSegment).onComplete { res ->
+                    val device = if (res.succeeded()) res.result() else null
+                    if (device != null && device.type == DeviceConfig.DEVICE_TYPE_HMI) {
+                        val subPath = parts.drop(1).joinToString("/")
+                        serveHmiDevice(device, firstSegment, subPath)
+                    } else {
+                        findMainHmiAndServe(relPath, ::serveHmiDevice)
+                    }
+                }
+            } else {
+                findMainHmiAndServe(relPath, ::serveHmiDevice)
+            }
+        }
+
+        if (mountPath.isNotEmpty() && mountPath != "/") {
+            router.get(mountPath).handler { ctx ->
+                ctx.response().putHeader("location", "$mountPath/").setStatusCode(302).end()
+            }
+        }
+    }
+
+    private fun getEffectiveDeviceStore(): IDeviceConfigStore? {
+        if (sharedDeviceConfigStore != null) return sharedDeviceConfigStore
+        val configStoreType = Monster.getConfigStoreType(config)
+        return if (configStoreType != "NONE") {
+            DeviceConfigStoreFactory.getSharedInstance()
+        } else {
+            null
+        }
+    }
+
+    private fun findMainHmiAndServe(
+        fileSubPath: String,
+        serveFn: (DeviceConfig?, String, String) -> Unit
+    ) {
+        val deviceStore = getEffectiveDeviceStore()
+        if (deviceStore != null) {
+            deviceStore.getAllDevices().onComplete { res ->
+                if (res.succeeded()) {
+                    val hmiDevices = res.result().filter { it.type == DeviceConfig.DEVICE_TYPE_HMI }
+                    val mainDevice = hmiDevices.find { it.config.getBoolean("isMain") == true }
+                        ?: hmiDevices.find { it.name == "main" }
+                        ?: hmiDevices.firstOrNull()
+                    serveFn(mainDevice, mainDevice?.name ?: "main", fileSubPath)
+                } else {
+                    serveFn(null, "main", fileSubPath)
+                }
+            }
+        } else {
+            serveFn(null, "main", fileSubPath)
+        }
     }
 }

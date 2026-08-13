@@ -207,4 +207,71 @@ class HmiClientConfigMutations(
             future
         }
     }
+
+    fun uploadZip(): DataFetcher<CompletableFuture<Map<String, Any>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any>>()
+            if (!Monster.isFeatureEnabled(Features.Hmi))
+                return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Feature Hmi disabled")) }
+
+            try {
+                val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Name is required")) }
+                val zipBase64 = env.getArgument<String>("zipBase64") ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "zipBase64 is required")) }
+                val setAsMain = env.getArgument<Boolean>("setAsMain") ?: false
+
+                val zipBytes = java.util.Base64.getDecoder().decode(zipBase64)
+                val targetDir = java.io.File("./data/hmi/$name")
+                if (!targetDir.exists()) {
+                    targetDir.mkdirs()
+                }
+
+                val canonicalTargetDir = targetDir.canonicalFile
+                java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(zipBytes)).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val entryFile = java.io.File(targetDir, entry.name).canonicalFile
+                        if (!entryFile.path.startsWith(canonicalTargetDir.path)) {
+                            entry = zis.nextEntry
+                            continue
+                        }
+                        if (entry.isDirectory) {
+                            entryFile.mkdirs()
+                        } else {
+                            entryFile.parentFile?.mkdirs()
+                            entryFile.outputStream().use { os -> zis.copyTo(os) }
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+
+                val config = JsonObject()
+                    .put("isMain", setAsMain)
+                    .put("urlPath", if (setAsMain) "" else name)
+                    .put("entryPoint", "index.html")
+
+                val device = DeviceConfig(
+                    name = name,
+                    namespace = name,
+                    nodeId = Monster.getClusterNodeId(vertx),
+                    type = DeviceConfig.DEVICE_TYPE_HMI,
+                    enabled = true,
+                    config = config
+                )
+
+                deviceStore.saveDevice(device).onComplete { result ->
+                    if (result.succeeded()) {
+                        future.complete(mapOf("success" to true, "hmi" to queries.deviceToMap(device)))
+                    } else {
+                        future.complete(mapOf("success" to false, "message" to (result.cause()?.message ?: "Failed to save device config")))
+                    }
+                }
+            } catch (e: Exception) {
+                logger.severe("Exception in uploadZip HMI: ${e.message}")
+                future.complete(mapOf("success" to false, "message" to (e.message ?: "Internal error")))
+            }
+
+            future
+        }
+    }
 }

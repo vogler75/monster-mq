@@ -127,6 +127,73 @@ class HmiClientConfigQueries(
         }
     }
 
+    fun hmiFiles(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<Map<String, Any>>>()
+            if (!Monster.isFeatureEnabled(Features.Hmi))
+                return@DataFetcher future.apply { complete(emptyList()) }
+
+            try {
+                val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(emptyList()) }
+                val hmiDir = java.io.File("./data/hmi/$name")
+                if (!hmiDir.exists() || !hmiDir.isDirectory) {
+                    return@DataFetcher future.apply { complete(emptyList()) }
+                }
+
+                val files = mutableListOf<Map<String, Any>>()
+                val baseCanonical = hmiDir.canonicalFile
+                hmiDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val relPath = file.canonicalFile.path.removePrefix(baseCanonical.path).removePrefix(java.io.File.separator).replace('\\', '/')
+                    files.add(mapOf(
+                        "path" to relPath,
+                        "sizeBytes" to file.length()
+                    ))
+                }
+                future.complete(files)
+            } catch (e: Exception) {
+                logger.severe("Exception in hmiFiles query: ${e.message}")
+                future.complete(emptyList())
+            }
+
+            future
+        }
+    }
+
+    fun exportHmiZip(): DataFetcher<CompletableFuture<String>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<String>()
+            if (!Monster.isFeatureEnabled(Features.Hmi))
+                return@DataFetcher future.apply { complete("") }
+
+            try {
+                val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete("") }
+                val hmiDir = java.io.File("./data/hmi/$name")
+                if (!hmiDir.exists() || !hmiDir.isDirectory) {
+                    return@DataFetcher future.apply { complete("") }
+                }
+
+                val baos = java.io.ByteArrayOutputStream()
+                java.util.zip.ZipOutputStream(baos).use { zos ->
+                    val baseCanonical = hmiDir.canonicalFile
+                    hmiDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                        val relPath = file.canonicalFile.path.removePrefix(baseCanonical.path).removePrefix(java.io.File.separator).replace('\\', '/')
+                        val entry = java.util.zip.ZipEntry(relPath)
+                        zos.putNextEntry(entry)
+                        file.inputStream().use { input -> input.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+                val b64 = java.util.Base64.getEncoder().encodeToString(baos.toByteArray())
+                future.complete(b64)
+            } catch (e: Exception) {
+                logger.severe("Exception in exportHmiZip query: ${e.message}")
+                future.complete("")
+            }
+
+            future
+        }
+    }
+
     fun deviceToMap(device: DeviceConfig): Map<String, Any> {
         val cfg = device.config
         val isMain = cfg.getBoolean("isMain", device.name == "main")
@@ -146,6 +213,16 @@ class HmiClientConfigQueries(
         val currentNodeId = Monster.getClusterNodeId(vertx)
         val isOnCurrentNode = device.isAssignedToNode(currentNodeId)
 
+        val hmiDir = java.io.File("./data/hmi/${device.name}")
+        var fileCount = 0
+        var sizeBytes = 0L
+        if (hmiDir.exists() && hmiDir.isDirectory) {
+            hmiDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                fileCount++
+                sizeBytes += file.length()
+            }
+        }
+
         return mapOf(
             "name" to device.name,
             "nodeId" to device.nodeId,
@@ -153,7 +230,9 @@ class HmiClientConfigQueries(
             "config" to configMap,
             "createdAt" to device.createdAt.toString(),
             "updatedAt" to device.updatedAt.toString(),
-            "isOnCurrentNode" to isOnCurrentNode
+            "isOnCurrentNode" to isOnCurrentNode,
+            "fileCount" to fileCount,
+            "sizeBytes" to sizeBytes
         )
     }
 }
