@@ -1,0 +1,30 @@
+Release v1.8.27
+Built from commit: a8bfad84
+Date: 2026-08-14 12:58:23
+
+Changes since v1.8.26:
+---
+a8bfad84 Update mqtt-client-detail.js
+fb5c5fdd feat(stores): add getDevicesByType to IDeviceConfigStore across all database backends and enforce single main HMI screen
+9001f76f feat(graphql): add TEXT option to DataFormat enum
+46e388e8 fix(dashboard): fix HMI screen delete confirmation dialog
+39e1724e Fix wildcard and substring topic search in GraphQL searchTopics query
+160b8245 feat(dashboard): add HMI Screens management views and cleanup ZIP extraction
+c58004c0 feat(hmi): add HMI feature flag to system page and update HMI GraphQL resolvers
+db0c741b feat(hmi): model HMI dashboards as HMI device configurations
+a1ec1b41 feat: add Hmi feature flag to Features object and schema
+842714d1 Limit maximum queued messages per client in QueueStoreMemory (fixes #165)
+06006293 Delete last value store entry on empty payload publish (fixes #29)
+3ad78632 Show usage help when no arguments are passed
+c3fc3d01 Remove -p/--publish option from build.sh
+0ffe928f Rename publish flags --github-only and --docker-only to --github and --docker
+593de21f Move broker release zip output to dist/ directory
+0817c894 Simplify desktop build targets to DMGs and setup EXEs only
+32da1f16 build(dashboard): skip mac target and use win zip fallback when building desktop app on linux
+07e96f9e build(docker): use -c -y --clean when building docker image in publish.sh
+d2f85903 docs(deps): update Java/GraalVM requirements to 21 LTS
+89c9ffec Create icon.png
+6112ace4 fix(dashboard): add pre-rendered icon.icns and icon.ico to fix build on linux
+6f1c6661 build(docker): update default base image to GraalVM JDK 21 LTS
+2d5e7d0c fix(dashboard): remove invalid npm alias override for boolean to fix npm ci
+a2685ab5 Standardize build, release, and publish scripts
