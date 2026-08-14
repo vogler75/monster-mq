@@ -275,7 +275,7 @@ class HmiScreenDetailManager {
             if (res && res.success) {
                 window.ui.success(`HMI screen "${name}" saved successfully`);
                 if (this.isNew) {
-                    window.location.href = `/pages/hmi-screen-detail.html?name=${encodeURIComponent(name)}`;
+                    (window.spaLocation || window.location).href = `/pages/hmi-screen-detail.html?name=${encodeURIComponent(name)}`;
                 } else {
                     await this.loadHmi();
                 }
@@ -293,14 +293,7 @@ class HmiScreenDetailManager {
     async deleteHmi() {
         if (!this.hmiName) return;
 
-        const confirmed = await window.ui.showConfirm({
-            title: 'Delete HMI Screen',
-            message: `Are you sure you want to delete HMI screen "${this.hmiName}"? All hosted assets will be removed.`,
-            confirmText: 'Delete',
-            type: 'danger'
-        });
-
-        if (!confirmed) return;
+        if (!await window.ui.confirmDelete(this.hmiName, { title: 'Delete HMI Screen' })) return;
 
         try {
             window.ui.setLoading(true);
@@ -319,7 +312,7 @@ class HmiScreenDetailManager {
 
             if (res && res.success) {
                 window.ui.success(`HMI screen "${this.hmiName}" deleted successfully`);
-                window.location.href = '/pages/hmi-screens.html';
+                (window.spaLocation || window.location).href = '/pages/hmi-screens.html';
             } else {
                 throw new Error(res?.message || 'Failed to delete HMI screen');
             }

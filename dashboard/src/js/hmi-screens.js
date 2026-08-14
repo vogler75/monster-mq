@@ -189,14 +189,7 @@ class HmiScreensManager {
     }
 
     async deleteHmi(name) {
-        const confirmed = await window.ui.showConfirm({
-            title: 'Delete HMI Screen',
-            message: `Are you sure you want to delete HMI screen "${name}" and all its files? This action cannot be undone.`,
-            confirmText: 'Delete',
-            type: 'danger'
-        });
-
-        if (!confirmed) return;
+        if (!await window.ui.confirmDelete(name, { title: 'Delete HMI Screen' })) return;
 
         try {
             window.ui.setLoading(true);
