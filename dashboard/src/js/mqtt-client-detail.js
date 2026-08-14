@@ -858,8 +858,12 @@ function hideAddAddressModal() {
     if (window.mqttClientDetailManager) window.mqttClientDetailManager.hideAddAddressModal();
 }
 
+function addAddress() {
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.addAddress();
+}
+
 function saveAddress() {
-    if (window.mqttClientDetailManager) window.mqttClientDetailManager.saveAddress();
+    if (window.mqttClientDetailManager) window.mqttClientDetailManager.addAddress();
 }
 
 function hideEditAddressModal() {
