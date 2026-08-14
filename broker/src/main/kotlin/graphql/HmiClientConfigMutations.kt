@@ -30,6 +30,28 @@ class HmiClientConfigMutations(
     }
 
     @Suppress("UNCHECKED_CAST")
+    private fun unsetOtherMainHmis(currentName: String): io.vertx.core.Future<Void> {
+        return deviceStore.getDevicesByType(DeviceConfig.DEVICE_TYPE_HMI).compose { hmiDevices ->
+            val futures = mutableListOf<io.vertx.core.Future<*>>()
+            for (dev in hmiDevices) {
+                if (dev.name != currentName && dev.config.getBoolean("isMain", false)) {
+                    dev.config.put("isMain", false)
+                    val urlPath = dev.config.getString("urlPath")
+                    if (urlPath.isNullOrEmpty()) {
+                        dev.config.put("urlPath", dev.name)
+                    }
+                    futures.add(deviceStore.saveDevice(dev))
+                }
+            }
+            if (futures.isEmpty()) {
+                io.vertx.core.Future.succeededFuture()
+            } else {
+                io.vertx.core.Future.all(futures as List<io.vertx.core.Future<*>>).compose { io.vertx.core.Future.succeededFuture() }
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
     fun create(): DataFetcher<CompletableFuture<Map<String, Any>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any>>()
@@ -45,9 +67,10 @@ class HmiClientConfigMutations(
                 val enabled = input["enabled"] as? Boolean ?: true
                 val configInput = input["config"] as? Map<String, Any> ?: emptyMap()
 
+                val isMain = configInput["isMain"] as? Boolean ?: false
                 val configJson = JsonObject()
                 configInput["urlPath"]?.let { configJson.put("urlPath", it) }
-                configInput["isMain"]?.let { configJson.put("isMain", it) }
+                configJson.put("isMain", isMain)
                 configInput["title"]?.let { configJson.put("title", it) }
                 configInput["description"]?.let { configJson.put("description", it) }
                 configInput["entryPoint"]?.let { configJson.put("entryPoint", it) }
@@ -68,7 +91,13 @@ class HmiClientConfigMutations(
                     }
                 }
 
-                deviceStore.saveDevice(request.toDeviceConfig()).onComplete { result ->
+                val saveFuture = if (isMain) {
+                    unsetOtherMainHmis(name).compose { deviceStore.saveDevice(request.toDeviceConfig()) }
+                } else {
+                    deviceStore.saveDevice(request.toDeviceConfig())
+                }
+
+                saveFuture.onComplete { result ->
                     if (result.succeeded()) {
                         val saved = result.result()
                         future.complete(mapOf("success" to true, "hmi" to queries.deviceToMap(saved)))
@@ -254,13 +283,19 @@ class HmiClientConfigMutations(
                 val device = DeviceConfig(
                     name = name,
                     namespace = name,
-                    nodeId = Monster.getClusterNodeId(vertx),
+                    nodeId = "local",
                     type = DeviceConfig.DEVICE_TYPE_HMI,
                     enabled = true,
                     config = config
                 )
 
-                deviceStore.saveDevice(device).onComplete { result ->
+                val saveFuture = if (setAsMain) {
+                    unsetOtherMainHmis(name).compose { deviceStore.saveDevice(device) }
+                } else {
+                    deviceStore.saveDevice(device)
+                }
+
+                saveFuture.onComplete { result ->
                     if (result.succeeded()) {
                         future.complete(mapOf("success" to true, "hmi" to queries.deviceToMap(device)))
                     } else {

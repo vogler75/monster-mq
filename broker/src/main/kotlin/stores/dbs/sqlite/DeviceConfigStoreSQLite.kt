@@ -59,6 +59,13 @@ class DeviceConfigStoreSQLite(
             CREATE INDEX IF NOT EXISTS idx_deviceconfigs_namespace ON $TABLE_NAME (namespace)
         """
 
+        private const val SELECT_BY_TYPE = """
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
+            FROM $TABLE_NAME
+            WHERE type = ?
+            ORDER BY name
+        """
+
         private const val SELECT_ALL = """
             SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
@@ -165,6 +172,29 @@ class DeviceConfigStoreSQLite(
             .onFailure { error ->
                 logger.severe("Failed to get all devices: ${error.message}")
                 promise.fail(DeviceConfigException("Failed to retrieve devices", error))
+            }
+
+        return promise.future()
+    }
+
+    override fun getDevicesByType(type: String): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        sqliteClient.executeQuery(SELECT_BY_TYPE, JsonArray().add(type))
+            .onSuccess { results ->
+                try {
+                    val devices = results.map { row ->
+                        mapJsonToDeviceConfig(row as JsonObject)
+                    }
+                    promise.complete(devices)
+                } catch (e: Exception) {
+                    logger.severe("Failed to map results: ${e.message}")
+                    promise.fail(DeviceConfigException("Failed to process results", e))
+                }
+            }
+            .onFailure { error ->
+                logger.severe("Failed to get devices by type $type: ${error.message}")
+                promise.fail(DeviceConfigException("Failed to retrieve devices by type", error))
             }
 
         return promise.future()

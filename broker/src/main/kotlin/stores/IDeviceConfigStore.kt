@@ -17,6 +17,11 @@ interface IDeviceConfigStore {
     fun getAllDevices(): Future<List<DeviceConfig>>
 
     /**
+     * Get device configurations filtered by device type
+     */
+    fun getDevicesByType(type: String): Future<List<DeviceConfig>>
+
+    /**
      * Get devices assigned to a specific cluster node
      */
     fun getDevicesByNode(nodeId: String): Future<List<DeviceConfig>>

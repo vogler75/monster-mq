@@ -94,6 +94,30 @@ class DeviceConfigStoreMongoDB(
         return promise.future()
     }
 
+    override fun getDevicesByType(type: String): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        try {
+            val documents = deviceConfigsCollection.find(eq("type", type)).sort(Document("name", 1))
+            val devices = mutableListOf<DeviceConfig>()
+
+            for (doc in documents) {
+                try {
+                    devices.add(mapDocumentToDevice(doc))
+                } catch (e: DeviceConfigException) {
+                    logger.warning("Skipping invalid device record: ${e.message}")
+                }
+            }
+
+            promise.complete(devices)
+        } catch (e: Exception) {
+            logger.severe("Failed to get devices by type $type: ${e.message}")
+            promise.fail(DeviceConfigException("Failed to get devices by type", e))
+        }
+
+        return promise.future()
+    }
+
     override fun getDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
         val promise = Promise.promise<List<DeviceConfig>>()
 

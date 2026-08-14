@@ -49,6 +49,13 @@ class DeviceConfigStoreCrateDB(
             ORDER BY name
         """
 
+        private const val SELECT_BY_TYPE = """
+            SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
+            FROM $TABLE_NAME
+            WHERE type = ?
+            ORDER BY name
+        """
+
         private const val SELECT_BY_NODE = """
             SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at
             FROM $TABLE_NAME
@@ -141,6 +148,32 @@ class DeviceConfigStoreCrateDB(
         } catch (e: Exception) {
             logger.severe("Failed to get all devices: ${e.message}")
             promise.fail(DeviceConfigException("Failed to get all devices", e))
+        }
+
+        return promise.future()
+    }
+
+    override fun getDevicesByType(type: String): Future<List<DeviceConfig>> {
+        val promise = Promise.promise<List<DeviceConfig>>()
+
+        try {
+            connection!!.prepareStatement(SELECT_BY_TYPE).use { stmt ->
+                stmt.setString(1, type)
+                stmt.executeQuery().use { rs ->
+                    val devices = mutableListOf<DeviceConfig>()
+                    while (rs.next()) {
+                        try {
+                            devices.add(mapResultSetToDevice(rs))
+                        } catch (e: DeviceConfigException) {
+                            logger.warning("Skipping invalid device record for type $type: ${e.message}")
+                        }
+                    }
+                    promise.complete(devices)
+                }
+            }
+        } catch (e: Exception) {
+            logger.severe("Failed to get devices by type $type: ${e.message}")
+            promise.fail(DeviceConfigException("Failed to get devices by type", e))
         }
 
         return promise.future()

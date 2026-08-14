@@ -73,10 +73,9 @@ class HmiClientConfigQueries(
                         }
                     }
                     else -> {
-                        deviceStore.getAllDevices().onComplete { result ->
+                        deviceStore.getDevicesByType(DeviceConfig.DEVICE_TYPE_HMI).onComplete { result ->
                             if (result.succeeded()) {
                                 val deviceMaps = result.result()
-                                    .filter { it.type == DeviceConfig.DEVICE_TYPE_HMI }
                                     .map { deviceToMap(it) }
                                 future.complete(deviceMaps)
                             } else {

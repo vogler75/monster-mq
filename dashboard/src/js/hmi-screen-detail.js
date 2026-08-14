@@ -81,6 +81,8 @@ class HmiScreenDetailManager {
         if (crumb) crumb.textContent = 'New HMI Screen';
         document.getElementById('page-title').textContent = 'Configure New HMI Screen';
         document.getElementById('name-input').disabled = false;
+        const nodeSelect = document.getElementById('node-id-select');
+        if (nodeSelect) nodeSelect.value = 'local';
         document.getElementById('delete-btn').style.display = 'none';
         document.getElementById('export-btn').style.display = 'none';
         document.getElementById('launch-btn').style.display = 'none';
