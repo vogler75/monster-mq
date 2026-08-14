@@ -5,6 +5,7 @@ import java.util.Base64
 
 enum class DataFormat {
     JSON,
+    TEXT,
     BINARY
 }
 
@@ -332,6 +333,7 @@ object PayloadConverter {
     fun encode(payload: ByteArray, format: DataFormat): String {
         return when (format) {
             DataFormat.JSON -> String(payload, Charsets.UTF_8)
+            DataFormat.TEXT -> String(payload, Charsets.UTF_8)
             DataFormat.BINARY -> Base64.getEncoder().encodeToString(payload)
         }
     }
@@ -339,6 +341,7 @@ object PayloadConverter {
     fun decode(payload: String, format: DataFormat): ByteArray {
         return when (format) {
             DataFormat.JSON -> payload.toByteArray(Charsets.UTF_8)
+            DataFormat.TEXT -> payload.toByteArray(Charsets.UTF_8)
             DataFormat.BINARY -> Base64.getDecoder().decode(payload)
         }
     }
@@ -366,6 +369,14 @@ object PayloadConverter {
                     jsonStr to DataFormat.JSON
                 } catch (e: Exception) {
                     // Only fall back to binary if UTF-8 decoding fails
+                    Base64.getEncoder().encodeToString(payload) to DataFormat.BINARY
+                }
+            }
+            DataFormat.TEXT -> {
+                try {
+                    val textStr = String(payload, Charsets.UTF_8)
+                    textStr to DataFormat.TEXT
+                } catch (e: Exception) {
                     Base64.getEncoder().encodeToString(payload) to DataFormat.BINARY
                 }
             }

@@ -8,6 +8,8 @@ enum DataFormat {
     # Allows for rich querying and manipulation of message content
     # Invalid JSON will result in parsing errors
     JSON
+    # Text format: payload is returned as plain UTF-8 text string
+    TEXT
     # Binary format: payload is treated as raw binary data encoded in base64
     # Preserves exact byte content for non-text data (images, files, etc.)
     # Always safe for any payload content regardless of encoding
