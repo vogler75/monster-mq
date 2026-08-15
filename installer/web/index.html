@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MonsterMQ Setup & Configuration</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="dark-theme">
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="#10B981" fill-opacity="0.15"/>
+            <path d="M7 9L16 15L25 9M7 14L16 20L25 14M7 19L16 25L25 19" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>MonsterMQ <span class="badge">Setup</span></h1>
+          <p class="subtitle">High-Performance MQTT Broker & Industrial Gateway</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <div id="java-status-pill" class="status-pill checking">
+          <span class="dot"></span>
+          <span class="text">Checking Java...</span>
+        </div>
+        <div id="version-tag-pill" class="status-pill neutral">
+          <span class="text">v1.8.28</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stepper Navigation -->
+    <nav class="stepper-nav">
+      <div class="step-item active" data-step="1">
+        <div class="step-circle">1</div>
+        <div class="step-label">Welcome & Version</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" data-step="2">
+        <div class="step-circle">2</div>
+        <div class="step-label">Destination</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" data-step="3">
+        <div class="step-circle">3</div>
+        <div class="step-label">Configuration</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" data-step="4">
+        <div class="step-circle">4</div>
+        <div class="step-label">Installation</div>
+      </div>
+      <div class="step-line"></div>
+      <div class="step-item" data-step="5">
+        <div class="step-circle">5</div>
+        <div class="step-label">Launch</div>
+      </div>
+    </nav>
+
+    <!-- Main Content Step Pages -->
+    <main class="wizard-body">
+      <!-- STEP 1: Welcome & Version -->
+      <section id="step-1" class="wizard-step active">
+        <div class="step-header">
+          <h2>Welcome to MonsterMQ Installation</h2>
+          <p class="desc">Select the release version to download and verify your system prerequisites.</p>
+        </div>
+
+        <div class="card-grid">
+          <!-- Release Selection Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Select Release Version
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label for="release-select">MonsterMQ Release</label>
+                <div class="select-wrapper">
+                  <select id="release-select">
+                    <option value="" disabled selected>Fetching available releases from GitHub...</option>
+                  </select>
+                </div>
+                <div id="release-details" class="field-hint">Latest release automatically detected.</div>
+              </div>
+              <div id="release-notes-box" class="release-notes-box">
+                <div class="notes-header">Release Information</div>
+                <div id="release-notes-content" class="notes-content">Loading details...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- System & Java Prerequisite Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                System & Runtime Check
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="system-specs">
+                <div class="spec-row">
+                  <span class="spec-label">Operating System</span>
+                  <span id="sys-os" class="spec-value">-</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-label">Architecture</span>
+                  <span id="sys-arch" class="spec-value">-</span>
+                </div>
+                <div class="spec-row">
+                  <span class="spec-label">Java Version</span>
+                  <span id="sys-java" class="spec-value">-</span>
+                </div>
+                <div id="java-path-row" class="spec-row hidden">
+                  <span class="spec-label">Java Binary</span>
+                  <span id="sys-java-path" class="spec-value" style="font-family: var(--font-mono); font-size: 11px;">-</span>
+                </div>
+              </div>
+
+              <div id="java-warning-box" class="alert-box warning hidden">
+                <div class="alert-title">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  Java 21+ Required
+                </div>
+                <div id="java-warning-text" class="alert-content"></div>
+                <div class="java-actions" style="margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                  <a id="java-download-link" href="https://adoptium.net/temurin/releases/?version=21" target="_blank" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">
+                    Download Java 21 (.pkg / .msi)
+                  </a>
+                  <button id="btn-recheck-java" class="btn btn-secondary" type="button" style="padding: 6px 12px; font-size: 12px;">
+                    Re-check Java
+                  </button>
+                </div>
+              </div>
+
+              <div id="java-ok-box" class="alert-box success hidden">
+                <div class="alert-title">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  Java 21+ Ready
+                </div>
+                <div class="alert-content">Your system has a compatible Java runtime installed.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 2: Destination Directory -->
+      <section id="step-2" class="wizard-step">
+        <div class="step-header">
+          <h2>Installation Location</h2>
+          <p class="desc">Choose where MonsterMQ files and database will be installed on your system.</p>
+        </div>
+
+        <div class="card full-width">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Target Directory
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label for="install-dir-input">Installation Path</label>
+              <div class="input-with-action">
+                <input type="text" id="install-dir-input" class="text-input" placeholder="/path/to/monstermq">
+              </div>
+              <div id="dir-status" class="field-hint">Validating folder access...</div>
+            </div>
+
+            <div class="info-callout">
+              <div class="callout-icon">ℹ️</div>
+              <div class="callout-text">
+                <strong>What will be placed here:</strong>
+                <ul>
+                  <li><code>monstermq-broker-*.jar</code> &mdash; Core broker runtime</li>
+                  <li><code>dependencies/</code> &mdash; Vert.x, Hazelcast, and connector libraries</li>
+                  <li><code>config.yaml</code> &mdash; Custom broker configuration file</li>
+                  <li><code>yaml-json-schema.json</code> &mdash; Configuration schema and documentation</li>
+                  <li><code>sqlite/</code> &mdash; Local SQLite database files (if enabled)</li>
+                  <li><code>run.sh</code> / <code>run.bat</code> &mdash; Startup launcher scripts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: Schema-Driven Config Editor -->
+      <section id="step-3" class="wizard-step">
+        <div class="step-header-with-tools">
+          <div>
+            <h2>Configuration Editor</h2>
+            <p class="desc">Configure ports, database backends, feature flags, and extensions with live schema documentation.</p>
+          </div>
+          <div class="editor-controls">
+            <!-- View Mode Switcher -->
+            <div class="segmented-control">
+              <button id="btn-view-form" class="segment-btn active" type="button">Visual Form</button>
+              <button id="btn-view-yaml" class="segment-btn" type="button">YAML Code</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Presets Bar -->
+        <div class="presets-bar">
+          <span class="preset-label">Templates:</span>
+          <button class="preset-chip active" data-preset="sqlite" type="button">Default (SQLite)</button>
+          <button class="preset-chip" data-preset="postgres" type="button">Production (PostgreSQL)</button>
+          <button class="preset-chip" data-preset="minimal" type="button">Lightweight Edge</button>
+        </div>
+
+        <!-- Visual Form View -->
+        <div id="config-form-view" class="config-editor-layout">
+          <!-- Sidebar Categories -->
+          <aside class="config-sidebar">
+            <div class="search-box">
+              <input type="text" id="config-search" placeholder="Search settings (e.g. TCP, SQLite, Auth)...">
+            </div>
+            <ul class="category-list">
+              <li class="category-item active" data-category="network">
+                <span class="cat-icon">🌐</span>
+                <span class="cat-name">Network & Ports</span>
+              </li>
+              <li class="category-item" data-category="storage">
+                <span class="cat-icon">🗄️</span>
+                <span class="cat-name">Storage & Database</span>
+              </li>
+              <li class="category-item" data-category="features">
+                <span class="cat-icon">⚡</span>
+                <span class="cat-name">Feature Flags</span>
+              </li>
+              <li class="category-item" data-category="security">
+                <span class="cat-icon">🔒</span>
+                <span class="cat-name">Security & Auth</span>
+              </li>
+              <li class="category-item" data-category="extensions">
+                <span class="cat-icon">🔌</span>
+                <span class="cat-name">APIs & Integrations</span>
+              </li>
+              <li class="category-item" data-category="tuning">
+                <span class="cat-icon">⚙️</span>
+                <span class="cat-name">Performance & Queues</span>
+              </li>
+            </ul>
+          </aside>
+
+          <!-- Category Forms Container -->
+          <div class="config-main">
+            <div id="category-content" class="category-content">
+              <!-- Dynamically rendered by app.js -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw YAML Code View -->
+        <div id="config-yaml-view" class="config-yaml-layout hidden">
+          <div class="yaml-editor-header">
+            <span>config.yaml</span>
+            <span id="yaml-validity-badge" class="badge-pill success">Valid YAML</span>
+          </div>
+          <textarea id="raw-yaml-input" class="yaml-textarea" spellcheck="false"></textarea>
+        </div>
+      </section>
+
+      <!-- STEP 4: Installation Progress -->
+      <section id="step-4" class="wizard-step">
+        <div class="step-header">
+          <h2>Installing MonsterMQ</h2>
+          <p class="desc">Please wait while the release package is downloaded, unpacked, and configured.</p>
+        </div>
+
+        <div class="card full-width">
+          <div class="card-body install-progress-body">
+            <div class="progress-animation">
+              <div class="spinner-ring"></div>
+            </div>
+            
+            <div class="progress-info">
+              <h3 id="install-stage-title">Initializing...</h3>
+              <p id="install-stage-msg">Connecting to GitHub releases...</p>
+            </div>
+
+            <div class="progress-bar-container">
+              <div id="install-progress-bar" class="progress-bar-fill" style="width: 0%"></div>
+            </div>
+
+            <div class="progress-steps-list">
+              <div id="pstep-prepare" class="pstep-item pending">
+                <span class="pstep-icon">○</span>
+                <span>Prepare Target Folder</span>
+              </div>
+              <div id="pstep-download" class="pstep-item pending">
+                <span class="pstep-icon">○</span>
+                <span>Download Broker Archive</span>
+              </div>
+              <div id="pstep-extract" class="pstep-item pending">
+                <span class="pstep-icon">○</span>
+                <span>Extract Package & Dependencies</span>
+              </div>
+              <div id="pstep-configure" class="pstep-item pending">
+                <span class="pstep-icon">○</span>
+                <span>Write Configuration & Schemas</span>
+              </div>
+              <div id="pstep-finalize" class="pstep-item pending">
+                <span class="pstep-icon">○</span>
+                <span>Setup Scripts & Permissions</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 5: Launch & Summary -->
+      <section id="step-5" class="wizard-step">
+        <div class="step-header">
+          <div class="success-icon-badge">✓</div>
+          <h2>MonsterMQ is Ready!</h2>
+          <p class="desc">Installation completed successfully. You can now start the broker and access endpoints.</p>
+        </div>
+
+        <div class="card-grid">
+          <!-- Endpoints Summary Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Broker Services & Endpoints
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="endpoint-list">
+                <div class="endpoint-item">
+                  <span class="ep-name">Web Dashboard</span>
+                  <a href="http://localhost:4000/" target="_blank" class="ep-link">http://localhost:4000/</a>
+                </div>
+                <div class="endpoint-item">
+                  <span class="ep-name">GraphQL API</span>
+                  <span class="ep-link">http://localhost:4000/graphql</span>
+                </div>
+                <div class="endpoint-item">
+                  <span class="ep-name">MQTT TCP</span>
+                  <span class="ep-link">mqtt://localhost:1883</span>
+                </div>
+                <div class="endpoint-item">
+                  <span class="ep-name">MCP AI Server</span>
+                  <span class="ep-link">http://localhost:3000/</span>
+                </div>
+              </div>
+
+              <div class="quick-actions">
+                <button id="btn-start-broker" class="btn btn-primary" type="button">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Start MonsterMQ
+                </button>
+                <button id="btn-open-dashboard" class="btn btn-secondary" type="button" disabled>
+                  Open Dashboard
+                </button>
+                <button id="btn-open-folder" class="btn btn-secondary" type="button">
+                  Open Folder
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Console Output Card -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                Process Logs
+              </div>
+              <span id="broker-status-badge" class="badge-pill neutral">Not Running</span>
+            </div>
+            <div class="card-body">
+              <div id="console-logs" class="console-box">
+                <div class="console-placeholder">Click "Start MonsterMQ" to launch the broker and stream logs here.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer Controls -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <button id="btn-prev-step" class="btn btn-secondary hidden" type="button">Back</button>
+      </div>
+      <div class="footer-right">
+        <button id="btn-next-step" class="btn btn-primary" type="button">Continue</button>
+        <button id="btn-exit" class="btn btn-secondary hidden" type="button">Close Installer</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

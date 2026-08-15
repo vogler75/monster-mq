@@ -44,3 +44,4 @@ tests/.env
 ### Others ###
 .antigravitycli
 dist/
+installer/bin/

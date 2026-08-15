@@ -29,6 +29,7 @@ VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 BUILD_BROKER=false
 BUILD_DESKTOP=false
 BUILD_DOCKER=false
+BUILD_SETUP=false
 CLEAN=false
 EXPLICIT_TARGET=false
 
@@ -36,9 +37,10 @@ usage() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --all            Build all artifacts"
+    echo "  --all            Build all artifacts (broker zip, desktop apps, setup executables, docker image)"
     echo "  --broker         Build standalone Java broker bundle (zip)"
     echo "  --desktop        Build Electron desktop dashboard apps (mac/win)"
+    echo "  --setup          Build cross-platform Go setup executables (setup.exe, setup-mac, setup-linux)"
     echo "  --docker         Build local Docker image (native platform)"
     echo "  --clean          Clean output build directories"
     echo "  -h, --help       Show this help message"
@@ -55,6 +57,7 @@ while [[ $# -gt 0 ]]; do
         --all)
             BUILD_BROKER=true
             BUILD_DESKTOP=true
+            BUILD_SETUP=true
             BUILD_DOCKER=true
             EXPLICIT_TARGET=true
             shift
@@ -66,6 +69,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --desktop)
             BUILD_DESKTOP=true
+            EXPLICIT_TARGET=true
+            shift
+            ;;
+        --setup|--installer)
+            BUILD_SETUP=true
             EXPLICIT_TARGET=true
             shift
             ;;
@@ -92,6 +100,7 @@ done
 if [ "$EXPLICIT_TARGET" = false ] && [ "$CLEAN" = false ]; then
     BUILD_BROKER=true
     BUILD_DESKTOP=true
+    BUILD_SETUP=true
     BUILD_DOCKER=true
 fi
 
@@ -107,7 +116,7 @@ if [ "$CLEAN" = true ]; then
     echo -e "${GREEN}✓ Clean complete${NC}"
 fi
 
-if [ "$BUILD_BROKER" = false ] && [ "$BUILD_DESKTOP" = false ] && [ "$BUILD_DOCKER" = false ]; then
+if [ "$BUILD_BROKER" = false ] && [ "$BUILD_DESKTOP" = false ] && [ "$BUILD_SETUP" = false ] && [ "$BUILD_DOCKER" = false ]; then
     echo -e "${GREEN}No build targets specified. Clean operation finished.${NC}"
     exit 0
 fi
@@ -164,8 +173,14 @@ EOF
     cat << 'EOF' > "${STAGE_DIR}/run.bat"
 @echo off
 set SCRIPT_DIR=%~dp0
-cd /d %SCRIPT_DIR%
-java -classpath "monstermq-broker-*.jar;dependencies/*" at.rocworks.MonsterKt %*
+cd /d "%SCRIPT_DIR%"
+set "JAR_FILE="
+for %%f in ("monstermq-broker-*.jar") do set "JAR_FILE=%%f"
+if not defined JAR_FILE (
+    echo Error: monstermq-broker-*.jar not found.
+    exit /b 1
+)
+java -classpath "%JAR_FILE%;dependencies/*" at.rocworks.MonsterKt %*
 EOF
 
     cat << EOF > "${STAGE_DIR}/README.md"
@@ -255,9 +270,23 @@ if [ "$BUILD_DESKTOP" = true ]; then
     echo -e "${GREEN}✓ Desktop apps built in dashboard/dist-desktop/${NC}"
 fi
 
-# 3. Build Docker Image (Local)
+# 3. Build Setup Executables (setup.exe, setup-mac, setup-linux)
+if [ "$BUILD_SETUP" = true ]; then
+    echo -e "${GREEN}[3/4] Building Cross-Platform Setup Executables (Go)...${NC}"
+    (cd installer && ./build.sh)
+    mkdir -p dist
+    cp installer/bin/setup.exe dist/setup.exe
+    cp installer/bin/setup-win-arm64.exe dist/setup-win-arm64.exe
+    cp installer/bin/setup-mac-arm64 dist/setup-mac-arm64
+    cp installer/bin/setup-mac-x64 dist/setup-mac-x64
+    cp installer/bin/setup-linux-amd64 dist/setup-linux-amd64
+    cp installer/bin/setup-linux-arm64 dist/setup-linux-arm64
+    echo -e "${GREEN}✓ Setup executables copied to dist/${NC}"
+fi
+
+# 4. Build Docker Image (Local)
 if [ "$BUILD_DOCKER" = true ]; then
-    echo -e "${GREEN}[3/3] Building Local Docker Image...${NC}"
+    echo -e "${GREEN}[4/4] Building Local Docker Image...${NC}"
     (cd docker && ./build -n)
     echo -e "${GREEN}✓ Local Docker image built${NC}"
 fi

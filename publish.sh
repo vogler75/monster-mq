@@ -134,7 +134,7 @@ if [ "$PUBLISH_GITHUB" = true ]; then
     fi
 
     shopt -s nullglob
-    for f in dashboard/dist-desktop/MonsterMQ-Dashboard*.dmg dashboard/dist-desktop/MonsterMQ-Dashboard*-setup.exe; do
+    for f in dashboard/dist-desktop/MonsterMQ-Dashboard*.dmg dashboard/dist-desktop/MonsterMQ-Dashboard*-setup.exe dist/setup* installer/bin/setup*; do
         if [[ "$f" == *.blockmap ]]; then
             continue
         fi
