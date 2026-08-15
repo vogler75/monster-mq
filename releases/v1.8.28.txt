@@ -1,0 +1,14 @@
+Release v1.8.28
+Built from commit: 9ccd6a04
+Date: 2026-08-15 13:41:01
+
+Changes since v1.8.27:
+---
+9ccd6a04 fix(i3xclient): support POST stream endpoint and JSON array SSE payloads
+12a3ec84 feat(devices): implement i3X client bridge connector and dashboard UI
+1e36c040 fix i3x subscription streaming
+921122c8 Update example-config-postgres.yaml
+4d95b360 i3x: add /v1 alias, bulk updates, SSE fixes
+3ae8cf34 Fix Default archive group initial retention values
+7cdebe00 feat(install): add 1-line installation scripts and bundle default config
+119dbea1 Update version
