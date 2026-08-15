@@ -11,6 +11,7 @@ import io.vertx.core.Promise
 import io.vertx.core.http.HttpClient
 import io.vertx.core.http.HttpClientOptions
 import io.vertx.core.http.HttpClientResponse
+import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.RequestOptions
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -320,7 +321,6 @@ class I3xClientConnector : AbstractVerticle() {
         val host = uri.host ?: "localhost"
         val port = if (uri.port > 0) uri.port else (if (isSsl) 443 else 80)
         val basePath = uri.path.orEmpty().trimEnd('/')
-        val streamPath = "$basePath/subscriptions/stream?subscriptionId=$subscriptionId&clientId=${i3xConfig.clientId}"
 
         val clientOptions = HttpClientOptions()
             .setConnectTimeout(i3xConfig.connectionTimeout.toInt())
@@ -331,25 +331,37 @@ class I3xClientConnector : AbstractVerticle() {
         val client = vertx.createHttpClient(clientOptions)
         httpClient = client
 
-        val reqOptions = RequestOptions()
+        // Primary method: POST /subscriptions/stream with JSON payload { "clientId": ..., "subscriptionId": ... }
+        val streamPathPost = "$basePath/subscriptions/stream"
+        val bodyJson = JsonObject()
+            .put("clientId", i3xConfig.clientId)
+            .put("subscriptionId", subscriptionId)
+        val bodyBuffer = bodyJson.toBuffer()
+
+        val reqOptionsPost = RequestOptions()
+            .setMethod(HttpMethod.POST)
             .setHost(host)
             .setPort(port)
-            .setURI(streamPath)
+            .setURI(streamPathPost)
             .setSsl(isSsl)
+            .addHeader("Content-Type", "application/json")
             .addHeader("Accept", "text/event-stream")
             .addHeader("Cache-Control", "no-cache")
 
-        applyAuthToRequestOptions(reqOptions)
+        applyAuthToRequestOptions(reqOptionsPost)
 
-        client.request(reqOptions)
-            .compose { req -> req.send() }
+        client.request(reqOptionsPost)
+            .compose { req -> req.send(bodyBuffer) }
             .onSuccess { resp ->
                 if (resp.statusCode() == 200) {
                     activeStreamResponse = resp
                     setupSseReader(resp)
                     promise.complete()
+                } else if (resp.statusCode() == 405) {
+                    logger.fine("POST /subscriptions/stream returned HTTP 405, attempting GET fallback")
+                    openSseStreamGetFallback(subscriptionId, host, port, basePath, isSsl, promise)
                 } else {
-                    val msg = "SSE stream request failed with HTTP ${resp.statusCode()}"
+                    val msg = "SSE stream request failed with HTTP ${resp.statusCode()}: ${resp.statusMessage()}"
                     logger.warning(msg)
                     promise.fail(msg)
                 }
@@ -359,6 +371,46 @@ class I3xClientConnector : AbstractVerticle() {
             }
 
         return promise.future()
+    }
+
+    private fun openSseStreamGetFallback(
+        subscriptionId: String,
+        host: String,
+        port: Int,
+        basePath: String,
+        isSsl: Boolean,
+        promise: Promise<Void>
+    ) {
+        val client = httpClient ?: return promise.fail("HttpClient is null")
+        val streamPathGet = "$basePath/subscriptions/stream?subscriptionId=$subscriptionId&clientId=${i3xConfig.clientId}"
+
+        val reqOptionsGet = RequestOptions()
+            .setMethod(HttpMethod.GET)
+            .setHost(host)
+            .setPort(port)
+            .setURI(streamPathGet)
+            .setSsl(isSsl)
+            .addHeader("Accept", "text/event-stream")
+            .addHeader("Cache-Control", "no-cache")
+
+        applyAuthToRequestOptions(reqOptionsGet)
+
+        client.request(reqOptionsGet)
+            .compose { req -> req.send() }
+            .onSuccess { resp ->
+                if (resp.statusCode() == 200) {
+                    activeStreamResponse = resp
+                    setupSseReader(resp)
+                    promise.complete()
+                } else {
+                    val msg = "SSE stream GET fallback failed with HTTP ${resp.statusCode()}: ${resp.statusMessage()}"
+                    logger.warning(msg)
+                    promise.fail(msg)
+                }
+            }
+            .onFailure { err ->
+                promise.fail(err)
+            }
     }
 
     private fun setupSseReader(resp: HttpClientResponse) {
@@ -417,28 +469,54 @@ class I3xClientConnector : AbstractVerticle() {
     // -------------------------------------------------------------------------
 
     private fun handleSseEvent(event: String, data: String) {
+        val trimmed = data.trim()
+        if (trimmed.isEmpty()) return
+
         try {
-            logger.fine("Received i3X event '$event': $data")
-            val json = JsonObject(data)
-            val updatesArray = json.getJsonArray("updates")
-            if (updatesArray != null) {
-                for (i in 0 until updatesArray.size()) {
-                    val update = updatesArray.getJsonObject(i) ?: continue
-                    processUpdate(update)
+            logger.fine("Received i3X event '$event': $trimmed")
+            if (trimmed.startsWith("[")) {
+                val array = JsonArray(trimmed)
+                for (i in 0 until array.size()) {
+                    val item = array.getValue(i)
+                    if (item is JsonObject) {
+                        processBatchOrUpdate(item)
+                    }
                 }
-            } else if (json.containsKey("elementId")) {
-                processUpdate(json)
+            } else if (trimmed.startsWith("{")) {
+                val json = JsonObject(trimmed)
+                processBatchOrUpdate(json)
+            } else {
+                logger.warning("Unrecognized SSE event payload format from '${deviceConfig.name}': $trimmed")
             }
         } catch (e: Exception) {
             logger.warning("Failed to parse i3X event data: ${e.message}")
         }
     }
 
+    private fun processBatchOrUpdate(json: JsonObject) {
+        val updatesArray = json.getJsonArray("updates")
+        if (updatesArray != null) {
+            for (i in 0 until updatesArray.size()) {
+                val update = updatesArray.getJsonObject(i) ?: continue
+                processUpdate(update)
+            }
+        } else if (json.containsKey("elementId")) {
+            processUpdate(json)
+        }
+    }
+
     private fun processUpdate(update: JsonObject) {
         val elementId = update.getString("elementId") ?: return
-        val value = update.getValue("value")
-        val quality = update.getString("quality") ?: "Good"
-        val timestamp = update.getString("timestamp")
+        var value = update.getValue("value")
+        var quality = update.getString("quality")
+        var timestamp = update.getString("timestamp")
+
+        if (value is JsonObject && (value.containsKey("value") || value.containsKey("quality") || value.containsKey("timestamp"))) {
+            if (quality == null) quality = value.getString("quality")
+            if (timestamp == null) timestamp = value.getString("timestamp")
+            value = value.getValue("value")
+        }
+        if (quality == null) quality = "Good"
 
         val matchingAddress = findMatchingAddress(elementId)
         if (matchingAddress == null) {

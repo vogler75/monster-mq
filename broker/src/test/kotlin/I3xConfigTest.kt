@@ -144,4 +144,33 @@ class I3xConfigTest {
         assertEquals("Uncertain", vqtJson.getString("quality"))
         assertEquals(fixedTime, vqtJson.getString("timestamp"))
     }
+
+    @Test
+    fun testSseArrayAndBatchPayloadStructures() {
+        // SSE Array payload: [{"elementId": "pump-101", "value": 45.2, "quality": "Good", "timestamp": "2026-08-15T12:00:00Z"}]
+        val arrayPayload = """
+            [
+              {"elementId": "pump-101", "value": 45.2, "quality": "Good", "timestamp": "2026-08-15T12:00:00Z"},
+              {"elementId": "pump-102", "value": {"value": 88.0, "quality": "Good", "timestamp": "2026-08-15T12:00:00Z"}}
+            ]
+        """.trimIndent()
+        val jsonArray = JsonArray(arrayPayload)
+        assertEquals(2, jsonArray.size())
+        val item1 = jsonArray.getJsonObject(0)
+        assertEquals("pump-101", item1.getString("elementId"))
+        assertEquals(45.2, item1.getDouble("value"), 0.001)
+
+        // SSE Batch payload: {"sequenceNumber": 1, "updates": [{"elementId": "sensors/temp", "value": 22.5, "quality": "Good"}]}
+        val batchPayload = """
+            {
+              "sequenceNumber": 1,
+              "updates": [
+                {"elementId": "sensors/temp", "value": 22.5, "quality": "Good", "timestamp": "2026-08-15T12:00:00Z"}
+              ]
+            }
+        """.trimIndent()
+        val jsonBatch = JsonObject(batchPayload)
+        assertTrue(jsonBatch.containsKey("updates"))
+        assertEquals(1, jsonBatch.getJsonArray("updates").size())
+    }
 }
