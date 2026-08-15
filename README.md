@@ -216,6 +216,7 @@ Features:
   SparkplugB: true
   FlowEngine: true
   Agents: true
+  I3xClient: true
 ```
 
 Omitting a key defaults to `true`. GraphQL mutations for a disabled feature return an error immediately; the extension's verticle is not deployed at startup.

@@ -102,3 +102,4 @@ Features:
   DeviceImportExport: true
   Zenoh: true
   Hmi: true
+  I3xClient: true

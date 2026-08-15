@@ -117,3 +117,4 @@ Features:
   SparkplugB: true
   FlowEngine: true
   Agents: true
+  I3xClient: true

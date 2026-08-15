@@ -137,6 +137,7 @@ Features:
   TopicNamespace: true        # Topic namespace management
   DeviceImportExport: true    # Device configuration import/export
   Zenoh: true                 # Zenoh broker federation transport
+  I3xClient: true             # i3X client bridge
 
 # User Management & Auth
 Auth:

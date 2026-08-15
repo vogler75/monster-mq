@@ -266,77 +266,11 @@ if [ ! -f "${TARGET_PATH}/yaml-json-schema.json" ]; then
 fi
 
 if [ ! -f "${TARGET_PATH}/config.yaml" ]; then
-    CONFIG_URL="https://raw.githubusercontent.com/${REPO}/main/broker/example-config.yaml"
+    CONFIG_URL="https://raw.githubusercontent.com/${REPO}/main/broker/config-default.yaml"
     if [ "$HTTP_GET" = "curl" ]; then
         curl -sSL "$CONFIG_URL" -o "${TARGET_PATH}/config.yaml" 2>/dev/null || true
     else
         wget -qO "${TARGET_PATH}/config.yaml" "$CONFIG_URL" 2>/dev/null || true
-    fi
-fi
-
-if [ ! -f "${TARGET_PATH}/config.yaml" ] || [ ! -s "${TARGET_PATH}/config.yaml" ]; then
-    cat << 'EOF' > "${TARGET_PATH}/config.yaml"
-TCP: 1883
-WS: 1884
-
-NodeName: local
-DefaultStoreType: SQLITE
-
-QueuedMessagesEnabled: true
-AllowRootWildcardSubscription: true
-
-SQLite:
-  Path: "sqlite"
-  EnableWAL: true
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-  Path: /graphql
-
-MCP:
-  Enabled: true
-  Port: 3000
-
-UserManagement:
-  Enabled: false
-
-Metrics:
-  Enabled: true
-
-Logging:
-  Memory:
-    Enabled: true
-    Entries: 1000
-
-Features:
-  OpcUa: true
-  OpcUaServer: true
-  MqttClient: true
-  Kafka: true
-  Nats: true
-  Redis: true
-  RedisServer: true
-  Telegram: true
-  WinCCOa: true
-  WinCCUa: true
-  Plc4x: true
-  Neo4j: true
-  JdbcLogger: true
-  InfluxDBLogger: true
-  TimeBaseLogger: true
-  SparkplugB: true
-  FlowEngine: true
-  Agents: true
-  GenAi: true
-  Mcp: true
-  KafkaServer: true
-  SchemaPolicy: true
-  TopicNamespace: true
-  DeviceImportExport: true
-  Zenoh: true
-  Hmi: true
-EOF
     fi
 fi
 

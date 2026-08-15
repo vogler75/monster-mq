@@ -349,6 +349,7 @@ Features:
   SparkplugB: true
   FlowEngine: true
   Agents: true
+  I3xClient: true
 ```
 
 Omitting a key is equivalent to `true`. To disable a feature, set it explicitly to `false`. GraphQL mutations for a disabled feature return an error response immediately; the extension's verticle is not deployed on that node at startup.

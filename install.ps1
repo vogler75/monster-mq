@@ -179,76 +179,9 @@ if (-not (Test-Path $schemaPath)) {
 
 if (-not (Test-Path $configPath)) {
     try {
-        $exampleUrl = "https://raw.githubusercontent.com/$Repo/main/broker/example-config.yaml"
-        Invoke-WebRequest -Uri $exampleUrl -OutFile $configPath -UseBasicParsing -ErrorAction SilentlyContinue
+        $configUrl = "https://raw.githubusercontent.com/$Repo/main/broker/config-default.yaml"
+        Invoke-WebRequest -Uri $configUrl -OutFile $configPath -UseBasicParsing -ErrorAction SilentlyContinue
     } catch {}
-}
-
-if (-not (Test-Path $configPath) -or (Get-Item $configPath).Length -eq 0) {
-    $defaultConfig = @"
-TCP: 1883
-WS: 1884
-
-NodeName: local
-DefaultStoreType: SQLITE
-
-QueuedMessagesEnabled: true
-AllowRootWildcardSubscription: true
-
-SQLite:
-  Path: "sqlite"
-  EnableWAL: true
-
-GraphQL:
-  Enabled: true
-  Port: 4000
-  Path: /graphql
-
-MCP:
-  Enabled: true
-  Port: 3000
-
-UserManagement:
-  Enabled: false
-
-Metrics:
-  Enabled: true
-
-Logging:
-  Memory:
-    Enabled: true
-    Entries: 1000
-
-Features:
-  OpcUa: true
-  OpcUaServer: true
-  MqttClient: true
-  Kafka: true
-  Nats: true
-  Redis: true
-  RedisServer: true
-  Telegram: true
-  WinCCOa: true
-  WinCCUa: true
-  Plc4x: true
-  Neo4j: true
-  JdbcLogger: true
-  InfluxDBLogger: true
-  TimeBaseLogger: true
-  SparkplugB: true
-  FlowEngine: true
-  Agents: true
-  GenAi: true
-  Mcp: true
-  KafkaServer: true
-  SchemaPolicy: true
-  TopicNamespace: true
-  DeviceImportExport: true
-  Zenoh: true
-  Hmi: true
-"@
-        Set-Content -Path $configPath -Value $defaultConfig
-    }
 }
 
 Write-Host ""
