@@ -1146,6 +1146,41 @@ class MetricsResolver(
         }
     }
 
+    fun i3xClientMetrics(): DataFetcher<CompletableFuture<List<I3xClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<I3xClientMetrics>>()
+            val i3xClient = env.getSource<Map<String, Any>>()
+            val clientName = i3xClient?.get("name") as? String
+
+            if (clientName == null) {
+                future.complete(listOf(I3xClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                return@DataFetcher future
+            }
+
+            val addr = at.rocworks.bus.EventBusAddresses.I3xBridge.connectorMetrics(clientName)
+            vertx.eventBus().request<io.vertx.core.json.JsonObject>(addr, io.vertx.core.json.JsonObject()).onComplete { reply ->
+                if (reply.succeeded()) {
+                    val body = reply.result().body()
+                    val inRate = body.getDouble("messagesInRate", 0.0)
+                    val connected = body.getBoolean("connected", false)
+                    future.complete(listOf(I3xClientMetrics(round2(inRate), connected, TimestampConverter.currentTimeIsoString())))
+                } else {
+                    future.complete(listOf(I3xClientMetrics(0.0, false, TimestampConverter.currentTimeIsoString())))
+                }
+            }
+
+            future
+        }
+    }
+
+    fun i3xClientMetricsHistory(): DataFetcher<CompletableFuture<List<I3xClientMetrics>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<List<I3xClientMetrics>>()
+            future.complete(emptyList())
+            future
+        }
+    }
+
     // OPC UA Device Metrics (embedded field resolvers)
     fun opcUaDeviceMetricsField(): DataFetcher<CompletableFuture<List<OpcUaDeviceMetrics>>> {
         return DataFetcher { env ->

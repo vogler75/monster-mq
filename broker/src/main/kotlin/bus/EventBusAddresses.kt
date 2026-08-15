@@ -148,6 +148,14 @@ object EventBusAddresses {
         fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
     }
 
+    // i3X Client (i3X -> MQTT)
+    object I3xBridge {
+        private const val BRIDGE_NS = "$BASE.bridge.i3x"
+        const val CONNECTORS_LIST = "$BRIDGE_NS.connectors.list"
+        fun connectorsList(nodeId: String) = "$BRIDGE_NS.connectors.list.$nodeId"
+        fun connectorMetrics(deviceName: String) = "$BRIDGE_NS.metrics.$deviceName"
+    }
+
     // PLC4X Client (PLC4X -> MQTT)
     object Plc4xBridge {
         private const val BRIDGE_NS = "$BASE.bridge.plc4x"

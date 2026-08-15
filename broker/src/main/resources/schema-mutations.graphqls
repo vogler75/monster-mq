@@ -1851,3 +1851,97 @@ input TelegramClientInput {
     enabled: Boolean = true
     config: TelegramClientConfigInput!
 }
+
+#############################################
+# i3X Client Mutations                      #
+#############################################
+
+type I3xClientMutations {
+    # Create a new i3X client bridge
+    create(input: I3xClientInput!): I3xClientResult!
+    # Update an existing i3X client bridge configuration
+    update(name: String!, input: I3xClientInput!): I3xClientResult!
+    # Delete an i3X client bridge permanently
+    delete(name: String!): Boolean!
+    # Start (enable) an i3X client bridge
+    start(name: String!): I3xClientResult!
+    # Stop (disable) an i3X client bridge
+    stop(name: String!): I3xClientResult!
+    # Toggle the enabled state of an i3X client bridge
+    toggle(name: String!, enabled: Boolean!): I3xClientResult!
+    # Reassign an i3X client bridge to a different cluster node
+    reassign(name: String!, nodeId: String!): I3xClientResult!
+    # Add an address entry (elementId to MQTT topic mapping)
+    addAddress(deviceName: String!, input: I3xAddressInput!): I3xClientResult!
+    # Update an existing address entry by elementId
+    updateAddress(deviceName: String!, elementId: String!, input: I3xAddressInput!): I3xClientResult!
+    # Delete an address entry by elementId
+    deleteAddress(deviceName: String!, elementId: String!): I3xClientResult!
+}
+
+extend type Mutation {
+    # Access i3X client bridge management operations
+    i3xClient: I3xClientMutations!
+}
+
+type I3xClientResult {
+    success: Boolean!
+    client: I3xClient
+    errors: [String!]!
+}
+
+input I3xHeaderInput {
+    key: String!
+    value: String!
+}
+
+input I3xAddressInput {
+    # i3X object element ID or path prefix (e.g., "factory/line1/motor1" or "sensors")
+    elementId: String!
+    # Local MQTT destination topic or prefix
+    topic: String!
+    # Hierarchy depth: 1 = single element, 0 = unlimited / recursive subtree, N = depth limit
+    maxDepth: Int = 1
+    # Publish MQTT messages with retained flag
+    retained: Boolean = false
+    # MQTT QoS level (0, 1, or 2)
+    qos: Int = 0
+    # Format of published message payload
+    messageFormat: I3xMessageFormat = RAW_VALUE
+    # Remove base elementId prefix when mapping child topics in recursive subscriptions
+    removePath: Boolean = false
+    # Optional description
+    description: String = ""
+}
+
+input I3xConnectionConfigInput {
+    # Full i3X server URL (e.g., "http://localhost:3002/i3x/v1")
+    url: String!
+    # Authentication type
+    authType: I3xAuthType = NONE
+    # Username for Basic auth
+    username: String
+    # Password for Basic auth (leave blank to keep existing)
+    password: String
+    # Bearer token (leave blank to keep existing)
+    token: String
+    # Custom HTTP headers
+    headers: [I3xHeaderInput!] = []
+    # Client ID used for i3X subscription
+    clientId: String = "monstermq-i3x-client"
+    # Delay between reconnection attempts in milliseconds
+    reconnectDelay: Long = 5000
+    # Connection timeout in milliseconds
+    connectionTimeout: Long = 10000
+    # Configured object subscriptions
+    addresses: [I3xAddressInput!] = []
+}
+
+input I3xClientInput {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean = true
+    config: I3xConnectionConfigInput!
+}
+

@@ -52,6 +52,7 @@ import at.rocworks.devices.mqttclient.MqttClientExtension
 import at.rocworks.devices.kafkaclient.KafkaClientExtension
 import at.rocworks.devices.winccoa.WinCCOaExtension
 import at.rocworks.devices.winccua.WinCCUaExtension
+import at.rocworks.devices.i3xclient.I3xClientExtension
 import at.rocworks.extensions.Oa4jBridge
 import at.rocworks.devices.plc4x.Plc4xExtension
 import at.rocworks.devices.neo4j.Neo4jExtension
@@ -1498,6 +1499,17 @@ MORE INFO:
                             vertx.deployVerticle(winCCUaExtension, winCCUaDeploymentOptions)
                         } else {
                             logger.fine("WinCCUa extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        // i3X Client Extension
+                        if (Monster.isFeatureEnabled(Features.I3xClient)) {
+                            val i3xClientExtension = I3xClientExtension()
+                            val i3xDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(i3xClientExtension, i3xDeploymentOptions)
+                        } else {
+                            logger.fine("I3xClient extension disabled by Features config")
                             Future.succeededFuture()
                         }
                     }

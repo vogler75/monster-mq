@@ -226,6 +226,7 @@ class SidebarManager {
                     { href: '/pages/telegram-clients.html', icon: 'send-top-right', text: 'Telegram Clients', feature: 'Telegram' },
                     { href: '/pages/winccoa-clients.html', icon: 'rack-ipc', text: 'WinCC OA Clients', feature: 'WinCCOa' },
                     { href: '/pages/winccua-clients.html', icon: 'rack-ipc', text: 'WinCC Unified Clients', feature: 'WinCCUa' },
+                    { href: '/pages/i3x-clients.html', icon: 'link', text: 'i3X Clients', feature: 'I3xClient' },
                     { href: '/pages/plc4x-clients.html', icon: 'solid-state-drive', text: 'PLC4X Clients', feature: 'Plc4x' },
                     { href: '/pages/neo4j-clients.html', icon: 'distribution', text: 'Neo4j Clients', feature: 'Neo4j' },
                     { href: '/pages/sparkplugb-decoders.html', icon: 'electrical-energy', text: 'SparkplugB Decoders', feature: 'SparkplugB' }
@@ -484,9 +485,12 @@ class SidebarManager {
 
     setActiveNavItem() {
         const currentPath = this._currentHref?.split('?')[0];
+        const listPath = currentPath
+            ? currentPath.replace(/-detail\.html$/, 's.html').replace(/([a-z0-9]+)-client-detail\.html$/, '$1-clients.html')
+            : null;
         requestAnimationFrame(() => {
             document.querySelectorAll('ix-menu-item[data-href]').forEach(item => {
-                if (item.dataset.href === currentPath) {
+                if (item.dataset.href === currentPath || (listPath && item.dataset.href === listPath)) {
                     item.setAttribute('active', '');
                 } else {
                     item.removeAttribute('active');

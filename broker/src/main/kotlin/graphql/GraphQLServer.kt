@@ -32,6 +32,8 @@ import at.rocworks.graphql.WinCCOaClientConfigQueries
 import at.rocworks.graphql.WinCCOaClientConfigMutations
 import at.rocworks.graphql.WinCCUaClientConfigQueries
 import at.rocworks.graphql.WinCCUaClientConfigMutations
+import at.rocworks.graphql.I3xClientConfigQueries
+import at.rocworks.graphql.I3xClientConfigMutations
 import at.rocworks.graphql.Plc4xClientConfigQueries
 import at.rocworks.graphql.Plc4xClientConfigMutations
 import at.rocworks.graphql.Neo4jClientConfigQueries
@@ -395,6 +397,10 @@ class GraphQLServer(
         val winCCUaClientQueries = deviceStore?.let { WinCCUaClientConfigQueries(vertx, it) }
         val winCCUaClientMutations = deviceStore?.let { WinCCUaClientConfigMutations(vertx, it) }
 
+        // Initialize i3X Client resolvers
+        val i3xClientQueries = deviceStore?.let { I3xClientConfigQueries(vertx, it) }
+        val i3xClientMutations = deviceStore?.let { I3xClientConfigMutations(vertx, it) }
+
         // Initialize PLC4X Client resolvers
         val plc4xClientQueries = deviceStore?.let { Plc4xClientConfigQueries(vertx, it) }
         val plc4xClientMutations = deviceStore?.let { Plc4xClientConfigMutations(vertx, it) }
@@ -609,6 +615,12 @@ class GraphQLServer(
                     .apply {
                         winCCUaClientQueries?.let { resolver ->
                             dataFetcher("winCCUaClients", resolver.winCCUaClients())
+                        }
+                    }
+                    // i3X Client queries
+                    .apply {
+                        i3xClientQueries?.let { resolver ->
+                            dataFetcher("i3xClients", resolver.i3xClients())
                         }
                     }
                     // PLC4X Client queries
@@ -842,6 +854,16 @@ class GraphQLServer(
                     .apply {
                         winCCUaClientMutations?.let { _ ->
                             dataFetcher("winCCUaDevice") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+                    // i3X Client mutations
+                    .apply {
+                        i3xClientMutations?.let { _ ->
+                            dataFetcher("i3xClient") { env ->
                                 val result = authContext.validateFieldAccess(env)
                                 if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                                 emptyMap<String, Any>()
@@ -1110,6 +1132,23 @@ class GraphQLServer(
                     }
                 }
             }
+            // Register i3X Client Mutations type
+            .type("I3xClientMutations") { builder ->
+                builder.apply {
+                    i3xClientMutations?.let { resolver ->
+                        dataFetcher("create", resolver.createI3xClient())
+                        dataFetcher("update", resolver.updateI3xClient())
+                        dataFetcher("delete", resolver.deleteI3xClient())
+                        dataFetcher("start", resolver.startI3xClient())
+                        dataFetcher("stop", resolver.stopI3xClient())
+                        dataFetcher("toggle", resolver.toggleI3xClient())
+                        dataFetcher("reassign", resolver.reassignI3xClient())
+                        dataFetcher("addAddress", resolver.addI3xClientAddress())
+                        dataFetcher("updateAddress", resolver.updateI3xClientAddress())
+                        dataFetcher("deleteAddress", resolver.deleteI3xClientAddress())
+                    }
+                }
+            }
             // Register OPC UA Device Mutations type
             .type("OpcUaDeviceMutations") { builder ->
                 builder.apply {
@@ -1372,6 +1411,11 @@ class GraphQLServer(
                 builder
                     .dataFetcher("metrics", metricsResolver.winCCUaClientMetrics())
                     .dataFetcher("metricsHistory", metricsResolver.winCCUaClientMetricsHistory())
+            }
+            .type("I3xClient") { builder ->
+                builder
+                    .dataFetcher("metrics", metricsResolver.i3xClientMetrics())
+                    .dataFetcher("metricsHistory", metricsResolver.i3xClientMetricsHistory())
             }
             .type("Plc4xClient") { builder ->
                 builder

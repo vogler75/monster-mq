@@ -47,6 +47,7 @@ data class DeviceConfig(
         const val DEVICE_TYPE_GENAI_PROVIDER = "GenAiProvider"
         const val DEVICE_TYPE_MCP_SERVER = "MCP-Server"
         const val DEVICE_TYPE_HMI = "HMI"
+        const val DEVICE_TYPE_I3X_CLIENT = "I3X-Client"
 
         fun fromJsonObject(json: JsonObject): DeviceConfig {
             return DeviceConfig(

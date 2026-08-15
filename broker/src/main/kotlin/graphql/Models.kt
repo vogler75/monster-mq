@@ -265,6 +265,13 @@ data class WinCCUaClientMetrics(
     val timestamp: String
 )
 
+// i3X Client Metrics
+data class I3xClientMetrics(
+    val messagesIn: Double,
+    val connected: Boolean = false,
+    val timestamp: String
+)
+
 // PLC4X Client Metrics
 data class Plc4xDeviceMetrics(
     val messagesInRate: Double,

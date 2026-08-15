@@ -856,7 +856,8 @@
         "TopicNamespace": { "type": "boolean", "default": true, "description": "Topic namespace management" },
         "DeviceImportExport": { "type": "boolean", "default": true, "description": "Device configuration import/export" },
         "Zenoh": { "type": "boolean", "default": true, "description": "Zenoh broker federation transport" },
-        "Hmi": { "type": "boolean", "default": true, "description": "HTML/JS HMI hosting and dashboard management" }
+        "Hmi": { "type": "boolean", "default": true, "description": "HTML/JS HMI hosting and dashboard management" },
+        "I3xClient": { "type": "boolean", "default": true, "description": "i3X client bridge" }
       },
       "additionalProperties": false
     }
