@@ -235,15 +235,19 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
         done
     fi
 
-    # Deduplicate release files list
+    # Deduplicate release files list (macOS Bash 3.2 compatible)
     UNIQUE_FILES=()
-    declare -A SEEN_FILES
+    SEEN_FILES=" "
     for file in "${RELEASE_FILES[@]}"; do
-        BASE=$(basename "$file")
-        if [ -z "${SEEN_FILES[$BASE]}" ]; then
-            SEEN_FILES[$BASE]=1
-            UNIQUE_FILES+=("$file")
-        fi
+        BASE="$(basename "$file")"
+        case "$SEEN_FILES" in
+            *" $BASE "*)
+                ;;
+            *)
+                SEEN_FILES="${SEEN_FILES}${BASE} "
+                UNIQUE_FILES+=("$file")
+                ;;
+        esac
     done
 
     if [ ${#UNIQUE_FILES[@]} -eq 0 ]; then
