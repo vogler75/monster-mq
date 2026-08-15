@@ -1865,8 +1865,11 @@ MORE INFO:
         if (sqliteUsed) {
             val sqliteDir = File(sqliteConfig.path)
             if (!sqliteDir.exists()) {
-                logger.severe("SQLite directory '${sqliteConfig.path}' does not exist. Please create the directory or update the SQLite.Path configuration.")
-                exitProcess(1)
+                if (!sqliteDir.mkdirs()) {
+                    logger.severe("SQLite directory '${sqliteConfig.path}' does not exist and could not be created. Please check permissions or update SQLite.Path.")
+                    exitProcess(1)
+                }
+                logger.info("Created SQLite directory: '${sqliteConfig.path}'")
             }
             if (!sqliteDir.isDirectory()) {
                 logger.severe("SQLite path '${sqliteConfig.path}' is not a directory. Please ensure it points to a valid directory.")

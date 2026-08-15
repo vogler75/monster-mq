@@ -1,7 +1,7 @@
 TCP: 1883
-TCPS: 8883
+#TCPS: 8883
 WS: 9000
-WSS: 9001
+#WSS: 9001
 
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
@@ -73,3 +73,32 @@ GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
+
+# Feature Flags (all enabled)
+Features:
+  OpcUa: true
+  OpcUaServer: true
+  MqttClient: true
+  Kafka: true
+  Nats: true
+  Redis: true
+  RedisServer: true
+  Telegram: true
+  WinCCOa: true
+  WinCCUa: true
+  Plc4x: true
+  Neo4j: true
+  JdbcLogger: true
+  InfluxDBLogger: true
+  TimeBaseLogger: true
+  SparkplugB: true
+  FlowEngine: true
+  Agents: true
+  GenAi: true
+  Mcp: true
+  KafkaServer: true
+  SchemaPolicy: true
+  TopicNamespace: true
+  DeviceImportExport: true
+  Zenoh: true
+  Hmi: true

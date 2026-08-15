@@ -17,6 +17,22 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 
 ## Quick Start
 
+### 1-Line Installer (Linux & macOS)
+
+Requires Java 21+ (`java -version`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/install.sh | bash
+cd monstermq && ./run.sh
+```
+
+### 1-Line Installer (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/vogler75/monster-mq/main/install.ps1 | iex
+cd .\monstermq; .\run.bat
+```
+
 ### Docker
 
 Run the published image:

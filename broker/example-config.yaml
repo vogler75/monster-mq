@@ -1,150 +1,86 @@
-TCP: 1883
-TCPS: 8883
-WS: 9000
-WSS: 9001
+# ==============================================================================
+# MonsterMQ Default Configuration
+# Storage backend: SQLite (embedded, zero-configuration)
+# ==============================================================================
 
+# Network Ports
+TCP: 1883
+WS: 1884
+# TCPS: 8883 # Enable for MQTT over TLS (requires server-keystore.jks)
+# WSS: 8884  # Enable for MQTT over Secure WebSocket (requires server-keystore.jks)
+
+# Clustering / Node Identity
+NodeName: local
+
+# Storage Engine Configuration
+# Options: SQLITE, POSTGRES, MONGODB, CRATEDB, MEMORY
+DefaultStoreType: SQLITE
+
+# Queuing & Subscriptions
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
-DefaultStoreType: POSTGRES
-
-#SessionStoreType: POSTGRES      # Persistent sessions
-#RetainedStoreType: POSTGRES     # Persistent retained messages
-#ConfigStoreType: POSTGRES       # Persistent broker configuration (users, ACL, SparkplugB decoders, etc.)
-#QueueStoreType: POSTGRES        # Persistent message queues (for QoS 1/2 messages when clients are offline)
-#SessionStoreType: MEMORY        # Volatile sessions/subscriptions; use QueueStoreType: MEMORY separately for volatile queues
-#QueueStoreType: MEMORY          # Volatile queued messages when QueuedMessagesEnabled is true
-#MaxQueuedMessagesPerClient: 10000 # Maximum queued messages per client in QueueStoreMemory before FIFO eviction (0 = unlimited)
-
-# User Management configuration
-UserManagement:
-  Enabled: false  # Set to true to enable user authentication and ACL
-  PasswordAlgorithm: bcrypt
-  CacheRefreshInterval: 60  # seconds
-  DisconnectOnUnauthorized: true
-
-# MQTT TCP Server configuration (socket-level settings)
-MqttTcpServer:
-  NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
-  ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB, recommended: 512KB-2MB for high load)
-  SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB, recommended: 512KB-2MB for high load)
-  MaxMessageSizeKb: 512
-
-# Queue size configuration for high-load scenarios
-Queues:
-  SubscriptionQueueSize: 50000  # Queue size for subscription add/delete operations (default: 10,000)
-  MessageQueueSize: 100000       # Queue size for message add/delete operations (default: 100,000)
-  DatabaseBatchSize: 4000       # Batch size for database queue write/delete operations (default: 4,000)
-  MessageCacheSize: 4000        # Queued messages fetched and locked per persistent-session drain batch (default: 4,000)
-
-# Metrics configuration
-Metrics:
-  Enabled: true
-  # StoreType: MEMORY      # Optional: MEMORY, NONE, or same backend as StoreType/DefaultStoreType
-  CollectionIntervalSeconds: 10
-  RetentionHours: 24
-  MaxHistoryRows: 3600
-
-# Logging configuration
-Logging:
-  Memory:
-    Enabled: true         # Enable in-memory log storage (circular buffer)
-    Entries: 1000          # Maximum number of log entries to store in memory
-
-# Batches messages for delivery to clients to reduce eventBus overhead
-BulkMessaging:
-  Enabled: true              # Enable/disable bulk message batching
-  TimeoutMS: 100             # Flush batches after this many milliseconds (100ms recommended)
-  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
-
-# Bulk Processing configuration (Topic grouping + Worker threads)
-BulkProcessing:
-  Enabled: false             # Enable/disable publish bulk processing
-  TimeoutMS: 50              # Flush inbound batch after this many milliseconds (50ms recommended)
-  BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
-  WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
-
-# Sparkplug B support configuration
-# DEPRECATED: SparkplugMetricExpansion is replaced by SparkplugB Decoder Devices
-# Configure SparkplugB decoders via GraphQL API or Web Dashboard instead
-# See: doc/sparkplugb-decoder.md for migration guide
-# SparkplugMetricExpansion:
-#   Enabled: false  # This option is no longer used
-
-# SQLite configuration
+# SQLite Configuration (embedded database folder)
 SQLite:
   Path: "sqlite"
+  EnableWAL: true
 
-# PostgreSQL configuration
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
-
-# CrateDB configuration
-CrateDB:
-  Url: jdbc:postgresql://localhost:5433/monster
-  User: crate
-  Pass: ""
-
-# MongoDB configuration
-MongoDB:
-  Url: mongodb://system:manager@localhost:27017
-  Database: monster
-
-# Kafka configuration
-Kafka:
-  Servers: linux0:9092
-  Bus: # Use Kafka as the message bus
-    Enabled: false
-    Topic: monster
-
-# Zenoh configuration (distributed federation transport)
-Zenoh:
-  Enabled: false
-  Mode: client                    # Modes: client, peer, router (default: client)
-  Connect:                        # Static router endpoints (leave empty to use multicast scouting)
-    - tcp/127.0.0.1:7447
-  RemotePrefix: monstermq/mqtt    # Root namespace prefix for MQTT topics in Zenoh network
-  # LocalPrefix: data/zenoh       # Optional: Mount Zenoh publications under a local MQTT sub-tree prefix
-  Allow:                          # Topic patterns to allow (MQTT wildcard syntax)
-    - "#"
-  Deny:                           # Topic patterns to deny (MQTT wildcard syntax)
-    - "$SYS/#"
-  Deduplication:
-    CacheSize: 100000             # Maximum unique message UUIDs stored in the deduplication cache
-    TtlSeconds: 300               # Time-to-live for cache entries in seconds
-
+# Web Dashboard & GraphQL API
 GraphQL:
   Enabled: true
   Port: 4000
   Path: /graphql
 
-# REST API (hosted on the same port as GraphQL)
-# Endpoints: /api/v1/topics/... (publish, read), /api/v1/write (bulk), /api/v1/subscribe (SSE)
-# Swagger UI: /api/v1/docs
-RestApi:
-  Enabled: true
-
-# MCP Server configuration
+# Model Context Protocol (MCP) Server for AI Tools
 MCP:
   Enabled: true
   Port: 3000
 
-# Archive group examples (import via -archiveConfigs/-archiveConfigsMerge or GraphQL mutations)
-ArchiveGroups:
-  - Name: Default
+# User Management & Authentication (disabled by default for quickstart)
+UserManagement:
+  Enabled: false
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60
+  DisconnectOnUnauthorized: true
+
+# Metrics Collection
+Metrics:
+  Enabled: true
+  CollectionIntervalSeconds: 10
+  RetentionHours: 24
+  MaxHistoryRows: 3600
+
+# In-memory logging buffer for Web Dashboard log viewer
+Logging:
+  Memory:
     Enabled: true
-    TopicFilter: ["#"]
-    RetainedOnly: false
-    LastValType: POSTGRES
-    ArchiveType: POSTGRES
-    PayloadFormat: DEFAULT
-    LastValRetention: "7d"
-    ArchiveRetention: "30d"
-    PurgeInterval: "1h"
-    QueueType: NONE           # Store-and-Forward queue type: NONE (disabled), MEMORY, or DISK
-    QueueSize: 100000         # Queue capacity in messages
-    BulkSize: 4000            # Batch flush size
-    BulkTimeoutMs: 250        # Batch flush timeout in ms
-    QueueDiskPath: "data/queue" # Directory for disk queue file when QueueType is DISK
+    Entries: 1000
+
+# Feature Flags (all enabled)
+Features:
+  OpcUa: true
+  OpcUaServer: true
+  MqttClient: true
+  Kafka: true
+  Nats: true
+  Redis: true
+  RedisServer: true
+  Telegram: true
+  WinCCOa: true
+  WinCCUa: true
+  Plc4x: true
+  Neo4j: true
+  JdbcLogger: true
+  InfluxDBLogger: true
+  TimeBaseLogger: true
+  SparkplugB: true
+  FlowEngine: true
+  Agents: true
+  GenAi: true
+  Mcp: true
+  KafkaServer: true
+  SchemaPolicy: true
+  TopicNamespace: true
+  DeviceImportExport: true
+  Zenoh: true
+  Hmi: true

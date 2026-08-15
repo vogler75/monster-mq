@@ -139,8 +139,17 @@ if [ "$BUILD_BROKER" = true ]; then
     cp broker/target/broker-1.0-SNAPSHOT.jar "${STAGE_DIR}/monstermq-broker-${VERSION}.jar"
     cp -r broker/target/dependencies "${STAGE_DIR}/dependencies"
     
-    if [ -f "config.yaml.example" ]; then
-        cp config.yaml.example "${STAGE_DIR}/config.yaml"
+    if [ -f "broker/example-config.yaml" ]; then
+        cp broker/example-config.yaml "${STAGE_DIR}/config.yaml"
+    elif [ -f "broker/example-config-sqlite.yaml" ]; then
+        cp broker/example-config-sqlite.yaml "${STAGE_DIR}/config.yaml"
+    fi
+
+    mkdir -p "${STAGE_DIR}/sqlite"
+    mkdir -p "${STAGE_DIR}/log"
+
+    if [ -f "broker/yaml-json-schema.json" ]; then
+        cp broker/yaml-json-schema.json "${STAGE_DIR}/yaml-json-schema.json"
     fi
     
     cat << 'EOF' > "${STAGE_DIR}/run.sh"
@@ -171,6 +180,64 @@ Linux / macOS:
 
 Windows:
   run.bat
+
+Web Dashboard & GraphQL:
+  http://localhost:4000/
+
+MQTT Broker:
+  mqtt://localhost:1883
+EOF
+
+    cat << 'EOF' > "${STAGE_DIR}/AGENTS.md"
+# MonsterMQ Agent Guide
+
+This file provides guidance to AI coding and DevOps agents working with this MonsterMQ broker instance.
+
+## What MonsterMQ Is
+
+MonsterMQ is a high-performance, industrial-grade MQTT broker (MQTT 3.1.1 and MQTT 5.0) built on Vert.x with multi-database persistence, embedded web dashboard, GraphQL API, Model Context Protocol (MCP) server for AI tools, and industrial protocol bridging (OPC UA, PLC4X, SparkplugB, WinCC OA/Unified, Kafka, NATS, Redis).
+
+## Quick Start & Running
+
+Requirements: **Java 21+** (`java -version`)
+
+- **Linux / macOS**: `./run.sh` (or `./run.sh -config config.yaml`)
+- **Windows**: `run.bat` (or `run.bat -config config.yaml`)
+
+## Endpoints
+
+| Service | Port / Path | Description |
+| :--- | :--- | :--- |
+| **MQTT TCP** | `tcp://localhost:1883` | Standard plain MQTT protocol |
+| **MQTT WebSocket** | `ws://localhost:1884` | MQTT over WebSocket for web apps |
+| **GraphQL & Dashboard** | `http://localhost:4000/` | Web Dashboard & `/graphql` API endpoint |
+| **MCP Server** | `http://localhost:3000/` | Model Context Protocol for AI tool integration |
+
+## Configuration & Schema (`yaml-json-schema.json`)
+
+The broker configuration is defined in `config.yaml`.
+The draft-07 JSON schema is provided in `yaml-json-schema.json` in this directory.
+
+### Key Configuration Concepts:
+- **`DefaultStoreType`**: Default database backend (`SQLITE`, `POSTGRES`, `MONGODB`, `CRATEDB`, `MEMORY`). Defaults to `SQLITE`.
+- **`SQLite.Path`**: Directory for SQLite database files (defaults to `"sqlite"`).
+- **`Features`**: Map of feature flags (`OpcUa`, `MqttClient`, `FlowEngine`, `Agents`, `GenAi`, `Mcp`, `Plc4x`, `SparkplugB`, etc.).
+- **`UserManagement`**: Authentication and ACL rules (`Enabled: false` by default for quickstart).
+- **`GraphQL`**: Controls web dashboard and GraphQL API (`Port: 4000`, `Path: /graphql`).
+- **`MCP`**: Controls Model Context Protocol server (`Port: 3000`).
+
+## Database Backends
+
+- **SQLite (Default)**: Zero external setup. Database files are stored locally under `./sqlite/`.
+- **PostgreSQL**: Set `DefaultStoreType: POSTGRES` and configure connection details under `Postgres: { Url, User, Pass }`.
+- **MongoDB**: Set `DefaultStoreType: MONGODB` and configure `MongoDB: { Url, Database }`.
+
+## CLI Arguments
+
+- `-config <file>`: Specify custom configuration YAML (defaults to `config.yaml` or `GATEWAY_CONFIG` env var).
+- `-cluster`: Enable Hazelcast cluster mode.
+- `-log <level>`: Set log level (`INFO`, `FINE`, `FINER`, `FINEST`, `ALL`).
+- `-workerPoolSize <num>`: Vert.x worker thread pool size.
 EOF
 
     ZIP_PATH="dist/${BUNDLE_NAME}.zip"
