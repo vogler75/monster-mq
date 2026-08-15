@@ -330,12 +330,12 @@ class ArchiveHandler(
                             lastValType = MessageStoreType.MEMORY,
                             archiveType = MessageArchiveType.NONE,
                             payloadFormat = PayloadFormat.DEFAULT,
-                            lastValRetentionMs = 3600000L,
-                            archiveRetentionMs = 3600000L,
-                            purgeIntervalMs = 3600000L,
-                            lastValRetentionStr = "1h",
-                            archiveRetentionStr = "1h",
-                            purgeIntervalStr = "1h",
+                            lastValRetentionMs = null,
+                            archiveRetentionMs = null,
+                            purgeIntervalMs = null,
+                            lastValRetentionStr = null,
+                            archiveRetentionStr = null,
+                            purgeIntervalStr = null,
                             databaseConfig = databaseConfig
                         )
                         configStore.saveArchiveGroup(defaultArchiveGroup, enabled = false).onComplete { saveResult ->
