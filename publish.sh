@@ -121,10 +121,16 @@ if [ "$PUBLISH_GITHUB" = true ]; then
     RELEASE_FILES=()
 
     BROKER_ZIP="dist/monstermq-broker-${VERSION}.zip"
+    if [ ! -f "$BROKER_ZIP" ]; then
+        echo -e "${YELLOW}Broker package ${BROKER_ZIP} not found. Building it now...${NC}"
+        ./build.sh --broker
+    fi
+
     if [ -f "$BROKER_ZIP" ]; then
         RELEASE_FILES+=("$BROKER_ZIP")
     else
-        echo -e "${YELLOW}Warning: ${BROKER_ZIP} not found. Run ./build.sh --broker first.${NC}"
+        echo -e "${RED}Error: Failed to build ${BROKER_ZIP}.${NC}"
+        exit 1
     fi
 
     shopt -s nullglob
