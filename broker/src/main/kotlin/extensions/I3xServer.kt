@@ -53,7 +53,7 @@ class I3xServer(
     private val logger = Utils.getLogger(this::class.java)
 
     companion object {
-        const val SPEC_VERSION = "1.0-beta"
+        const val SPEC_VERSION = "1.0"
         const val SERVER_NAME = "monstermq-i3x"
         const val BASE_NAMESPACE_URI = "http://i3x.dev/base"
 
@@ -91,6 +91,7 @@ class I3xServer(
     }
 
     private val basePath = "/i3x/v1"
+    private val basePaths = listOf("/i3x/v1", "/v1")
     private val baseNamespaceUri = "mqtt://$brokerName/"
 
     // --- Subscriptions (v1) ---
@@ -148,49 +149,66 @@ class I3xServer(
 
         router.route().handler(BodyHandler.create())
 
-        // /info is unauthenticated discovery.
-        router.get("$basePath/info").handler(::handleInfo)
+        for (path in basePaths) {
+            // /info is unauthenticated discovery.
+            router.get("$path/info").handler(::handleInfo)
 
-        // All other routes require authentication.
-        router.route("$basePath/*").handler { ctx ->
-            if (ctx.request().path() == "$basePath/info") {
-                ctx.next(); return@handler
+            // All other routes require authentication.
+            router.route("$path/*").handler { ctx ->
+                if (ctx.request().path() == "$path/info") {
+                    ctx.next(); return@handler
+                }
+                if (logger.isLoggable(java.util.logging.Level.FINE)) {
+                    val method = ctx.request().method().name()
+                    val body = if (method == "POST" || method == "PUT") ctx.body()?.asString()?.take(200) else ""
+                    logger.fine("I3X $method ${ctx.request().uri()} $body")
+                }
+                if (!validateAuthentication(ctx)) return@handler
+                ctx.next()
             }
-            if (logger.isLoggable(java.util.logging.Level.FINE)) {
-                val body = if (ctx.request().method().name() == "POST") ctx.body()?.asString()?.take(200) else ""
-                logger.fine("I3X ${ctx.request().method()} ${ctx.request().uri()} $body")
-            }
-            if (!validateAuthentication(ctx)) return@handler
-            ctx.next()
+
+            // Explore
+            router.get("$path/namespaces").handler(::handleNamespaces)
+            router.get("$path/objecttypes").handler(::handleObjectTypes)
+            router.post("$path/objecttypes/query").handler(::handleObjectTypesQuery)
+            router.get("$path/relationshiptypes").handler(::handleRelationshipTypes)
+            router.post("$path/relationshiptypes/query").handler(::handleRelationshipTypesQuery)
+            router.get("$path/objects").handler(::handleObjects)
+            router.post("$path/objects/list").handler(::handleObjectsList)
+            router.post("$path/objects/related").handler(::handleObjectsRelated)
+
+            // Query
+            router.post("$path/objects/value").handler(::handleObjectsValue)
+            router.post("$path/objects/history").handler(::handleObjectsHistory)
+
+            // Bulk Update (PUT /objects/value and PUT /objects/history)
+            router.put("$path/objects/value").handler(::handleBulkUpdateValue)
+            router.put("$path/objects/history").handler(::handleBulkUpdateHistory)
+
+            // Single Update / Query by elementId in path — elementId can contain '/', match greedily.
+            val escapedBase = path.replace("/", "\\/")
+            router.putWithRegex("$escapedBase\\/objects\\/(?<eid>.+)\\/value").handler(::handleUpdateValue)
+            router.putWithRegex("$escapedBase\\/objects\\/(?<eid>.+)\\/history").handler(::handleUpdateHistory)
+            router.getWithRegex("$escapedBase\\/objects\\/(?<eid>.+)\\/history").handler(::handleGetHistorySingle)
+
+            // Subscriptions (v1)
+            router.post("$path/subscriptions").handler(::handleCreateSubscription)
+            router.post("$path/subscriptions/register").handler(::handleRegisterTopics)
+            router.post("$path/subscriptions/unregister").handler(::handleUnregisterTopics)
+            router.get("$path/subscriptions/stream").handler(::handleStream)
+            router.post("$path/subscriptions/stream").handler(::handleStream)
+            router.get("$path/subscriptions/:subId/stream").handler(::handleStream)
+            router.post("$path/subscriptions/:subId/stream").handler(::handleStream)
+            router.get("$path/subscriptions/sync").handler(::handleSync)
+            router.post("$path/subscriptions/sync").handler(::handleSync)
+            router.get("$path/subscriptions/:subId/sync").handler(::handleSync)
+            router.post("$path/subscriptions/:subId/sync").handler(::handleSync)
+            router.post("$path/subscriptions/list").handler(::handleSubscriptionsList)
+            router.get("$path/subscriptions/list").handler(::handleSubscriptionsList)
+            router.post("$path/subscriptions/delete").handler(::handleSubscriptionsDelete)
+            router.delete("$path/subscriptions/delete").handler(::handleSubscriptionsDelete)
+            router.delete("$path/subscriptions/:subId").handler(::handleSubscriptionsDelete)
         }
-
-        // Explore
-        router.get("$basePath/namespaces").handler(::handleNamespaces)
-        router.get("$basePath/objecttypes").handler(::handleObjectTypes)
-        router.post("$basePath/objecttypes/query").handler(::handleObjectTypesQuery)
-        router.get("$basePath/relationshiptypes").handler(::handleRelationshipTypes)
-        router.post("$basePath/relationshiptypes/query").handler(::handleRelationshipTypesQuery)
-        router.get("$basePath/objects").handler(::handleObjects)
-        router.post("$basePath/objects/list").handler(::handleObjectsList)
-        router.post("$basePath/objects/related").handler(::handleObjectsRelated)
-
-        // Query
-        router.post("$basePath/objects/value").handler(::handleObjectsValue)
-        router.post("$basePath/objects/history").handler(::handleObjectsHistory)
-
-        // Update — elementId can contain '/', match greedily.
-        router.putWithRegex("$basePath/objects/(?<eid>.+)/value").handler(::handleUpdateValue)
-        router.putWithRegex("$basePath/objects/(?<eid>.+)/history").handler(::handleUpdateHistory)
-        router.getWithRegex("$basePath/objects/(?<eid>.+)/history").handler(::handleGetHistorySingle)
-
-        // Subscriptions (v1 — all POST, clientId-scoped).
-        router.post("$basePath/subscriptions").handler(::handleCreateSubscription)
-        router.post("$basePath/subscriptions/register").handler(::handleRegisterTopics)
-        router.post("$basePath/subscriptions/unregister").handler(::handleUnregisterTopics)
-        router.post("$basePath/subscriptions/stream").handler(::handleStream)
-        router.post("$basePath/subscriptions/sync").handler(::handleSync)
-        router.post("$basePath/subscriptions/list").handler(::handleSubscriptionsList)
-        router.post("$basePath/subscriptions/delete").handler(::handleSubscriptionsDelete)
 
         vertx.createHttpServer(HttpServerOptions().setPort(port).setHost(host))
             .requestHandler(router)
@@ -807,22 +825,91 @@ class I3xServer(
             .onFailure { sendError(ctx, 500, "Value query failed: ${it.message}") }
     }
 
+    private fun encodeValueToBytes(v: Any?): ByteArray = when (v) {
+        is JsonObject -> v.encode().toByteArray(Charsets.UTF_8)
+        is JsonArray -> v.encode().toByteArray(Charsets.UTF_8)
+        null -> ByteArray(0)
+        else -> v.toString().toByteArray(Charsets.UTF_8)
+    }
+
+    private fun handleBulkUpdateValue(ctx: RoutingContext) {
+        val bodyStr = ctx.body()?.asString() ?: ""
+        val updates = mutableListOf<Pair<String, ByteArray>>()
+
+        try {
+            val trimmed = bodyStr.trim()
+            if (trimmed.startsWith("[")) {
+                val arr = JsonArray(trimmed)
+                for (i in 0 until arr.size()) {
+                    val item = arr.getJsonObject(i) ?: continue
+                    val elementId = item.getString("elementId") ?: continue
+                    val valBytes = encodeValueToBytes(item.getValue("value"))
+                    updates.add(elementId to valBytes)
+                }
+            } else if (trimmed.startsWith("{")) {
+                val obj = JsonObject(trimmed)
+                if (obj.containsKey("updates")) {
+                    val arr = obj.getJsonArray("updates") ?: JsonArray()
+                    for (i in 0 until arr.size()) {
+                        val item = arr.getJsonObject(i) ?: continue
+                        val elementId = item.getString("elementId") ?: continue
+                        val valBytes = encodeValueToBytes(item.getValue("value"))
+                        updates.add(elementId to valBytes)
+                    }
+                } else {
+                    // Dictionary format: { "topic/1": value1, "topic/2": value2 }
+                    for (field in obj.fieldNames()) {
+                        val valObj = obj.getValue(field)
+                        val valBytes = if (valObj is JsonObject && valObj.containsKey("value")) {
+                            encodeValueToBytes(valObj.getValue("value"))
+                        } else {
+                            encodeValueToBytes(valObj)
+                        }
+                        updates.add(field to valBytes)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            sendError(ctx, 400, "Invalid JSON payload: ${e.message}")
+            return
+        }
+
+        if (updates.isEmpty()) {
+            sendError(ctx, 400, "No valid updates found in request body")
+            return
+        }
+
+        val items = mutableListOf<BulkItem>()
+        for ((elementId, payloadBytes) in updates) {
+            try {
+                val msg = BrokerMessage(
+                    messageId = 0,
+                    topicName = elementId,
+                    payload = payloadBytes,
+                    qosLevel = 0,
+                    isRetain = true,
+                    isDup = false,
+                    isQueued = false,
+                    clientId = "i3x-v1"
+                )
+                sessionHandler.publishMessage(msg)
+                items.add(BulkItem.ok(elementId, JsonObject().put("status", "published")))
+            } catch (e: Exception) {
+                items.add(BulkItem.error(elementId, 500, e.message ?: "Publish failed"))
+            }
+        }
+        sendBulk(ctx, items)
+    }
+
     private fun handleUpdateValue(ctx: RoutingContext) {
         val elementId = extractElementId(ctx, "/value") ?: return
         if (elementId.isEmpty()) return sendError(ctx, 400, "Missing elementId")
-        val bodyStr = ctx.body().asString() ?: ""
-        // v1 spec accepts `{ value, quality?, timestamp? }` but this project currently
-        // writes the raw value; accept either.
+        val bodyStr = ctx.body()?.asString() ?: ""
+        // v1 spec accepts `{ value, quality?, timestamp? }` or raw JSON value; accept either.
         val payloadBytes: ByteArray = try {
             val maybe = JsonObject(bodyStr)
             if (maybe.containsKey("value")) {
-                val v = maybe.getValue("value")
-                when (v) {
-                    is JsonObject -> v.encode().toByteArray(Charsets.UTF_8)
-                    is JsonArray -> v.encode().toByteArray(Charsets.UTF_8)
-                    null -> ByteArray(0)
-                    else -> v.toString().toByteArray(Charsets.UTF_8)
-                }
+                encodeValueToBytes(maybe.getValue("value"))
             } else bodyStr.toByteArray(Charsets.UTF_8)
         } catch (_: Exception) {
             bodyStr.toByteArray(Charsets.UTF_8)
@@ -849,8 +936,8 @@ class I3xServer(
 
     private fun extractElementId(ctx: RoutingContext, suffix: String): String? {
         val path = ctx.request().path()
-        val prefix = "$basePath/objects/"
-        if (!path.startsWith(prefix) || !path.endsWith(suffix)) {
+        val prefix = if (path.startsWith("/i3x/v1/objects/")) "/i3x/v1/objects/" else if (path.startsWith("/v1/objects/")) "/v1/objects/" else ""
+        if (prefix.isEmpty() || !path.endsWith(suffix) || path.length <= prefix.length + suffix.length) {
             sendError(ctx, 400, "Invalid path")
             return null
         }
@@ -1007,6 +1094,119 @@ class I3xServer(
         }
     }
 
+    private fun parseHistoryRecords(item: JsonObject): List<Pair<Any?, Instant>> {
+        val records = mutableListOf<Pair<Any?, Instant>>()
+        if (item.containsKey("values")) {
+            val valArr = item.getJsonArray("values") ?: JsonArray()
+            for (j in 0 until valArr.size()) {
+                val rec = valArr.getJsonObject(j) ?: continue
+                val ts = rec.getString("timestamp")?.let { parseInstant(it) } ?: Instant.now()
+                records.add(rec.getValue("value") to ts)
+            }
+        } else if (item.containsKey("data")) {
+            val dataArr = item.getJsonArray("data") ?: JsonArray()
+            for (j in 0 until dataArr.size()) {
+                val rec = dataArr.getJsonObject(j) ?: continue
+                val ts = rec.getString("timestamp")?.let { parseInstant(it) } ?: Instant.now()
+                records.add(rec.getValue("value") to ts)
+            }
+        } else if (item.containsKey("value")) {
+            val ts = item.getString("timestamp")?.let { parseInstant(it) } ?: Instant.now()
+            records.add(item.getValue("value") to ts)
+        }
+        return records
+    }
+
+    private fun handleBulkUpdateHistory(ctx: RoutingContext) {
+        val bodyStr = ctx.body()?.asString() ?: ""
+        data class HistoryUpdate(val elementId: String, val records: List<Pair<Any?, Instant>>)
+        val updates = mutableListOf<HistoryUpdate>()
+
+        try {
+            val trimmed = bodyStr.trim()
+            if (trimmed.startsWith("[")) {
+                val arr = JsonArray(trimmed)
+                for (i in 0 until arr.size()) {
+                    val item = arr.getJsonObject(i) ?: continue
+                    val elementId = item.getString("elementId") ?: continue
+                    val records = parseHistoryRecords(item)
+                    if (records.isNotEmpty()) updates.add(HistoryUpdate(elementId, records))
+                }
+            } else if (trimmed.startsWith("{")) {
+                val obj = JsonObject(trimmed)
+                val arr = obj.getJsonArray("updates") ?: obj.getJsonArray("data") ?: JsonArray()
+                for (i in 0 until arr.size()) {
+                    val item = arr.getJsonObject(i) ?: continue
+                    val elementId = item.getString("elementId") ?: continue
+                    val records = parseHistoryRecords(item)
+                    if (records.isNotEmpty()) updates.add(HistoryUpdate(elementId, records))
+                }
+            }
+        } catch (e: Exception) {
+            sendError(ctx, 400, "Invalid JSON payload: ${e.message}")
+            return
+        }
+
+        if (updates.isEmpty()) {
+            sendError(ctx, 400, "No valid historical updates found in request body")
+            return
+        }
+
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            val items = mutableListOf<BulkItem>()
+            for (up in updates) {
+                val elementId = up.elementId
+                val archives = historyArchiveSupportingWrite(elementId)
+                if (archives.isEmpty()) {
+                    items.add(BulkItem.notFound(elementId, "No archive group matches topic '$elementId'"))
+                    continue
+                }
+                val writable = archives.filter {
+                    it.archiveStore != null &&
+                        it.archiveStore!!.getType() != at.rocworks.stores.MessageArchiveType.NONE
+                }
+                val messages = up.records.map { (value, ts) ->
+                    val payloadBytes = encodeValueToBytes(value)
+                    BrokerMessage(
+                        messageId = 0,
+                        topicName = elementId,
+                        payload = payloadBytes,
+                        qosLevel = 0,
+                        isRetain = false,
+                        isDup = false,
+                        isQueued = false,
+                        clientId = "i3x-v1",
+                        time = ts
+                    )
+                }
+                val warnings = JsonArray()
+                archives.forEach {
+                    val store = it.archiveStore
+                    if (store == null || it !in writable) {
+                        warnings.add("Archive group '${it.name}' does not support backfill; skipped")
+                    } else {
+                        try {
+                            store.addHistory(messages)
+                        } catch (e: Exception) {
+                            warnings.add("Archive group '${it.name}' write failed: ${e.message}")
+                        }
+                    }
+                }
+                items.add(
+                    BulkItem.ok(
+                        elementId,
+                        JsonObject()
+                            .put("writtenCount", messages.size)
+                            .put("archiveGroups", JsonArray(archives.map { it.name }))
+                            .put("warnings", warnings)
+                    )
+                )
+            }
+            items
+        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
+            .onFailure { err -> sendError(ctx, 500, "Bulk history write failed: ${err.message}") }
+    }
+
     private fun handleUpdateHistory(ctx: RoutingContext) {
         val elementId = extractElementId(ctx, "/history") ?: return
         val body = ctx.body().asJsonObject() ?: JsonObject()
@@ -1028,12 +1228,7 @@ class I3xServer(
             val rec = dataArr.getJsonObject(j) ?: continue
             val ts = rec.getString("timestamp")?.let { parseInstant(it) } ?: Instant.now()
             val value = rec.getValue("value")
-            val payloadBytes: ByteArray = when (value) {
-                is JsonObject -> value.encode().toByteArray(Charsets.UTF_8)
-                is JsonArray -> value.encode().toByteArray(Charsets.UTF_8)
-                null -> ByteArray(0)
-                else -> value.toString().toByteArray(Charsets.UTF_8)
-            }
+            val payloadBytes = encodeValueToBytes(value)
             messages.add(
                 BrokerMessage(
                     messageId = 0,
@@ -1077,8 +1272,64 @@ class I3xServer(
     //  Subscriptions
     // ---------------------------------------------------------------------
 
+    private fun extractSubId(ctx: RoutingContext): String? {
+        return ctx.pathParam("subId")
+            ?: ctx.pathParam("subscriptionId")
+            ?: ctx.queryParam("subscriptionId").firstOrNull()
+            ?: ctx.queryParam("subId").firstOrNull()
+            ?: try { ctx.body()?.asJsonObject()?.getString("subscriptionId") } catch (_: Exception) { null }
+            ?: try { ctx.body()?.asJsonObject()?.getString("subId") } catch (_: Exception) { null }
+            ?: ctx.request().getHeader("X-Subscription-Id")
+    }
+
+    private fun enqueueInitialValues(sub: I3xSubscription, targetIds: List<String>) {
+        vertx.executeBlocking(java.util.concurrent.Callable {
+            val snapshot = snapshotRetainedTopics()
+            val initialUpdates = mutableListOf<JsonObject>()
+            for (id in targetIds) {
+                if (sub.maxDepth == 1) {
+                    val msg = findRetainedMessage(snapshot, id)
+                    if (msg != null) {
+                        val seq = sub.nextSequence.getAndIncrement()
+                        val update = JsonObject()
+                            .put("sequenceNumber", seq)
+                            .put("elementId", id)
+                            .put("value", decodedValue(msg))
+                            .put("quality", qualityFor(id, msg))
+                            .put("timestamp", msg.time.toString())
+                        initialUpdates.add(update)
+                    }
+                } else {
+                    val leaves = leavesForComposition(id, snapshot, sub.maxDepth)
+                    for (leaf in leaves) {
+                        val msg = findRetainedMessage(snapshot, leaf)
+                        if (msg != null) {
+                            val seq = sub.nextSequence.getAndIncrement()
+                            val update = JsonObject()
+                                .put("sequenceNumber", seq)
+                                .put("elementId", leaf)
+                                .put("value", decodedValue(msg))
+                                .put("quality", qualityFor(leaf, msg))
+                                .put("timestamp", msg.time.toString())
+                            initialUpdates.add(update)
+                        }
+                    }
+                }
+            }
+            initialUpdates
+        }).onSuccess { updates ->
+            for (update in updates) {
+                vertx.eventBus().publish("mq.i3x.sub.${sub.subscriptionId}", update)
+                synchronized(sub.pendingQueue) {
+                    sub.pendingQueue.addLast(update)
+                    while (sub.pendingQueue.size > 10_000) sub.pendingQueue.removeFirst()
+                }
+            }
+        }
+    }
+
     private fun handleCreateSubscription(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
         val clientId = body.getString("clientId")
         val displayName = body.getString("displayName")
         val subId = UUID.randomUUID().toString()
@@ -1095,18 +1346,23 @@ class I3xServer(
     }
 
     private fun handleRegisterTopics(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val subId = body.getString("subscriptionId") ?: return sendError(ctx, 400, "Missing subscriptionId")
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
         val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
         val ids = body.getJsonArray("elementIds") ?: JsonArray()
         val maxDepth = body.getInteger("maxDepth", 1)
         sub.maxDepth = maxDepth
+        val addedIds = mutableListOf<String>()
         for (i in 0 until ids.size()) {
             val id = ids.getString(i) ?: continue
             if (id.isEmpty()) continue
             sub.registeredIds.add(id)
+            addedIds.add(id)
         }
         rewireMessageListener(sub)
+        if (addedIds.isNotEmpty()) {
+            enqueueInitialValues(sub, addedIds)
+        }
         sendOk(
             ctx,
             JsonObject()
@@ -1118,8 +1374,8 @@ class I3xServer(
     }
 
     private fun handleUnregisterTopics(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val subId = body.getString("subscriptionId") ?: return sendError(ctx, 400, "Missing subscriptionId")
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
         val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
         val ids = body.getJsonArray("elementIds") ?: JsonArray()
         for (i in 0 until ids.size()) {
@@ -1136,21 +1392,27 @@ class I3xServer(
     }
 
     private fun handleStream(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val subId = body.getString("subscriptionId") ?: return sendError(ctx, 400, "Missing subscriptionId")
+        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
         val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
 
         val response = ctx.response()
-            .putHeader("Content-Type", "text/event-stream")
-            .putHeader("Cache-Control", "no-cache")
+            .putHeader("Content-Type", "text/event-stream; charset=utf-8")
+            .putHeader("Cache-Control", "no-cache, no-transform")
             .putHeader("Connection", "keep-alive")
+            .putHeader("X-Accel-Buffering", "no")
             .setChunked(true)
+
+        // Send initial comment to establish SSE stream connection immediately
+        response.write(": connected\n\n")
 
         val busAddress = "mq.i3x.sub.${sub.subscriptionId}"
         val consumer = vertx.eventBus().consumer<JsonObject>(busAddress) { msg ->
-            if (!response.ended()) response.write("data: ${msg.body().encode()}\n\n")
+            if (!response.ended()) {
+                val data = msg.body()
+                response.write("data: ${data.encode()}\n\n")
+            }
         }
-        val timerId = vertx.setPeriodic(30_000L) {
+        val timerId = vertx.setPeriodic(15_000L) {
             if (!response.ended()) response.write(": heartbeat\n\n")
         }
         response.closeHandler {
@@ -1161,16 +1423,23 @@ class I3xServer(
         // Flush queued updates on connect.
         synchronized(sub.pendingQueue) {
             while (sub.pendingQueue.isNotEmpty()) {
-                response.write("data: ${sub.pendingQueue.removeFirst().encode()}\n\n")
+                val item = sub.pendingQueue.removeFirst()
+                response.write("data: ${item.encode()}\n\n")
             }
+        }
+
+        // If no updates were pending, check and enqueue initial retained values
+        if (sub.registeredIds.isNotEmpty()) {
+            enqueueInitialValues(sub, sub.registeredIds.toList())
         }
     }
 
     private fun handleSync(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val subId = body.getString("subscriptionId") ?: return sendError(ctx, 400, "Missing subscriptionId")
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
         val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
-        val lastSeq = body.getLong("lastSequenceNumber")
+        val lastSeq = ctx.queryParam("lastSequenceNumber").firstOrNull()?.toLongOrNull()
+            ?: body.getLong("lastSequenceNumber")
 
         val updates = JsonArray()
         synchronized(sub.pendingQueue) {
@@ -1192,29 +1461,47 @@ class I3xServer(
     }
 
     private fun handleSubscriptionsList(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val ids = body.getJsonArray("subscriptionIds") ?: JsonArray()
-        val items = (0 until ids.size()).map { i ->
-            val id = ids.getString(i)
-            val sub = id?.let { subscriptions[it] }
-            if (sub == null) BulkItem.notFound(id ?: "", "Subscription not found")
-            else BulkItem.ok(
-                id,
-                JsonObject()
-                    .put("clientId", sub.clientId)
-                    .put("subscriptionId", sub.subscriptionId)
-                    .put("displayName", sub.displayName)
-                    .put("elementIds", JsonArray(sub.registeredIds.toList()))
-                    .put("maxDepth", sub.maxDepth)
-                    .put("created", sub.created.toString())
-            )
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val ids = body.getJsonArray("subscriptionIds")
+            ?: extractSubId(ctx)?.let { JsonArray().add(it) }
+        val items = if (ids != null) {
+            (0 until ids.size()).map { i ->
+                val id = ids.getString(i)
+                val sub = id?.let { subscriptions[it] }
+                if (sub == null) BulkItem.notFound(id ?: "", "Subscription not found")
+                else BulkItem.ok(
+                    id,
+                    JsonObject()
+                        .put("clientId", sub.clientId)
+                        .put("subscriptionId", sub.subscriptionId)
+                        .put("displayName", sub.displayName)
+                        .put("elementIds", JsonArray(sub.registeredIds.toList()))
+                        .put("maxDepth", sub.maxDepth)
+                        .put("created", sub.created.toString())
+                )
+            }
+        } else {
+            subscriptions.values.map { sub ->
+                BulkItem.ok(
+                    sub.subscriptionId,
+                    JsonObject()
+                        .put("clientId", sub.clientId)
+                        .put("subscriptionId", sub.subscriptionId)
+                        .put("displayName", sub.displayName)
+                        .put("elementIds", JsonArray(sub.registeredIds.toList()))
+                        .put("maxDepth", sub.maxDepth)
+                        .put("created", sub.created.toString())
+                )
+            }
         }
         sendBulk(ctx, items)
     }
 
     private fun handleSubscriptionsDelete(ctx: RoutingContext) {
-        val body = ctx.body().asJsonObject() ?: JsonObject()
-        val ids = body.getJsonArray("subscriptionIds") ?: JsonArray()
+        val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val ids = body.getJsonArray("subscriptionIds")
+            ?: extractSubId(ctx)?.let { JsonArray().add(it) }
+            ?: JsonArray()
         val items = (0 until ids.size()).map { i ->
             val id = ids.getString(i)
             val sub = id?.let { subscriptions.remove(it) }
@@ -1233,15 +1520,12 @@ class I3xServer(
         sub.topicFilters.clear()
         if (sub.registeredIds.isEmpty()) return
 
-        // Keep the listener rewire simple: register exact topic filters and,
-        // when maxDepth != 1, also register a wildcard subtree for each id.
-        // We intentionally avoid `snapshotRetainedTopics()` here because this
-        // runs on the event loop (called from register/unregister handlers).
         for (id in sub.registeredIds) {
-            sub.topicFilters.add(id)
-            if (sub.maxDepth != 1) {
-                sub.topicFilters.add("$id/#")
-            }
+            val cleanId = id.trim().trim('/')
+            if (cleanId.isEmpty()) continue
+            sub.topicFilters.add(cleanId)
+            sub.topicFilters.add("$cleanId/#")
+            sub.topicFilters.add("$cleanId/+")
         }
         if (sub.topicFilters.isEmpty()) return
 

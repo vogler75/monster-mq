@@ -5,7 +5,7 @@ Source: MonsterMQ broker source under `broker/src/main/kotlin/`, especially
 `stores/IMessageStore.kt`, and `stores/PayloadDecoder.kt`.
 
 This document is the project-specific v1 mapping reference for the MonsterMQ
-i3X server. The public API is mounted under `/i3x/v1`.
+i3X server. The public API is mounted under `/i3x/v1` and `/v1`.
 
 ---
 
@@ -45,7 +45,7 @@ version and optional capabilities.
 {
   "success": true,
   "result": {
-    "specVersion": "1.0-beta",
+    "specVersion": "1.0",
     "serverVersion": "0.1.0",
     "serverName": "monstermq-i3x",
     "capabilities": {
@@ -467,22 +467,33 @@ For a primitive leaf the result is just
 - `N > 1` — include up to N-1 levels of child `components`
 - `0` — unlimited depth
 
-### `PUT /objects/{elementId}/value`
+### `PUT /objects/value`
 
-Writes a current value. The current implementation accepts the raw JSON value
-as the request body:
+Bulk writes current values. Request body supports the standard i3X `updates` array, direct JSON dictionaries, or array of update objects:
 
 ```json
-42
+{
+  "updates": [
+    { "elementId": "factory/line1/motor1/speed", "value": 1500, "quality": "Good", "timestamp": "2026-08-15T10:00:00.000Z" },
+    { "elementId": "factory/line1/motor1/enabled", "value": true }
+  ]
+}
 ```
 
-The value is published to the MQTT topic as a retained message. Only leaf
-Objects (primitive payload or JSON-object payload with no sub-topic children)
-are writable. Intermediate topic levels (folders) are not writable as a whole.
+Or dictionary map:
+```json
+{
+  "factory/line1/motor1/speed": 1500,
+  "factory/line1/motor1/enabled": true
+}
+```
 
-Spec note: the v1 guide describes a VQT request body with `value`, optional
-`quality`, and optional `timestamp`. This project currently writes the raw
-value and ignores client-supplied quality/timestamp for current writes.
+Response is a standard bulk envelope. Values are published to MQTT as retained messages.
+
+### `PUT /objects/{elementId}/value`
+
+Writes a single current value. Accepts a VQT object (`{ "value": ... }`) or raw JSON value.
+The value is published to the MQTT topic as a retained message. Only leaf Objects (primitive payload or JSON-object payload with no sub-topic children) are writable. Intermediate topic levels (folders) are not writable as a whole.
 
 ---
 
@@ -540,9 +551,26 @@ Response:
 Project extension for reading one topic's history. Query parameters:
 `startTime`, `endTime`, and optional `maxValues`.
 
+### `PUT /objects/history`
+
+Bulk writes historical data. Request body:
+
+```json
+{
+  "updates": [
+    {
+      "elementId": "factory/line1/motor1/speed",
+      "values": [
+        { "value": 1500, "timestamp": "2026-08-15T10:00:00.000Z" }
+      ]
+    }
+  ]
+}
+```
+
 ### `PUT /objects/{elementId}/history`
 
-Project extension for historical writes. Request body:
+Historical write for a single topic. Request body:
 
 ```json
 {
@@ -621,9 +649,9 @@ Request:
 
 Stops monitoring the listed IDs for future updates.
 
-### `POST /subscriptions/stream`
+### `GET /subscriptions/stream` / `POST /subscriptions/stream`
 
-Opens a Server-Sent Events stream:
+Opens a Server-Sent Events (SSE) stream. Accepts `subscriptionId` via URL query parameter (`?subscriptionId=sub-123`), path parameter (`/subscriptions/{subscriptionId}/stream`), or JSON POST body:
 
 ```json
 {
@@ -632,7 +660,9 @@ Opens a Server-Sent Events stream:
 }
 ```
 
-SSE update payloads are VQT-like updates:
+Upon connection, initial retained values for all registered topics are sent immediately to establish current state, followed by real-time updates on change.
+
+SSE update payloads are VQT updates:
 
 ```json
 {
@@ -701,15 +731,10 @@ Bulk delete subscriptions:
 - Schema governance is partially implemented; see
   `dev/plans/TOPIC_SCHEMA_GOVERNANCE_ISSUE_112.md` for the full plan.
 
-Current v1 alignment gaps to track:
+Current v1 implementation notes:
 
-- Bulk envelopes currently use top-level `success: true` even when an item in
-  `results` failed.
-- Subscription `clientId` is accepted and returned but not required or
-  enforced.
-- Current-value writes accept a raw JSON value instead of the v1 VQT body.
-- Historical writes are backend-gated: append-only archive backends (Kafka)
-  silently skip backfill.
-- `TopicSchemaPolicy`-driven `Uncertain` quality on schema-violating retained
-  payloads is not yet emitted; payloads that violate their schema are
-  currently returned as `Good`.
+- Bulk envelopes use top-level `success: false` when any item in `results` failed.
+- Subscription `clientId` is accepted and returned.
+- Current-value writes support bulk `PUT /objects/value` (with `updates` array or map) and single `PUT /objects/{elementId}/value`.
+- Historical writes support bulk `PUT /objects/history` and single `PUT /objects/{elementId}/history` (backend-gated for backfill support).
+- `TopicSchemaPolicy`-driven `Uncertain` quality is emitted when retained payloads violate registered schemas.

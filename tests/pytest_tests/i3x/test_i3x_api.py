@@ -158,13 +158,21 @@ class TestInfo:
         body = resp.json()
         assert body["success"] is True
         result = body["result"]
-        assert result["specVersion"].startswith("1.")
+        assert result["specVersion"] == "1.0"
         assert result["serverName"]
         assert result["serverVersion"]
         caps = result["capabilities"]
         assert caps["query"]["history"] is True
         assert caps["update"]["current"] is True
         assert caps["subscribe"]["stream"] is True
+
+    def test_v1_alias_info(self, server_reachable):
+        v1_url = I3X_URL.replace("/i3x/v1", "/v1")
+        resp = requests.get(f"{v1_url}/info", timeout=REQUEST_TIMEOUT)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["success"] is True
+        assert body["result"]["specVersion"] == "1.0"
 
 
 # ---------------------------------------------------------------------------
@@ -422,6 +430,71 @@ class TestValues:
         assert read["success"] is True
         assert read["results"][0]["result"]["value"] in (42, "42", 42.0)
 
+    def test_bulk_put_value_updates_array(
+        self, auth_headers, publish_retained, server_reachable
+    ):
+        unique = f"i3xtest_{uuid.uuid4().hex[:6]}"
+        t1 = f"{unique}/motor1/speed"
+        t2 = f"{unique}/motor1/enabled"
+        publish_retained(t1, "0")
+        publish_retained(t2, "false")
+
+        resp = requests.put(
+            f"{I3X_URL}/objects/value",
+            headers=auth_headers,
+            json={
+                "updates": [
+                    {"elementId": t1, "value": 1750},
+                    {"elementId": t2, "value": True},
+                ]
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert len(body["results"]) == 2
+        assert all(r["success"] is True for r in body["results"])
+
+        time.sleep(0.3)
+        read = requests.post(
+            f"{I3X_URL}/objects/value",
+            headers=auth_headers,
+            json={"elementIds": [t1, t2]},
+            timeout=REQUEST_TIMEOUT,
+        ).json()
+        assert read["success"] is True
+        res_map = {r["elementId"]: r["result"]["value"] for r in read["results"]}
+        assert res_map[t1] in (1750, "1750", 1750.0)
+        assert res_map[t2] is True or res_map[t2] == "true"
+
+    def test_bulk_put_value_dict_format(
+        self, auth_headers, publish_retained, server_reachable
+    ):
+        unique = f"i3xtest_{uuid.uuid4().hex[:6]}"
+        t1 = f"{unique}/temp"
+        publish_retained(t1, "0")
+
+        resp = requests.put(
+            f"{I3X_URL}/objects/value",
+            headers=auth_headers,
+            json={t1: 23.5},
+            timeout=REQUEST_TIMEOUT,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+
+        time.sleep(0.3)
+        read = requests.post(
+            f"{I3X_URL}/objects/value",
+            headers=auth_headers,
+            json={"elementIds": [t1]},
+            timeout=REQUEST_TIMEOUT,
+        ).json()
+        assert read["success"] is True
+        assert read["results"][0]["result"]["value"] in (23.5, "23.5", 23.5)
+
 
 # ---------------------------------------------------------------------------
 # History
@@ -442,6 +515,30 @@ class TestHistory:
         assert resp.status_code == 200
         body = resp.json()
         # Top-level success=false because the single item failed.
+        assert body["success"] is False
+        assert body["results"][0]["success"] is False
+        assert body["results"][0]["error"]["code"] == 404
+
+    def test_bulk_put_history_missing_archive_group(
+        self, auth_headers, server_reachable
+    ):
+        resp = requests.put(
+            f"{I3X_URL}/objects/history",
+            headers=auth_headers,
+            json={
+                "updates": [
+                    {
+                        "elementId": "nonexistent/archive/topic",
+                        "values": [
+                            {"value": 100, "timestamp": "2026-08-15T10:00:00.000Z"}
+                        ],
+                    }
+                ]
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
         assert body["success"] is False
         assert body["results"][0]["success"] is False
         assert body["results"][0]["error"]["code"] == 404
@@ -544,6 +641,67 @@ class TestSubscriptions:
                 f"{I3X_URL}/subscriptions/delete",
                 headers=auth_headers,
                 json={"clientId": client_id, "subscriptionIds": [sub_id]},
+                timeout=REQUEST_TIMEOUT,
+            )
+
+    def test_stream_sse_initial_value_and_live_updates(
+        self, auth_headers, publish_retained, server_reachable
+    ):
+        unique = f"i3xtest_{uuid.uuid4().hex[:6]}"
+        topic = f"{unique}/sse/speed"
+        publish_retained(topic, "100")
+        time.sleep(0.2)
+
+        client_id = f"pytest-{uuid.uuid4().hex[:6]}"
+        created = requests.post(
+            f"{I3X_URL}/subscriptions",
+            headers=auth_headers,
+            json={"clientId": client_id, "displayName": "pytest-sse"},
+            timeout=REQUEST_TIMEOUT,
+        ).json()
+        assert created["success"] is True
+        sub_id = created["result"]["subscriptionId"]
+
+        try:
+            reg = requests.post(
+                f"{I3X_URL}/subscriptions/register",
+                headers=auth_headers,
+                json={
+                    "subscriptionId": sub_id,
+                    "elementIds": [topic],
+                    "maxDepth": 1,
+                },
+                timeout=REQUEST_TIMEOUT,
+            ).json()
+            assert reg["success"] is True
+
+            # Open SSE stream via GET /subscriptions/stream?subscriptionId=...
+            resp = requests.get(
+                f"{I3X_URL}/subscriptions/stream",
+                headers=auth_headers,
+                params={"subscriptionId": sub_id},
+                stream=True,
+                timeout=REQUEST_TIMEOUT,
+            )
+            assert resp.status_code == 200
+            assert "text/event-stream" in resp.headers.get("Content-Type", "")
+
+            # Verify initial event received on connect
+            lines = []
+            for line in resp.iter_lines():
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    lines.append(line_str)
+                    break
+
+            assert lines, "Expected initial SSE data line"
+            data_json = json.loads(lines[0][6:])
+            assert data_json["elementId"] == topic
+            assert data_json["value"] == 100
+        finally:
+            requests.delete(
+                f"{I3X_URL}/subscriptions/{sub_id}",
+                headers=auth_headers,
                 timeout=REQUEST_TIMEOUT,
             )
 
