@@ -6,7 +6,7 @@
 #   ./publish.sh --all        Publish all GitHub release assets and Docker Hub images
 #   ./publish.sh --github     Publish all GitHub release assets (broker zip, desktop apps, setup)
 #   -- Target-specific GitHub options --
-#   ./publish.sh --dist       Publish standalone broker bundle (.zip) to GitHub only
+#   ./publish.sh --broker     Publish standalone broker bundle (.zip) to GitHub only
 #   ./publish.sh --dashboard  Publish desktop dashboard apps (dmg/exe) to GitHub only
 #   ./publish.sh --setup      Publish cross-platform Go setup executables to GitHub only
 #   -- Docker option --
@@ -48,7 +48,7 @@ usage() {
     echo "Options:"
     echo "  --all            Publish everything (all GitHub release assets + Docker Hub images)"
     echo "  --github         Publish all GitHub release assets (broker zip, desktop dashboard, setup executables)"
-    echo "  --dist, --broker Publish standalone broker bundle (.zip) to GitHub release only"
+    echo "  --broker, -b     Publish standalone broker bundle (.zip) to GitHub release only"
     echo "  --dashboard, -d  Publish desktop dashboard apps (.dmg / .exe) to GitHub release only"
     echo "  --setup, -s      Publish Go setup executables (setup.exe, setup-mac, setup-linux) to GitHub only"
     echo "  --docker         Build multi-arch Docker image and push to Docker Hub only"
@@ -79,7 +79,7 @@ while [[ $# -gt 0 ]]; do
             EXPLICIT_TARGET=true
             shift
             ;;
-        --dist|--broker|--zip)
+        --broker|-b)
             PUBLISH_BROKER=true
             EXPLICIT_TARGET=true
             shift
