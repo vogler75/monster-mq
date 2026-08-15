@@ -97,16 +97,16 @@ class I3xServer(
     // --- Subscriptions (v1) ---
 
     private data class I3xSubscription(
-        val clientId: String?,
+        val clientId: String,
         val subscriptionId: String,
         val displayName: String?,
-        val created: Instant = Instant.now(),
         val registeredIds: MutableSet<String> = ConcurrentHashMap.newKeySet(),
-        val topicFilters: MutableSet<String> = ConcurrentHashMap.newKeySet(),
         val pendingQueue: ArrayDeque<JsonObject> = ArrayDeque(),
         var nextSequence: AtomicLong = AtomicLong(1L),
         var maxDepth: Int = 1
-    )
+    ) {
+        val listenerId: String get() = "i3x-$subscriptionId"
+    }
 
     // subscriptionId -> subscription
     private val subscriptions = ConcurrentHashMap<String, I3xSubscription>()
@@ -225,7 +225,7 @@ class I3xServer(
 
     override fun stop() {
         for (sub in subscriptions.values) {
-            sessionHandler.unregisterMessageListener("i3x-${sub.subscriptionId}")
+            cleanupSubscription(sub)
         }
         subscriptions.clear()
     }
@@ -256,7 +256,7 @@ class I3xServer(
         for (item in items) {
             val entry = JsonObject()
                 .put("success", item.success)
-                .put("elementId", item.elementId)
+                .put(item.idField, item.id)
             if (item.success) {
                 entry.put("result", item.result)
             } else {
@@ -277,11 +277,12 @@ class I3xServer(
     }
 
     private data class BulkItem(
-        val elementId: String,
+        val id: String,
         val success: Boolean,
         val result: Any? = null,
         val errorCode: Int? = null,
-        val errorMessage: String? = null
+        val errorMessage: String? = null,
+        val idField: String = "elementId"
     ) {
         companion object {
             fun ok(elementId: String, result: Any?): BulkItem = BulkItem(elementId, true, result)
@@ -289,6 +290,18 @@ class I3xServer(
                 BulkItem(elementId, false, errorCode = 404, errorMessage = message)
             fun error(elementId: String, code: Int, message: String): BulkItem =
                 BulkItem(elementId, false, errorCode = code, errorMessage = message)
+            fun subscriptionOk(subscriptionId: String, result: Any?): BulkItem =
+                BulkItem(subscriptionId, true, result, idField = "subscriptionId")
+            fun subscriptionNotFound(
+                subscriptionId: String,
+                message: String = "Subscription not found"
+            ): BulkItem = BulkItem(
+                subscriptionId,
+                false,
+                errorCode = 404,
+                errorMessage = message,
+                idField = "subscriptionId"
+            )
         }
     }
 
@@ -1282,6 +1295,41 @@ class I3xServer(
             ?: ctx.request().getHeader("X-Subscription-Id")
     }
 
+    private fun extractClientId(ctx: RoutingContext): String? {
+        val clientId = ctx.queryParam("clientId").firstOrNull()
+            ?: try { ctx.body()?.asJsonObject()?.getString("clientId") } catch (_: Exception) { null }
+            ?: ctx.request().getHeader("X-Client-Id")
+        return clientId?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun ownedSubscription(ctx: RoutingContext): I3xSubscription? {
+        val subId = extractSubId(ctx)
+        if (subId.isNullOrBlank()) {
+            sendError(ctx, 400, "Missing subscriptionId")
+            return null
+        }
+        val clientId = extractClientId(ctx)
+        if (clientId.isNullOrBlank()) {
+            sendError(ctx, 400, "Missing clientId")
+            return null
+        }
+        val sub = subscriptions[subId]
+        if (sub == null || sub.clientId != clientId) {
+            sendError(ctx, 404, "Subscription not found")
+            return null
+        }
+        return sub
+    }
+
+    private fun enqueueUpdate(sub: I3xSubscription, entry: JsonObject) {
+        synchronized(sub.pendingQueue) {
+            val update = entry.copy().put("sequenceNumber", sub.nextSequence.getAndIncrement())
+            sub.pendingQueue.addLast(update)
+            while (sub.pendingQueue.size > 10_000) sub.pendingQueue.removeFirst()
+            vertx.eventBus().publish("mq.i3x.stream.${sub.subscriptionId}", update)
+        }
+    }
+
     private fun enqueueInitialValues(sub: I3xSubscription, targetIds: List<String>) {
         vertx.executeBlocking(java.util.concurrent.Callable {
             val snapshot = snapshotRetainedTopics()
@@ -1290,9 +1338,7 @@ class I3xServer(
                 if (sub.maxDepth == 1) {
                     val msg = findRetainedMessage(snapshot, id)
                     if (msg != null) {
-                        val seq = sub.nextSequence.getAndIncrement()
                         val update = JsonObject()
-                            .put("sequenceNumber", seq)
                             .put("elementId", id)
                             .put("value", decodedValue(msg))
                             .put("quality", qualityFor(id, msg))
@@ -1304,9 +1350,7 @@ class I3xServer(
                     for (leaf in leaves) {
                         val msg = findRetainedMessage(snapshot, leaf)
                         if (msg != null) {
-                            val seq = sub.nextSequence.getAndIncrement()
                             val update = JsonObject()
-                                .put("sequenceNumber", seq)
                                 .put("elementId", leaf)
                                 .put("value", decodedValue(msg))
                                 .put("quality", qualityFor(leaf, msg))
@@ -1319,21 +1363,23 @@ class I3xServer(
             initialUpdates
         }).onSuccess { updates ->
             for (update in updates) {
-                vertx.eventBus().publish("mq.i3x.sub.${sub.subscriptionId}", update)
-                synchronized(sub.pendingQueue) {
-                    sub.pendingQueue.addLast(update)
-                    while (sub.pendingQueue.size > 10_000) sub.pendingQueue.removeFirst()
-                }
+                if (subscriptions[sub.subscriptionId] === sub) enqueueUpdate(sub, update)
             }
         }
     }
 
     private fun handleCreateSubscription(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
-        val clientId = body.getString("clientId")
+        val clientId = body.getString("clientId")?.trim()
+        if (clientId.isNullOrEmpty()) return sendError(ctx, 400, "Missing clientId")
         val displayName = body.getString("displayName")
         val subId = UUID.randomUUID().toString()
-        val sub = I3xSubscription(clientId = clientId, subscriptionId = subId, displayName = displayName)
+        val sub = I3xSubscription(
+            clientId = clientId,
+            subscriptionId = subId,
+            displayName = displayName
+        )
+
         subscriptions[subId] = sub
         sendOk(
             ctx,
@@ -1341,59 +1387,55 @@ class I3xServer(
                 .put("clientId", clientId)
                 .put("subscriptionId", subId)
                 .put("displayName", displayName)
-                .put("created", sub.created.toString())
         )
     }
 
     private fun handleRegisterTopics(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
-        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
-        val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
-        val ids = body.getJsonArray("elementIds") ?: JsonArray()
-        val maxDepth = body.getInteger("maxDepth", 1)
+        val sub = ownedSubscription(ctx) ?: return
+        val ids = body.getJsonArray("elementIds") ?: body.getJsonArray("elements") ?: JsonArray()
+        val maxDepth = body.getInteger("maxDepth", sub.maxDepth)
         sub.maxDepth = maxDepth
         val addedIds = mutableListOf<String>()
+        val items = mutableListOf<BulkItem>()
         for (i in 0 until ids.size()) {
-            val id = ids.getString(i) ?: continue
-            if (id.isEmpty()) continue
-            sub.registeredIds.add(id)
-            addedIds.add(id)
+            val id = ids.getString(i)?.trim().orEmpty()
+            if (id.isEmpty()) {
+                items.add(BulkItem.error(id, 400, "Element ID must not be empty"))
+                continue
+            }
+            if (sub.registeredIds.add(id)) {
+                addedIds.add(id)
+            }
+            items.add(BulkItem.ok(id, null))
         }
-        rewireMessageListener(sub)
+        rewireSubscriptions(sub)
         if (addedIds.isNotEmpty()) {
             enqueueInitialValues(sub, addedIds)
         }
-        sendOk(
-            ctx,
-            JsonObject()
-                .put("clientId", sub.clientId)
-                .put("subscriptionId", subId)
-                .put("elementIds", JsonArray(sub.registeredIds.toList()))
-                .put("maxDepth", sub.maxDepth)
-        )
+        sendBulk(ctx, items)
     }
 
     private fun handleUnregisterTopics(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
-        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
-        val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
-        val ids = body.getJsonArray("elementIds") ?: JsonArray()
+        val sub = ownedSubscription(ctx) ?: return
+        val ids = body.getJsonArray("elementIds") ?: body.getJsonArray("elements") ?: JsonArray()
+        val items = mutableListOf<BulkItem>()
         for (i in 0 until ids.size()) {
-            val id = ids.getString(i) ?: continue
+            val id = ids.getString(i)?.trim().orEmpty()
+            if (id.isEmpty()) {
+                items.add(BulkItem.error(id, 400, "Element ID must not be empty"))
+                continue
+            }
             sub.registeredIds.remove(id)
+            items.add(BulkItem.ok(id, null))
         }
-        rewireMessageListener(sub)
-        sendOk(
-            ctx,
-            JsonObject()
-                .put("subscriptionId", subId)
-                .put("elementIds", JsonArray(sub.registeredIds.toList()))
-        )
+        rewireSubscriptions(sub)
+        sendBulk(ctx, items)
     }
 
     private fun handleStream(ctx: RoutingContext) {
-        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
-        val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
+        val sub = ownedSubscription(ctx) ?: return
 
         val response = ctx.response()
             .putHeader("Content-Type", "text/event-stream; charset=utf-8")
@@ -1405,11 +1447,14 @@ class I3xServer(
         // Send initial comment to establish SSE stream connection immediately
         response.write(": connected\n\n")
 
-        val busAddress = "mq.i3x.sub.${sub.subscriptionId}"
-        val consumer = vertx.eventBus().consumer<JsonObject>(busAddress) { msg ->
-            if (!response.ended()) {
-                val data = msg.body()
-                response.write("data: ${data.encode()}\n\n")
+        val streamAddress = "mq.i3x.stream.${sub.subscriptionId}"
+        lateinit var streamConsumer: io.vertx.core.eventbus.MessageConsumer<JsonObject>
+        synchronized(sub.pendingQueue) {
+            while (sub.pendingQueue.isNotEmpty()) {
+                writeSseUpdate(response, sub.pendingQueue.removeFirst())
+            }
+            streamConsumer = vertx.eventBus().consumer<JsonObject>(streamAddress) { msg ->
+                if (!response.ended()) writeSseUpdate(response, msg.body())
             }
         }
         val timerId = vertx.setPeriodic(15_000L) {
@@ -1417,31 +1462,17 @@ class I3xServer(
         }
         response.closeHandler {
             vertx.cancelTimer(timerId)
-            consumer.unregister()
-        }
-
-        // Flush queued updates on connect.
-        synchronized(sub.pendingQueue) {
-            while (sub.pendingQueue.isNotEmpty()) {
-                val item = sub.pendingQueue.removeFirst()
-                response.write("data: ${item.encode()}\n\n")
-            }
-        }
-
-        // If no updates were pending, check and enqueue initial retained values
-        if (sub.registeredIds.isNotEmpty()) {
-            enqueueInitialValues(sub, sub.registeredIds.toList())
+            streamConsumer.unregister()
         }
     }
 
     private fun handleSync(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
-        val subId = extractSubId(ctx) ?: return sendError(ctx, 400, "Missing subscriptionId")
-        val sub = subscriptions[subId] ?: return sendError(ctx, 404, "Subscription not found")
+        val sub = ownedSubscription(ctx) ?: return
         val lastSeq = ctx.queryParam("lastSequenceNumber").firstOrNull()?.toLongOrNull()
             ?: body.getLong("lastSequenceNumber")
 
-        val updates = JsonArray()
+        val batches = JsonArray()
         synchronized(sub.pendingQueue) {
             if (lastSeq != null) {
                 while (sub.pendingQueue.isNotEmpty() &&
@@ -1449,48 +1480,35 @@ class I3xServer(
                     sub.pendingQueue.removeFirst()
                 }
             }
-            for (u in sub.pendingQueue) updates.add(u)
+            for (update in sub.pendingQueue) batches.add(toSyncBatch(update))
         }
-        sendOk(
-            ctx,
-            JsonObject()
-                .put("clientId", sub.clientId)
-                .put("subscriptionId", subId)
-                .put("updates", updates)
-        )
+        sendOk(ctx, batches)
     }
 
     private fun handleSubscriptionsList(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
-        val ids = body.getJsonArray("subscriptionIds")
-            ?: extractSubId(ctx)?.let { JsonArray().add(it) }
-        val items = if (ids != null) {
-            (0 until ids.size()).map { i ->
-                val id = ids.getString(i)
-                val sub = id?.let { subscriptions[it] }
-                if (sub == null) BulkItem.notFound(id ?: "", "Subscription not found")
-                else BulkItem.ok(
+        val clientId = extractClientId(ctx)
+        if (clientId.isNullOrBlank()) return sendError(ctx, 400, "Missing clientId")
+        val ids = body.getJsonArray("subscriptionIds") ?: JsonArray()
+        val items = (0 until ids.size()).map { i ->
+            val id = ids.getString(i).orEmpty()
+            val sub = subscriptions[id]?.takeIf { it.clientId == clientId }
+            if (sub == null) {
+                BulkItem.subscriptionNotFound(id)
+            } else {
+                val monitoredObjects = JsonArray(
+                    sub.registeredIds.sorted().map { elementId ->
+                        JsonObject()
+                            .put("elementId", elementId)
+                            .put("maxDepth", sub.maxDepth)
+                    }
+                )
+                BulkItem.subscriptionOk(
                     id,
                     JsonObject()
-                        .put("clientId", sub.clientId)
                         .put("subscriptionId", sub.subscriptionId)
                         .put("displayName", sub.displayName)
-                        .put("elementIds", JsonArray(sub.registeredIds.toList()))
-                        .put("maxDepth", sub.maxDepth)
-                        .put("created", sub.created.toString())
-                )
-            }
-        } else {
-            subscriptions.values.map { sub ->
-                BulkItem.ok(
-                    sub.subscriptionId,
-                    JsonObject()
-                        .put("clientId", sub.clientId)
-                        .put("subscriptionId", sub.subscriptionId)
-                        .put("displayName", sub.displayName)
-                        .put("elementIds", JsonArray(sub.registeredIds.toList()))
-                        .put("maxDepth", sub.maxDepth)
-                        .put("created", sub.created.toString())
+                        .put("monitoredObjects", monitoredObjects)
                 )
             }
         }
@@ -1499,49 +1517,75 @@ class I3xServer(
 
     private fun handleSubscriptionsDelete(ctx: RoutingContext) {
         val body = try { ctx.body()?.asJsonObject() } catch (_: Exception) { null } ?: JsonObject()
+        val clientId = extractClientId(ctx)
+        if (clientId.isNullOrBlank()) return sendError(ctx, 400, "Missing clientId")
         val ids = body.getJsonArray("subscriptionIds")
             ?: extractSubId(ctx)?.let { JsonArray().add(it) }
             ?: JsonArray()
         val items = (0 until ids.size()).map { i ->
-            val id = ids.getString(i)
-            val sub = id?.let { subscriptions.remove(it) }
-            if (sub == null) BulkItem.notFound(id ?: "", "Subscription not found")
-            else {
-                sessionHandler.unregisterMessageListener("i3x-${sub.subscriptionId}")
-                BulkItem.ok(id, JsonObject().put("deleted", true))
+            val id = ids.getString(i).orEmpty()
+            val sub = subscriptions[id]?.takeIf { it.clientId == clientId }
+            if (sub == null || !subscriptions.remove(id, sub)) {
+                BulkItem.subscriptionNotFound(id)
+            } else {
+                cleanupSubscription(sub)
+                BulkItem.subscriptionOk(id, null)
             }
         }
         sendBulk(ctx, items)
     }
 
-    private fun rewireMessageListener(sub: I3xSubscription) {
-        val listenerId = "i3x-${sub.subscriptionId}"
-        sessionHandler.unregisterMessageListener(listenerId)
-        sub.topicFilters.clear()
-        if (sub.registeredIds.isEmpty()) return
+    private fun rewireSubscriptions(sub: I3xSubscription) {
+        sessionHandler.unregisterMessageListener(sub.listenerId)
 
-        for (id in sub.registeredIds) {
-            val cleanId = id.trim().trim('/')
-            if (cleanId.isEmpty()) continue
-            sub.topicFilters.add(cleanId)
-            sub.topicFilters.add("$cleanId/#")
-            sub.topicFilters.add("$cleanId/+")
-        }
-        if (sub.topicFilters.isEmpty()) return
-
-        sessionHandler.registerMessageListener(listenerId, sub.topicFilters.toList()) { message ->
-            val seq = sub.nextSequence.getAndIncrement()
-            val update = JsonObject()
-                .put("sequenceNumber", seq)
-                .put("elementId", message.topicName)
-                .put("value", decodedValue(message))
-                .put("quality", qualityFor(message.topicName, message))
-                .put("timestamp", message.time.toString())
-            vertx.eventBus().publish("mq.i3x.sub.${sub.subscriptionId}", update)
-            synchronized(sub.pendingQueue) {
-                sub.pendingQueue.addLast(update)
-                while (sub.pendingQueue.size > 10_000) sub.pendingQueue.removeFirst()
+        val filters = sub.registeredIds
+            .flatMap { subscriptionFilters(it, sub.maxDepth) }
+            .distinct()
+        if (filters.isNotEmpty()) {
+            sessionHandler.registerMessageListener(sub.listenerId, filters) { message ->
+                val entry = JsonObject()
+                    .put("elementId", message.topicName)
+                    .put("value", decodedValue(message))
+                    .put("quality", qualityFor(message.topicName, message))
+                    .put("timestamp", message.time.toString())
+                if (subscriptions[sub.subscriptionId] === sub) enqueueUpdate(sub, entry)
             }
+        }
+    }
+
+    private fun subscriptionFilters(elementId: String, maxDepth: Int): List<String> {
+        val cleanId = elementId.trim().trim('/')
+        if (cleanId.isEmpty()) return emptyList()
+        if (maxDepth == 0) return listOf(cleanId, "$cleanId/#")
+
+        val filters = mutableListOf(cleanId)
+        var descendantFilter = cleanId
+        for (depth in 2..maxDepth) {
+            descendantFilter += "/+"
+            filters.add(descendantFilter)
+        }
+        return filters
+    }
+
+    private fun toSyncBatch(update: JsonObject): JsonObject {
+        val entry = update.copy()
+        val sequenceNumber = entry.getLong("sequenceNumber") ?: 0L
+        entry.remove("sequenceNumber")
+        return JsonObject()
+            .put("sequenceNumber", sequenceNumber)
+            .put("updates", JsonArray().add(entry))
+    }
+
+    private fun writeSseUpdate(response: io.vertx.core.http.HttpServerResponse, update: JsonObject) {
+        response.write("event: update\n")
+        response.write("data: ${toSyncBatch(update).encode()}\n\n")
+    }
+
+    private fun cleanupSubscription(sub: I3xSubscription) {
+        sessionHandler.unregisterMessageListener(sub.listenerId)
+        sub.registeredIds.clear()
+        synchronized(sub.pendingQueue) {
+            sub.pendingQueue.clear()
         }
     }
 

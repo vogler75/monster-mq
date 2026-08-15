@@ -585,7 +585,33 @@ class TestSubscriptions:
                 timeout=REQUEST_TIMEOUT,
             )
             assert reg.status_code == 200
-            assert reg.json()["success"] is True
+            reg_body = reg.json()
+            assert reg_body["success"] is True
+            assert len(reg_body["results"]) == 1
+            assert reg_body["results"][0]["success"] is True
+            assert reg_body["results"][0]["elementId"] == topic
+
+            listed = requests.post(
+                f"{I3X_URL}/subscriptions/list",
+                headers=auth_headers,
+                json={"clientId": client_id, "subscriptionIds": [sub_id]},
+                timeout=REQUEST_TIMEOUT,
+            ).json()
+            assert listed["success"] is True
+            assert listed["results"][0]["subscriptionId"] == sub_id
+            detail = listed["results"][0]["result"]
+            assert detail["subscriptionId"] == sub_id
+            assert detail["monitoredObjects"] == [
+                {"elementId": topic, "maxDepth": 1}
+            ]
+
+            wrong_client = requests.post(
+                f"{I3X_URL}/subscriptions/sync",
+                headers=auth_headers,
+                json={"clientId": f"{client_id}-other", "subscriptionId": sub_id},
+                timeout=REQUEST_TIMEOUT,
+            )
+            assert wrong_client.status_code == 404
 
             # Publish an update and poll sync.
             mqtt_client = mqtt.Client(
@@ -602,9 +628,9 @@ class TestSubscriptions:
             mqtt_client.disconnect()
 
             # Give the listener a moment to enqueue.
-            updates = []
+            batches = []
             deadline = time.time() + 5
-            while time.time() < deadline and not updates:
+            while time.time() < deadline and not batches:
                 time.sleep(0.2)
                 sync = requests.post(
                     f"{I3X_URL}/subscriptions/sync",
@@ -613,16 +639,19 @@ class TestSubscriptions:
                     timeout=REQUEST_TIMEOUT,
                 ).json()
                 assert sync["success"] is True
-                updates = sync["result"]["updates"]
+                batches = sync["result"]
 
-            assert updates, "No updates received via /sync within 5s"
-            for u in updates:
-                assert u["elementId"] == topic
-                assert "sequenceNumber" in u
-                assert u["quality"] in ("Good", "GoodNoData", "Bad", "Uncertain")
+            assert batches, "No updates received via /sync within 5s"
+            for batch in batches:
+                assert "sequenceNumber" in batch
+                assert len(batch["updates"]) == 1
+                update = batch["updates"][0]
+                assert update["elementId"] == topic
+                assert "sequenceNumber" not in update
+                assert update["quality"] in ("Good", "GoodNoData", "Bad", "Uncertain")
 
             # Ack with the highest sequence number; the queue should be empty now.
-            max_seq = max(u["sequenceNumber"] for u in updates)
+            max_seq = max(batch["sequenceNumber"] for batch in batches)
             sync_after = requests.post(
                 f"{I3X_URL}/subscriptions/sync",
                 headers=auth_headers,
@@ -634,7 +663,7 @@ class TestSubscriptions:
                 timeout=REQUEST_TIMEOUT,
             ).json()
             assert sync_after["success"] is True
-            assert sync_after["result"]["updates"] == []
+            assert sync_after["result"] == []
         finally:
             # Clean up.
             requests.post(
@@ -667,6 +696,7 @@ class TestSubscriptions:
                 f"{I3X_URL}/subscriptions/register",
                 headers=auth_headers,
                 json={
+                    "clientId": client_id,
                     "subscriptionId": sub_id,
                     "elementIds": [topic],
                     "maxDepth": 1,
@@ -674,34 +704,155 @@ class TestSubscriptions:
                 timeout=REQUEST_TIMEOUT,
             ).json()
             assert reg["success"] is True
+            assert reg["results"][0]["elementId"] == topic
 
             # Open SSE stream via GET /subscriptions/stream?subscriptionId=...
             resp = requests.get(
                 f"{I3X_URL}/subscriptions/stream",
                 headers=auth_headers,
-                params={"subscriptionId": sub_id},
+                params={"clientId": client_id, "subscriptionId": sub_id},
                 stream=True,
                 timeout=REQUEST_TIMEOUT,
             )
             assert resp.status_code == 200
             assert "text/event-stream" in resp.headers.get("Content-Type", "")
 
-            # Verify initial event received on connect
-            lines = []
-            for line in resp.iter_lines():
+            # Read the initial SyncBatch event.
+            line_iter = resp.iter_lines()
+            initial_batch = None
+            for line in line_iter:
                 line_str = line.decode("utf-8") if isinstance(line, bytes) else line
                 if line_str.startswith("data: "):
-                    lines.append(line_str)
+                    initial_batch = json.loads(line_str[6:])
                     break
 
-            assert lines, "Expected initial SSE data line"
-            data_json = json.loads(lines[0][6:])
-            assert data_json["elementId"] == topic
-            assert data_json["value"] == 100
+            assert initial_batch is not None, "Expected initial SSE SyncBatch"
+            assert initial_batch["sequenceNumber"] >= 1
+            assert len(initial_batch["updates"]) == 1
+            initial_update = initial_batch["updates"][0]
+            assert initial_update["elementId"] == topic
+            assert str(initial_update["value"]) == "100"
+            assert "sequenceNumber" not in initial_update
+
+            # Now publish a live change via MQTT
+            time.sleep(0.5)
+            publish_retained(topic, "200")
+
+            live_batches = []
+            start_t = time.time()
+            for line in line_iter:
+                line_str = line.decode("utf-8") if isinstance(line, bytes) else line
+                if line_str.startswith("data: "):
+                    batch = json.loads(line_str[6:])
+                    live_batches.append(batch)
+                    if any(str(update["value"]) == "200" for update in batch["updates"]):
+                        break
+                if time.time() - start_t > 5:
+                    break
+
+            live_updates = [
+                update
+                for batch in live_batches
+                for update in batch["updates"]
+            ]
+            assert any(str(update["value"]) == "200" for update in live_updates), (
+                f"200 event not received: {live_batches}"
+            )
         finally:
             requests.delete(
                 f"{I3X_URL}/subscriptions/{sub_id}",
                 headers=auth_headers,
+                params={"clientId": client_id},
+                timeout=REQUEST_TIMEOUT,
+            )
+
+    def test_sync_composition_receives_live_descendant_updates(
+        self, auth_headers, publish_retained, server_reachable
+    ):
+        unique = f"i3xtest_{uuid.uuid4().hex[:6]}"
+        parent = f"{unique}/meter"
+        child = f"{parent}/watt"
+        publish_retained(child, "10")
+
+        client_id = f"pytest-{uuid.uuid4().hex[:6]}"
+        created = requests.post(
+            f"{I3X_URL}/subscriptions",
+            headers=auth_headers,
+            json={"clientId": client_id, "displayName": "pytest-composition"},
+            timeout=REQUEST_TIMEOUT,
+        ).json()
+        assert created["success"] is True
+        sub_id = created["result"]["subscriptionId"]
+
+        def sync_batches(last_sequence_number=None):
+            request = {"clientId": client_id, "subscriptionId": sub_id}
+            if last_sequence_number is not None:
+                request["lastSequenceNumber"] = last_sequence_number
+            response = requests.post(
+                f"{I3X_URL}/subscriptions/sync",
+                headers=auth_headers,
+                json=request,
+                timeout=REQUEST_TIMEOUT,
+            ).json()
+            assert response["success"] is True
+            return response["result"]
+
+        try:
+            registered = requests.post(
+                f"{I3X_URL}/subscriptions/register",
+                headers=auth_headers,
+                json={
+                    "clientId": client_id,
+                    "subscriptionId": sub_id,
+                    "elementIds": [parent],
+                    "maxDepth": 2,
+                },
+                timeout=REQUEST_TIMEOUT,
+            ).json()
+            assert registered["success"] is True
+            assert registered["results"][0]["elementId"] == parent
+
+            initial_batches = []
+            deadline = time.time() + 5
+            while time.time() < deadline and not initial_batches:
+                time.sleep(0.2)
+                initial_batches = sync_batches()
+            assert initial_batches, "No initial composition update received"
+            assert any(
+                update["elementId"] == child and str(update["value"]) == "10"
+                for batch in initial_batches
+                for update in batch["updates"]
+            )
+
+            initial_max_sequence = max(
+                batch["sequenceNumber"] for batch in initial_batches
+            )
+            assert sync_batches(initial_max_sequence) == []
+
+            publish_retained(child, "11")
+
+            live_batches = []
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                time.sleep(0.2)
+                live_batches = sync_batches(initial_max_sequence)
+                if any(
+                    update["elementId"] == child and str(update["value"]) == "11"
+                    for batch in live_batches
+                    for update in batch["updates"]
+                ):
+                    break
+
+            assert any(
+                update["elementId"] == child and str(update["value"]) == "11"
+                for batch in live_batches
+                for update in batch["updates"]
+            ), f"Live descendant update not received: {live_batches}"
+        finally:
+            requests.post(
+                f"{I3X_URL}/subscriptions/delete",
+                headers=auth_headers,
+                json={"clientId": client_id, "subscriptionIds": [sub_id]},
                 timeout=REQUEST_TIMEOUT,
             )
 
