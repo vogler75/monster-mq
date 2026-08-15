@@ -64,13 +64,6 @@ BulkProcessing:
   BulkSize: 1000             # Flush when batch reaches this many messages (1000 recommended)
   WorkerThreads: 4           # Number of parallel worker threads (recommended: 2-8)
 
-# Sparkplug B support configuration
-# DEPRECATED: SparkplugMetricExpansion is replaced by SparkplugB Decoder Devices
-# Configure SparkplugB decoders via GraphQL API or Web Dashboard instead
-# See: doc/sparkplugb-decoder.md for migration guide
-# SparkplugMetricExpansion:
-#   Enabled: false  # This option is no longer used
-
 # SQLite configuration
 SQLite:
   Path: "sqlite"
