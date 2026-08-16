@@ -178,7 +178,9 @@ class ArchiveGroupResolver(
                               "queueSize" to jsonObj.getInteger("queueSize", 100000),
                               "bulkSize" to jsonObj.getInteger("bulkSize", 4000),
                               "bulkTimeoutMs" to jsonObj.getLong("bulkTimeoutMs", 250L),
-                              "queueDiskPath" to jsonObj.getString("queueDiskPath", "data/queue")
+                              "queueDiskPath" to jsonObj.getString("queueDiskPath", "data/queue"),
+                              "lastValReadOnly" to jsonObj.getBoolean("lastValReadOnly", false),
+                              "archiveReadOnly" to jsonObj.getBoolean("archiveReadOnly", false)
                         )
                     }
 
@@ -222,8 +224,10 @@ class ArchiveGroupResolver(
                                          "queueSize" to config.archiveGroup.queueSize,
                                          "bulkSize" to config.archiveGroup.bulkSize,
                                          "bulkTimeoutMs" to config.archiveGroup.bulkTimeoutMs,
-                                         "queueDiskPath" to config.archiveGroup.queueDiskPath
-                                    )
+                                         "queueDiskPath" to config.archiveGroup.queueDiskPath,
+                                         "lastValReadOnly" to config.archiveGroup.lastValReadOnly,
+                                         "archiveReadOnly" to config.archiveGroup.archiveReadOnly
+                                     )
                                 }
 
                                 // Apply filters
@@ -288,7 +292,9 @@ class ArchiveGroupResolver(
                               "queueSize" to runtimeStatus.getInteger("queueSize", 100000),
                               "bulkSize" to runtimeStatus.getInteger("bulkSize", 4000),
                               "bulkTimeoutMs" to runtimeStatus.getLong("bulkTimeoutMs", 250L),
-                              "queueDiskPath" to runtimeStatus.getString("queueDiskPath", "data/queue")
+                              "queueDiskPath" to runtimeStatus.getString("queueDiskPath", "data/queue"),
+                              "lastValReadOnly" to runtimeStatus.getBoolean("lastValReadOnly", false),
+                              "archiveReadOnly" to runtimeStatus.getBoolean("archiveReadOnly", false)
                         )
                     } else {
                         null
@@ -321,8 +327,10 @@ class ArchiveGroupResolver(
                                          "queueSize" to archiveGroup.archiveGroup.queueSize,
                                          "bulkSize" to archiveGroup.archiveGroup.bulkSize,
                                          "bulkTimeoutMs" to archiveGroup.archiveGroup.bulkTimeoutMs,
-                                         "queueDiskPath" to archiveGroup.archiveGroup.queueDiskPath
-                                    )
+                                         "queueDiskPath" to archiveGroup.archiveGroup.queueDiskPath,
+                                         "lastValReadOnly" to archiveGroup.archiveGroup.lastValReadOnly,
+                                         "archiveReadOnly" to archiveGroup.archiveGroup.archiveReadOnly
+                                     )
                                 } else {
                                     null
                                 }
@@ -636,6 +644,8 @@ class ArchiveGroupResolver(
                 val bulkSize = (input["bulkSize"] as? Number)?.toInt() ?: 4000
                 val bulkTimeoutMs = (input["bulkTimeoutMs"] as? Number)?.toLong() ?: 250L
                 val queueDiskPath = input["queueDiskPath"] as? String ?: "data/queue"
+                val lastValReadOnly = input["lastValReadOnly"] as? Boolean ?: false
+                val archiveReadOnly = input["archiveReadOnly"] as? Boolean ?: false
 
                 // Parse optional durations
                 val lastValRetention = input["lastValRetention"] as? String
@@ -715,7 +725,9 @@ class ArchiveGroupResolver(
                     bulkSize = bulkSize,
                     bulkTimeoutMs = bulkTimeoutMs,
                     queueDiskPath = queueDiskPath,
-                    databaseConfig = JsonObject() // Will be populated from config
+                    databaseConfig = JsonObject(), // Will be populated from config
+                    lastValReadOnly = lastValReadOnly,
+                    archiveReadOnly = archiveReadOnly
                 )
 
                 validateConnectionSelection(configStore, databaseConnectionName, lastValType, archiveType).onComplete { validation ->
@@ -752,7 +764,9 @@ class ArchiveGroupResolver(
                                     "queueSize" to queueSize,
                                     "bulkSize" to bulkSize,
                                     "bulkTimeoutMs" to bulkTimeoutMs,
-                                    "queueDiskPath" to queueDiskPath
+                                    "queueDiskPath" to queueDiskPath,
+                                    "lastValReadOnly" to lastValReadOnly,
+                                    "archiveReadOnly" to archiveReadOnly
                                 )
                             ))
                         } else {
@@ -922,6 +936,16 @@ class ArchiveGroupResolver(
                              } else {
                                  existingArchiveGroup.queueDiskPath
                              }
+                             val lastValReadOnly = if (input.containsKey("lastValReadOnly")) {
+                                 input["lastValReadOnly"] as? Boolean ?: existingArchiveGroup.lastValReadOnly
+                             } else {
+                                 existingArchiveGroup.lastValReadOnly
+                             }
+                             val archiveReadOnly = if (input.containsKey("archiveReadOnly")) {
+                                 input["archiveReadOnly"] as? Boolean ?: existingArchiveGroup.archiveReadOnly
+                             } else {
+                                 existingArchiveGroup.archiveReadOnly
+                             }
 
                              // Parse optional durations if provided, otherwise keep existing
                             val lastValRetention = input["lastValRetention"] as? String
@@ -989,7 +1013,9 @@ class ArchiveGroupResolver(
                                  bulkSize = bulkSize,
                                  bulkTimeoutMs = bulkTimeoutMs,
                                  queueDiskPath = queueDiskPath,
-                                 databaseConfig = JsonObject() // Will be populated from config
+                                 databaseConfig = JsonObject(), // Will be populated from config
+                                 lastValReadOnly = lastValReadOnly,
+                                 archiveReadOnly = archiveReadOnly
                              )
 
                             validateConnectionSelection(configStore, databaseConnectionName, lastValType, archiveType).onComplete { validation ->
@@ -1025,7 +1051,9 @@ class ArchiveGroupResolver(
                                                 "queueSize" to queueSize,
                                                 "bulkSize" to bulkSize,
                                                 "bulkTimeoutMs" to bulkTimeoutMs,
-                                                "queueDiskPath" to queueDiskPath
+                                                "queueDiskPath" to queueDiskPath,
+                                                "lastValReadOnly" to lastValReadOnly,
+                                                "archiveReadOnly" to archiveReadOnly
                                             )
                                         ))
                                     } else {

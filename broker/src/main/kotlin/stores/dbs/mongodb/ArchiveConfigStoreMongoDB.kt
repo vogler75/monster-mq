@@ -320,6 +320,8 @@ class ArchiveConfigStoreMongoDB(
         val bulkSize = document.getInteger("bulk_size") ?: 4000
         val bulkTimeoutMs = document.getLong("bulk_timeout_ms") ?: 250L
         val queueDiskPath = document.getString("queue_disk_path") ?: "data/queue"
+        val lastValReadOnly = document.getBoolean("last_val_read_only", false)
+        val archiveReadOnly = document.getBoolean("archive_read_only", false)
 
         return ArchiveGroup(
             name = name,
@@ -341,7 +343,9 @@ class ArchiveConfigStoreMongoDB(
             queueSize = queueSize,
             bulkSize = bulkSize,
             bulkTimeoutMs = bulkTimeoutMs,
-            queueDiskPath = queueDiskPath
+            queueDiskPath = queueDiskPath,
+            lastValReadOnly = lastValReadOnly,
+            archiveReadOnly = archiveReadOnly
         )
     }
 
@@ -361,6 +365,8 @@ class ArchiveConfigStoreMongoDB(
             .append("bulk_size", archiveGroup.bulkSize)
             .append("bulk_timeout_ms", archiveGroup.bulkTimeoutMs)
             .append("queue_disk_path", archiveGroup.queueDiskPath)
+            .append("last_val_read_only", archiveGroup.lastValReadOnly)
+            .append("archive_read_only", archiveGroup.archiveReadOnly)
             .append("updated_at", Instant.now())
 
         // Add optional duration fields (preserve original string to avoid lossy roundtrip via formatDuration)

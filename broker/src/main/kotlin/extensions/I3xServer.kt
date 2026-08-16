@@ -978,7 +978,7 @@ class I3xServer(
 
     private fun historyArchiveSupportingWrite(topic: String): List<ArchiveGroup> {
         return archiveHandler.getDeployedArchiveGroups().values.filter {
-            it.filterTree.isTopicNameMatching(topic)
+            !it.archiveReadOnly && it.filterTree.isTopicNameMatching(topic)
         }
     }
 

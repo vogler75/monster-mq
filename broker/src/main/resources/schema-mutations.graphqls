@@ -273,6 +273,8 @@ input CreateArchiveGroupInput {
     bulkSize: Int = 4000
     bulkTimeoutMs: Long = 250
     queueDiskPath: String = "data/queue"
+    lastValReadOnly: Boolean = false
+    archiveReadOnly: Boolean = false
 }
 
 input UpdateArchiveGroupInput {
@@ -292,6 +294,8 @@ input UpdateArchiveGroupInput {
     bulkSize: Int
     bulkTimeoutMs: Long
     queueDiskPath: String
+    lastValReadOnly: Boolean
+    archiveReadOnly: Boolean
 }
 
 type ArchiveGroupResult {

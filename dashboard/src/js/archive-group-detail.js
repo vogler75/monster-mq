@@ -27,6 +27,15 @@ class ArchiveGroupDetailManager {
         if (this.isNew) {
             document.getElementById('page-title').textContent = 'New Archive Group';
             document.getElementById('page-subtitle').textContent = 'Create a new archive group';
+            const createFields = await window.graphqlClient.getTypeFields('CreateArchiveGroupInput');
+            const lastValCheckboxGroup = document.getElementById('group-last-val-read-only')?.closest('.checkbox-group');
+            if (lastValCheckboxGroup) {
+                lastValCheckboxGroup.style.display = createFields.has('lastValReadOnly') ? '' : 'none';
+            }
+            const archiveCheckboxGroup = document.getElementById('group-archive-read-only')?.closest('.checkbox-group');
+            if (archiveCheckboxGroup) {
+                archiveCheckboxGroup.style.display = createFields.has('archiveReadOnly') ? '' : 'none';
+            }
             return;
         }
 
@@ -73,6 +82,10 @@ class ArchiveGroupDetailManager {
 
     async loadData() {
         const redisDbNumberField = this.redisServerEnabled ? 'redisDbNumber' : '';
+        const fields = await window.graphqlClient.getTypeFields('ArchiveGroupInfo');
+        const lastValROField = fields.has('lastValReadOnly') ? 'lastValReadOnly' : '';
+        const archiveROField = fields.has('archiveReadOnly') ? 'archiveReadOnly' : '';
+
         const result = await window.graphqlClient.query(`
             query GetArchiveGroup($name: String!) {
                 archiveGroup(name: $name) {
@@ -95,6 +108,8 @@ class ArchiveGroupDetailManager {
                     bulkSize
                     bulkTimeoutMs
                     queueDiskPath
+                    ${lastValROField}
+                    ${archiveROField}
                     createdAt
                     updatedAt
                     connectionStatus {
@@ -112,7 +127,7 @@ class ArchiveGroupDetailManager {
         }
     }
 
-    renderForm() {
+    async renderForm() {
         const g = this.groupData;
 
         document.getElementById('page-title').textContent = g.name;
@@ -126,13 +141,26 @@ class ArchiveGroupDetailManager {
 
         // Storage
         document.getElementById('group-last-val-type').value = g.lastValType || 'NONE';
+        document.getElementById('group-last-val-read-only').checked = !!g.lastValReadOnly;
         document.getElementById('group-archive-type').value = g.archiveType || 'NONE';
+        document.getElementById('group-archive-read-only').checked = !!g.archiveReadOnly;
         document.getElementById('group-payload-format').value = g.payloadFormat || 'DEFAULT';
         this.updateRedisDbNumberVisibility();
         if (this.redisServerEnabled) {
             document.getElementById('group-redis-db-number').value = g.redisDbNumber ?? '';
         }
         this.updateDatabaseConnectionOptions();
+
+        // Hide read-only checkboxes if the broker schema doesn't support them
+        const infoFields = await window.graphqlClient.getTypeFields('ArchiveGroupInfo');
+        const lastValCheckboxGroup = document.getElementById('group-last-val-read-only')?.closest('.checkbox-group');
+        if (lastValCheckboxGroup) {
+            lastValCheckboxGroup.style.display = infoFields.has('lastValReadOnly') ? '' : 'none';
+        }
+        const archiveCheckboxGroup = document.getElementById('group-archive-read-only')?.closest('.checkbox-group');
+        if (archiveCheckboxGroup) {
+            archiveCheckboxGroup.style.display = infoFields.has('archiveReadOnly') ? '' : 'none';
+        }
 
         // Retention
         document.getElementById('group-last-val-retention').value = g.lastValRetention || '';
@@ -327,6 +355,8 @@ class ArchiveGroupDetailManager {
             bulkSize: Number(document.getElementById('group-bulk-size').value || 4000),
             bulkTimeoutMs: Number(document.getElementById('group-bulk-timeout-ms').value || 250),
             queueDiskPath: document.getElementById('group-queue-disk-path').value.trim() || 'data/queue',
+            lastValReadOnly: document.getElementById('group-last-val-read-only').checked,
+            archiveReadOnly: document.getElementById('group-archive-read-only').checked,
         };
 
         if (this.redisServerEnabled) {
@@ -441,6 +471,10 @@ class ArchiveGroupDetailManager {
                 if (!input.databaseConnectionName) delete input.databaseConnectionName;
                 if (!this.redisServerEnabled || input.redisDbNumber === null) delete input.redisDbNumber;
 
+                const createFields = await window.graphqlClient.getTypeFields('CreateArchiveGroupInput');
+                if (!createFields.has('lastValReadOnly')) delete input.lastValReadOnly;
+                if (!createFields.has('archiveReadOnly')) delete input.archiveReadOnly;
+
                 result = await window.graphqlClient.query(`
                     mutation CreateArchiveGroup($input: CreateArchiveGroupInput!) {
                         archiveGroup {
@@ -459,6 +493,11 @@ class ArchiveGroupDetailManager {
                     this.showError(result.archiveGroup.create.message || 'Failed to create archive group.');
                 }
             } else {
+                const input = { ...data };
+                const updateFields = await window.graphqlClient.getTypeFields('UpdateArchiveGroupInput');
+                if (!updateFields.has('lastValReadOnly')) delete input.lastValReadOnly;
+                if (!updateFields.has('archiveReadOnly')) delete input.archiveReadOnly;
+
                 result = await window.graphqlClient.query(`
                     mutation UpdateArchiveGroup($input: UpdateArchiveGroupInput!) {
                         archiveGroup {
@@ -468,7 +507,7 @@ class ArchiveGroupDetailManager {
                             }
                         }
                     }
-                `, { input: data });
+                `, { input });
 
                 if (result.archiveGroup.update.success) {
                     this.showSuccess('Archive group saved successfully.');

@@ -783,6 +783,8 @@ class ArchiveHandler(
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
                 put("purgeInterval", archiveInfo.archiveGroup.getPurgeIntervalMs()?.toString())
+                put("lastValReadOnly", archiveInfo.archiveGroup.lastValReadOnly)
+                put("archiveReadOnly", archiveInfo.archiveGroup.archiveReadOnly)
             }
         }
     }
@@ -819,6 +821,8 @@ class ArchiveHandler(
                 put("lastValRetention", archiveInfo.archiveGroup.getLastValRetentionMs()?.toString())
                 put("archiveRetention", archiveInfo.archiveGroup.getArchiveRetentionMs()?.toString())
                 put("purgeInterval", archiveInfo.archiveGroup.getPurgeIntervalMs()?.toString())
+                put("lastValReadOnly", archiveInfo.archiveGroup.lastValReadOnly)
+                put("archiveReadOnly", archiveInfo.archiveGroup.archiveReadOnly)
             })
         }
         return result

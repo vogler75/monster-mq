@@ -100,7 +100,9 @@ class ArchiveConfigStoreCrateDB(
                 queue_size INTEGER DEFAULT 100000,
                 bulk_size INTEGER DEFAULT 4000,
                 bulk_timeout_ms BIGINT DEFAULT 250,
-                queue_disk_path STRING DEFAULT 'data/queue'
+                queue_disk_path STRING DEFAULT 'data/queue',
+                last_val_read_only BOOLEAN NOT NULL DEFAULT FALSE,
+                archive_read_only BOOLEAN NOT NULL DEFAULT FALSE
             )
         """.trimIndent()
 
@@ -213,8 +215,8 @@ class ArchiveConfigStoreCrateDB(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, last_val_read_only, archive_read_only, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -232,6 +234,8 @@ class ArchiveConfigStoreCrateDB(
                     bulk_size = EXCLUDED.bulk_size,
                     bulk_timeout_ms = EXCLUDED.bulk_timeout_ms,
                     queue_disk_path = EXCLUDED.queue_disk_path,
+                    last_val_read_only = EXCLUDED.last_val_read_only,
+                    archive_read_only = EXCLUDED.archive_read_only,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -263,6 +267,8 @@ class ArchiveConfigStoreCrateDB(
                         preparedStatement.setInt(15, archiveGroup.bulkSize)
                         preparedStatement.setLong(16, archiveGroup.bulkTimeoutMs)
                         preparedStatement.setString(17, archiveGroup.queueDiskPath)
+                        preparedStatement.setBoolean(18, archiveGroup.lastValReadOnly)
+                        preparedStatement.setBoolean(19, archiveGroup.archiveReadOnly)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         val success = rowsAffected > 0
@@ -464,6 +470,8 @@ class ArchiveConfigStoreCrateDB(
         val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
         val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
         val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
+        val lastValReadOnly = try { resultSet.getBoolean("last_val_read_only") } catch (e: Exception) { false }
+        val archiveReadOnly = try { resultSet.getBoolean("archive_read_only") } catch (e: Exception) { false }
 
         return ArchiveGroup(
             name = name,
@@ -482,7 +490,9 @@ class ArchiveConfigStoreCrateDB(
             queueSize = queueSize,
             bulkSize = bulkSize,
             bulkTimeoutMs = bulkTimeoutMs,
-            queueDiskPath = queueDiskPath
+            queueDiskPath = queueDiskPath,
+            lastValReadOnly = lastValReadOnly,
+            archiveReadOnly = archiveReadOnly
         )
     }
 

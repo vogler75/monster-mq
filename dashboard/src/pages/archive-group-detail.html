@@ -102,6 +102,10 @@
                                 <option value="MONGODB">MongoDB</option>
                                 <option value="SQLITE">SQLite</option>
                             </select>
+                            <div class="checkbox-group" style="margin-top: 8px;">
+                                <input type="checkbox" id="group-last-val-read-only">
+                                <label for="group-last-val-read-only">Last Value Read-Only (disable writes, keep readable)</label>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="group-archive-type">Archive Type *</label>
@@ -112,7 +116,10 @@
                                 <option value="MONGODB">MongoDB</option>
                                 <option value="SQLITE">SQLite</option>
                             </select>
-                            <small>MEMORY is only available for Last Value Type, not Archive Type</small>
+                            <div class="checkbox-group" style="margin-top: 8px;">
+                                <input type="checkbox" id="group-archive-read-only">
+                                <label for="group-archive-read-only">Archive Read-Only (disable writes &amp; retention purge, keep readable)</label>
+                            </div>
                         </div>
                         <div class="form-group" id="database-connection-group" style="display:none;">
                             <label for="group-database-connection">Database Connection</label>

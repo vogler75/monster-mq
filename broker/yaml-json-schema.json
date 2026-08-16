@@ -1019,6 +1019,18 @@
             "title": "Disk Buffer Directory",
             "default": "data/queue",
             "description": "Filesystem path for persistent disk buffer files when QueueType is DISK"
+          },
+          "LastValReadOnly": {
+            "type": "boolean",
+            "title": "Last Value Read Only",
+            "default": false,
+            "description": "When true, live topic value caching is disabled while keeping last values readable and queryable"
+          },
+          "ArchiveReadOnly": {
+            "type": "boolean",
+            "title": "Archive Read Only",
+            "default": false,
+            "description": "When true, historical message recording is disabled while keeping history queries and analytics active"
           }
         },
         "required": ["Name", "TopicFilter", "LastValType", "ArchiveType"]

@@ -53,7 +53,9 @@ class ArchiveGroup(
     val queueSize: Int = 100000,
     val bulkSize: Int = 4000,
     val bulkTimeoutMs: Long = 250L,
-    val queueDiskPath: String = "data/queue"
+    val queueDiskPath: String = "data/queue",
+    val lastValReadOnly: Boolean = false,
+    val archiveReadOnly: Boolean = false
 ) : AbstractVerticle() {
 
     private val logger = Utils.getLogger(this::class.java, name)
@@ -602,6 +604,10 @@ class ArchiveGroup(
     }
 
     private fun purgeArchiveStore() {
+        if (archiveReadOnly) {
+            logger.fine { "Archive [$name] is read-only, skipping Archive purge" }
+            return
+        }
         val retentionMs = archiveRetentionMs ?: return
         val messageArchive = archiveStore ?: return
 
@@ -702,6 +708,8 @@ class ArchiveGroup(
             val queueDiskPath = config.getString("QueueDiskPath") ?: config.getString("queueDiskPath") ?: "data/queue"
             val databaseConnectionName = config.getString("DatabaseConnectionName") ?: config.getString("databaseConnectionName")
             val redisDbNumber = config.getInteger("RedisDbNumber") ?: config.getInteger("redisDbNumber")
+            val lastValReadOnly = config.getBoolean("LastValReadOnly") ?: config.getBoolean("lastValReadOnly") ?: false
+            val archiveReadOnly = config.getBoolean("ArchiveReadOnly") ?: config.getBoolean("archiveReadOnly") ?: false
 
             return ArchiveGroup(
                 name = name,
@@ -724,7 +732,9 @@ class ArchiveGroup(
                 queueSize = queueSize,
                 bulkSize = bulkSize,
                 bulkTimeoutMs = bulkTimeoutMs,
-                queueDiskPath = queueDiskPath
+                queueDiskPath = queueDiskPath,
+                lastValReadOnly = lastValReadOnly,
+                archiveReadOnly = archiveReadOnly
             )
         }
 

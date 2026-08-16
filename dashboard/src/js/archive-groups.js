@@ -32,6 +32,10 @@ class ArchiveGroupsManager {
         try {
             console.log('Loading archive groups...');
             const redisDbNumberField = this.redisServerEnabled ? 'redisDbNumber' : '';
+            const fields = await window.graphqlClient.getTypeFields('ArchiveGroupInfo');
+            const lastValROField = fields.has('lastValReadOnly') ? 'lastValReadOnly' : '';
+            const archiveROField = fields.has('archiveReadOnly') ? 'archiveReadOnly' : '';
+
             const result = await window.graphqlClient.query(`
                 query GetArchiveGroups {
                     archiveGroups {
@@ -49,6 +53,8 @@ class ArchiveGroupsManager {
                         lastValRetention
                         archiveRetention
                         purgeInterval
+                        ${lastValROField}
+                        ${archiveROField}
                         createdAt
                         updatedAt
                         connectionStatus {
@@ -153,9 +159,11 @@ class ArchiveGroupsManager {
                     const ar = group.archiveType;
                     const showLv = lv && lv !== 'NONE';
                     const showAr = ar && ar !== 'NONE';
-                    if (showLv && showAr) return this.escapeHtml(`${lv}`) + '<br>' + this.escapeHtml(`${ar}`);
-                    if (showLv) return this.escapeHtml(lv);
-                    if (showAr) return this.escapeHtml(ar);
+                    const lvText = showLv ? `${lv}${group.lastValReadOnly ? ' (RO)' : ''}` : '';
+                    const arText = showAr ? `${ar}${group.archiveReadOnly ? ' (RO)' : ''}` : '';
+                    if (showLv && showAr) return this.escapeHtml(lvText) + '<br>' + this.escapeHtml(arText);
+                    if (showLv) return this.escapeHtml(lvText);
+                    if (showAr) return this.escapeHtml(arText);
                     return 'NONE';
                 })()}</td>
                 <td>${this.escapeHtml(this.getDatabaseConnectionLabel(group))}</td>

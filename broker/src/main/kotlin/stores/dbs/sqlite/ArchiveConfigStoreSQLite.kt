@@ -50,7 +50,9 @@ class ArchiveConfigStoreSQLite(
                 queue_size INTEGER DEFAULT 100000,
                 bulk_size INTEGER DEFAULT 4000,
                 bulk_timeout_ms INTEGER DEFAULT 250,
-                queue_disk_path TEXT DEFAULT 'data/queue'
+                queue_disk_path TEXT DEFAULT 'data/queue',
+                last_val_read_only INTEGER NOT NULL DEFAULT 0,
+                archive_read_only INTEGER NOT NULL DEFAULT 0
             )
         """.trimIndent())
             .add("""
@@ -106,6 +108,12 @@ class ArchiveConfigStoreSQLite(
                 }
                 if (!columnNames.contains("queue_disk_path")) {
                     migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN queue_disk_path TEXT DEFAULT 'data/queue'")
+                }
+                if (!columnNames.contains("last_val_read_only")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN last_val_read_only INTEGER NOT NULL DEFAULT 0")
+                }
+                if (!columnNames.contains("archive_read_only")) {
+                    migrationsNeeded.add("ALTER TABLE $configTableName ADD COLUMN archive_read_only INTEGER NOT NULL DEFAULT 0")
                 }
 
                 if (migrationsNeeded.isEmpty) {
@@ -185,8 +193,8 @@ class ArchiveConfigStoreSQLite(
     override fun saveArchiveGroup(archiveGroup: ArchiveGroup, enabled: Boolean): Future<Boolean> {
         val sql = """
             INSERT OR REPLACE INTO $configTableName
-            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, last_val_read_only, archive_read_only, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """.trimIndent()
 
         val topicFilterJson = JsonArray(archiveGroup.topicFilter).encode()
@@ -208,6 +216,8 @@ class ArchiveConfigStoreSQLite(
             .add(archiveGroup.bulkSize)
             .add(archiveGroup.bulkTimeoutMs)
             .add(archiveGroup.queueDiskPath)
+            .add(if (archiveGroup.lastValReadOnly) 1 else 0)
+            .add(if (archiveGroup.archiveReadOnly) 1 else 0)
 
         return sqliteClient.executeUpdate(sql, params).map { rowsAffected ->
             val success = rowsAffected > 0
@@ -320,6 +330,9 @@ class ArchiveConfigStoreSQLite(
         val payloadFormatStr = try { row.getString("payload_format") } catch (e: Exception) { null }
         val payloadFormat = PayloadFormat.parse(payloadFormatStr)
 
+        val lastValReadOnly = toBool(row.getValue("last_val_read_only"))
+        val archiveReadOnly = toBool(row.getValue("archive_read_only"))
+
         return ArchiveGroup(
             name = name,
             topicFilter = topicFilter,
@@ -335,7 +348,9 @@ class ArchiveConfigStoreSQLite(
             purgeIntervalStr = purgeInterval,
             databaseConnectionName = row.getString("database_connection_name"),
             redisDbNumber = row.getInteger("redis_db_number"),
-            databaseConfig = JsonObject() // Will be populated from config
+            databaseConfig = JsonObject(), // Will be populated from config
+            lastValReadOnly = lastValReadOnly,
+            archiveReadOnly = archiveReadOnly
         )
     }
 

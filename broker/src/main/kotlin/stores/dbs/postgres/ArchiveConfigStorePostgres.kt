@@ -68,7 +68,9 @@ class ArchiveConfigStorePostgres(
                     queue_size INTEGER DEFAULT 100000,
                     bulk_size INTEGER DEFAULT 4000,
                     bulk_timeout_ms BIGINT DEFAULT 250,
-                    queue_disk_path VARCHAR(255) DEFAULT 'data/queue'
+                    queue_disk_path VARCHAR(255) DEFAULT 'data/queue',
+                    last_val_read_only BOOLEAN NOT NULL DEFAULT FALSE,
+                    archive_read_only BOOLEAN NOT NULL DEFAULT FALSE
                 );
                 """.trimIndent()
 
@@ -81,6 +83,8 @@ class ArchiveConfigStorePostgres(
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS bulk_size INTEGER DEFAULT 4000")
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS bulk_timeout_ms BIGINT DEFAULT 250")
                     statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS queue_disk_path VARCHAR(255) DEFAULT 'data/queue'")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS last_val_read_only BOOLEAN NOT NULL DEFAULT FALSE")
+                    statement.executeUpdate("ALTER TABLE $configTableName ADD COLUMN IF NOT EXISTS archive_read_only BOOLEAN NOT NULL DEFAULT FALSE")
                     statement.executeUpdate("""
                         CREATE TABLE IF NOT EXISTS $connectionTableName (
                             name VARCHAR(255) PRIMARY KEY,
@@ -115,7 +119,7 @@ class ArchiveConfigStorePostgres(
 
         vertx.executeBlocking(Callable {
             val archiveGroups = mutableListOf<ArchiveGroupConfig>()
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path FROM $configTableName ORDER BY name"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, last_val_read_only, archive_read_only FROM $configTableName ORDER BY name"
 
             try {
                 db.connection?.let { connection ->
@@ -146,6 +150,8 @@ class ArchiveConfigStorePostgres(
                             val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
                             val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
                             val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
+                            val lastValReadOnly = try { resultSet.getBoolean("last_val_read_only") } catch (e: Exception) { false }
+                            val archiveReadOnly = try { resultSet.getBoolean("archive_read_only") } catch (e: Exception) { false }
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,
@@ -167,7 +173,9 @@ class ArchiveConfigStorePostgres(
                                 queueSize = queueSize,
                                 bulkSize = bulkSize,
                                 bulkTimeoutMs = bulkTimeoutMs,
-                                queueDiskPath = queueDiskPath
+                                queueDiskPath = queueDiskPath,
+                                lastValReadOnly = lastValReadOnly,
+                                archiveReadOnly = archiveReadOnly
                             )
                             archiveGroups.add(ArchiveGroupConfig(archiveGroup, enabled))
                         }
@@ -198,7 +206,7 @@ class ArchiveConfigStorePostgres(
         val promise = Promise.promise<ArchiveGroupConfig?>()
 
         vertx.executeBlocking(Callable {
-            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path FROM $configTableName WHERE name = ?"
+            val sql = "SELECT name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, last_val_read_only, archive_read_only FROM $configTableName WHERE name = ?"
 
             try {
                 db.connection?.let { connection ->
@@ -229,6 +237,8 @@ class ArchiveConfigStorePostgres(
                             val bulkSize = try { resultSet.getInt("bulk_size") } catch (e: Exception) { 0 }.let { if (it <= 0) 4000 else it }
                             val bulkTimeoutMs = try { resultSet.getLong("bulk_timeout_ms") } catch (e: Exception) { 0L }.let { if (it <= 0L) 250L else it }
                             val queueDiskPath = try { resultSet.getString("queue_disk_path") } catch (e: Exception) { null } ?: "data/queue"
+                            val lastValReadOnly = try { resultSet.getBoolean("last_val_read_only") } catch (e: Exception) { false }
+                            val archiveReadOnly = try { resultSet.getBoolean("archive_read_only") } catch (e: Exception) { false }
 
                             val archiveGroup = ArchiveGroup(
                                 name = name,
@@ -250,7 +260,9 @@ class ArchiveConfigStorePostgres(
                                 queueSize = queueSize,
                                 bulkSize = bulkSize,
                                 bulkTimeoutMs = bulkTimeoutMs,
-                                queueDiskPath = queueDiskPath
+                                queueDiskPath = queueDiskPath,
+                                lastValReadOnly = lastValReadOnly,
+                                archiveReadOnly = archiveReadOnly
                             )
                             ArchiveGroupConfig(archiveGroup, enabled)
                         } else {
@@ -286,8 +298,8 @@ class ArchiveConfigStorePostgres(
         vertx.executeBlocking(Callable {
             val sql = """
                 INSERT INTO $configTableName
-                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, updated_at)
-                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (name, enabled, topic_filter, retained_only, last_val_type, archive_type, last_val_retention, archive_retention, purge_interval, payload_format, database_connection_name, redis_db_number, queue_type, queue_size, bulk_size, bulk_timeout_ms, queue_disk_path, last_val_read_only, archive_read_only, updated_at)
+                VALUES (?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT (name) DO UPDATE SET
                     enabled = EXCLUDED.enabled,
                     topic_filter = EXCLUDED.topic_filter,
@@ -305,6 +317,8 @@ class ArchiveConfigStorePostgres(
                     bulk_size = EXCLUDED.bulk_size,
                     bulk_timeout_ms = EXCLUDED.bulk_timeout_ms,
                     queue_disk_path = EXCLUDED.queue_disk_path,
+                    last_val_read_only = EXCLUDED.last_val_read_only,
+                    archive_read_only = EXCLUDED.archive_read_only,
                     updated_at = CURRENT_TIMESTAMP
             """.trimIndent()
 
@@ -334,6 +348,8 @@ class ArchiveConfigStorePostgres(
                         preparedStatement.setInt(15, archiveGroup.bulkSize)
                         preparedStatement.setLong(16, archiveGroup.bulkTimeoutMs)
                         preparedStatement.setString(17, archiveGroup.queueDiskPath)
+                        preparedStatement.setBoolean(18, archiveGroup.lastValReadOnly)
+                        preparedStatement.setBoolean(19, archiveGroup.archiveReadOnly)
 
                         val rowsAffected = preparedStatement.executeUpdate()
                         connection.commit()

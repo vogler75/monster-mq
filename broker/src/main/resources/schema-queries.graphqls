@@ -398,6 +398,8 @@ type ArchiveGroupInfo {
     queueDiskPath: String
     createdAt: String
     updatedAt: String
+    lastValReadOnly: Boolean!
+    archiveReadOnly: Boolean!
     # Database connection status from all nodes in the cluster
     connectionStatus: [NodeConnectionStatus!]!
     # Current metrics for this archive group (single most recent entry)

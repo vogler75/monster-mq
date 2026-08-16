@@ -147,8 +147,8 @@ class MessageHandler(
         archiveBufferSizeAccumulator[archiveGroup.name] = AtomicLong(0)
         archiveBufferSampleCount[archiveGroup.name] = AtomicLong(0)
 
-        // Create queue and writer thread only if this archive group has an active archiveStore
-        if (archiveGroup.archiveStore != null) {
+        // Create queue and writer thread only if this archive group has an active archiveStore and is not archiveReadOnly
+        if (archiveGroup.archiveStore != null && !archiveGroup.archiveReadOnly) {
             val queue: IMessageQueue = when (archiveGroup.queueType) {
                 "DISK" -> MessageQueueDisk(
                     queueName = "archive",
@@ -334,19 +334,21 @@ class MessageHandler(
             if ((!archiveGroup.retainedOnly || message.isRetain) &&
                 (archiveGroup.topicFilter.isEmpty() || archiveGroup.filterTree.isTopicNameMatching(message.topicName))) {
                 
-                archiveGroup.lastValStore?.let { lastValStore ->
-                    try {
-                        if (message.payload.isEmpty()) {
-                            lastValStore.delAll(listOf(message.topicName))
-                        } else {
-                            lastValStore.addAll(listOf(message))
+                if (!archiveGroup.lastValReadOnly) {
+                    archiveGroup.lastValStore?.let { lastValStore ->
+                        try {
+                            if (message.payload.isEmpty()) {
+                                lastValStore.delAll(listOf(message.topicName))
+                            } else {
+                                lastValStore.addAll(listOf(message))
+                            }
+                        } catch (e: Exception) {
+                            logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
                         }
-                    } catch (e: Exception) {
-                        logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
                     }
                 }
 
-                if (archiveGroup.archiveStore != null) {
+                if (!archiveGroup.archiveReadOnly && archiveGroup.archiveStore != null) {
                     val queue = archiveQueues[archiveGroup.name]
                     if (queue != null) {
                         try {

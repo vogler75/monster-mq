@@ -522,6 +522,50 @@ class GraphQLDashboardClient {
         }
     }
 
+    /**
+     * Introspect a GraphQL type to check available fields or inputFields.
+     * Caches results in memory for the lifecycle of the client.
+     */
+    async getTypeFields(typeName) {
+        if (!this._typeFieldsCache) {
+            this._typeFieldsCache = {};
+        }
+        if (this._typeFieldsCache[typeName]) {
+            return this._typeFieldsCache[typeName];
+        }
+        try {
+            const result = await this.query(`
+                query CheckTypeFields($name: String!) {
+                    __type(name: $name) {
+                        fields {
+                            name
+                        }
+                        inputFields {
+                            name
+                        }
+                    }
+                }
+            `, { name: typeName });
+            const fields = new Set();
+            if (result?.__type?.fields) {
+                result.__type.fields.forEach(f => fields.add(f.name));
+            }
+            if (result?.__type?.inputFields) {
+                result.__type.inputFields.forEach(f => fields.add(f.name));
+            }
+            this._typeFieldsCache[typeName] = fields;
+            return fields;
+        } catch (error) {
+            console.warn(`Failed to introspect type ${typeName}:`, error);
+            return new Set();
+        }
+    }
+
+    async hasTypeField(typeName, fieldName) {
+        const fields = await this.getTypeFields(typeName);
+        return fields.has(fieldName);
+    }
+
     async getBrokersWithHistory(lastMinutes = null, from = null, to = null) {
         const query = `
             query GetBrokersWithHistory($lastMinutes: Int, $from: String, $to: String) {
