@@ -6,6 +6,11 @@ WS: 9000
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 DefaultStoreType: SQLITE
 # For flash-light edge mode, override runtime churn stores:
 # SessionStoreType: MEMORY

@@ -11,6 +11,11 @@ AllowRootWildcardSubscription: true
 MaxPublishRate: 0    # Max messages per second a client can publish
 MaxSubscribeRate: 0  # Max messages per second a client can receive
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 DefaultStoreType: SQLITE
 
 # Batches messages for delivery to clients to reduce eventBus overhead

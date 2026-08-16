@@ -163,6 +163,11 @@ class Monster(args: Array<String>) {
         fun getStoreType(configJson: JsonObject): String = getStoreTypeWithDefault(configJson, "StoreType", "SQLITE")
 
         @JvmStatic
+        fun getHmiPath(configJson: JsonObject): String? {
+            return configJson.getJsonObject("HMI")?.getString("Path")?.takeIf { it.isNotBlank() }
+        }
+
+        @JvmStatic
         fun getQueueStoreType(configJson: JsonObject): String {
             // If QueueStoreType is explicitly set, use it
             val explicit = configJson.getString("QueueStoreType")

@@ -4,6 +4,11 @@ WS: 1884
 NodeName: local
 DefaultStoreType: SQLITE
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 

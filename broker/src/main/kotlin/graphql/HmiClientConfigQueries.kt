@@ -16,9 +16,12 @@ import java.util.logging.Logger
  */
 class HmiClientConfigQueries(
     private val vertx: Vertx,
-    private val deviceStore: IDeviceConfigStore
+    private val deviceStore: IDeviceConfigStore,
+    private val config: io.vertx.core.json.JsonObject = io.vertx.core.json.JsonObject()
 ) {
     private val logger: Logger = Utils.getLogger(HmiClientConfigQueries::class.java)
+    private val hmiPath: String?
+        get() = Monster.getHmiPath(config)
 
     fun hmis(): DataFetcher<CompletableFuture<List<Map<String, Any>>>> {
         return DataFetcher { env ->
@@ -134,7 +137,8 @@ class HmiClientConfigQueries(
 
             try {
                 val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete(emptyList()) }
-                val hmiDir = java.io.File("./data/hmi/$name")
+                val basePath = hmiPath ?: return@DataFetcher future.apply { complete(emptyList()) }
+                val hmiDir = java.io.File(basePath, name)
                 if (!hmiDir.exists() || !hmiDir.isDirectory) {
                     return@DataFetcher future.apply { complete(emptyList()) }
                 }
@@ -166,7 +170,8 @@ class HmiClientConfigQueries(
 
             try {
                 val name = env.getArgument<String>("name") ?: return@DataFetcher future.apply { complete("") }
-                val hmiDir = java.io.File("./data/hmi/$name")
+                val basePath = hmiPath ?: return@DataFetcher future.apply { complete("") }
+                val hmiDir = java.io.File(basePath, name)
                 if (!hmiDir.exists() || !hmiDir.isDirectory) {
                     return@DataFetcher future.apply { complete("") }
                 }
@@ -212,13 +217,16 @@ class HmiClientConfigQueries(
         val currentNodeId = Monster.getClusterNodeId(vertx)
         val isOnCurrentNode = device.isAssignedToNode(currentNodeId)
 
-        val hmiDir = java.io.File("./data/hmi/${device.name}")
+        val basePath = hmiPath
         var fileCount = 0
         var sizeBytes = 0L
-        if (hmiDir.exists() && hmiDir.isDirectory) {
-            hmiDir.walkTopDown().filter { it.isFile }.forEach { file ->
-                fileCount++
-                sizeBytes += file.length()
+        if (basePath != null) {
+            val hmiDir = java.io.File(basePath, device.name)
+            if (hmiDir.exists() && hmiDir.isDirectory) {
+                hmiDir.walkTopDown().filter { it.isFile }.forEach { file ->
+                    fileCount++
+                    sizeBytes += file.length()
+                }
             }
         }
 

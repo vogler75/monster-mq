@@ -10,6 +10,11 @@ AllowRootWildcardSubscription: true
 MaxPublishRate: 10000    # Max messages per second a client can publish
 MaxSubscribeRate: 10000  # Max messages per second a client can receive
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 DefaultStoreType: SQLITE
 
 # User Management configuration

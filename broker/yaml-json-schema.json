@@ -1112,6 +1112,16 @@
         "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" }
       },
       "additionalProperties": false
+    },
+    "HMI": {
+      "type": "object",
+      "title": "Embedded HMI Hosting",
+      "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker",
+      "properties": {
+        "Enabled": { "type": "boolean", "title": "Enable HMI Hosting", "default": true },
+        "Path": { "type": "string", "title": "HMI Asset Path", "default": "./data/hmi", "description": "Filesystem path for HMI web asset files" },
+        "MountPath": { "type": "string", "title": "HMI Mount URL Subpath", "default": "/hmi", "description": "HTTP subpath where HMI dashboards are mounted" }
+      }
     }
   },
   "required": [

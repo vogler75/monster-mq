@@ -17,10 +17,13 @@ import java.util.logging.Logger
  */
 class HmiClientConfigMutations(
     private val vertx: Vertx,
-    private val deviceStore: IDeviceConfigStore
+    private val deviceStore: IDeviceConfigStore,
+    private val config: io.vertx.core.json.JsonObject = io.vertx.core.json.JsonObject()
 ) {
     private val logger: Logger = Utils.getLogger(HmiClientConfigMutations::class.java)
-    private val queries = HmiClientConfigQueries(vertx, deviceStore)
+    private val queries = HmiClientConfigQueries(vertx, deviceStore, config)
+    private val hmiPath: String?
+        get() = Monster.getHmiPath(config)
 
     fun hmi(): DataFetcher<Map<String, Any>> {
         return DataFetcher {
@@ -249,7 +252,8 @@ class HmiClientConfigMutations(
                 val setAsMain = env.getArgument<Boolean>("setAsMain") ?: false
 
                 val zipBytes = java.util.Base64.getDecoder().decode(zipBase64)
-                val targetDir = java.io.File("./data/hmi/$name")
+                val basePath = hmiPath ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "HMI.Path is missing in configuration")) }
+                val targetDir = java.io.File(basePath, name)
                 if (targetDir.exists()) {
                     targetDir.deleteRecursively()
                 }

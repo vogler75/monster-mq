@@ -6,6 +6,11 @@ WSS: 9001
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 DefaultStoreType: POSTGRES
 
 #SessionStoreType: POSTGRES      # Persistent sessions

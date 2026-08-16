@@ -12,6 +12,11 @@ WS: 1884
 # Clustering / Node Identity
 NodeName: local
 
+HMI:
+  Enabled: true
+  Path: "./data/hmi"
+  MountPath: "/hmi"
+
 # Storage Engine Configuration
 # Options: SQLITE, POSTGRES, MONGODB, CRATEDB, MEMORY
 DefaultStoreType: SQLITE

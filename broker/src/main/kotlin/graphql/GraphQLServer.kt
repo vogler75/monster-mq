@@ -378,8 +378,8 @@ class GraphQLServer(
         val mqttClientMutations = deviceStore?.let { MqttClientConfigMutations(vertx, it) }
 
         // Initialize HMI Client resolvers
-        val hmiQueries = deviceStore?.let { HmiClientConfigQueries(vertx, it) }
-        val hmiMutations = deviceStore?.let { HmiClientConfigMutations(vertx, it) }
+        val hmiQueries = deviceStore?.let { HmiClientConfigQueries(vertx, it, config) }
+        val hmiMutations = deviceStore?.let { HmiClientConfigMutations(vertx, it, config) }
 
         // Initialize Kafka Client resolvers
         val kafkaClientQueries = deviceStore?.let { KafkaClientConfigQueries(vertx, it) }
@@ -1565,9 +1565,14 @@ class GraphQLServer(
 
     private fun registerHmiRoutes(router: Router) {
         val hmiConfig = config.getJsonObject("HMI")
+        val basePath = Monster.getHmiPath(config)
+        if (basePath == null) {
+            if (Monster.isFeatureEnabled(Features.Hmi) || (hmiConfig != null && hmiConfig.getBoolean("Enabled", false))) {
+                logger.warning("HMI is enabled, but HMI.Path is missing in configuration. HMI server will not be started.")
+            }
+            return
+        }
         val mountPath = (hmiConfig?.getString("MountPath") ?: "/hmi").trimEnd('/')
-        val basePath = hmiConfig?.getString("Path") ?: "./data/hmi"
-
         val hmiRoute = if (mountPath.isEmpty()) "/*" else "$mountPath/*"
 
         router.route(hmiRoute).handler { ctx ->
