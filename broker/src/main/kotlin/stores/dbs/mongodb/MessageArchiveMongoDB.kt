@@ -418,13 +418,19 @@ class MessageArchiveMongoDB(
                 val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
 
                 // Pure native MQL — aggregation only works with JSON payloads
-                val valueExpr: Any = if (field.isEmpty()) {
+                val inputExpr = if (field.isEmpty()) {
                     // No field specified: treat payload as a numeric value (native MQL, no JS)
-                    Document("\$toDouble", "\$payload")
+                    "\$payload"
                 } else {
                     // JSON field path: extract nested field from payload document
-                    Document("\$toDouble", "\$payload.${field.split(".").joinToString(".")}")
+                    "\$payload.${field.split(".").joinToString(".")}"
                 }
+                val valueExpr = Document("\$convert", Document(mapOf(
+                    "input" to inputExpr,
+                    "to" to "double",
+                    "onError" to null,
+                    "onNull" to null
+                )))
 
                 for (func in functions) {
                     val funcLower = func.lowercase()
