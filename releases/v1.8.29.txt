@@ -1,0 +1,16 @@
+Release v1.8.29
+Built from commit: e4d72a6b
+Date: 2026-08-16 18:05:10
+
+Changes since v1.8.28:
+---
+e4d72a6b feat(archive,dashboard): populate in-memory stores with retained messages on start and support image/text preview in topic browser
+9d24be58 feat(hmi): require explicit HMI.Path config and log warning if missing
+9bc3e565 fix(mongodb): use safe $convert with onError in aggregation pipeline
+d1d85a00 feat(archive): add separate lastValReadOnly and archiveReadOnly support with dashboard schema introspection
+5a8665a4 fix(publish): replace declare -A with Bash 3.2 compatible deduplication for macOS
+f6fc0c62 chore(publish): use --broker flag instead of --dist
+c1d87a11 feat(publish): add granular options for dist zip, dashboard apps, and setup executables
+b7840a05 feat(installer): add cross-platform Go setup installer and schema-driven config editor
+aad33a6b feat(config): add broker/config-default.yaml and update install scripts and config examples with I3xClient
+55a0b946 Update publish.sh
