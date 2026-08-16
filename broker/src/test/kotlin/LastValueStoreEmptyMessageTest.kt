@@ -68,4 +68,44 @@ class LastValueStoreEmptyMessageTest {
         messageHandler.saveMessage(emptyMsg)
         assertNull("Expected topic to be removed from lastValStore on empty message payload", lastValStore.get(topic))
     }
+
+    @Test
+    fun testPopulateRetainedMessagesToMemoryStore() {
+        val retainedStore = MessageStoreMemory("Retained")
+        val retainedMsg = BrokerMessage(
+            messageId = 1,
+            topicName = "sensor/temp",
+            payload = "25C".toByteArray(),
+            qosLevel = 1,
+            isRetain = true,
+            isDup = false,
+            isQueued = false,
+            clientId = "test-client",
+            time = Instant.now()
+        )
+        retainedStore.addAll(listOf(retainedMsg))
+
+        val archiveGroup = ArchiveGroup(
+            name = "Default",
+            topicFilter = listOf("#"),
+            retainedOnly = false,
+            lastValType = MessageStoreType.MEMORY,
+            archiveType = MessageArchiveType.NONE,
+            databaseConfig = JsonObject()
+        )
+
+        val lastValStore = MessageStoreMemory("DefaultLastval")
+        val field = ArchiveGroup::class.java.getDeclaredField("lastValStore")
+        field.isAccessible = true
+        field.set(archiveGroup, lastValStore)
+
+        assertNull("Memory store should initially be empty", lastValStore.get("sensor/temp"))
+
+        archiveGroup.populateFromRetainedStore(retainedStore)
+
+        val populated = lastValStore.get("sensor/temp")
+        assertNotNull("Expected retained message to be populated into memory store", populated)
+        assertEquals("25C", String(populated!!.payload))
+        assertEquals(true, populated.isRetain)
+    }
 }

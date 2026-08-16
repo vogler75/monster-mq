@@ -504,18 +504,48 @@ class TopicBrowser {
                 content.innerHTML = `<div class="data-text">${this.escapeHtml(payload)}</div>`;
             }
         } else if (format === 'BINARY' || format === 'BASE64') {
-            // Binary data
-            const size = typeof payload === 'string' ? payload.length : (payload?.byteLength || payload?.length || 0);
-            const displaySize = format === 'BASE64' ? Math.floor(size * 3 / 4) : size; // Estimate original size for base64
-            content.innerHTML = `
-                <div class="data-binary">
-                    <span class="binary-icon">🗄️</span>
-                    <div>
-                        <div>Binary Data (${format})</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">Size: ${this.formatBytes(displaySize)}</div>
+            const imageInfo = this.detectImage(payload, contentType);
+            if (imageInfo) {
+                const size = typeof payload === 'string' ? payload.length : 0;
+                const displaySize = Math.floor(size * 3 / 4);
+                content.innerHTML = `
+                    <div class="data-image-container">
+                        <div class="data-image-wrapper">
+                            <img src="${imageInfo.dataUrl}" alt="${this.escapeHtml(imageInfo.formatName || 'Image')}" class="data-image" />
+                        </div>
+                        <div class="data-image-meta">
+                            <span>${this.escapeHtml(imageInfo.formatName || imageInfo.mimeType)}</span>
+                            <span>•</span>
+                            <span>${this.formatBytes(displaySize)}</span>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
+            } else {
+                const decodedText = this.tryDecodeBinaryToText(payload);
+                if (decodedText !== null) {
+                    // Check if decoded text is JSON
+                    try {
+                        const jsonData = JSON.parse(decodedText);
+                        const formattedJson = this.formatJson(jsonData);
+                        content.innerHTML = `<div class="data-json">${formattedJson}</div>`;
+                    } catch {
+                        content.innerHTML = `<div class="data-text">${this.escapeHtml(decodedText)}</div>`;
+                    }
+                } else {
+                    // Binary data
+                    const size = typeof payload === 'string' ? payload.length : (payload?.byteLength || payload?.length || 0);
+                    const displaySize = format === 'BASE64' || typeof payload === 'string' ? Math.floor(size * 3 / 4) : size; // Estimate original size for base64
+                    content.innerHTML = `
+                        <div class="data-binary">
+                            <span class="binary-icon">🗄️</span>
+                            <div>
+                                <div>Binary Data (${format})</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Size: ${this.formatBytes(displaySize)}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
         } else {
             // TEXT or unknown format - display as plain text
             content.innerHTML = `<div class="data-text">${this.escapeHtml(String(payload))}</div>`;
@@ -536,6 +566,107 @@ class TopicBrowser {
                 userProperties
             });
             this.dataViewer.appendChild(mqtt5Section);
+        }
+    }
+
+    detectImage(payload, contentType) {
+        if (!payload || typeof payload !== 'string') return null;
+
+        const clean = payload.trim();
+
+        // If contentType explicitly specifies an image MIME type
+        if (contentType && contentType.startsWith('image/')) {
+            return {
+                mimeType: contentType,
+                formatName: contentType.replace('image/', '').toUpperCase() + ' Image',
+                dataUrl: `data:${contentType};base64,${clean}`
+            };
+        }
+
+        try {
+            // Decode the header bytes (up to 32 bytes) from base64
+            const binaryString = atob(clean.slice(0, 64));
+            const len = binaryString.length;
+            if (len < 3) return null;
+
+            const b = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                b[i] = binaryString.charCodeAt(i);
+            }
+
+            // PNG: 89 50 4E 47 0D 0A 1A 0A
+            if (len >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47 &&
+                b[4] === 0x0D && b[5] === 0x0A && b[6] === 0x1A && b[7] === 0x0A) {
+                return {
+                    mimeType: 'image/png',
+                    formatName: 'PNG Image',
+                    dataUrl: `data:image/png;base64,${clean}`
+                };
+            }
+
+            // JPEG / JPG: FF D8 FF
+            if (len >= 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) {
+                return {
+                    mimeType: 'image/jpeg',
+                    formatName: 'JPEG Image',
+                    dataUrl: `data:image/jpeg;base64,${clean}`
+                };
+            }
+
+            // GIF: GIF87a or GIF89a (47 49 46 38 37/39 61)
+            if (len >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38 &&
+                (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61) {
+                return {
+                    mimeType: 'image/gif',
+                    formatName: 'GIF Image',
+                    dataUrl: `data:image/gif;base64,${clean}`
+                };
+            }
+
+            // WebP: RIFF (bytes 0-3) ... WEBP (bytes 8-11)
+            if (len >= 12 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+                b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+                return {
+                    mimeType: 'image/webp',
+                    formatName: 'WebP Image',
+                    dataUrl: `data:image/webp;base64,${clean}`
+                };
+            }
+
+            // BMP: BM (42 4D)
+            if (len >= 2 && b[0] === 0x42 && b[1] === 0x4D) {
+                return {
+                    mimeType: 'image/bmp',
+                    formatName: 'BMP Image',
+                    dataUrl: `data:image/bmp;base64,${clean}`
+                };
+            }
+        } catch {
+            // Not valid base64
+        }
+
+        return null;
+    }
+
+    tryDecodeBinaryToText(payload) {
+        if (!payload || typeof payload !== 'string') return null;
+        try {
+            const binaryString = atob(payload.trim());
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const decoder = new TextDecoder('utf-8', { fatal: true });
+            const decoded = decoder.decode(bytes);
+
+            // Check if string contains unprintable control characters (excluding whitespace: \t, \n, \r)
+            if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(decoded)) {
+                return null;
+            }
+            return decoded;
+        } catch {
+            return null;
         }
     }
 

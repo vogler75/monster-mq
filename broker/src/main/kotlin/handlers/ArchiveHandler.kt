@@ -954,6 +954,9 @@ class ArchiveHandler(
                 messageHandler?.registerArchiveGroup(archiveGroup)
                     ?: logger.warning("MessageHandler not available - archive group [${archiveGroup.name}] won't receive messages")
 
+                // Populate in-memory last-value store with existing retained messages
+                archiveGroup.populateFromRetainedStore()
+
                 promise.complete(deploymentId)
             } else {
                 logger.severe("Failed to deploy ArchiveGroup [${archiveGroup.name}] at runtime: ${result.cause()?.message}")

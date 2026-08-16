@@ -3,6 +3,7 @@ package at.rocworks.handlers
 import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Utils
+import at.rocworks.data.BrokerMessage
 import at.rocworks.data.PurgeResult
 import at.rocworks.data.TopicTree
 import at.rocworks.stores.IMessageArchive
@@ -202,6 +203,29 @@ class ArchiveGroup(
     fun getArchiveType(): MessageArchiveType = archiveType
     fun getDatabaseConnectionName(): String? = databaseConnectionName
     fun getRedisDbNumber(): Int? = redisDbNumber ?: if (name == "Default") 0 else null
+
+    fun populateFromRetainedStore(retainedStore: IMessageStore? = null) {
+        if (lastValType != MessageStoreType.MEMORY && (lastValType != MessageStoreType.HAZELCAST || Monster.isClustered())) return
+        val store = lastValStore ?: return
+        val rs = retainedStore ?: Monster.getRetainedStore() ?: return
+        try {
+            val matching = mutableListOf<BrokerMessage>()
+            rs.findMatchingMessages("#") { msg ->
+                if (msg.isRetain && (!retainedOnly || msg.isRetain)) {
+                    if (topicFilter.isEmpty() || filterTree.isTopicNameMatching(msg.topicName)) {
+                        matching.add(msg)
+                    }
+                }
+                true
+            }
+            if (matching.isNotEmpty()) {
+                logger.info("Populated ${matching.size} retained message(s) to memory store for ArchiveGroup [$name]")
+                store.addAll(matching)
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to populate retained messages for ArchiveGroup [$name]: ${e.message}")
+        }
+    }
 
     private fun createMessageStore(storeType: MessageStoreType, storeName: String, callback: (Boolean) -> Unit) {
         if (isStopping) {

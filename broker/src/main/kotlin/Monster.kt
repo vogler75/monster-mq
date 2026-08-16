@@ -1077,6 +1077,11 @@ MORE INFO:
                 logger.fine("Initialization of bus and archive groups completed.")
                 val archiveGroups = archiveGroupsFuture.result()
 
+                // Populate in-memory last value stores with existing retained messages from persistent storage
+                archiveGroups.forEach { group ->
+                    group.populateFromRetainedStore(retainedStore)
+                }
+
                 // Message handler
                 val messageHandler = MessageHandler(retainedStore!!, archiveGroups)
 

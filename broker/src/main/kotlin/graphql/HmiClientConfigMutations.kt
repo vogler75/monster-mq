@@ -132,12 +132,15 @@ class HmiClientConfigMutations(
                 val name = env.getArgument<String>("name")
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Name is required")) }
 
-                if (name == "main") {
-                    return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Cannot delete default 'main' HMI")) }
-                }
-
                 deviceStore.deleteDevice(name).onComplete { result ->
                     if (result.succeeded()) {
+                        val basePath = hmiPath
+                        if (basePath != null) {
+                            val targetDir = java.io.File(basePath, name)
+                            if (targetDir.exists()) {
+                                targetDir.deleteRecursively()
+                            }
+                        }
                         future.complete(mapOf("success" to true))
                     } else {
                         logger.severe("Error deleting HMI $name: ${result.cause()?.message}")

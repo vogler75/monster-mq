@@ -64,11 +64,13 @@ class MessageStoreMemory(
 
     override fun addAll(messages: List<BrokerMessage>) {
         val topics = messages.map { it.topicName }.distinct()
+        index.addAll(topics)
         vertx?.eventBus()?.publish(addAddress, JsonArray(topics))
         store.putAll(messages.map { Pair(it.topicName, it) })
     }
 
     override fun delAll(topics: List<String>) {
+        index.delAll(topics)
         vertx?.eventBus()?.publish(delAddress, JsonArray(topics))
         topics.forEach { store.remove(it) } // there is no delAll
     }
