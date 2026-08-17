@@ -26,7 +26,8 @@ class McpServer(
     private val retainedStore: IMessageStore,
     private val archiveHandler: ArchiveHandler,
     private val sessionHandler: SessionHandler,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    private val dataCatalogStore: at.rocworks.stores.IDataCatalogStore?
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -47,7 +48,7 @@ class McpServer(
     override fun start(startPromise: Promise<Void>) {
         logger.fine("Starting MCP server")
 
-        mcpHandler = McpHandler(vertx, retainedStore, archiveHandler) // McpHandler is initialized
+        mcpHandler = McpHandler(vertx, retainedStore, archiveHandler, dataCatalogStore) // McpHandler is initialized
 
         val router = Router.router(vertx)
         router.route().handler(BodyHandler.create())

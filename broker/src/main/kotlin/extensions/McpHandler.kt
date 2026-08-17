@@ -22,7 +22,8 @@ import java.util.concurrent.Callable
 class McpHandler(
     private val vertx: Vertx,
     private val retainedStore: IMessageStore,
-    private val archiveHandler: ArchiveHandler
+    private val archiveHandler: ArchiveHandler,
+    private val dataCatalogStore: at.rocworks.stores.IDataCatalogStore?
 ) {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -328,6 +329,71 @@ class McpHandler(
 
     private fun registerTools() {
         // Register tools
+        registerTool(
+            AsyncTool(
+                "get-datacatalog-types",
+                """
+**Get Data Catalog Types**
+
+Retrieves all Data Catalog Types.
+Optional parameter: namespace (String).
+
+Returns a JSON string of types.
+                """.trimIndent(),
+                JsonObject()
+                    .put("type", "object")
+                    .put("properties", JsonObject()
+                        .put("namespace", JsonObject().put("type", "string").put("description", "Namespace to filter by"))
+                    ),
+                ::getDataCatalogTypes,
+                readOnlyToolAnnotations("Get Data Catalog Types")
+            )
+        )
+        
+        registerTool(
+            AsyncTool(
+                "get-datacatalog-instances",
+                """
+**Get Data Catalog Instances**
+
+Retrieves Data Catalog Instances.
+Optional parameter: typeId (String).
+
+Returns a JSON string of instances.
+                """.trimIndent(),
+                JsonObject()
+                    .put("type", "object")
+                    .put("properties", JsonObject()
+                        .put("typeId", JsonObject().put("type", "string").put("description", "Type ID to filter by"))
+                    ),
+                ::getDataCatalogInstances,
+                readOnlyToolAnnotations("Get Data Catalog Instances")
+            )
+        )
+        
+        registerTool(
+            AsyncTool(
+                "get-datacatalog-relations",
+                """
+**Get Data Catalog Relations**
+
+Retrieves Data Catalog Relations.
+Optional parameters: sourceId (String), targetId (String), relationType (String).
+
+Returns a JSON string of relations.
+                """.trimIndent(),
+                JsonObject()
+                    .put("type", "object")
+                    .put("properties", JsonObject()
+                        .put("sourceId", JsonObject().put("type", "string").put("description", "Source ID to filter by"))
+                        .put("targetId", JsonObject().put("type", "string").put("description", "Target ID to filter by"))
+                        .put("relationType", JsonObject().put("type", "string").put("description", "Relation Type to filter by"))
+                    ),
+                ::getDataCatalogRelations,
+                readOnlyToolAnnotations("Get Data Catalog Relations")
+            )
+        )
+        
         registerTool(
             AsyncTool(
                 "list-archive-groups",
@@ -1086,6 +1152,83 @@ A table with:
     }
 
     // --------------------------------------------------------------------------------------------------------------
+
+    private fun getDataCatalogTypes(args: JsonObject): Future<JsonArray> {
+        logger.info("getDataCatalogTypes called")
+        val namespace = args.getString("namespace")
+        if (dataCatalogStore == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Data catalog store is not configured"))
+        }
+        return dataCatalogStore.getTypes(namespace).map { types ->
+            val arr = JsonArray()
+            types.forEach { t ->
+                arr.add(JsonObject()
+                    .put("id", t.id)
+                    .put("namespace", t.namespace)
+                    .put("name", t.name)
+                    .put("description", t.description)
+                    .put("structure", t.structure)
+                    .put("topicPattern", t.topicPattern)
+                    .put("createdAt", t.createdAt?.toString())
+                    .put("updatedAt", t.updatedAt?.toString())
+                )
+            }
+            JsonArray().add(JsonObject().put("type", "text").put("text", arr.encodePrettily()))
+        }.recover { e ->
+            logger.warning("Error getting data catalog types: ${e.message}")
+            Future.failedFuture(McpException(JSONRPC_INTERNAL_ERROR, "Failed to get data catalog types: ${e.message}"))
+        }
+    }
+
+    private fun getDataCatalogInstances(args: JsonObject): Future<JsonArray> {
+        logger.info("getDataCatalogInstances called")
+        val typeId = args.getString("typeId")
+        if (dataCatalogStore == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Data catalog store is not configured"))
+        }
+        return dataCatalogStore.getInstances(typeId).map { instances ->
+            val arr = JsonArray()
+            instances.forEach { i ->
+                arr.add(JsonObject()
+                    .put("id", i.id)
+                    .put("typeId", i.typeId)
+                    .put("name", i.name)
+                    .put("baseTopic", i.baseTopic)
+                    .put("properties", i.properties)
+                    .put("createdAt", i.createdAt?.toString())
+                    .put("updatedAt", i.updatedAt?.toString())
+                )
+            }
+            JsonArray().add(JsonObject().put("type", "text").put("text", arr.encodePrettily()))
+        }.recover { e ->
+            logger.warning("Error getting data catalog instances: ${e.message}")
+            Future.failedFuture(McpException(JSONRPC_INTERNAL_ERROR, "Failed to get data catalog instances: ${e.message}"))
+        }
+    }
+
+    private fun getDataCatalogRelations(args: JsonObject): Future<JsonArray> {
+        logger.info("getDataCatalogRelations called")
+        val sourceId = args.getString("sourceId")
+        val targetId = args.getString("targetId")
+        val relationType = args.getString("relationType")
+        if (dataCatalogStore == null) {
+            return Future.failedFuture(McpException(JSONRPC_INVALID_ARGUMENT, "Data catalog store is not configured"))
+        }
+        return dataCatalogStore.getRelations(sourceId, targetId, relationType).map { relations ->
+            val arr = JsonArray()
+            relations.forEach { r ->
+                arr.add(JsonObject()
+                    .put("sourceId", r.sourceId)
+                    .put("targetId", r.targetId)
+                    .put("relationType", r.relationType)
+                )
+            }
+            JsonArray().add(JsonObject().put("type", "text").put("text", arr.encodePrettily()))
+        }.recover { e ->
+            logger.warning("Error getting data catalog relations: ${e.message}")
+            Future.failedFuture(McpException(JSONRPC_INTERNAL_ERROR, "Failed to get data catalog relations: ${e.message}"))
+        }
+    }
 
     private fun listArchiveGroups(args: JsonObject): Future<JsonArray> {
         logger.info("listArchiveGroups called")

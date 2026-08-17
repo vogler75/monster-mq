@@ -1140,6 +1140,22 @@ MORE INFO:
                     null
                 }
 
+                val dataCatalogStore = if (configStoreType != "NONE") {
+                    try {
+                        val store = at.rocworks.stores.factories.DataCatalogStoreFactory.create(configStoreType, configJson, vertx)
+                        at.rocworks.stores.factories.DataCatalogStoreFactory.setSharedInstance(store)
+                        store?.initialize()?.onComplete { result ->
+                            if (result.failed()) {
+                                logger.warning("Failed to initialize data catalog store: ${result.cause()?.message}")
+                            }
+                        }
+                        store
+                    } catch (e: Exception) {
+                        logger.warning("Failed to create data catalog store: ${e.message}")
+                        null
+                    }
+                } else null
+
                 // OPC UA Server Extension
                 val opcUaServerExtension = if (deviceConfigStore != null) {
                     OpcUaServerExtension(sessionHandler, deviceConfigStore, userManager)
@@ -1162,7 +1178,7 @@ MORE INFO:
                 val mcpEnabled = mcpConfig.getBoolean("Enabled", false)
                 val mcpPort = mcpConfig.getInteger("Port", 3000)
                 val mcpServer = if (mcpEnabled) {
-                    McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, sessionHandler, userManager)
+                    McpServer("0.0.0.0", mcpPort, retainedStore, archiveHandler, sessionHandler, userManager, dataCatalogStore)
                 } else {
                     logger.fine("MCP server is disabled in configuration")
                     null
@@ -1186,7 +1202,8 @@ MORE INFO:
                         archiveHandler,
                         sessionHandler,
                         deviceConfigStore,
-                        userManager
+                        userManager,
+                        dataCatalogStore
                     )
                 } else {
                     logger.fine("I3X API server is disabled in configuration")
@@ -1306,6 +1323,7 @@ MORE INFO:
                         metricsStore,
                         this.archiveHandler,
                         deviceConfigStore,
+                        dataCatalogStore,
                         genAiProvider,
                         dashboardPath,
                         restApiServer

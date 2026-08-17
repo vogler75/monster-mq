@@ -1,0 +1,98 @@
+# =======================
+# Data Catalog Types
+# =======================
+
+type DataCatalogType {
+    id: String!
+    namespace: String!
+    name: String!
+    description: String
+    structure: JSON!
+    topicPattern: String
+    createdAt: String
+    updatedAt: String
+}
+
+input DataCatalogTypeInput {
+    id: String!
+    namespace: String!
+    name: String!
+    description: String
+    structure: JSON!
+    topicPattern: String
+}
+
+type DataCatalogInstance {
+    id: String!
+    typeId: String!
+    name: String!
+    baseTopic: String!
+    properties: JSON!
+    createdAt: String
+    updatedAt: String
+}
+
+input DataCatalogInstanceInput {
+    id: String!
+    typeId: String!
+    name: String!
+    baseTopic: String!
+    properties: JSON!
+}
+
+type DataCatalogRelation {
+    sourceId: String!
+    targetId: String!
+    relationType: String!
+}
+
+input DataCatalogRelationInput {
+    sourceId: String!
+    targetId: String!
+    relationType: String!
+}
+
+type ImportDataCatalogResult {
+    success: Boolean!
+    typesImported: Int!
+    instancesImported: Int!
+    relationsImported: Int!
+    failed: Int!
+    errors: [String!]!
+}
+
+# =======================
+# Data Catalog Queries
+# =======================
+
+extend type Query {
+    dataCatalogTypes(namespace: String): [DataCatalogType!]!
+    dataCatalogType(id: String!): DataCatalogType
+    
+    dataCatalogInstances(typeId: String): [DataCatalogInstance!]!
+    dataCatalogInstance(id: String!): DataCatalogInstance
+    
+    dataCatalogRelations(sourceId: String, targetId: String, relationType: String): [DataCatalogRelation!]!
+}
+
+# =======================
+# Data Catalog Mutations
+# =======================
+
+type DataCatalogMutations {
+    saveType(input: DataCatalogTypeInput!): DataCatalogType!
+    deleteType(id: String!): Boolean!
+    
+    saveInstance(input: DataCatalogInstanceInput!): DataCatalogInstance!
+    deleteInstance(id: String!): Boolean!
+    
+    saveRelation(input: DataCatalogRelationInput!): DataCatalogRelation!
+    deleteRelation(sourceId: String!, targetId: String!, relationType: String!): Boolean!
+    
+    exportCatalog(namespace: String): JSON!
+    importCatalog(data: JSON!): ImportDataCatalogResult!
+}
+
+extend type Mutation {
+    dataCatalog: DataCatalogMutations
+}

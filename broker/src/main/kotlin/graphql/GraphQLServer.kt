@@ -62,6 +62,8 @@ import at.rocworks.graphql.GenAiProviderQueries
 import at.rocworks.graphql.GenAiProviderMutations
 import at.rocworks.graphql.TopicSchemaQueries
 import at.rocworks.graphql.TopicSchemaMutations
+import at.rocworks.graphql.DataCatalogQueries
+import at.rocworks.graphql.DataCatalogMutations
 import at.rocworks.schema.TopicSchemaPolicyCache
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.stores.DeviceConfig
@@ -101,6 +103,7 @@ class GraphQLServer(
     private val metricsStore: IMetricsStore?,
     private val archiveHandler: ArchiveHandler?,
     private val sharedDeviceConfigStore: IDeviceConfigStore? = null,
+    private val dataCatalogStore: at.rocworks.stores.IDataCatalogStore? = null,
     private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null,
     private val dashboardPath: String? = null,
     private val restApiServer: at.rocworks.extensions.RestApiServer? = null
@@ -466,6 +469,9 @@ class GraphQLServer(
 
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
+        // Initialize Data Catalog resolvers
+        val dataCatalogQueries = DataCatalogQueries(dataCatalogStore)
+        val dataCatalogMutations = DataCatalogMutations(dataCatalogStore)
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -704,6 +710,16 @@ class GraphQLServer(
                             dataFetcher("topicNamespaces", resolver.topicNamespaces())
                             dataFetcher("topicNamespace", resolver.topicNamespace())
                             dataFetcher("topicNamespaceMatch", resolver.topicNamespaceMatch())
+                        }
+                    }
+                    // Data Catalog queries
+                    .apply {
+                        dataCatalogQueries.let { resolver ->
+                            dataFetcher("dataCatalogTypes", resolver.dataCatalogTypes())
+                            dataFetcher("dataCatalogType", resolver.dataCatalogType())
+                            dataFetcher("dataCatalogInstances", resolver.dataCatalogInstances())
+                            dataFetcher("dataCatalogInstance", resolver.dataCatalogInstance())
+                            dataFetcher("dataCatalogRelations", resolver.dataCatalogRelations())
                         }
                     }
             }
@@ -990,6 +1006,31 @@ class GraphQLServer(
                             }
                         }
                     }
+                    // Data Catalog mutations - grouped under dataCatalog
+                    .apply {
+                        dataCatalogMutations.let { _ ->
+                            dataFetcher("dataCatalog") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
+            }
+            // Register Data Catalog Mutations type
+            .type("DataCatalogMutations") { builder ->
+                builder.apply {
+                    dataCatalogMutations.let { resolver ->
+                        dataFetcher("saveType", resolver.saveType())
+                        dataFetcher("deleteType", resolver.deleteType())
+                        dataFetcher("saveInstance", resolver.saveInstance())
+                        dataFetcher("deleteInstance", resolver.deleteInstance())
+                        dataFetcher("saveRelation", resolver.saveRelation())
+                        dataFetcher("deleteRelation", resolver.deleteRelation())
+                        dataFetcher("exportCatalog", resolver.exportCatalog())
+                        dataFetcher("importCatalog", resolver.importCatalog())
+                    }
+                }
             }
             // Register MQTT Client Mutations type
             .type("MqttClientMutations") { builder ->

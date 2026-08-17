@@ -48,6 +48,7 @@ class I3xServer(
     private val sessionHandler: SessionHandler,
     private val deviceConfigStore: IDeviceConfigStore?,
     private val userManager: UserManager,
+    private val dataCatalogStore: at.rocworks.stores.IDataCatalogStore?
 ) : AbstractVerticle() {
 
     private val logger = Utils.getLogger(this::class.java)
@@ -396,7 +397,8 @@ class I3xServer(
         else -> JsonObject()
     }
 
-    private fun collectObjectTypes(): List<JsonObject> {
+    private fun collectObjectTypes(): Future<List<JsonObject>> {
+        val promise = Promise.promise<List<JsonObject>>()
         val devices = loadDevices()
         val out = mutableListOf<JsonObject>()
         // Synthetic types.
@@ -411,27 +413,52 @@ class I3xServer(
                 val ns = namespaceUriForPolicy(device.name, devices)
                 out.add(buildObjectType(device.name, ns, schema))
             }
-        return out
+            
+        if (dataCatalogStore != null) {
+            dataCatalogStore.getTypes(null).onComplete { ar ->
+                if (ar.succeeded()) {
+                    ar.result().forEach { t ->
+                        out.add(buildObjectType(t.id, t.namespace, t.structure))
+                    }
+                }
+                promise.complete(out)
+            }
+        } else {
+            promise.complete(out)
+        }
+        return promise.future()
     }
 
     private fun handleObjectTypes(ctx: RoutingContext) {
         val nsUri = ctx.queryParam("namespaceUri").firstOrNull()
-        val all = collectObjectTypes()
-        val filtered = if (nsUri != null) all.filter { it.getString("namespaceUri") == nsUri } else all
-        val arr = JsonArray()
-        filtered.forEach { arr.add(it) }
-        sendOk(ctx, arr)
+        collectObjectTypes().onComplete { ar ->
+            if (ar.succeeded()) {
+                val all = ar.result()
+                val filtered = if (nsUri != null) all.filter { it.getString("namespaceUri") == nsUri } else all
+                val arr = JsonArray()
+                filtered.forEach { arr.add(it) }
+                sendOk(ctx, arr)
+            } else {
+                sendError(ctx, 500, ar.cause().message ?: "Unknown error")
+            }
+        }
     }
 
     private fun handleObjectTypesQuery(ctx: RoutingContext) {
         val ids = ctx.body().asJsonObject()?.getJsonArray("elementIds") ?: JsonArray()
-        val byId = collectObjectTypes().associateBy { it.getString("elementId") }
-        val items = (0 until ids.size()).map { i ->
-            val id = ids.getString(i) ?: return@map BulkItem.notFound("", "Missing elementId")
-            val type = byId[id] ?: return@map BulkItem.notFound(id, "ObjectType not found")
-            BulkItem.ok(id, type)
+        collectObjectTypes().onComplete { ar ->
+            if (ar.succeeded()) {
+                val byId = ar.result().associateBy { it.getString("elementId") }
+                val items = (0 until ids.size()).map { i ->
+                    val id = ids.getString(i) ?: return@map BulkItem.notFound("", "Missing elementId")
+                    val type = byId[id] ?: return@map BulkItem.notFound(id, "ObjectType not found")
+                    BulkItem.ok(id, type)
+                }
+                sendBulk(ctx, items)
+            } else {
+                sendError(ctx, 500, ar.cause().message ?: "Unknown error")
+            }
         }
-        sendBulk(ctx, items)
     }
 
     // ---------------------------------------------------------------------
