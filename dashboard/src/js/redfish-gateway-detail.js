@@ -541,23 +541,15 @@ class RedfishDetailManager {
         if (!tree) return;
         tree.innerHTML = '';
         this.treeNodes.clear();
-
-        const rootItem = this.createTreeItem('Broker Root', 'root', false, true);
-        tree.appendChild(rootItem);
-
-        const childContainer = document.createElement('ul');
-        childContainer.className = 'tree-children';
-        rootItem.appendChild(childContainer);
-
-        this.loadTopicLevel('+', childContainer, '');
+        this.loadTopicLevel('+', tree, '');
     }
 
     async loadTopicLevel(pattern, container, parentPath = '') {
         try {
-            const loading = document.createElement('li');
-            loading.className = 'tree-node';
-            loading.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem; padding:0.25rem 0.5rem; display:block;">Loading...</span>';
-            container.appendChild(loading);
+            const loadingItem = document.createElement('li');
+            loadingItem.className = 'tree-node loading-item';
+            loadingItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted); font-size: 0.8rem; padding: 0.25rem 0.5rem;">Loading topics...</div>';
+            container.appendChild(loadingItem);
 
             const query = `
                 query BrowseTopics($topic: String!, $archiveGroup: String!) {
@@ -571,49 +563,84 @@ class RedfishDetailManager {
                 archiveGroup: this.selectedArchiveGroup
             });
 
-            container.removeChild(loading);
+            if (container.contains(loadingItem)) {
+                container.removeChild(loadingItem);
+            }
 
             const topics = res?.browseTopics || [];
             if (topics.length === 0) {
-                const empty = document.createElement('li');
-                empty.className = 'tree-node';
-                empty.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem; padding:0.25rem 0.5rem; font-style:italic; display:block;">No topics found</span>';
-                container.appendChild(empty);
+                const emptyItem = document.createElement('li');
+                emptyItem.className = 'tree-node';
+                emptyItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted); font-style: italic; font-size: 0.8rem; padding: 0.25rem 0.5rem;">No topics found</div>';
+                container.appendChild(emptyItem);
                 return;
             }
 
-            const grouped = this.groupTopicsByLevel(topics.map(t => t.name), parentPath);
-            grouped.forEach((data, levelName) => {
+            const topicList = topics.map(topic => ({
+                topic: topic.name,
+                hasValue: true
+            }));
+
+            const groupedTopics = this.groupTopicsByLevel(topicList, parentPath);
+            if (groupedTopics.size === 0) {
+                const emptyItem = document.createElement('li');
+                emptyItem.className = 'tree-node';
+                emptyItem.innerHTML = '<div class="tree-item" style="color: var(--text-muted); font-style: italic; font-size: 0.8rem; padding: 0.25rem 0.5rem;">No topics found</div>';
+                container.appendChild(emptyItem);
+                return;
+            }
+
+            for (const [levelName, topicData] of groupedTopics) {
                 const fullPath = parentPath ? `${parentPath}/${levelName}` : levelName;
-                const nodeItem = this.createTreeItem(levelName, fullPath, data.hasValue, data.hasChildren);
-                container.appendChild(nodeItem);
-            });
-        } catch (e) {
-            console.error('Error loading topic level:', e);
+                const treeItem = this.createTreeItem(levelName, fullPath, topicData.hasValue, topicData.hasChildren);
+                container.appendChild(treeItem);
+            }
+        } catch (error) {
+            console.error('Error loading topic level:', error);
+            const loadingItems = container.querySelectorAll('.loading-item');
+            loadingItems.forEach(item => { if (container.contains(item)) container.removeChild(item); });
+            const errorItem = document.createElement('li');
+            errorItem.className = 'tree-node';
+            errorItem.innerHTML = `<div class="tree-item" style="color: var(--monster-red); font-size: 0.8rem; padding: 0.25rem 0.5rem;">Error: ${this.escapeHtml(error.message)}</div>`;
+            container.appendChild(errorItem);
         }
     }
 
-    groupTopicsByLevel(topicNames, parentPath) {
-        const map = new Map();
+    groupTopicsByLevel(topics, parentPath) {
+        const grouped = new Map();
         const parentLevels = parentPath ? parentPath.split('/').length : 0;
 
-        topicNames.forEach(name => {
-            const parts = name.split('/');
-            if (parts.length > parentLevels) {
-                const nextLevel = parts[parentLevels];
-                const hasChildren = parts.length > parentLevels + 1;
-                const hasValue = parts.length === parentLevels + 1;
+        for (const topic of topics) {
+            const levels = topic.topic.split('/');
 
-                if (!map.has(nextLevel)) {
-                    map.set(nextLevel, { hasValue, hasChildren });
+            if (parentLevels === 0) {
+                const topLevel = levels[0];
+                const hasChildren = true;
+                const hasValue = levels.length === 1 && topic.hasValue;
+
+                if (!grouped.has(topLevel)) {
+                    grouped.set(topLevel, { hasValue, hasChildren });
                 } else {
-                    const existing = map.get(nextLevel);
+                    const existing = grouped.get(topLevel);
                     existing.hasValue = existing.hasValue || hasValue;
-                    if (hasChildren) existing.hasChildren = true;
+                    existing.hasChildren = existing.hasChildren || hasChildren;
+                }
+            } else if (levels.length > parentLevels) {
+                const nextLevel = levels[parentLevels];
+                const hasChildren = true;
+                const hasValue = levels.length === parentLevels + 1 && topic.hasValue;
+
+                if (!grouped.has(nextLevel)) {
+                    grouped.set(nextLevel, { hasValue, hasChildren });
+                } else {
+                    const existing = grouped.get(nextLevel);
+                    existing.hasValue = existing.hasValue || hasValue;
+                    existing.hasChildren = existing.hasChildren || hasChildren;
                 }
             }
-        });
-        return map;
+        }
+
+        return grouped;
     }
 
     createTreeItem(name, fullPath, hasValue, hasChildren) {
@@ -622,71 +649,102 @@ class RedfishDetailManager {
 
         const item = document.createElement('div');
         item.className = 'tree-item';
-        if (hasValue) item.classList.add('has-data');
+        if (hasValue) {
+            item.classList.add('has-data');
+        }
 
         const toggle = document.createElement('button');
         toggle.className = 'tree-toggle';
-        if (hasChildren) {
-            toggle.innerHTML = '&#9654;';
-        }
+        toggle.type = 'button';
+        toggle.innerHTML = hasChildren ? '&#9654;' : '';
 
         const icon = document.createElement('ix-icon');
         icon.setAttribute('name', hasChildren ? 'folder' : 'link');
-        icon.setAttribute('size', '12');
+        icon.setAttribute('size', '14');
         icon.style.marginRight = '0.35rem';
         icon.style.color = hasChildren ? 'var(--monster-purple)' : 'var(--monster-teal)';
 
-        const span = document.createElement('span');
-        span.textContent = name;
-        span.style.flex = '1';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = name;
+        nameSpan.style.flex = '1';
 
         item.appendChild(toggle);
         item.appendChild(icon);
-        item.appendChild(span);
+        item.appendChild(nameSpan);
         li.appendChild(item);
 
-        // Interaction
+        const nodeData = {
+            element: li,
+            item,
+            toggle,
+            expanded: false,
+            hasChildren,
+            hasValue,
+            fullPath,
+            name
+        };
+
+        this.treeNodes.set(fullPath, nodeData);
+
         if (hasChildren) {
-            let expanded = false;
-            let childrenContainer = null;
-            const toggleHandler = (e) => {
+            toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
-                expanded = !expanded;
-                if (expanded) {
-                    toggle.classList.add('expanded');
-                    if (!childrenContainer) {
-                        childrenContainer = document.createElement('ul');
-                        childrenContainer.className = 'tree-children';
-                        li.appendChild(childrenContainer);
-                        this.loadTopicLevel(`${fullPath}/+`, childrenContainer, fullPath);
-                    } else {
-                        childrenContainer.classList.remove('collapsed');
-                    }
-                } else {
-                    toggle.classList.remove('expanded');
-                    if (childrenContainer) childrenContainer.classList.add('collapsed');
-                }
-            };
-            toggle.addEventListener('click', toggleHandler);
+                this.toggleNode(fullPath);
+            });
         }
 
-        // Draggable and clickable
+        // Draggable
         item.draggable = true;
         item.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/plain', fullPath);
             e.dataTransfer.effectAllowed = 'copy';
         });
 
-        item.addEventListener('dblclick', () => {
+        // Double-click to add to filters
+        item.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
             this.addTopicFilterRow(fullPath);
             window.ui.success(`Added topic "${fullPath}" to filters`);
         });
 
-        item.addEventListener('click', () => {
+        // Click to toggle or preview
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
             this.previewTopicPayload(fullPath);
+            if (hasChildren && !hasValue) {
+                this.toggleNode(fullPath);
+            }
         });
 
         return li;
+    }
+
+    async toggleNode(fullPath) {
+        const nodeData = this.treeNodes.get(fullPath);
+        if (!nodeData || !nodeData.hasChildren) return;
+
+        if (nodeData.expanded) {
+            const childContainer = nodeData.element.querySelector('.tree-children');
+            if (childContainer) {
+                childContainer.classList.add('collapsed');
+            }
+            nodeData.toggle.classList.remove('expanded');
+            nodeData.expanded = false;
+        } else {
+            let childContainer = nodeData.element.querySelector('.tree-children');
+            if (!childContainer) {
+                childContainer = document.createElement('ul');
+                childContainer.className = 'tree-children';
+                nodeData.element.appendChild(childContainer);
+
+                const pattern = `${fullPath}/+`;
+                await this.loadTopicLevel(pattern, childContainer, fullPath);
+            }
+
+            childContainer.classList.remove('collapsed');
+            nodeData.toggle.classList.add('expanded');
+            nodeData.expanded = true;
+        }
     }
 
     async previewTopicPayload(topic) {
@@ -703,7 +761,7 @@ class RedfishDetailManager {
                     currentValue(topic: $topic, archiveGroup: $archiveGroup) {
                         topic
                         payload
-                        time
+                        timestamp
                     }
                 }
             `;
@@ -713,14 +771,17 @@ class RedfishDetailManager {
             });
             const val = res?.currentValue;
             if (val && val.payload) {
+                let formatted = '';
                 try {
                     const parsed = JSON.parse(val.payload);
-                    payloadText.textContent = JSON.stringify(parsed, null, 2);
+                    formatted = JSON.stringify(parsed, null, 2);
                 } catch {
-                    payloadText.textContent = val.payload;
+                    formatted = val.payload;
                 }
+                const tsStr = val.timestamp ? new Date(val.timestamp).toLocaleTimeString() : '';
+                payloadText.textContent = (tsStr ? `[${tsStr}] ` : '') + formatted;
             } else {
-                payloadText.textContent = '(No current value available for this topic)';
+                payloadText.textContent = `(No current value recorded for topic "${topic}")`;
             }
         } catch (e) {
             payloadText.textContent = 'Error: ' + e.message;
@@ -736,7 +797,7 @@ class RedfishDetailManager {
         }
 
         const tree = document.getElementById('side-topic-tree');
-        tree.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem; padding:0.5rem; display:block;">Searching...</span>';
+        tree.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; padding:0.5rem;">Searching...</div>';
 
         try {
             const query = `
@@ -754,7 +815,7 @@ class RedfishDetailManager {
 
             tree.innerHTML = '';
             if (topics.length === 0) {
-                tree.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem; padding:0.5rem; font-style:italic; display:block;">No matching topics found</span>';
+                tree.innerHTML = '<div style="color:var(--text-muted); font-size:0.8rem; padding:0.5rem; font-style:italic;">No matching topics found</div>';
                 return;
             }
 
@@ -763,7 +824,7 @@ class RedfishDetailManager {
                 tree.appendChild(nodeItem);
             });
         } catch (e) {
-            tree.innerHTML = `<span style="color:var(--monster-red); font-size:0.75rem; padding:0.5rem; display:block;">Search error: ${this.escapeHtml(e.message)}</span>`;
+            tree.innerHTML = `<div style="color:var(--monster-red); font-size:0.8rem; padding:0.5rem;">Search error: ${this.escapeHtml(e.message)}</div>`;
         }
     }
 
