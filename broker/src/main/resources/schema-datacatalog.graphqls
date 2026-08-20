@@ -61,6 +61,15 @@ type ImportDataCatalogResult {
     errors: [String!]!
 }
 
+type DataCatalogProposal {
+    types: [DataCatalogType!]!
+    instances: [DataCatalogInstance!]!
+    relations: [DataCatalogRelation!]!
+    topicsAnalyzed: Int!
+    summary: String
+    error: String
+}
+
 # =======================
 # Data Catalog Queries
 # =======================
@@ -73,6 +82,8 @@ extend type Query {
     dataCatalogInstance(id: String!): DataCatalogInstance
     
     dataCatalogRelations(sourceId: String, targetId: String, relationType: String): [DataCatalogRelation!]!
+    
+    inferDataCatalog(topicPattern: String!, archiveGroup: String): DataCatalogProposal!
 }
 
 # =======================
@@ -96,3 +107,4 @@ type DataCatalogMutations {
 extend type Mutation {
     dataCatalog: DataCatalogMutations
 }
+

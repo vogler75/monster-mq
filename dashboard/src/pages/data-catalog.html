@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MonsterMQ - Data Catalog</title>
+    <script type="module" src="/js/ix-init.js"></script>
+    <script src="/js/storage.js"></script>
+    <script src="/js/graphql-client.js"></script>
+    <script src="/js/ui.js"></script>
+    <script src="/js/log-viewer.js"></script>
+    <script src="/js/sidebar.js"></script>
+    <style>
+        .catalog-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--dark-border);
+            padding-bottom: 0.5rem;
+        }
+
+        .catalog-tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .catalog-tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--background-secondary);
+        }
+
+        .catalog-tab-btn.active {
+            color: #fff;
+            background: var(--primary);
+        }
+
+        .tab-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.1rem 0.4rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+
+        .catalog-tab-content {
+            display: none;
+        }
+
+        .catalog-tab-content.active {
+            display: block;
+        }
+
+        .topic-pattern-tag {
+            background: var(--background-secondary);
+            color: var(--text-secondary);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .relation-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .ai-magic-btn {
+            background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%) !important;
+            color: white !important;
+            border: none !important;
+            box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .ai-magic-btn:hover {
+            opacity: 0.95;
+            box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-container {
+            background: var(--dark-surface);
+            border: 1px solid var(--dark-border);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--dark-border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .proposal-card {
+            background: var(--background-secondary);
+            border: 1px solid var(--dark-border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .proposal-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .mode-toggle-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .mode-option-card {
+            border: 2px solid var(--dark-border);
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--background-secondary);
+        }
+
+        .mode-option-card.selected {
+            border-color: var(--primary);
+            background: rgba(139, 92, 246, 0.08);
+        }
+
+        .mode-option-card h4 {
+            margin: 0 0 0.25rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .mode-option-card p {
+            margin: 0;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <ix-application force-breakpoint="lg">
+    <ix-menu application-name="MonsterMQ" pinned start-expanded>
+    </ix-menu>
+    <div class="main-content" id="main-content">
+        <div class="container">
+            <div class="page-header">
+                <div>
+                    <h1 class="page-title">Data Catalog</h1>
+                    <p class="page-subtitle">Define semantic object types, instances, relationships, and explore topic trees with AI & heuristic auto-discovery</p>
+                </div>
+                <div class="page-header-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn ai-magic-btn" onclick="catalogManager.openDiscoveryModal()">
+                        <ix-icon name="rocket" size="16"></ix-icon> Auto-Discover (AI / Rules)
+                    </button>
+                    <button class="btn btn-secondary" onclick="catalogManager.openExportImportModal()">
+                        <ix-icon name="upload" size="16"></ix-icon> Export / Import
+                    </button>
+                    <a href="/pages/data-catalog-type-detail.html?new=true" class="btn btn-primary">
+                        <ix-icon name="add-circle" size="16"></ix-icon> Add Type
+                    </a>
+                    <a href="/pages/data-catalog-instance-detail.html?new=true" class="btn btn-secondary">
+                        <ix-icon name="add-circle" size="16"></ix-icon> Add Instance
+                    </a>
+                </div>
+            </div>
+
+            <!-- Metrics Grid -->
+            <div class="metrics-grid" style="margin-bottom: 2rem;">
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: rgba(139, 92, 246, 0.15); color: #8b5cf6;">
+                        <ix-icon name="hierarchy" size="24"></ix-icon>
+                    </div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="metric-types-count">0</div>
+                        <div class="metric-label">Object Types</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">
+                        <ix-icon name="solid-state-drive" size="24"></ix-icon>
+                    </div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="metric-instances-count">0</div>
+                        <div class="metric-label">Object Instances</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">
+                        <ix-icon name="link" size="24"></ix-icon>
+                    </div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="metric-relations-count">0</div>
+                        <div class="metric-label">Relationships</div>
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-icon" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">
+                        <ix-icon name="folder" size="24"></ix-icon>
+                    </div>
+                    <div class="metric-content">
+                        <div class="metric-value" id="metric-namespaces-count">0</div>
+                        <div class="metric-label">Namespaces</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <div class="catalog-tabs">
+                <button class="catalog-tab-btn active" id="tab-btn-types" onclick="catalogManager.switchTab('types')">
+                    <ix-icon name="hierarchy" size="16"></ix-icon> Object Types <span class="tab-badge" id="tab-badge-types">0</span>
+                </button>
+                <button class="catalog-tab-btn" id="tab-btn-instances" onclick="catalogManager.switchTab('instances')">
+                    <ix-icon name="solid-state-drive" size="16"></ix-icon> Object Instances <span class="tab-badge" id="tab-badge-instances">0</span>
+                </button>
+                <button class="catalog-tab-btn" id="tab-btn-relations" onclick="catalogManager.switchTab('relations')">
+                    <ix-icon name="link" size="16"></ix-icon> Relationships <span class="tab-badge" id="tab-badge-relations">0</span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Object Types -->
+            <div id="tab-content-types" class="catalog-tab-content active">
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">
+                            <h2>Object Types</h2>
+                        </div>
+                        <div class="table-actions" style="display: flex; gap: 0.75rem;">
+                            <input type="text" id="search-types" class="form-control" placeholder="Search types..." style="width: 200px;" oninput="catalogManager.filterTypes()">
+                            <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="catalogManager.loadData()" title="Refresh"></ix-icon-button>
+                            <a href="/pages/data-catalog-type-detail.html?new=true" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add Type</a>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type ID & Name</th>
+                                <th>Namespace</th>
+                                <th>Topic Pattern</th>
+                                <th>Description</th>
+                                <th>Schema & Instances</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="types-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 2: Object Instances -->
+            <div id="tab-content-instances" class="catalog-tab-content">
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">
+                            <h2>Object Instances</h2>
+                        </div>
+                        <div class="table-actions" style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <select id="filter-instance-type" class="form-control" style="width: 180px;" onchange="catalogManager.filterInstances()">
+                                <option value="">All Types</option>
+                            </select>
+                            <input type="text" id="search-instances" class="form-control" placeholder="Search instances..." style="width: 200px;" oninput="catalogManager.filterInstances()">
+                            <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="catalogManager.loadData()" title="Refresh"></ix-icon-button>
+                            <a href="/pages/data-catalog-instance-detail.html?new=true" class="btn btn-primary"><ix-icon name="add-circle" size="16"></ix-icon> Add Instance</a>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Instance ID & Name</th>
+                                <th>Object Type</th>
+                                <th>Base Topic</th>
+                                <th>Properties</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="instances-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 3: Relations -->
+            <div id="tab-content-relations" class="catalog-tab-content">
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">
+                            <h2>Relationships</h2>
+                        </div>
+                        <div class="table-actions" style="display: flex; gap: 0.75rem;">
+                            <input type="text" id="search-relations" class="form-control" placeholder="Search relations..." style="width: 200px;" oninput="catalogManager.filterRelations()">
+                            <ix-icon-button icon="refresh" variant="subtle-tertiary" onclick="catalogManager.loadData()" title="Refresh"></ix-icon-button>
+                            <button class="btn btn-primary" onclick="catalogManager.openAddRelationModal()"><ix-icon name="add-circle" size="16"></ix-icon> Add Relation</button>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Source Entity (ID)</th>
+                                <th>Relationship Type</th>
+                                <th>Target Entity (ID)</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="relations-table-body">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <span>Loading Data Catalog&hellip;</span>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <p id="error-text"></p>
+            </div>
+
+            <!-- Auto-Discovery Modal -->
+            <div id="discovery-modal" class="modal-overlay">
+                <div class="modal-container">
+                    <div class="modal-header">
+                        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <ix-icon name="rocket" size="20" style="color: var(--primary);"></ix-icon> Auto-Discover Data Catalog
+                        </h3>
+                        <ix-icon-button icon="close" variant="subtle-tertiary" onclick="catalogManager.closeDiscoveryModal()"></ix-icon-button>
+                    </div>
+                    <div class="modal-body">
+                        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                            Inspect active topic subtrees (e.g. <code>machine1/#</code> or <code>factory1/line1/#</code>) to automatically infer or use GenAI to propose structured Object Types, Instances, and Relations.
+                        </p>
+
+                        <!-- Discovery Mode Switcher -->
+                        <div class="mode-toggle-group">
+                            <div class="mode-option-card selected" id="mode-card-ai" onclick="catalogManager.selectDiscoveryMode('ai')">
+                                <h4><ix-icon name="rocket" size="18" style="color: #8b5cf6;"></ix-icon> AI-Assisted (GenAI)</h4>
+                                <p>Uses LLM semantic reasoning to analyze topic structures, payloads, and domain patterns.</p>
+                            </div>
+                            <div class="mode-option-card" id="mode-card-heuristic" onclick="catalogManager.selectDiscoveryMode('heuristic')">
+                                <h4><ix-icon name="cogwheel" size="18" style="color: #3b82f6;"></ix-icon> Deterministic (Rules)</h4>
+                                <p>Fast rule-based schema generator and hierarchy clusterer directly from live topic depth.</p>
+                            </div>
+                        </div>
+
+                        <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label class="form-label">Topic Pattern / Subtree</label>
+                                <input type="text" id="discovery-topic-pattern" class="form-control" value="#" placeholder="e.g. machine1/# or plant1/+/line1/#">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Archive Group</label>
+                                <select id="discovery-archive-group" class="form-control">
+                                    <option value="Default">Default</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="ai-prompt-group" class="form-group" style="margin-bottom: 1.5rem;">
+                            <label class="form-label">Custom AI Guidance / Context (Optional)</label>
+                            <textarea id="discovery-ai-prompt" class="form-control" rows="2" placeholder="e.g. Group pumps and motors into asset types, extract pressure and temp sensors"></textarea>
+                        </div>
+
+                        <!-- Run Discovery Button -->
+                        <div style="display: flex; justify-content: flex-end; margin-bottom: 1.5rem;">
+                            <button class="btn btn-primary" id="btn-run-discovery" onclick="catalogManager.runDiscovery()">
+                                <ix-icon name="search" size="16"></ix-icon> Analyze Topic Tree
+                            </button>
+                        </div>
+
+                        <!-- Discovery Results Preview -->
+                        <div id="discovery-results" style="display: none;">
+                            <hr style="border-color: var(--dark-border); margin: 1.5rem 0;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <h4 style="margin: 0; color: #10b981; display: flex; align-items: center; gap: 0.5rem;">
+                                    <ix-icon name="checkboxes" size="18"></ix-icon> Discovery Proposal Ready
+                                </h4>
+                                <div style="font-size: 0.85rem; color: var(--text-secondary);" id="discovery-summary-badge"></div>
+                            </div>
+
+                            <div id="proposal-types-section" style="margin-bottom: 1.5rem;">
+                                <h5 style="margin-bottom: 0.5rem;">Proposed Object Types (<span id="proposal-types-count">0</span>)</h5>
+                                <div id="proposal-types-list"></div>
+                            </div>
+
+                            <div id="proposal-instances-section" style="margin-bottom: 1.5rem;">
+                                <h5 style="margin-bottom: 0.5rem;">Proposed Object Instances (<span id="proposal-instances-count">0</span>)</h5>
+                                <div id="proposal-instances-list"></div>
+                            </div>
+
+                            <div id="proposal-relations-section" style="margin-bottom: 1.5rem;">
+                                <h5 style="margin-bottom: 0.5rem;">Proposed Relations (<span id="proposal-relations-count">0</span>)</h5>
+                                <div id="proposal-relations-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="catalogManager.closeDiscoveryModal()">Close</button>
+                        <button class="btn btn-primary" id="btn-apply-discovery" style="display: none;" onclick="catalogManager.applyDiscoveryProposal()">
+                            <ix-icon name="check" size="16"></ix-icon> Apply Selected to Catalog
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export/Import Modal -->
+            <div id="export-import-modal" class="modal-overlay">
+                <div class="modal-container" style="max-width: 650px;">
+                    <div class="modal-header">
+                        <h3 style="margin: 0;">Export / Import Data Catalog</h3>
+                        <ix-icon-button icon="close" variant="subtle-tertiary" onclick="catalogManager.closeExportImportModal()"></ix-icon-button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 1.5rem;">
+                            <h4>Export Catalog</h4>
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Download all Object Types, Instances, and Relations as a standard JSON payload.</p>
+                            <button class="btn btn-secondary" onclick="catalogManager.exportCatalogJson()"><ix-icon name="download" size="16"></ix-icon> Download JSON</button>
+                        </div>
+                        <hr style="border-color: var(--dark-border); margin: 1.5rem 0;">
+                        <div>
+                            <h4>Import Catalog</h4>
+                            <p style="color: var(--text-secondary); font-size: 0.85rem;">Paste or upload a JSON catalog export to import into this broker.</p>
+                            <textarea id="import-json-text" class="form-control" rows="8" placeholder='{"types": [...], "instances": [...], "relations": [...]}' style="font-family: monospace; font-size: 0.8rem; margin-bottom: 1rem;"></textarea>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <input type="file" id="import-file-input" accept=".json" style="display: none;" onchange="catalogManager.handleImportFileUpload(event)">
+                                <button class="btn btn-secondary" onclick="document.getElementById('import-file-input').click()"><ix-icon name="folder" size="16"></ix-icon> Load File</button>
+                                <button class="btn btn-primary" onclick="catalogManager.importCatalogJson()"><ix-icon name="upload" size="16"></ix-icon> Import JSON</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Relation Modal -->
+            <div id="add-relation-modal" class="modal-overlay">
+                <div class="modal-container" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3 style="margin: 0;">Add Relationship</h3>
+                        <ix-icon-button icon="close" variant="subtle-tertiary" onclick="catalogManager.closeAddRelationModal()"></ix-icon-button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label">Source Entity ID</label>
+                            <input type="text" id="rel-source-id" class="form-control" placeholder="e.g. factory1 or pump-01">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label">Relationship Type</label>
+                            <select id="rel-type-select" class="form-control" onchange="catalogManager.onRelationTypeChange()">
+                                <option value="HasComponent">HasComponent</option>
+                                <option value="HasParent">HasParent</option>
+                                <option value="ConnectedTo">ConnectedTo</option>
+                                <option value="DependsOn">DependsOn</option>
+                                <option value="custom">Custom...</option>
+                            </select>
+                            <input type="text" id="rel-type-custom" class="form-control" placeholder="Custom relation type" style="display: none; margin-top: 0.5rem;">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Target Entity ID</label>
+                            <input type="text" id="rel-target-id" class="form-control" placeholder="e.g. line1 or motor-02">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="catalogManager.closeAddRelationModal()">Cancel</button>
+                        <button class="btn btn-primary" onclick="catalogManager.saveNewRelation()">Save Relation</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schema Viewer Modal -->
+            <div id="schema-viewer-modal" class="modal-overlay">
+                <div class="modal-container" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h3 style="margin: 0;" id="schema-viewer-title">JSON Schema Viewer</h3>
+                        <ix-icon-button icon="close" variant="subtle-tertiary" onclick="document.getElementById('schema-viewer-modal').style.display='none'"></ix-icon-button>
+                    </div>
+                    <div class="modal-body">
+                        <pre id="schema-viewer-content" style="background: var(--background-secondary); padding: 1rem; border-radius: 8px; overflow-x: auto; max-height: 400px; font-family: monospace; font-size: 0.85rem; color: #38bdf8;"></pre>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    </ix-application>
+
+    <script src="/js/data-catalog.js"></script>
+</body>
+</html>

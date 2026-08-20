@@ -92,6 +92,23 @@ extend type GenAiQuery {
         "Chat history from previous exchanges (optional). When provided, topic data is not re-sent."
         chatHistory: [ChatMessage!]
     ): TopicAnalysisResponse!
+
+    """
+    Analyze MQTT topics and propose a Data Catalog (Object Types, Instances, Relations) using AI.
+    """
+    proposeDataCatalog(
+        "Archive group to query (defaults to 'Default')"
+        archiveGroup: String
+
+        "MQTT topic pattern to inspect (e.g. 'machine1/#')"
+        topicPattern: String!
+
+        "Optional custom user guidance or context prompt"
+        prompt: String
+
+        "Max topics to sample (default 100)"
+        maxTopics: Int
+    ): DataCatalogProposal!
 }
 
 # Extend the root Query type with GenAI capabilities

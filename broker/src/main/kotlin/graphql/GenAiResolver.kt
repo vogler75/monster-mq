@@ -448,6 +448,212 @@ User question: $question
 
         renderNode(root, "", true, true)
     }
+
+    /**
+     * Propose Data Catalog (Object Types, Instances, Relations) using AI
+     */
+    fun proposeDataCatalog(): DataFetcher<CompletableFuture<Map<String, Any?>>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<Map<String, Any?>>()
+
+            try {
+                if (genAiProvider == null || !genAiProvider.isReady()) {
+                    future.complete(mapOf(
+                        "types" to emptyList<Map<String, Any?>>(),
+                        "instances" to emptyList<Map<String, Any?>>(),
+                        "relations" to emptyList<Map<String, Any?>>(),
+                        "topicsAnalyzed" to 0,
+                        "summary" to null,
+                        "error" to "GenAI is not enabled or not configured"
+                    ))
+                    return@DataFetcher future
+                }
+
+                val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
+                val topicPattern = env.getArgument<String>("topicPattern") ?: "#"
+                val userPrompt = env.getArgument<String>("prompt") ?: ""
+                val maxTopics = env.getArgument<Int>("maxTopics") ?: 100
+
+                if (archiveHandler == null) {
+                    future.complete(mapOf(
+                        "types" to emptyList<Map<String, Any?>>(),
+                        "instances" to emptyList<Map<String, Any?>>(),
+                        "relations" to emptyList<Map<String, Any?>>(),
+                        "topicsAnalyzed" to 0,
+                        "summary" to null,
+                        "error" to "ArchiveHandler is not available"
+                    ))
+                    return@DataFetcher future
+                }
+
+                val archiveGroup = archiveHandler.getDeployedArchiveGroups()[archiveGroupName]
+                if (archiveGroup == null || archiveGroup.lastValStore == null) {
+                    future.complete(mapOf(
+                        "types" to emptyList<Map<String, Any?>>(),
+                        "instances" to emptyList<Map<String, Any?>>(),
+                        "relations" to emptyList<Map<String, Any?>>(),
+                        "topicsAnalyzed" to 0,
+                        "summary" to null,
+                        "error" to "Archive group '$archiveGroupName' or LastValueStore not found"
+                    ))
+                    return@DataFetcher future
+                }
+
+                val lastValueStore = archiveGroup.lastValStore!!
+                val topics = mutableListOf<BrokerMessage>()
+                lastValueStore.findMatchingMessages(topicPattern) { msg ->
+                    if (topics.size < maxTopics) {
+                        topics.add(msg)
+                        true
+                    } else {
+                        false
+                    }
+                }
+
+                if (topics.isEmpty()) {
+                    future.complete(mapOf(
+                        "types" to emptyList<Map<String, Any?>>(),
+                        "instances" to emptyList<Map<String, Any?>>(),
+                        "relations" to emptyList<Map<String, Any?>>(),
+                        "topicsAnalyzed" to 0,
+                        "summary" to "No topics found matching pattern '$topicPattern'",
+                        "error" to null
+                    ))
+                    return@DataFetcher future
+                }
+
+                val topicValues = mutableMapOf<String, String>()
+                for (msg in topics) {
+                    val value = formatTopicValue(msg, 500)
+                    if (value != null) {
+                        topicValues[msg.topicName] = value
+                    }
+                }
+
+                val contextBuilder = StringBuilder()
+                formatTopicsAsHierarchy(topicValues, contextBuilder)
+
+                val prompt = """
+You are an Industrial IoT Semantic Data Architect.
+Analyze the following MQTT topic hierarchy and sample payload values to construct a CESMII i3X Data Catalog proposal.
+
+USER GUIDANCE: ${if (userPrompt.isNotBlank()) userPrompt else "Organize the topics into logical asset/device types and instances."}
+
+MQTT TOPIC HIERARCHY & SAMPLE VALUES:
+$contextBuilder
+
+INSTRUCTIONS:
+1. Identify logical Object Types (e.g. Pump, Sensor, Machine, Line, Plant).
+   - Each type must have: id (lowercase slug, e.g. "pump-type"), namespace (e.g. "default"), name, description, topicPattern (e.g. "plants/+/pumps/+"), and structure (a valid JSON Schema object with type="object", properties, etc.).
+2. Identify concrete Object Instances:
+   - Each instance must have: id (slug, e.g. "pump-01"), typeId (matching one of the types), name, baseTopic (the base MQTT topic for this instance), and properties (JSON object with metadata).
+3. Identify Relations between instances and types (e.g. sourceId, targetId, relationType like "HasComponent", "HasParent", "ConnectedTo").
+4. Provide a brief summary string.
+
+Respond ONLY with valid JSON in this exact structure (no markdown formatting, no commentary):
+{
+  "summary": "Brief summary description",
+  "types": [
+    {
+      "id": "string",
+      "namespace": "string",
+      "name": "string",
+      "description": "string",
+      "topicPattern": "string",
+      "structure": { "type": "object", "properties": {} }
+    }
+  ],
+  "instances": [
+    {
+      "id": "string",
+      "typeId": "string",
+      "name": "string",
+      "baseTopic": "string",
+      "properties": {}
+    }
+  ],
+  "relations": [
+    {
+      "sourceId": "string",
+      "targetId": "string",
+      "relationType": "string"
+    }
+  ]
+}
+""".trimIndent()
+
+                val request = GenAiRequest(prompt = prompt)
+                genAiProvider.generate(request)
+                    .thenAccept { response ->
+                        if (response.error != null) {
+                            future.complete(mapOf(
+                                "types" to emptyList<Map<String, Any?>>(),
+                                "instances" to emptyList<Map<String, Any?>>(),
+                                "relations" to emptyList<Map<String, Any?>>(),
+                                "topicsAnalyzed" to topics.size,
+                                "summary" to null,
+                                "error" to response.error
+                            ))
+                            return@thenAccept
+                        }
+
+                        var rawText = response.response.trim()
+                        if (rawText.startsWith("```")) {
+                            rawText = rawText.substringAfter("\n").substringBeforeLast("```").trim()
+                        }
+
+                        try {
+                            val json = io.vertx.core.json.JsonObject(rawText)
+                            val summary = json.getString("summary", "AI generated catalog proposal")
+                            val typesList = json.getJsonArray("types", io.vertx.core.json.JsonArray()).mapNotNull { (it as? io.vertx.core.json.JsonObject)?.map }
+                            val instancesList = json.getJsonArray("instances", io.vertx.core.json.JsonArray()).mapNotNull { (it as? io.vertx.core.json.JsonObject)?.map }
+                            val relationsList = json.getJsonArray("relations", io.vertx.core.json.JsonArray()).mapNotNull { (it as? io.vertx.core.json.JsonObject)?.map }
+
+                            future.complete(mapOf(
+                                "types" to typesList,
+                                "instances" to instancesList,
+                                "relations" to relationsList,
+                                "topicsAnalyzed" to topics.size,
+                                "summary" to summary,
+                                "error" to null
+                            ))
+                        } catch (e: Exception) {
+                            logger.warning("Failed to parse LLM catalog response: ${e.message}")
+                            future.complete(mapOf(
+                                "types" to emptyList<Map<String, Any?>>(),
+                                "instances" to emptyList<Map<String, Any?>>(),
+                                "relations" to emptyList<Map<String, Any?>>(),
+                                "topicsAnalyzed" to topics.size,
+                                "summary" to rawText,
+                                "error" to "Failed to parse AI JSON response: ${e.message}"
+                            ))
+                        }
+                    }
+                    .exceptionally { error ->
+                        future.complete(mapOf(
+                            "types" to emptyList<Map<String, Any?>>(),
+                            "instances" to emptyList<Map<String, Any?>>(),
+                            "relations" to emptyList<Map<String, Any?>>(),
+                            "topicsAnalyzed" to topics.size,
+                            "summary" to null,
+                            "error" to "AI request failed: ${error.message}"
+                        ))
+                        null
+                    }
+            } catch (e: Exception) {
+                future.complete(mapOf(
+                    "types" to emptyList<Map<String, Any?>>(),
+                    "instances" to emptyList<Map<String, Any?>>(),
+                    "relations" to emptyList<Map<String, Any?>>(),
+                    "topicsAnalyzed" to 0,
+                    "summary" to null,
+                    "error" to "Internal error: ${e.message}"
+                ))
+            }
+
+            future
+        }
+    }
 }
 
 /**

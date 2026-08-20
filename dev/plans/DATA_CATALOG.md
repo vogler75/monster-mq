@@ -18,9 +18,9 @@ This provides a structured semantic layer over the broker's MQTT topics without 
 ## 2. Storage Layer Architecture
 
 Tables / Collections shared across backends:
-- `data_catalog_types` (`id`, `namespace`, `name`, `description`, `structure`, `topic_pattern`, `created_at`, `updated_at`)
-- `data_catalog_instances` (`id`, `type_id`, `name`, `base_topic`, `properties`, `created_at`, `updated_at`)
-- `data_catalog_relations` (`source_id`, `target_id`, `relation_type`)
+- `datacatalogtypes` (`id`, `namespace`, `name`, `description`, `structure`, `topic_pattern`, `created_at`, `updated_at`)
+- `datacataloginstances` (`id`, `type_id`, `name`, `base_topic`, `properties`, `created_at`, `updated_at`)
+- `datacatalogrelations` (`source_id`, `target_id`, `relation_type`)
 
 ### Backends
 - **SQLite**: Pure SQL DDL + JSON serialization (`modernc.org/sqlite` in Go, SQLite JDBC in Kotlin).

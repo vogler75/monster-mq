@@ -26,9 +26,9 @@ class DataCatalogStorePostgres(
     private val logger: Logger = Utils.getLogger(DataCatalogStorePostgres::class.java)
 
     companion object {
-        private const val TABLE_TYPES = "data_catalog_types"
-        private const val TABLE_INSTANCES = "data_catalog_instances"
-        private const val TABLE_RELATIONS = "data_catalog_relations"
+        private const val TABLE_TYPES = "datacatalogtypes"
+        private const val TABLE_INSTANCES = "datacataloginstances"
+        private const val TABLE_RELATIONS = "datacatalogrelations"
 
         private val CREATE_TYPES_TABLE = """
             CREATE TABLE IF NOT EXISTS $TABLE_TYPES (

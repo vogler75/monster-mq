@@ -297,7 +297,8 @@ class GraphQLServer(
             "schema-agents.graphqls",      // AI Agents
             "schema-mcp-servers.graphqls",  // MCP Servers
             "schema-genai-providers.graphqls", // GenAI Providers
-            "schema-kafka-servers.graphqls" // Kafka Servers
+            "schema-kafka-servers.graphqls", // Kafka Servers
+            "schema-datacatalog.graphqls"  // Data Catalog
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -470,7 +471,7 @@ class GraphQLServer(
         // Initialize GenAI resolver (with archiveHandler for topic analysis)
         val genAiResolver = genAiProvider?.let { GenAiResolver(vertx, it, archiveHandler) }
         // Initialize Data Catalog resolvers
-        val dataCatalogQueries = DataCatalogQueries(dataCatalogStore)
+        val dataCatalogQueries = DataCatalogQueries(dataCatalogStore, archiveHandler)
         val dataCatalogMutations = DataCatalogMutations(dataCatalogStore)
 
         return RuntimeWiring.newRuntimeWiring()
@@ -720,6 +721,7 @@ class GraphQLServer(
                             dataFetcher("dataCatalogInstances", resolver.dataCatalogInstances())
                             dataFetcher("dataCatalogInstance", resolver.dataCatalogInstance())
                             dataFetcher("dataCatalogRelations", resolver.dataCatalogRelations())
+                            dataFetcher("inferDataCatalog", resolver.inferDataCatalog())
                         }
                     }
             }
@@ -729,6 +731,7 @@ class GraphQLServer(
                     genAiResolver?.let { resolver ->
                         dataFetcher("generate", resolver.generate())
                         dataFetcher("analyzeTopics", resolver.analyzeTopics())
+                        dataFetcher("proposeDataCatalog", resolver.proposeDataCatalog())
                     }
                 }
             }

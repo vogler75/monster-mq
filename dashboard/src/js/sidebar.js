@@ -198,6 +198,7 @@ class SidebarManager {
             {
                 section: 'Governance', sectionIcon: 'shield',
                 items: [
+                    { href: '/pages/data-catalog.html', icon: 'hierarchy', text: 'Data Catalog' },
                     { href: '/pages/topic-schema-policies.html', icon: 'shield-check', text: 'Schema Policies', feature: 'SchemaPolicy' },
                     { href: '/pages/topic-namespaces.html', icon: 'folder', text: 'Topic Namespaces', feature: 'TopicNamespace' }
                 ]
