@@ -1582,19 +1582,6 @@ class MetricsResolver(
         val configStoreType: String,
         val userManagementEnabled: Boolean,
         val anonymousEnabled: Boolean,
-        val mcpEnabled: Boolean,
-        val mcpPort: Int,
-        val prometheusEnabled: Boolean,
-        val prometheusPort: Int,
-        val i3xEnabled: Boolean,
-        val i3xPort: Int,
-        val graphqlEnabled: Boolean,
-        val graphqlPort: Int,
-        val metricsEnabled: Boolean,
-        val hmiEnabled: Boolean,
-        val genAiEnabled: Boolean,
-        val genAiProvider: String,
-        val genAiModel: String,
         val postgresUrl: String,
         val postgresUser: String,
         val crateDbUrl: String,
@@ -1624,23 +1611,6 @@ class MetricsResolver(
                 anonymousEnabled = config.getJsonObject("UserManagement", io.vertx.core.json.JsonObject())
                     .getJsonObject("AnonymousUser", io.vertx.core.json.JsonObject())
                     .getBoolean("Enabled", true),
-                mcpEnabled = config.getJsonObject("MCP", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
-                mcpPort = config.getJsonObject("MCP", io.vertx.core.json.JsonObject()).getInteger("Port", 3000),
-                prometheusEnabled = config.getJsonObject("Prometheus", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
-                prometheusPort = config.getJsonObject("Prometheus", io.vertx.core.json.JsonObject()).getInteger("Port", 3001),
-                i3xEnabled = config.getJsonObject("I3x", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
-                i3xPort = config.getJsonObject("I3x", io.vertx.core.json.JsonObject()).getInteger("Port", 3002),
-                graphqlEnabled = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
-                graphqlPort = config.getJsonObject("GraphQL", io.vertx.core.json.JsonObject()).getInteger("Port", 4000),
-                metricsEnabled = config.getJsonObject("Metrics", io.vertx.core.json.JsonObject()).getBoolean("Enabled", true),
-                hmiEnabled = Monster.isFeatureEnabled(Features.Hmi),
-                genAiEnabled = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).getBoolean("Enabled", false),
-                genAiProvider = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).let { genAi ->
-                    genAi.getJsonObject("Assistant", null)?.getString("Provider") ?: genAi.getString("Provider", "")
-                },
-                genAiModel = config.getJsonObject("GenAI", io.vertx.core.json.JsonObject()).let { genAi ->
-                    genAi.getJsonObject("Assistant", null)?.getString("Model") ?: genAi.getString("Model", "")
-                },
                 postgresUrl = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("Url", ""),
                 postgresUser = config.getJsonObject("Postgres", io.vertx.core.json.JsonObject()).getString("User", ""),
                 crateDbUrl = config.getJsonObject("CrateDB", io.vertx.core.json.JsonObject()).getString("Url", ""),

@@ -142,35 +142,11 @@
                     </div>
                 </div>
 
-                <!-- GenAI -->
-                <div class="section-card">
-                    <div class="section-header">
-                        <ix-icon name="star" size="18" style="color:var(--monster-purple);"></ix-icon>
-                        <h2 class="section-title">GenAI Integration</h2>
-                    </div>
-                    <div class="section-content">
-                        <div class="config-grid">
-                            <div class="config-item">
-                                <span class="label">GenAI</span>
-                                <span class="value" id="cfg-genai">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">Provider</span>
-                                <span class="value" id="cfg-genai-provider">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">Model</span>
-                                <span class="value mono" id="cfg-genai-model">-</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Database Connections -->
+                <!-- Database Connections & Bus -->
                 <div class="section-card">
                     <div class="section-header">
                         <ix-icon name="database" size="18" style="color:var(--monster-purple);"></ix-icon>
-                        <h2 class="section-title">Database Connections (YAML)</h2>
+                        <h2 class="section-title">Database Connections &amp; Bus</h2>
                     </div>
                     <div class="section-content">
                         <div class="config-grid">
@@ -202,46 +178,23 @@
                                 <span class="label">SQLite Path</span>
                                 <span class="value mono" id="cfg-sqlite-path">-</span>
                             </div>
+                            <div class="config-item">
+                                <span class="label">Kafka Servers</span>
+                                <span class="value mono" id="cfg-kafka-servers">-</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Extensions -->
+                <!-- Enabled Features -->
                 <div class="section-card">
                     <div class="section-header">
                         <ix-icon name="connector" size="18" style="color:var(--monster-purple);"></ix-icon>
-                        <h2 class="section-title">Extensions &amp; APIs</h2>
+                        <h2 class="section-title">Active Subsystems &amp; Features</h2>
                     </div>
                     <div class="section-content">
-                        <div class="config-grid">
-                            <div class="config-item">
-                                <span class="label">GraphQL / Dashboard</span>
-                                <span class="value" id="cfg-graphql">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">MCP Server (AI)</span>
-                                <span class="value" id="cfg-mcp">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">Prometheus Exporter</span>
-                                <span class="value" id="cfg-prometheus">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">I3X API (CESMII)</span>
-                                <span class="value" id="cfg-i3x">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">HMI Hosting</span>
-                                <span class="value" id="cfg-hmi">-</span>
-                            </div>
-                            <div class="config-item">
-                                <span class="label">Metrics Store</span>
-                                <span class="value" id="cfg-metrics">-</span>
-                            </div>
-                            <div class="config-item" style="grid-column: span 2;">
-                                <span class="label">Kafka Servers</span>
-                                <span class="value mono" id="cfg-kafka-servers">-</span>
-                            </div>
+                        <div id="cfg-features-container" style="display:flex; flex-wrap:wrap; gap:0.5rem;">
+                            <!-- Populated dynamically from broker.enabledFeatures -->
                         </div>
                     </div>
                 </div>
