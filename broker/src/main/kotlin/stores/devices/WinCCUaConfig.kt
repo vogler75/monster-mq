@@ -206,7 +206,8 @@ data class WinCCUaTransformConfig(
 enum class WinCCUaMessageFormat {
     JSON_ISO,    // { "value": <value>, "time": <ISO timestamp> }
     JSON_MS,     // { "value": <value>, "time": <ms since epoch> }
-    RAW_VALUE    // Just the plain value
+    RAW_VALUE,   // Just the plain value
+    RAW_JSON     // Raw JSON from WinCC (1:1)
 }
 
 /**
@@ -229,6 +230,7 @@ data class WinCCUaConnectionConfig(
         const val FORMAT_JSON_ISO = "JSON_ISO"
         const val FORMAT_JSON_MS = "JSON_MS"
         const val FORMAT_RAW_VALUE = "RAW_VALUE"
+        const val FORMAT_RAW_JSON = "RAW_JSON"
 
         const val MODE_GRAPHQL = "GRAPHQL"
         const val MODE_OPENPIPE = "OPENPIPE"
@@ -342,8 +344,8 @@ data class WinCCUaConnectionConfig(
         }
 
         // Validate message format
-        if (messageFormat !in listOf(FORMAT_JSON_ISO, FORMAT_JSON_MS, FORMAT_RAW_VALUE)) {
-            errors.add("messageFormat must be one of: $FORMAT_JSON_ISO, $FORMAT_JSON_MS, $FORMAT_RAW_VALUE")
+        if (messageFormat !in listOf(FORMAT_JSON_ISO, FORMAT_JSON_MS, FORMAT_RAW_VALUE, FORMAT_RAW_JSON)) {
+            errors.add("messageFormat must be one of: $FORMAT_JSON_ISO, $FORMAT_JSON_MS, $FORMAT_RAW_VALUE, $FORMAT_RAW_JSON")
         }
 
         // Validate addresses

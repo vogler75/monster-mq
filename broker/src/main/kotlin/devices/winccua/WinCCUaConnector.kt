@@ -463,7 +463,8 @@ class WinCCUaConnector : AbstractVerticle() {
         val quality = valueObj?.getJsonObject("quality")
 
         if (tagName != null && value != null) {
-            publishTagValue(address, tagName, value, timestamp, quality)
+            val effectiveQuality = if (address.includeQuality) quality else null
+            publishTagValue(address, tagName, value, timestamp, effectiveQuality, tagValuesData)
         }
     }
 
@@ -491,12 +492,19 @@ class WinCCUaConnector : AbstractVerticle() {
     /**
      * Publish tag value to MQTT broker with topic transformation
      */
-    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?, quality: JsonObject?) {
+    private fun publishTagValue(
+        address: WinCCUaAddress,
+        tagName: String,
+        value: Any?,
+        timestamp: String?,
+        quality: JsonObject?,
+        rawTag: JsonObject? = null
+    ) {
         try {
             val mqttTopic = WinCCUaPublisher.resolveTopic(
                 deviceConfig.namespace, address.topic, tagName, winCCUaConfig.transformConfig, topicCache
             )
-            val payload = WinCCUaPublisher.formatTagPayload(winCCUaConfig.messageFormat, value, timestamp, quality)
+            val payload = WinCCUaPublisher.formatTagPayload(winCCUaConfig.messageFormat, value, timestamp, quality, rawTag)
             val mqttMessage = WinCCUaPublisher.buildTagBrokerMessage(deviceConfig.name, mqttTopic, payload, address.retained)
 
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, mqttMessage)

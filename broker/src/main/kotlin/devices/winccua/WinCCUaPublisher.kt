@@ -33,19 +33,43 @@ object WinCCUaPublisher {
         messageFormat: String,
         value: Any?,
         timestamp: String?,
-        quality: JsonObject?
+        quality: JsonObject?,
+        rawTag: JsonObject? = null
     ): ByteArray {
         return when (messageFormat) {
+            WinCCUaConnectionConfig.FORMAT_RAW_JSON -> {
+                if (rawTag != null) {
+                    rawTag.encode().toByteArray()
+                } else {
+                    val json = JsonObject().put("value", value)
+                    if (timestamp != null) json.put("time", timestamp)
+                    if (quality != null) {
+                        quality.fieldNames().forEach { k -> json.put(k, quality.getValue(k)) }
+                    }
+                    json.encode().toByteArray()
+                }
+            }
             WinCCUaConnectionConfig.FORMAT_JSON_MS -> {
                 val timestampMs = try {
-                    if (timestamp != null) Instant.parse(timestamp).toEpochMilli() else System.currentTimeMillis()
+                    if (timestamp != null) {
+                        try {
+                            Instant.parse(timestamp).toEpochMilli()
+                        } catch (e: Exception) {
+                            java.time.LocalDateTime.parse(timestamp.replace(" ", "T"))
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toInstant()
+                                .toEpochMilli()
+                        }
+                    } else System.currentTimeMillis()
                 } catch (e: Exception) {
                     System.currentTimeMillis()
                 }
                 val json = JsonObject()
                     .put("value", value)
                     .put("time", timestampMs)
-                if (quality != null) json.put("quality", quality)
+                if (quality != null) {
+                    quality.fieldNames().forEach { k -> json.put(k, quality.getValue(k)) }
+                }
                 json.encode().toByteArray()
             }
             WinCCUaConnectionConfig.FORMAT_RAW_VALUE -> {
@@ -55,7 +79,9 @@ object WinCCUaPublisher {
                 // FORMAT_JSON_ISO and any unknown value fall back to ISO format
                 val json = JsonObject().put("value", value)
                 if (timestamp != null) json.put("time", timestamp)
-                if (quality != null) json.put("quality", quality)
+                if (quality != null) {
+                    quality.fieldNames().forEach { k -> json.put(k, quality.getValue(k)) }
+                }
                 json.encode().toByteArray()
             }
         }
