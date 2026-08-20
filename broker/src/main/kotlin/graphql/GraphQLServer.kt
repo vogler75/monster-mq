@@ -706,6 +706,85 @@ class GraphQLServer(
                             dataFetcher("topicNamespaceMatch", resolver.topicNamespaceMatch())
                         }
                     }
+                    // Redfish Gateway queries
+                    .dataFetcher("redfishMappings") { _ ->
+                        val future = java.util.concurrent.CompletableFuture<List<Map<String, Any?>>>()
+                        val store = getEffectiveDeviceStore()
+                        if (store == null || !Monster.isFeatureEnabled(Features.Redfish)) {
+                            future.complete(emptyList())
+                        } else {
+                            store.getAllDevices().onComplete { ar ->
+                                if (ar.succeeded()) {
+                                    val list = ar.result().filter { it.type == "Redfish" }.map { d ->
+                                        val cfg = d.config
+                                        mapOf(
+                                            "name" to d.name,
+                                            "nodeId" to d.nodeId,
+                                            "enabled" to d.enabled,
+                                            "createdAt" to d.createdAt.toString(),
+                                            "updatedAt" to d.updatedAt.toString(),
+                                            "isOnCurrentNode" to (d.nodeId == Monster.getClusterNodeId(vertx)),
+                                            "config" to mapOf(
+                                                "topicPrefix" to cfg.getString("topicPrefix", "redfish"),
+                                                "topicFilters" to cfg.getJsonArray("topicFilters", io.vertx.core.json.JsonArray()).list,
+                                                "chassisId" to cfg.getString("chassisId", "EdgeNode"),
+                                                "defaultReadingType" to cfg.getString("defaultReadingType", "Temperature"),
+                                                "defaultReadingUnits" to cfg.getString("defaultReadingUnits", "Cel"),
+                                                "thresholds" to cfg.getJsonObject("thresholds")?.map,
+                                                "jsonSchema" to cfg.getJsonObject("jsonSchema", io.vertx.core.json.JsonObject()).map
+                                            )
+                                        )
+                                    }
+                                    future.complete(list)
+                                } else {
+                                    future.completeExceptionally(ar.cause())
+                                }
+                            }
+                        }
+                        future
+                    }
+                    .dataFetcher("redfishMapping") { env ->
+                        val name = env.getArgument<String>("name") ?: return@dataFetcher java.util.concurrent.CompletableFuture.completedFuture(null)
+                        val future = java.util.concurrent.CompletableFuture<Map<String, Any?>?>()
+                        val store = getEffectiveDeviceStore()
+                        if (store == null || !Monster.isFeatureEnabled(Features.Redfish)) {
+                            future.complete(null)
+                        } else {
+                            store.getDevice(name).onComplete { ar ->
+                                if (ar.succeeded()) {
+                                    val d = ar.result()
+                                    if (d != null && d.type == "Redfish") {
+                                        val cfg = d.config
+                                        future.complete(mapOf(
+                                            "name" to d.name,
+                                            "nodeId" to d.nodeId,
+                                            "enabled" to d.enabled,
+                                            "createdAt" to d.createdAt.toString(),
+                                            "updatedAt" to d.updatedAt.toString(),
+                                            "isOnCurrentNode" to (d.nodeId == Monster.getClusterNodeId(vertx)),
+                                            "config" to mapOf(
+                                                "topicPrefix" to cfg.getString("topicPrefix", "redfish"),
+                                                "topicFilters" to cfg.getJsonArray("topicFilters", io.vertx.core.json.JsonArray()).list,
+                                                "chassisId" to cfg.getString("chassisId", "EdgeNode"),
+                                                "defaultReadingType" to cfg.getString("defaultReadingType", "Temperature"),
+                                                "defaultReadingUnits" to cfg.getString("defaultReadingUnits", "Cel"),
+                                                "thresholds" to cfg.getJsonObject("thresholds")?.map,
+                                                "jsonSchema" to cfg.getJsonObject("jsonSchema", io.vertx.core.json.JsonObject()).map
+                                            )
+                                        ))
+                                    } else {
+                                        future.complete(null)
+                                    }
+                                } else {
+                                    future.completeExceptionally(ar.cause())
+                                }
+                            }
+                        }
+                        future
+                    }
+                    .dataFetcher("redfishLiveSensors") { _ ->
+                        java.util.concurrent.CompletableFuture.completedFuture(emptyList<Map<String, Any?>>())
+                    }
             }
             // Register GenAI Query type
             .type("GenAiQuery") { builder ->
@@ -989,6 +1068,96 @@ class GraphQLServer(
                                 emptyMap<String, Any>()
                             }
                         }
+                    }
+                    // Redfish Gateway mutations
+                    .dataFetcher("saveRedfishMapping") { env ->
+                        val name: String = env.getArgument<String>("name") ?: ""
+                        val input: Map<String, Any?> = env.getArgument<Map<String, Any?>>("config") ?: emptyMap()
+                        val enabled: Boolean = env.getArgument<Boolean>("enabled") ?: true
+                        val cfgJson = io.vertx.core.json.JsonObject(input)
+                        val future = java.util.concurrent.CompletableFuture<Map<String, Any?>>()
+                        val store = getEffectiveDeviceStore()
+                        if (store == null) {
+                            future.complete(mapOf("success" to false, "message" to "Device store not available"))
+                        } else {
+                            val dev = at.rocworks.stores.DeviceConfig(
+                                name = name,
+                                namespace = "default",
+                                nodeId = Monster.getClusterNodeId(vertx),
+                                type = "Redfish",
+                                enabled = enabled,
+                                config = cfgJson
+                            )
+                            store.saveDevice(dev).onComplete { ar ->
+                                if (ar.succeeded()) {
+                                    future.complete(mapOf(
+                                        "success" to true,
+                                        "redfish" to mapOf(
+                                            "name" to name,
+                                            "nodeId" to dev.nodeId,
+                                            "enabled" to dev.enabled,
+                                            "createdAt" to dev.createdAt.toString(),
+                                            "updatedAt" to dev.updatedAt.toString(),
+                                            "isOnCurrentNode" to true,
+                                            "config" to input
+                                        )
+                                    ))
+                                } else {
+                                    future.complete(mapOf("success" to false, "message" to (ar.cause()?.message ?: "Save failed")))
+                                }
+                            }
+                        }
+                        future
+                    }
+                    .dataFetcher("deleteRedfishMapping") { env ->
+                        val name: String = env.getArgument<String>("name") ?: ""
+                        val future = java.util.concurrent.CompletableFuture<Boolean>()
+                        val store = getEffectiveDeviceStore()
+                        if (store == null) {
+                            future.complete(false)
+                        } else {
+                            store.deleteDevice(name).onComplete { ar ->
+                                future.complete(ar.succeeded())
+                            }
+                        }
+                        future
+                    }
+                    .dataFetcher("toggleRedfishMapping") { env ->
+                        val name: String = env.getArgument<String>("name") ?: ""
+                        val enabled: Boolean = env.getArgument<Boolean>("enabled") ?: false
+                        val future = java.util.concurrent.CompletableFuture<Map<String, Any?>>()
+                        val store = getEffectiveDeviceStore()
+                        if (store == null) {
+                            future.complete(mapOf("success" to false, "message" to "Device store not available"))
+                        } else {
+                            store.getDevice(name).onComplete { ar ->
+                                if (ar.succeeded() && ar.result() != null) {
+                                    val dev = ar.result()!!
+                                    val updated = dev.copy(enabled = enabled)
+                                    store.saveDevice(updated).onComplete { sar ->
+                                        if (sar.succeeded()) {
+                                            future.complete(mapOf(
+                                                "success" to true,
+                                                "redfish" to mapOf(
+                                                    "name" to updated.name,
+                                                    "nodeId" to updated.nodeId,
+                                                    "enabled" to updated.enabled,
+                                                    "createdAt" to updated.createdAt.toString(),
+                                                    "updatedAt" to updated.updatedAt.toString(),
+                                                    "isOnCurrentNode" to (updated.nodeId == Monster.getClusterNodeId(vertx)),
+                                                    "config" to updated.config.map
+                                                )
+                                            ))
+                                        } else {
+                                            future.complete(mapOf("success" to false, "message" to (sar.cause()?.message ?: "Toggle failed")))
+                                        }
+                                    }
+                                } else {
+                                    future.complete(mapOf("success" to false, "message" to "Device not found"))
+                                }
+                            }
+                        }
+                        future
                     }
             }
             // Register MQTT Client Mutations type

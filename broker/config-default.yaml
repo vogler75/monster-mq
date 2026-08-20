@@ -65,3 +65,4 @@ Features:
   Zenoh: true
   Hmi: true
   I3xClient: true
+  Redfish: true
