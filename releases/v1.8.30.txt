@@ -1,0 +1,14 @@
+Release v1.8.30
+Built from commit: 91049f1a
+Date: 2026-08-22 12:04:50
+
+Changes since v1.8.29:
+---
+91049f1a feat(redfish): implement DMTF Redfish REST API server and MQTT ingestion engine
+ff89c050 Allow omitting temperature parameter when set to 0 and require model configuration (#168)
+80acb315 docs: add Redfish gateway user guide and documentation
+4c420f3a fix(redfish): fix topic browser tree expansion and timestamp field in live preview
+d5ac5883 feat(redfish): add Redfish Bridging dashboard pages with topic browser and endpoints reference
+8813f41c feat(graphql): remove legacy feature fields from BrokerConfig and use enabledFeatures in dashboard
+ad5b83ed feat(winccua): add RAW_JSON message format, flat quality payload, and dashboard option
+4104ac6c Fix WinCC UA Linux pipe path hint
