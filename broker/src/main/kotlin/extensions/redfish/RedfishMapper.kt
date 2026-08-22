@@ -42,6 +42,7 @@ object RedfishMapper {
         val arrayPath = jsonSchema["arrayPath"] as? String
 
         val items = mutableListOf<Map<String, Any?>>()
+        @Suppress("UNCHECKED_CAST")
         val rootMap = root as? Map<String, Any?>
 
         if (!arrayPath.isNullOrBlank()) {

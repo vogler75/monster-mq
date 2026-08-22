@@ -1019,6 +1019,18 @@
             "title": "Disk Buffer Directory",
             "default": "data/queue",
             "description": "Filesystem path for persistent disk buffer files when QueueType is DISK"
+          },
+          "LastValReadOnly": {
+            "type": "boolean",
+            "title": "Last Value Read Only",
+            "default": false,
+            "description": "When true, live topic value caching is disabled while keeping last values readable and queryable"
+          },
+          "ArchiveReadOnly": {
+            "type": "boolean",
+            "title": "Archive Read Only",
+            "default": false,
+            "description": "When true, historical message recording is disabled while keeping history queries and analytics active"
           }
         },
         "required": ["Name", "TopicFilter", "LastValType", "ArchiveType"]
@@ -1097,9 +1109,34 @@
         "DeviceImportExport": { "type": "boolean", "title": "Device Import / Export", "default": true, "description": "JSON / YAML device and gateway configuration backup, import, and export" },
         "Zenoh": { "type": "boolean", "title": "Zenoh Transport", "default": true, "description": "Zenoh zero-overhead broker federation transport" },
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },
-        "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" }
+        "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" },
+        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": true, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" }
       },
       "additionalProperties": false
+    },
+    "HMI": {
+      "type": "object",
+      "title": "Embedded HMI Hosting",
+      "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker",
+      "properties": {
+        "Enabled": { "type": "boolean", "title": "Enable HMI Hosting", "default": true },
+        "Path": { "type": "string", "title": "HMI Asset Path", "default": "./data/hmi", "description": "Filesystem path for HMI web asset files" },
+        "MountPath": { "type": "string", "title": "HMI Mount URL Subpath", "default": "/hmi", "description": "HTTP subpath where HMI dashboards are mounted" }
+      }
+    },
+    "Redfish": {
+      "type": "object",
+      "title": "DMTF Redfish REST API Server",
+      "description": "Expose standard DMTF Redfish REST endpoints under /redfish/v1",
+      "properties": {
+        "Enabled": { "type": "boolean", "title": "Enable Redfish Server", "default": true },
+        "Port": { "type": "integer", "title": "Dedicated Listener Port", "default": 0, "description": "Dedicated TCP port for Redfish REST. 0 to multiplex onto GraphQL/HTTP port (default 4000)" },
+        "MountPath": { "type": "string", "title": "Mount URL Subpath", "default": "/redfish/v1", "description": "HTTP URL path prefix where Redfish APIs are mounted" },
+        "DefaultChassisId": { "type": "string", "title": "Default Chassis ID", "default": "EdgeNode" },
+        "DefaultSystemId": { "type": "string", "title": "Default System ID", "default": "edge-node" },
+        "DefaultManagerId": { "type": "string", "title": "Default Manager ID", "default": "monstermq" },
+        "AnonymousEnabled": { "type": "boolean", "title": "Allow Anonymous Read Access", "default": true }
+      }
     }
   },
   "required": [

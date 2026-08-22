@@ -67,6 +67,11 @@
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-maven-plugin</artifactId>
                 <version>2.3.0</version>
+                <configuration>
+                    <args>
+                        <arg>-Xannotation-default-target=param-property</arg>
+                    </args>
+                </configuration>
                 <executions>
                     <execution>
                         <id>compile</id>
