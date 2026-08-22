@@ -148,21 +148,26 @@ class AgentExecutor(
                 if (store != null) {
                     store.getDevice(agentConfig.providerName!!)
                         .onComplete { result ->
-                            chatModel = if (result.succeeded() && result.result() != null) {
-                                val providerConfig = GenAiProviderConfig.fromJsonObject(result.result()!!.config)
-                                LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
-                            } else {
-                                // Try config.yaml providers before falling back to direct config
-                                val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
-                                if (configProvider != null) {
-                                    logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
-                                    LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                            try {
+                                chatModel = if (result.succeeded() && result.result() != null) {
+                                    val providerConfig = GenAiProviderConfig.fromJsonObject(result.result()!!.config)
+                                    LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
                                 } else {
-                                    logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
-                                    LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                    // Try config.yaml providers before falling back to direct config
+                                    val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
+                                    if (configProvider != null) {
+                                        logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
+                                        LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                                    } else {
+                                        logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
+                                        LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                    }
                                 }
+                                doStart(startPromise)
+                            } catch (e: Exception) {
+                                logger.severe("Failed to start agent ${deviceConfig.name}: ${e.message}")
+                                startPromise.fail(e)
                             }
-                            doStart(startPromise)
                         }
                 } else {
                     // No device store — try config.yaml providers

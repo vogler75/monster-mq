@@ -31,26 +31,37 @@ logger = logging.getLogger("monster_agent")
 
 def create_llm(provider: str, model: str | None, api_key: str | None, temperature: float):
     """Create a LangChain chat model for the given provider."""
+    if not model or not model.strip():
+        raise ValueError(f"No model configured for AI provider '{provider}'. A model must be specified.")
+    should_set_temperature = temperature is not None and temperature > 0.0
     if provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
         key = api_key or os.environ.get("GEMINI_API_KEY")
-        model_name = model or "gemini-2.0-flash"
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=key, temperature=temperature)
+        kwargs = {"model": model, "google_api_key": key}
+        if should_set_temperature:
+            kwargs["temperature"] = temperature
+        return ChatGoogleGenerativeAI(**kwargs)
     elif provider == "claude":
         from langchain_anthropic import ChatAnthropic
         key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        model_name = model or "claude-sonnet-4-20250514"
-        return ChatAnthropic(model=model_name, anthropic_api_key=key, temperature=temperature)
+        kwargs = {"model": model, "anthropic_api_key": key}
+        if should_set_temperature:
+            kwargs["temperature"] = temperature
+        return ChatAnthropic(**kwargs)
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
         key = api_key or os.environ.get("OPENAI_API_KEY")
-        model_name = model or "gpt-4o"
-        return ChatOpenAI(model=model_name, openai_api_key=key, temperature=temperature)
+        kwargs = {"model": model, "openai_api_key": key}
+        if should_set_temperature:
+            kwargs["temperature"] = temperature
+        return ChatOpenAI(**kwargs)
     elif provider == "ollama":
         from langchain_ollama import ChatOllama
         base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-        model_name = model or "llama3"
-        return ChatOllama(model=model_name, base_url=base_url, temperature=temperature)
+        kwargs = {"model": model, "base_url": base_url}
+        if should_set_temperature:
+            kwargs["temperature"] = temperature
+        return ChatOllama(**kwargs)
     else:
         raise ValueError(f"Unknown AI provider: {provider}. Use: gemini, claude, openai, ollama")
 
