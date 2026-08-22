@@ -261,7 +261,7 @@
                                     <div class="form-group">
                                         <label for="client-pipe-path">Pipe Path</label>
                                         <input type="text" id="client-pipe-path" placeholder="Leave empty to use OS default">
-                                        <small class="form-hint">Defaults to <code>\\.\pipe\HmiRuntime</code> on Windows, <code>/tmp/HmiRuntime</code> on Linux</small>
+                                        <small class="form-hint">Defaults to <code>\\.\pipe\HmiRuntime</code> on Windows, <code>/tmp/siemens/automation/HmiRuntime</code> on Linux</small>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -276,6 +276,7 @@
                                         <option value="JSON_ISO" selected>JSON with ISO timestamps</option>
                                         <option value="JSON_MS">JSON with milliseconds</option>
                                         <option value="RAW_VALUE">Raw value only</option>
+                                        <option value="RAW_JSON">Raw JSON (Open Pipe)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">

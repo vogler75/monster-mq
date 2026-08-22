@@ -1,0 +1,74 @@
+type RedfishThresholds {
+    upperCaution: Float
+    upperCritical: Float
+    lowerCaution: Float
+    lowerCritical: Float
+}
+
+type RedfishMappingConfig {
+    topicPrefix: String!
+    topicFilters: [String!]!
+    chassisId: String
+    defaultReadingType: String
+    defaultReadingUnits: String
+    thresholds: RedfishThresholds
+    jsonSchema: JSON!
+}
+
+type RedfishMapping {
+    name: String!
+    nodeId: String!
+    enabled: Boolean!
+    config: RedfishMappingConfig!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+}
+
+type RedfishSensorStatus {
+    id: String!
+    name: String!
+    chassisId: String!
+    topic: String!
+    reading: Float!
+    readingType: String!
+    readingUnits: String!
+    health: String!
+    state: String!
+    lastUpdated: String!
+}
+
+type RedfishResult {
+    redfish: RedfishMapping
+    success: Boolean!
+    message: String
+}
+
+input RedfishThresholdsInput {
+    upperCaution: Float
+    upperCritical: Float
+    lowerCaution: Float
+    lowerCritical: Float
+}
+
+input RedfishMappingConfigInput {
+    topicPrefix: String
+    topicFilters: [String!]!
+    chassisId: String
+    defaultReadingType: String
+    defaultReadingUnits: String
+    thresholds: RedfishThresholdsInput
+    jsonSchema: JSON!
+}
+
+extend type Query {
+    redfishMappings: [RedfishMapping!]!
+    redfishMapping(name: String!): RedfishMapping
+    redfishLiveSensors(chassisId: String): [RedfishSensorStatus!]!
+}
+
+extend type Mutation {
+    saveRedfishMapping(name: String!, config: RedfishMappingConfigInput!, enabled: Boolean): RedfishResult!
+    deleteRedfishMapping(name: String!): Boolean!
+    toggleRedfishMapping(name: String!, enabled: Boolean!): RedfishResult!
+}

@@ -147,7 +147,7 @@ class GenAiProviderDetailManager {
             endpoint:       document.getElementById('provider-endpoint').value.trim() || null,
             serviceVersion: document.getElementById('provider-service-version').value.trim() || null,
             baseUrl:        document.getElementById('provider-base-url').value.trim() || null,
-            temperature:    parseFloat(document.getElementById('provider-temperature').value) || 0.7,
+            temperature:    document.getElementById('provider-temperature').value !== '' ? parseFloat(document.getElementById('provider-temperature').value) : 0.7,
             maxTokens:      parseInt(document.getElementById('provider-max-tokens').value) || null,
             enabled:        document.getElementById('provider-enabled').checked
         };

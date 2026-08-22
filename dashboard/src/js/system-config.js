@@ -25,13 +25,6 @@ class SystemConfigManager {
                         tcpPort wsPort tcpsPort wssPort natsPort
                         sessionStoreType retainedStoreType configStoreType
                         userManagementEnabled anonymousEnabled
-                        mcpEnabled mcpPort
-                        prometheusEnabled prometheusPort
-                        i3xEnabled i3xPort
-                        graphqlEnabled graphqlPort
-                        metricsEnabled
-                        hmiEnabled
-                        genAiEnabled genAiProvider genAiModel
                         postgresUrl postgresUser
                         crateDbUrl crateDbUser
                         mongoDbUrl mongoDbDatabase
@@ -78,12 +71,7 @@ class SystemConfigManager {
         this.setEl('cfg-user-mgmt', this.enabledBadge(cfg.userManagementEnabled));
         this.setEl('cfg-anonymous', this.allowedBadge(cfg.anonymousEnabled));
 
-        // GenAI
-        this.setEl('cfg-genai', this.enabledBadge(cfg.genAiEnabled));
-        this.setText('cfg-genai-provider', cfg.genAiEnabled && cfg.genAiProvider ? cfg.genAiProvider : '-');
-        this.setText('cfg-genai-model', cfg.genAiEnabled && cfg.genAiModel ? cfg.genAiModel : '-');
-
-        // Database Connections
+        // Database Connections & Bus
         this.setText('cfg-postgres-url', cfg.postgresUrl || '-');
         this.setText('cfg-postgres-user', cfg.postgresUser || '-');
         this.setText('cfg-cratedb-url', cfg.crateDbUrl || '-');
@@ -91,16 +79,26 @@ class SystemConfigManager {
         this.setText('cfg-mongodb-url', cfg.mongoDbUrl || '-');
         this.setText('cfg-mongodb-db', cfg.mongoDbDatabase || '-');
         this.setText('cfg-sqlite-path', cfg.sqlitePath || '-');
-
-        // Extensions
-        this.setEl('cfg-graphql', this.enabledPortBadge(cfg.graphqlEnabled, cfg.graphqlPort));
-        this.setEl('cfg-mcp', this.enabledPortBadge(cfg.mcpEnabled, cfg.mcpPort));
-        this.setEl('cfg-prometheus', this.enabledPortBadge(cfg.prometheusEnabled, cfg.prometheusPort));
-        this.setEl('cfg-i3x', this.enabledPortBadge(cfg.i3xEnabled, cfg.i3xPort));
-        const isHmiEnabled = cfg.hmiEnabled ?? (Array.isArray(enabledFeatures) && enabledFeatures.includes('Hmi'));
-        this.setEl('cfg-hmi', this.enabledBadge(isHmiEnabled));
-        this.setEl('cfg-metrics', this.enabledBadge(cfg.metricsEnabled));
         this.setText('cfg-kafka-servers', cfg.kafkaServers || '-');
+
+        // Active Subsystems & Features
+        const featContainer = document.getElementById('cfg-features-container');
+        if (featContainer) {
+            featContainer.innerHTML = '';
+            const features = Array.isArray(enabledFeatures) ? enabledFeatures : [];
+            if (features.length === 0) {
+                featContainer.innerHTML = '<span class="text-muted" style="font-size:0.85rem; font-style:italic;">No explicit feature flags reported (all default subsystems active)</span>';
+            } else {
+                features.slice().sort().forEach(f => {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge badge-enabled';
+                    badge.style.padding = '0.4rem 0.75rem';
+                    badge.style.fontSize = '0.85rem';
+                    badge.textContent = f;
+                    featContainer.appendChild(badge);
+                });
+            }
+        }
 
         document.getElementById('config-content').style.display = 'block';
     }

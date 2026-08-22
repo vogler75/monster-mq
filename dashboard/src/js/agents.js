@@ -450,7 +450,7 @@ class AgentManager {
             inputTopics: parseTopics(document.getElementById('agent-inputTopics').value),
             outputTopics: parseTopics(document.getElementById('agent-outputTopics').value),
             allowedPublishTopics: parseTopics(document.getElementById('agent-allowedPublishTopics').value),
-            temperature: parseFloat(document.getElementById('agent-temperature').value) || 0.7,
+            temperature: document.getElementById('agent-temperature').value !== '' ? parseFloat(document.getElementById('agent-temperature').value) : 0.7,
             maxToolIterations: parseInt(document.getElementById('agent-maxToolIterations').value) || 10,
             memoryWindowSize: parseInt(document.getElementById('agent-memoryWindowSize').value) || 20,
             enabled: document.getElementById('agent-enabled').checked,

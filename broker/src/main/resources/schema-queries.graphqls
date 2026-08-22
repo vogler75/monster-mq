@@ -1327,6 +1327,8 @@ enum WinCCUaMessageFormat {
     JSON_MS
     # Raw value only (no timestamp)
     RAW_VALUE
+    # Raw JSON from WinCC (1:1)
+    RAW_JSON
 }
 
 # Transport used to read data from WinCC Unified Runtime

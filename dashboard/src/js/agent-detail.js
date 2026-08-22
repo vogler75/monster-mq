@@ -697,7 +697,7 @@ class AgentDetailManager {
             provider: document.getElementById('agent-provider').value,
             model: document.getElementById('agent-model').value.trim() || null,
             systemPrompt: document.getElementById('agent-system-prompt').value || null,
-            temperature: parseFloat(document.getElementById('agent-temperature').value) || null,
+            temperature: document.getElementById('agent-temperature').value !== '' ? parseFloat(document.getElementById('agent-temperature').value) : null,
             maxTokens: parseInt(document.getElementById('agent-max-tokens').value) || null,
             maxToolIterations: parseInt(document.getElementById('agent-max-tool-iterations').value) || null,
             memoryWindowSize: parseInt(document.getElementById('agent-memory-window-size').value) || null,

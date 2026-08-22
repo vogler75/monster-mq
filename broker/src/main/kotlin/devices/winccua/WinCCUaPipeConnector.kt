@@ -571,8 +571,8 @@ class WinCCUaPipeConnector : AbstractVerticle() {
             val name = tagJson.getString("Name") ?: continue
             val value = tagJson.getValue("Value")
             val timestamp = tagJson.getString("TimeStamp")
-            val qualityStr = tagJson.getString("Quality")
-            val qualityCode = tagJson.getString("QualityCode")
+            val qualityStr = tagJson.getValue("Quality")?.toString()
+            val qualityCode = tagJson.getValue("QualityCode")?.toString()
             val qualityJson = if (qualityStr != null || qualityCode != null) {
                 JsonObject().apply {
                     if (qualityStr != null) put("quality", qualityStr)
@@ -580,7 +580,8 @@ class WinCCUaPipeConnector : AbstractVerticle() {
                 }
             } else null
 
-            publishTagValue(address, name, value, timestamp, qualityJson)
+            val effectiveQuality = if (address.includeQuality) qualityJson else null
+            publishTagValue(address, name, value, timestamp, effectiveQuality, tagJson)
         }
     }
 
@@ -623,12 +624,19 @@ class WinCCUaPipeConnector : AbstractVerticle() {
 
     /* ---------------------- Publish (shared with GraphQL connector) ---------------------- */
 
-    private fun publishTagValue(address: WinCCUaAddress, tagName: String, value: Any?, timestamp: String?, quality: JsonObject?) {
+    private fun publishTagValue(
+        address: WinCCUaAddress,
+        tagName: String,
+        value: Any?,
+        timestamp: String?,
+        quality: JsonObject?,
+        rawTag: JsonObject? = null
+    ) {
         try {
             val mqttTopic = WinCCUaPublisher.resolveTopic(
                 deviceConfig.namespace, address.topic, tagName, winCCUaConfig.transformConfig, topicCache
             )
-            val payload = WinCCUaPublisher.formatTagPayload(winCCUaConfig.messageFormat, value, timestamp, quality)
+            val payload = WinCCUaPublisher.formatTagPayload(winCCUaConfig.messageFormat, value, timestamp, quality, rawTag)
             val msg = WinCCUaPublisher.buildTagBrokerMessage(deviceConfig.name, mqttTopic, payload, address.retained)
             vertx.eventBus().publish(WinCCUaExtension.ADDRESS_WINCCUA_VALUE_PUBLISH, msg)
             messagesInCounter.incrementAndGet()

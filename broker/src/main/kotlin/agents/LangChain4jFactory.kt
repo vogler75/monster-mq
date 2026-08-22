@@ -32,9 +32,6 @@ object LangChain4jFactory {
 
     fun createChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
         val apiKey = resolveApiKey(config.apiKey, config.provider, globalConfig)
-        val model = config.model ?: resolveDefaultModel(config.provider, globalConfig)
-        logger.fine("Creating LangChain4j ${config.provider} model: ${model ?: "default"}")
-
         val configProviderKey = when (config.provider.lowercase()) {
             "gemini" -> "Gemini"
             "claude" -> "Claude"
@@ -44,6 +41,10 @@ object LangChain4jFactory {
             "llamacpp" -> "LlamaCpp"
             else -> config.provider
         }
+        val model = (config.model ?: resolveDefaultModel(config.provider, globalConfig))?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("No model configured for AI provider '${config.provider}'. A model must be specified in the agent/provider configuration or in GenAI.Providers.$configProviderKey.Model")
+        logger.fine("Creating LangChain4j ${config.provider} model: $model")
+
         val globalProviderTimeout = globalConfig
             .getJsonObject("GenAI", JsonObject())
             .getJsonObject("Providers", JsonObject())
@@ -51,11 +52,13 @@ object LangChain4jFactory {
             .getInteger("TimeoutSeconds")?.toLong()
         val effectiveTimeout = listOfNotNull(config.timeoutSeconds, globalProviderTimeout).maxOrNull()
 
+        val shouldSetTemperature = config.temperature > 0.0 && !config.enableThinking
+
         return when (config.provider.lowercase()) {
             "gemini" -> GoogleAiGeminiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(model ?: "gemini-2.0-flash")
-                .temperature(config.temperature)
+                .modelName(model)
+                .apply { if (shouldSetTemperature) temperature(config.temperature) }
                 .apply { config.maxTokens?.let { maxOutputTokens(it) } }
                 .sendThinking(config.enableThinking)
                 .returnThinking(config.enableThinking)
@@ -65,18 +68,18 @@ object LangChain4jFactory {
 
             "claude" -> AnthropicChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(model ?: "claude-sonnet-4-20250514")
+                .modelName(model)
                 .maxTokens(config.maxTokens ?: 4096)
-                .temperature(config.temperature)
+                .apply { if (shouldSetTemperature) temperature(config.temperature) }
                 .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
                 .build()
 
             "openai" -> OpenAiChatModel.builder()
                 .apiKey(apiKey)
-                .modelName(model ?: "gpt-4o")
+                .modelName(model)
                 .apply { config.endpoint?.let { baseUrl(it) } }
-                .temperature(config.temperature)
+                .apply { if (shouldSetTemperature) temperature(config.temperature) }
                 .apply { config.maxTokens?.let { maxTokens(it) } }
                 .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
@@ -84,22 +87,22 @@ object LangChain4jFactory {
 
             "ollama" -> OllamaChatModel.builder()
                 .baseUrl(apiKey)
-                .modelName(model ?: "llama3")
-                .temperature(config.temperature)
+                .modelName(model)
+                .apply { if (shouldSetTemperature) temperature(config.temperature) }
                 .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                 .listeners(listeners)
                 .build()
 
             "azure-openai" -> {
                 val endpoint = resolveEndpoint(config.endpoint, globalConfig)
-                val deploymentName = model ?: resolveDeploymentName(globalConfig)
+                val deploymentName = model
                 val svcVersion = resolveServiceVersion(config.serviceVersion, globalConfig)
                 AzureOpenAiChatModel.builder()
                     .endpoint(endpoint)
                     .apiKey(apiKey)
                     .deploymentName(deploymentName)
                     .apply { svcVersion?.let { serviceVersion(it) } }
-                    .temperature(config.temperature)
+                    .apply { if (shouldSetTemperature) temperature(config.temperature) }
                     .apply { config.maxTokens?.let { maxTokens(it) } }
                     .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                     .listeners(listeners)
@@ -110,9 +113,9 @@ object LangChain4jFactory {
                 val effectiveEndpoint = config.endpoint ?: "http://localhost:8080/v1"
                 OpenAiChatModel.builder()
                     .apiKey(apiKey.takeIf { !it.isNullOrBlank() } ?: "dummy-key")
-                    .modelName(model ?: "local-model")
+                    .modelName(model)
                     .baseUrl(effectiveEndpoint)
-                    .temperature(config.temperature)
+                    .apply { if (shouldSetTemperature) temperature(config.temperature) }
                     .apply { config.maxTokens?.let { maxTokens(it) } }
                     .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
                     .listeners(listeners)
@@ -269,7 +272,7 @@ object LangChain4jFactory {
             "llamacpp" -> providerSection.getJsonObject("LlamaCpp", null)
             else -> null
         }
-        return section?.getString("Model")
+        return section?.getString("Model") ?: section?.getString("Deployment")
     }
 
     private fun resolveEndpoint(agentEndpoint: String?, globalConfig: JsonObject): String {
@@ -288,13 +291,6 @@ object LangChain4jFactory {
         val envEndpoint = System.getenv("AZURE_OPENAI_ENDPOINT")
         if (!envEndpoint.isNullOrBlank()) return envEndpoint
         throw IllegalArgumentException("No endpoint found for Azure OpenAI. Configure GenAI.Providers.AzureOpenAI.Endpoint or set AZURE_OPENAI_ENDPOINT")
-    }
-
-    private fun resolveDeploymentName(globalConfig: JsonObject): String {
-        val azureConfig = globalConfig.getJsonObject("GenAI", JsonObject())
-            .getJsonObject("Providers", JsonObject())
-            .getJsonObject("AzureOpenAI", JsonObject())
-        return azureConfig.getString("Deployment") ?: "gpt-4o"
     }
 
     private fun resolveServiceVersion(agentServiceVersion: String?, globalConfig: JsonObject): String? {

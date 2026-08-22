@@ -127,24 +127,6 @@ type BrokerConfig {
     # User management
     userManagementEnabled: Boolean!
     anonymousEnabled: Boolean!
-    # Extensions
-    mcpEnabled: Boolean!
-    mcpPort: Int!
-    prometheusEnabled: Boolean!
-    prometheusPort: Int!
-    i3xEnabled: Boolean!
-    i3xPort: Int!
-    # GraphQL / HTTP API
-    graphqlEnabled: Boolean!
-    graphqlPort: Int!
-    # Metrics
-    metricsEnabled: Boolean!
-    # HMI
-    hmiEnabled: Boolean!
-    # GenAI
-    genAiEnabled: Boolean!
-    genAiProvider: String!
-    genAiModel: String!
     # Database connections (passwords omitted)
     postgresUrl: String!
     postgresUser: String!
