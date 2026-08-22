@@ -4,10 +4,9 @@
 #
 # Usage:
 #   ./publish.sh --all        Publish all GitHub release assets and Docker Hub images
-#   ./publish.sh --github     Publish all GitHub release assets (broker zip, desktop apps, setup)
+#   ./publish.sh --github     Publish all GitHub release assets (broker zip, setup executables)
 #   -- Target-specific GitHub options --
 #   ./publish.sh --broker     Publish standalone broker bundle (.zip) to GitHub only
-#   ./publish.sh --dashboard  Publish desktop dashboard apps (dmg/exe) to GitHub only
 #   ./publish.sh --setup      Publish cross-platform Go setup executables to GitHub only
 #   -- Docker option --
 #   ./publish.sh --docker     Build and push Docker images to Docker Hub only
@@ -36,7 +35,6 @@ VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 TAG="v${VERSION}"
 
 PUBLISH_BROKER=false
-PUBLISH_DASHBOARD=false
 PUBLISH_SETUP=false
 PUBLISH_DOCKER=false
 EXPLICIT_TARGET=false
@@ -47,9 +45,8 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --all            Publish everything (all GitHub release assets + Docker Hub images)"
-    echo "  --github         Publish all GitHub release assets (broker zip, desktop dashboard, setup executables)"
+    echo "  --github         Publish all GitHub release assets (broker zip, setup executables)"
     echo "  --broker, -b     Publish standalone broker bundle (.zip) to GitHub release only"
-    echo "  --dashboard, -d  Publish desktop dashboard apps (.dmg / .exe) to GitHub release only"
     echo "  --setup, -s      Publish Go setup executables (setup.exe, setup-mac, setup-linux) to GitHub only"
     echo "  --docker         Build multi-arch Docker image and push to Docker Hub only"
     echo "  -y, --yes        Auto-confirm publishing without asking"
@@ -66,7 +63,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --all)
             PUBLISH_BROKER=true
-            PUBLISH_DASHBOARD=true
             PUBLISH_SETUP=true
             PUBLISH_DOCKER=true
             EXPLICIT_TARGET=true
@@ -74,18 +70,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --github)
             PUBLISH_BROKER=true
-            PUBLISH_DASHBOARD=true
             PUBLISH_SETUP=true
             EXPLICIT_TARGET=true
             shift
             ;;
         --broker|-b)
             PUBLISH_BROKER=true
-            EXPLICIT_TARGET=true
-            shift
-            ;;
-        --dashboard|--desktop|-d)
-            PUBLISH_DASHBOARD=true
             EXPLICIT_TARGET=true
             shift
             ;;
@@ -115,7 +105,6 @@ done
 
 if [ "$EXPLICIT_TARGET" = false ]; then
     PUBLISH_BROKER=true
-    PUBLISH_DASHBOARD=true
     PUBLISH_SETUP=true
     PUBLISH_DOCKER=true
 fi
@@ -123,7 +112,6 @@ fi
 echo -e "${GREEN}=== MonsterMQ Main Publish Pipeline (Target: ${TAG}) ===${NC}"
 echo "Selected publish targets:"
 [ "$PUBLISH_BROKER" = true ] && echo -e "  • ${BLUE}Broker Bundle (.zip)${NC} -> GitHub Release"
-[ "$PUBLISH_DASHBOARD" = true ] && echo -e "  • ${BLUE}Desktop Dashboard (DMG / Setup)${NC} -> GitHub Release"
 [ "$PUBLISH_SETUP" = true ] && echo -e "  • ${BLUE}Setup Executables (Go installer)${NC} -> GitHub Release"
 [ "$PUBLISH_DOCKER" = true ] && echo -e "  • ${BLUE}Docker Hub Multi-Arch Images${NC}"
 echo ""
@@ -179,35 +167,7 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
         fi
     fi
 
-    # 1b. Desktop Dashboard Apps
-    if [ "$PUBLISH_DASHBOARD" = true ]; then
-        DESKTOP_FILES=()
-        shopt -s nullglob
-        for f in dashboard/dist-desktop/MonsterMQ-Dashboard*.dmg dashboard/dist-desktop/MonsterMQ-Dashboard*-setup.exe; do
-            if [[ "$f" != *.blockmap ]]; then
-                DESKTOP_FILES+=("$f")
-            fi
-        done
-        shopt -u nullglob
-
-        if [ ${#DESKTOP_FILES[@]} -eq 0 ]; then
-            echo -e "${YELLOW}Desktop dashboard apps not found. Building them now...${NC}"
-            ./build.sh --desktop
-            shopt -s nullglob
-            for f in dashboard/dist-desktop/MonsterMQ-Dashboard*.dmg dashboard/dist-desktop/MonsterMQ-Dashboard*-setup.exe; do
-                if [[ "$f" != *.blockmap ]]; then
-                    DESKTOP_FILES+=("$f")
-                fi
-            done
-            shopt -u nullglob
-        fi
-
-        for f in "${DESKTOP_FILES[@]}"; do
-            RELEASE_FILES+=("$f")
-        done
-    fi
-
-    # 1c. Setup Executables
+    # 1b. Setup Executables
     if [ "$PUBLISH_SETUP" = true ]; then
         SETUP_FILES=()
         shopt -s nullglob

@@ -86,13 +86,31 @@ for arg in "$@"; do
     fi
 done
 
+# Resolve dashboard directory (supports monorepo, sibling checkouts, or separate repo names)
+resolve_dashboard_dir() {
+    local candidates=(
+        "$(cd "$(dirname "$0")/../dashboard" 2>/dev/null && pwd)"
+        "$(cd "$(dirname "$0")/../../dashboard" 2>/dev/null && pwd)"
+        "$(cd "$(dirname "$0")/../../monster-mq-dashboard" 2>/dev/null && pwd)"
+        "$(cd "$(dirname "$0")/../monster-mq-dashboard" 2>/dev/null && pwd)"
+    )
+    for dir in "${candidates[@]}"; do
+        if [ -n "$dir" ] && [ -f "$dir/package.json" ]; then
+            echo "$dir"
+            return 0
+        fi
+    done
+    echo ""
+    return 1
+}
+
 # If -build option is specified, build dashboard and broker
 if [ "$BUILD_FIRST" = true ]; then
     # Build the dashboard
-    DASHBOARD_DIR="$(cd "$(dirname "$0")/../dashboard" && pwd)"
+    DASHBOARD_DIR="$(resolve_dashboard_dir)"
     RESOURCES_DIR="$(cd "$(dirname "$0")" && pwd)/src/main/resources/dashboard"
-    if [ -f "$DASHBOARD_DIR/package.json" ]; then
-        echo "Building dashboard..."
+    if [ -n "$DASHBOARD_DIR" ] && [ -f "$DASHBOARD_DIR/package.json" ]; then
+        echo "Building dashboard from $DASHBOARD_DIR..."
         (cd "$DASHBOARD_DIR" && npm install && npm run build)
         if [ $? -ne 0 ]; then
             echo "Dashboard build failed!"
@@ -103,7 +121,9 @@ if [ "$BUILD_FIRST" = true ]; then
         cp -r "$DASHBOARD_DIR/dist" "$RESOURCES_DIR"
         echo "Dashboard build completed."
     else
-        echo "Dashboard not found, skipping."
+        echo "Error: Dashboard checkout not found!"
+        echo "Please create a symlink or clone https://github.com/vogler75/monster-mq-dashboard into a sibling folder (e.g. ../dashboard)."
+        exit 1
     fi
 
     # Build the broker
@@ -202,28 +222,33 @@ JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
 
 # Serve dashboard from filesystem for development
 if [ "$DASHBOARD_DEV" = true ]; then
-    DASHBOARD_DIR="$(cd "$(dirname "$0")/../dashboard" && pwd)"
-    DASHBOARD_DIST="$DASHBOARD_DIR/dist"
+    DASHBOARD_DIR="$(resolve_dashboard_dir)"
     
-    # If -build was NOT specified, build the dashboard now if requested by -d
-    if [ "$BUILD_FIRST" = false ]; then
-        if [ -f "$DASHBOARD_DIR/package.json" ]; then
-            echo "Always build requested by -d, building dashboard..."
-            (cd "$DASHBOARD_DIR" && npm install && npm run build)
-            if [ $? -ne 0 ]; then
-                echo "Dashboard build failed!"
-                exit 1
+    if [ -n "$DASHBOARD_DIR" ]; then
+        DASHBOARD_DIST="$DASHBOARD_DIR/dist"
+        # If -build was NOT specified, build the dashboard now if requested by -d
+        if [ "$BUILD_FIRST" = false ]; then
+            if [ -f "$DASHBOARD_DIR/package.json" ]; then
+                echo "Always build requested by -d, building dashboard from $DASHBOARD_DIR..."
+                (cd "$DASHBOARD_DIR" && npm install && npm run build)
+                if [ $? -ne 0 ]; then
+                    echo "Dashboard build failed!"
+                    exit 1
+                fi
             fi
-        else
-            echo "Warning: Dashboard directory or package.json not found, skipping build."
         fi
-    fi
 
-    if [ -d "$DASHBOARD_DIST" ]; then
-        echo "Dashboard serving from filesystem: $DASHBOARD_DIST"
-        REMAINING_ARGS+=("-dashboardPath" "$DASHBOARD_DIST")
+        if [ -d "$DASHBOARD_DIST" ]; then
+            echo "Dashboard serving from filesystem: $DASHBOARD_DIST"
+            REMAINING_ARGS+=("-dashboardPath" "$DASHBOARD_DIST")
+        else
+            echo "Error: $DASHBOARD_DIST not found after build attempt."
+            exit 1
+        fi
     else
-        echo "Warning: dashboard/dist/ not found after build attempt."
+        echo "Error: Dashboard checkout not found in any standard location (../dashboard, ../../dashboard, ../../monster-mq-dashboard)."
+        echo "Please create a symlink or clone https://github.com/vogler75/monster-mq-dashboard into a sibling folder."
+        exit 1
     fi
 fi
 

@@ -27,14 +27,14 @@ java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-clu
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
-#### iX Dashboard (dashboard/)
-The dashboard using Siemens iX lives in `dashboard/` and is built with Vite. It outputs to `dashboard/dist/`.
+#### iX Dashboard (monster-mq-dashboard)
+The dashboard using Siemens iX lives in its own repository at [`monster-mq-dashboard`](https://github.com/vogler75/monster-mq-dashboard) (and locally at `../dashboard` or `../monster-mq-dashboard`). It is built with Vite and outputs to `dist/`.
 
 ```bash
-cd dashboard
+cd ../dashboard        # or within the dashboard checkout
 npm install
 npm run dev          # Vite dev server on http://localhost:5173, proxies /graphql to :4000
-npm run build        # Outputs to dashboard/dist/
+npm run build        # Outputs to dist/
 ```
 
 ### Running Tests
@@ -172,7 +172,7 @@ component changes appearance as you navigate. Use `window.ui` instead of
 (air-gapped deployments — add to `VENDOR_BUNDLES` in `vite.config.js` instead).
   - `dist/` - Build output (gitignored)
 
-**IMPORTANT**: Always edit dashboard files in `dashboard/src/`, NOT in `broker/src/main/resources/dashboard/`. The Vite build (`npm run build` or `./run -build`) copies the built output to `broker/src/main/resources/dashboard/`, so any direct edits there will be overwritten.
+**IMPORTANT**: Always edit dashboard files in the `monster-mq-dashboard` repository (`src/`), NOT directly in `broker/src/main/resources/dashboard/`. The build script or Maven downloads and packages the built output into `broker/src/main/resources/dashboard/` or the JAR classpath, so any direct edits there will be overwritten.
 
 ### HTTP Services and Ports
 

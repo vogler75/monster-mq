@@ -1289,6 +1289,35 @@ MORE INFO:
                     null
                 }
 
+                // Redfish Server
+                val redfishConfig = configJson.getJsonObject("Redfish", JsonObject())
+                val redfishEnabled = Monster.isFeatureEnabled(Features.Redfish) && redfishConfig.getBoolean("Enabled", true)
+                val redfishPort = redfishConfig.getInteger("Port", 0)
+                val redfishServer = if (redfishEnabled) {
+                    val redfishMountPath = redfishConfig.getString("MountPath", "/redfish/v1")
+                    val defaultChassisId = redfishConfig.getString("DefaultChassisId", "EdgeNode")
+                    val defaultSystemId = redfishConfig.getString("DefaultSystemId", this.nodeName.ifBlank { "edge-node" })
+                    val defaultManagerId = redfishConfig.getString("DefaultManagerId", "monstermq")
+                    val anonymousEnabled = redfishConfig.getBoolean("AnonymousEnabled", true)
+
+                    at.rocworks.extensions.redfish.RedfishServer(
+                        host = "0.0.0.0",
+                        port = redfishPort,
+                        mountPath = redfishMountPath,
+                        defaultChassisId = defaultChassisId,
+                        defaultSystemId = defaultSystemId,
+                        defaultManagerId = defaultManagerId,
+                        anonymousEnabled = anonymousEnabled,
+                        archiveHandler = this.archiveHandler,
+                        sessionHandler = sessionHandler,
+                        deviceConfigStore = deviceConfigStore,
+                        userManager = userManager
+                    )
+                } else {
+                    if (!redfishEnabled) logger.fine("Redfish server is disabled in configuration")
+                    null
+                }
+
                 val graphQLServer = if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
 
@@ -1308,7 +1337,8 @@ MORE INFO:
                         deviceConfigStore,
                         genAiProvider,
                         dashboardPath,
-                        restApiServer
+                        restApiServer,
+                        redfishServer
                     )
                 } else {
                     logger.fine("GraphQL server is disabled in configuration")
@@ -1325,7 +1355,8 @@ MORE INFO:
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     prometheusServer,
-                    i3xServer
+                    i3xServer,
+                    if (redfishServer != null && redfishPort > 0) redfishServer else null
                 )
 
                 // Deploy all verticles
