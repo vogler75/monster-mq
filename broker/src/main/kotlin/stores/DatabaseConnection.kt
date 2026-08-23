@@ -20,19 +20,61 @@ abstract class DatabaseConnection(
     private var reconnectOngoing = false
     @Volatile
     private var disconnectedLogged = false
+    @Volatile
+    private var isStopped = false
+    @Volatile
+    private var isConnected = false
+    private var periodicTimerId: Long? = null
+    private var retryTimerId: Long? = null
+    private var vertxInstance: Vertx? = null
 
-    fun start(vertx: Vertx, startPromise: Promise<Void>) = connect(vertx, startPromise)
+    fun start(vertx: Vertx, startPromise: Promise<Void>) {
+        this.vertxInstance = vertx
+        this.isStopped = false
+        connect(vertx, startPromise)
+    }
+
+    fun stop(): Future<Void> {
+        isStopped = true
+        isConnected = false
+        vertxInstance?.let { v ->
+            periodicTimerId?.let { id -> v.cancelTimer(id) }
+            retryTimerId?.let { id -> v.cancelTimer(id) }
+        }
+        periodicTimerId = null
+        retryTimerId = null
+        try {
+            connection?.close()
+        } catch (e: Exception) {
+            logger.finer { "Error closing connection: ${e.message}" }
+        }
+        connection = null
+        return Future.succeededFuture()
+    }
+
+    fun getConnectionStatus(): Boolean {
+        return !isStopped && isConnected && connection != null
+    }
 
     private fun connect(vertx: Vertx, connectPromise: Promise<Void>) {
+        if (isStopped) {
+            isConnected = false
+            connectPromise.tryFail("Database connection is stopped")
+            return
+        }
         vertx.executeBlocking(Callable {
+            if (isStopped) return@Callable
             try {
                 open().onComplete { result ->
+                    if (isStopped) return@onComplete
                     if (result.succeeded()) {
-                        vertx.setPeriodic(5000) { // TODO: configurable
+                        periodicTimerId = vertx.setPeriodic(5000) { // TODO: configurable
+                            if (isStopped) return@setPeriodic
                             // Execute blocking health check on worker thread pool
                             vertx.executeBlocking(Callable {
-                                check()
+                                if (isStopped) false else check()
                             }).onComplete { checkResult ->
+                                if (isStopped) return@onComplete
                                 if (checkResult.succeeded()) {
                                     if (!checkResult.result()) {
                                         reconnect(vertx)
@@ -43,17 +85,23 @@ abstract class DatabaseConnection(
                                 }
                             }
                         }
-                        connectPromise.complete()
+                        connectPromise.tryComplete()
                     } else {
-                        logger.warning("Connect failed! [${result.cause().message}] [${Utils.getCurrentFunctionName()}]")
-                        vertx.setTimer(defaultRetryWaitTime) {
-                            connect(vertx, connectPromise)
+                        isConnected = false
+                        if (!isStopped) {
+                            logger.warning("Connect failed! [${result.cause().message}] [${Utils.getCurrentFunctionName()}]")
+                            retryTimerId = vertx.setTimer(defaultRetryWaitTime) {
+                                if (!isStopped) {
+                                    connect(vertx, connectPromise)
+                                }
+                            }
                         }
                     }
                 }
             } catch (e: Exception) {
+                isConnected = false
                 logger.warning("Error in connect [${e.message}] [${Utils.getCurrentFunctionName()}]")
-                connectPromise.fail(e)
+                connectPromise.tryFail(e)
             }
         })
     }
@@ -80,9 +128,19 @@ abstract class DatabaseConnection(
                     } else {
                         logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
                     }
-                    init(connection).onSuccess { promise.complete() }.onFailure { promise.fail(it) }
+                    init(connection).onSuccess {
+                        isConnected = true
+                        promise.complete()
+                    }.onFailure {
+                        isConnected = false
+                        promise.fail(it)
+                    }
+                } ?: run {
+                    isConnected = false
+                    promise.fail("DriverManager returned null connection")
                 }
         } catch (e: Exception) {
+            isConnected = false
             logger.warning("Error opening connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
             promise.fail(e)
         }
@@ -90,10 +148,17 @@ abstract class DatabaseConnection(
     }
 
     fun check(): Boolean {
+        if (isStopped) {
+            isConnected = false
+            return false
+        }
         if (connection != null && !connection!!.isClosed) {
             try {
-                return connection!!.isValid(3)
+                val valid = connection!!.isValid(3)
+                isConnected = valid
+                return valid
             } catch (e: Exception) {
+                isConnected = false
                 logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
                 // If the connection has an aborted transaction, try to rollback
                 if (e.message?.contains("aborted") == true || e.message?.contains("transaction") == true) {
@@ -106,11 +171,13 @@ abstract class DatabaseConnection(
                 }
             }
         }
+        isConnected = false
         return false
     }
 
 
     private fun reconnect(vertx: Vertx) {
+        if (isStopped) return
         if (!reconnectOngoing) {
             if (!disconnectedLogged) {
                 disconnectedLogged = true

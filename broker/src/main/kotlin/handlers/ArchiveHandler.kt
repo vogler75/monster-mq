@@ -463,12 +463,14 @@ class ArchiveHandler(
         val requiredTypes = setOfNotNull(
             when (archiveGroup.getLastValType()) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveGroup.getArchiveType()) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
@@ -494,6 +496,11 @@ class ArchiveHandler(
                     .put("Pass", connection.password ?: "")
                     .put("Schema", connection.schema)
                 )
+                DatabaseConnectionType.CRATEDB -> baseConfig.put("CrateDB", JsonObject()
+                    .put("Url", connection.url)
+                    .put("User", connection.username ?: "")
+                    .put("Pass", connection.password ?: "")
+                )
                 DatabaseConnectionType.MONGODB -> baseConfig.put("MongoDB", JsonObject()
                     .put("Url", mongoUrlWithCredentials(connection.url, connection.username, connection.password))
                     .put("User", connection.username)
@@ -512,6 +519,7 @@ class ArchiveHandler(
                 val missingTypes = requiredTypes.filter {
                     when (it) {
                         DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.getString("Url").isNullOrBlank()
+                        DatabaseConnectionType.CRATEDB -> configJson.getJsonObject("CrateDB")?.getString("Url").isNullOrBlank()
                         DatabaseConnectionType.MONGODB -> configJson.getJsonObject("MongoDB")?.getString("Url").isNullOrBlank()
                         DatabaseConnectionType.SQLITE -> configJson.getJsonObject("SQLite")?.getString("Path").isNullOrBlank()
                     }
@@ -524,7 +532,7 @@ class ArchiveHandler(
             }
 
             val requiredType = requiredTypes.firstOrNull()
-                ?: return Future.failedFuture("Default database connection can only be used for Postgres, MongoDB, or SQLite stores")
+                ?: return Future.failedFuture("Default database connection can only be used for Postgres, CrateDB, MongoDB, or SQLite stores")
             val connection = when (requiredType) {
                 DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.let {
                     val url = it.getString("Url")
@@ -535,6 +543,17 @@ class ArchiveHandler(
                         username = it.getString("User"),
                         password = it.getString("Pass"),
                         schema = it.getString("Schema"),
+                        readOnly = true
+                    )
+                }
+                DatabaseConnectionType.CRATEDB -> configJson.getJsonObject("CrateDB")?.let {
+                    val url = it.getString("Url")
+                    if (url.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.CRATEDB,
+                        url = url,
+                        username = it.getString("User"),
+                        password = it.getString("Pass"),
                         readOnly = true
                     )
                 }
@@ -589,7 +608,9 @@ class ArchiveHandler(
             bulkSize = ag.bulkSize,
             bulkTimeoutMs = ag.bulkTimeoutMs,
             queueDiskPath = ag.queueDiskPath,
-            databaseConfig = databaseConfig
+            databaseConfig = databaseConfig,
+            lastValReadOnly = ag.lastValReadOnly,
+            archiveReadOnly = ag.archiveReadOnly
         )
     }
 

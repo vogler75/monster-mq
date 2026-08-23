@@ -162,6 +162,10 @@ class ArchiveGroup(
         isStopping = true
         stopRetentionScheduling()
 
+        // Directly stop stores in case child verticles were still connecting or not yet in childDeployments
+        try { lastValStore?.stopStore() } catch (e: Exception) { logger.fine { "Error stopping lastValStore: ${e.message}" } }
+        try { archiveStore?.stopStore() } catch (e: Exception) { logger.fine { "Error stopping archiveStore: ${e.message}" } }
+
         // Clean up child verticle deployments
         if (childDeployments.isNotEmpty()) {
             logger.info("Undeploying ${childDeployments.size} child verticles for ArchiveGroup [$name]")

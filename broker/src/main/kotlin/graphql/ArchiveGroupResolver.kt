@@ -67,6 +67,18 @@ class ArchiveGroupResolver(
                 ))
             }
         }
+        databaseConfig.getJsonObject("CrateDB")?.let {
+            val url = it.getString("Url")
+            if (!url.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.CRATEDB,
+                    url = url,
+                    username = it.getString("User"),
+                    readOnly = true
+                ))
+            }
+        }
         return connections
     }
 
@@ -95,12 +107,14 @@ class ArchiveGroupResolver(
         val requiredTypes = setOfNotNull(
             when (lastValType) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveType) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
@@ -108,7 +122,7 @@ class ArchiveGroupResolver(
         )
 
         if (requiredTypes.isEmpty()) {
-            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL, MongoDB, or SQLite storage")
+            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL, CrateDB, MongoDB, or SQLite storage")
         }
         if (requiredTypes.size > 1) {
             return io.vertx.core.Future.succeededFuture(

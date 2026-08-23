@@ -57,8 +57,8 @@ class MessageStoreCrateDB(
                         topic_r VARCHAR[],
                         topic_l VARCHAR,
                         time TIMESTAMPTZ,
-                        payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT(DYNAMIC),
+                        payload_b64 VARCHAR INDEX OFF STORAGE WITH (columnstore = false),
+                        payload_obj OBJECT(IGNORED),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),
@@ -98,6 +98,14 @@ class MessageStoreCrateDB(
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
+    }
+
+    override fun stopStore(): Future<Void> {
+        return db.stop()
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        db.stop().onComplete { stopPromise.complete() }
     }
 
     override fun get(topicName: String): BrokerMessage? {
@@ -514,7 +522,7 @@ class MessageStoreCrateDB(
         }
     }
 
-    override fun getConnectionStatus(): Boolean = db.check()
+    override fun getConnectionStatus(): Boolean = db.getConnectionStatus()
 
     override fun findTopicsByName(name: String, ignoreCase: Boolean, namespace: String): List<String> {
         val resultTopics = mutableListOf<String>()
@@ -626,14 +634,15 @@ class MessageStoreCrateDB(
                         topic_r VARCHAR[],
                         topic_l VARCHAR,
                         time TIMESTAMPTZ,
-                        payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT(DYNAMIC),
+                        payload_b64 VARCHAR INDEX OFF STORAGE WITH (columnstore = false),
+                        payload_obj OBJECT(IGNORED),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),
                         message_uuid VARCHAR(36)
                     )
                     """.trimIndent())
+                    connection.commit()
                     logger.info("Message store table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 }
                 true

@@ -61,10 +61,18 @@ class MessageArchivePostgres (
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.POSTGRES
 
-    override fun getConnectionStatus(): Boolean = db.check()
+    override fun getConnectionStatus(): Boolean = db.getConnectionStatus()
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
+    }
+
+    override fun stopStore(): Future<Void> {
+        return db.stop()
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        db.stop().onComplete { stopPromise.complete() }
     }
 
     override fun addHistory(messages: List<BrokerMessage>) {

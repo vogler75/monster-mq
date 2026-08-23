@@ -49,10 +49,18 @@ class MessageArchiveCrateDB (
     override fun getName(): String = name
     override fun getType() = MessageArchiveType.CRATEDB
 
-    override fun getConnectionStatus(): Boolean = db.check()
+    override fun getConnectionStatus(): Boolean = db.getConnectionStatus()
 
     override fun start(startPromise: Promise<Void>) {
         db.start(vertx, startPromise)
+    }
+
+    override fun stopStore(): Future<Void> {
+        return db.stop()
+    }
+
+    override fun stop(stopPromise: Promise<Void>) {
+        db.stop().onComplete { stopPromise.complete() }
     }
 
     override fun addHistory(messages: List<BrokerMessage>) {
@@ -494,8 +502,8 @@ class MessageArchiveCrateDB (
                     CREATE TABLE IF NOT EXISTS $tableName (
                         topic VARCHAR,
                         time TIMESTAMPTZ,
-                        payload_b64 VARCHAR INDEX OFF,
-                        payload_obj OBJECT(DYNAMIC),
+                        payload_b64 VARCHAR INDEX OFF STORAGE WITH (columnstore = false),
+                        payload_obj OBJECT(IGNORED),
                         qos INT,
                         retained BOOLEAN,
                         client_id VARCHAR(65535),
@@ -505,6 +513,7 @@ class MessageArchiveCrateDB (
                     """.trimIndent()
                     )
                 }
+                connection.commit()
                 logger.info("Message archive table [$name] initialized (created or already exists) [${Utils.getCurrentFunctionName()}]")
                 true
             } ?: false

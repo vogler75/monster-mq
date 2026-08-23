@@ -51,6 +51,10 @@ object KafkaQueueStoreFactory {
                         val dbPath = connection.url
                         KafkaQueueStoreSQLite(dbPath, tableNameSuffix)
                     }
+                    DatabaseConnectionType.CRATEDB -> {
+                        logger.warning("CrateDB is not supported for Kafka queue store, falling back to SQLite Memory")
+                        KafkaQueueStoreSQLite("file::memory:?cache=shared", tableNameSuffix)
+                    }
                 }
             } else {
                 when (storeTypeUpper) {
