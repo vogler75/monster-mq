@@ -55,6 +55,10 @@ object KafkaQueueStoreFactory {
                         logger.warning("CrateDB is not supported for Kafka queue store, falling back to SQLite Memory")
                         KafkaQueueStoreSQLite("file::memory:?cache=shared", tableNameSuffix)
                     }
+                    DatabaseConnectionType.QUESTDB -> {
+                        logger.warning("QuestDB is not supported for Kafka queue store, falling back to SQLite Memory")
+                        KafkaQueueStoreSQLite("file::memory:?cache=shared", tableNameSuffix)
+                    }
                 }
             } else {
                 when (storeTypeUpper) {

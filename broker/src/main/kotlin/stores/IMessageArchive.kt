@@ -12,6 +12,7 @@ enum class MessageArchiveType {
     NONE,
     POSTGRES,
     CRATEDB,
+    QUESTDB,
     MONGODB,
     SQLITE
 }

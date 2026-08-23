@@ -420,6 +420,7 @@ enum DatabaseConnectionType {
     MONGODB
     SQLITE
     CRATEDB
+    QUESTDB
 }
 
 type DatabaseConnectionInfo {

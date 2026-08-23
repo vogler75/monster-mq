@@ -69,7 +69,7 @@ class McpHandler(
     private fun defaultArchiveSupportsSql(): Boolean {
         val defaultArchiveGroup = getArchiveGroup() ?: return false
         return when (defaultArchiveGroup.getArchiveType()) {
-            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.SQLITE -> true
+            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.QUESTDB, MessageArchiveType.SQLITE -> true
             MessageArchiveType.MONGODB, MessageArchiveType.NONE -> false
         }
     }

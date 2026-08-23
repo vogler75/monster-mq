@@ -949,7 +949,7 @@
           "ArchiveType": {
             "type": "string",
             "title": "Historical Archive Backend",
-            "enum": ["NONE", "POSTGRES", "CRATEDB", "MONGODB", "SQLITE"],
+            "enum": ["NONE", "POSTGRES", "CRATEDB", "QUESTDB", "MONGODB", "SQLITE"],
             "default": "NONE",
             "description": "Database backend used for long-term historical time-series storage"
           },

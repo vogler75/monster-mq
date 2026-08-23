@@ -7,7 +7,8 @@ enum class DatabaseConnectionType {
     POSTGRES,
     MONGODB,
     SQLITE,
-    CRATEDB
+    CRATEDB,
+    QUESTDB
 }
 
 data class DatabaseConnectionConfig(
