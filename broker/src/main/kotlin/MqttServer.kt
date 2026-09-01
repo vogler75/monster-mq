@@ -4,7 +4,7 @@ import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
-import io.vertx.core.net.ClientAuth
+import io.vertx.core.http.ClientAuth
 import io.vertx.core.net.JksOptions
 import io.vertx.core.net.KeyCertOptions
 import io.vertx.core.net.PemKeyCertOptions
