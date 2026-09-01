@@ -397,26 +397,90 @@
     "SSL": {
       "type": "object",
       "title": "SSL / TLS Encryption",
-      "description": "SSL/TLS certificate configuration for encrypted MQTT connections (TCPS and WSS)",
+      "description": "SSL/TLS certificate configuration for encrypted MQTT connections (TCPS and WSS). These settings are used by the MQTTS (TCPS) listener, and also serve as the fallback for the WSS listener when the optional 'WSS' override below is not set.",
       "properties": {
         "KeyStorePath": {
           "type": "string",
           "title": "KeyStore File Path",
-          "description": "Path to the keystore file containing the server certificate and private key",
+          "description": "Path to the keystore file containing the server certificate and private key. When KeyStoreType is PEM, this is the certificate (or fullchain) PEM file path instead.",
           "default": "server-keystore.jks"
         },
         "KeyStorePassword": {
           "type": "string",
           "title": "KeyStore Password",
-          "description": "Password for accessing the keystore file",
+          "description": "Password for accessing the keystore file. Ignored when KeyStoreType is PEM.",
           "default": "password"
         },
         "KeyStoreType": {
           "type": "string",
           "title": "KeyStore Format",
-          "enum": ["JKS", "PKCS12", "PFX", "P12"],
-          "description": "Keystore format: JKS (Java KeyStore) or PKCS12 / PFX / P12 (industry standard).",
+          "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+          "description": "Keystore format: JKS (Java KeyStore), PKCS12 / PFX / P12 (industry standard), or PEM (separate certificate + private key files, e.g. from Let's Encrypt/certbot).",
           "default": "JKS"
+        },
+        "KeyPath": {
+          "type": "string",
+          "title": "Private Key File Path (PEM only)",
+          "description": "Path to the private key PEM file. Only used when KeyStoreType is PEM.",
+          "default": ""
+        },
+        "ClientAuth": {
+          "type": "string",
+          "title": "Client Certificate Verification",
+          "enum": ["NONE", "REQUEST", "REQUIRED"],
+          "description": "Enables mutual TLS (mTLS) on the MQTTS (TCPS) listener by requesting/requiring a client certificate, verified against TrustStorePath. NONE is the default and matches prior behavior (no client certificate requested). Not applied to the WSS listener.",
+          "default": "NONE"
+        },
+        "TrustStorePath": {
+          "type": "string",
+          "title": "TrustStore / CA File Path",
+          "description": "Path to a truststore (JKS/PKCS12) or a CA certificate PEM file (when TrustStoreType is PEM) used to verify client certificates when ClientAuth is REQUEST or REQUIRED.",
+          "default": ""
+        },
+        "TrustStorePassword": {
+          "type": "string",
+          "title": "TrustStore Password",
+          "description": "Password for accessing the truststore file. Ignored when TrustStoreType is PEM.",
+          "default": ""
+        },
+        "TrustStoreType": {
+          "type": "string",
+          "title": "TrustStore Format",
+          "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+          "description": "Truststore format: JKS, PKCS12 / PFX / P12, or PEM (a single CA certificate file).",
+          "default": "JKS"
+        },
+        "WSS": {
+          "type": "object",
+          "title": "WSS Listener Certificate Override",
+          "description": "Optional independent certificate for the Secure WebSocket (WSS) listener. Falls back to the KeyStore settings above when not set. Use this when WSS should present a different certificate than MQTTS, e.g. a public domain certificate for WSS and an internal CA-issued certificate for MQTTS. There's no ClientAuth/TrustStore here since WSS stays server-authenticated TLS only.",
+          "properties": {
+            "KeyStorePath": {
+              "type": "string",
+              "title": "KeyStore File Path",
+              "description": "Path to the keystore file (or certificate/fullchain PEM file when KeyStoreType is PEM) for the WSS listener.",
+              "default": ""
+            },
+            "KeyStorePassword": {
+              "type": "string",
+              "title": "KeyStore Password",
+              "description": "Password for accessing the WSS keystore file. Ignored when KeyStoreType is PEM.",
+              "default": ""
+            },
+            "KeyStoreType": {
+              "type": "string",
+              "title": "KeyStore Format",
+              "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+              "description": "Keystore format for the WSS certificate.",
+              "default": "JKS"
+            },
+            "KeyPath": {
+              "type": "string",
+              "title": "Private Key File Path (PEM only)",
+              "description": "Path to the WSS private key PEM file. Only used when KeyStoreType is PEM.",
+              "default": ""
+            }
+          }
         }
       }
     },
@@ -949,7 +1013,7 @@
           "ArchiveType": {
             "type": "string",
             "title": "Historical Archive Backend",
-            "enum": ["NONE", "POSTGRES", "CRATEDB", "MONGODB", "SQLITE"],
+            "enum": ["NONE", "POSTGRES", "CRATEDB", "QUESTDB", "MONGODB", "SQLITE"],
             "default": "NONE",
             "description": "Database backend used for long-term historical time-series storage"
           },
