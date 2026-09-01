@@ -1020,6 +1020,22 @@ MORE INFO:
         val keyStorePath = sslConfig.getString("KeyStorePath", "server-keystore.jks")
         val keyStorePassword = sslConfig.getString("KeyStorePassword", "password")
         val keyStoreType = sslConfig.getString("KeyStoreType", "JKS")
+        val keyPath = sslConfig.getString("KeyPath", "")
+
+        // Optional mutual TLS (client certificate verification) for the MQTTS (TCPS) listener.
+        // Defaults preserve prior behavior exactly: ClientAuth "NONE" means no trust store is applied.
+        val clientAuth = sslConfig.getString("ClientAuth", "NONE")
+        val trustStorePath = sslConfig.getString("TrustStorePath", "")
+        val trustStorePassword = sslConfig.getString("TrustStorePassword", "")
+        val trustStoreType = sslConfig.getString("TrustStoreType", "JKS")
+
+        // Optional independent certificate for the WSS listener. Falls back to the SSL settings
+        // above when not set, so existing single-certificate configs are unaffected.
+        val wssSslConfig = sslConfig.getJsonObject("WSS", JsonObject())
+        val wssKeyStorePath = wssSslConfig.getString("KeyStorePath", keyStorePath)
+        val wssKeyStorePassword = wssSslConfig.getString("KeyStorePassword", keyStorePassword)
+        val wssKeyStoreType = wssSslConfig.getString("KeyStoreType", keyStoreType)
+        val wssKeyPath = wssSslConfig.getString("KeyPath", keyPath)
 
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
@@ -1350,8 +1366,15 @@ MORE INFO:
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
+                    if (useTcpSsl>0) MqttServer(
+                        useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
+                        keyStorePath, keyStorePassword, keyStoreType, keyPath,
+                        clientAuth, trustStorePath, trustStorePassword, trustStoreType
+                    ) else null,
+                    if (useWsSsl>0) MqttServer(
+                        useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
+                        wssKeyStorePath, wssKeyStorePassword, wssKeyStoreType, wssKeyPath
+                    ) else null,
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     prometheusServer,
