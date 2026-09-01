@@ -73,18 +73,19 @@ const defaultSQLiteConfig = {
     DeviceImportExport: true,
     Zenoh: true,
     Hmi: true,
-    I3xClient: true
+    I3xClient: true,
+    Redfish: true
   }
 };
 
 // Category Mapping for Schema Properties
 const categoryMapping = {
-  network: ['TCP', 'WS', 'TCPS', 'WSS', 'NATS', 'GraphQL', 'MCP', 'Prometheus', 'I3x', 'RedisServer', 'KafkaServer'],
-  storage: ['DefaultStoreType', 'SessionStoreType', 'QueueStoreType', 'RetainedStoreType', 'ConfigStoreType', 'SQLite', 'Postgres', 'MongoDB', 'CrateDB'],
+  network: ['TCP', 'WS', 'TCPS', 'WSS', 'NATS', 'GraphQL', 'MCP', 'Prometheus', 'RedisServer', 'KafkaServer'],
+  storage: ['DefaultStoreType', 'SessionStoreType', 'QueueStoreType', 'RetainedStoreType', 'ConfigStoreType', 'SQLite', 'Postgres', 'MongoDB', 'CrateDB', 'ArchiveGroups'],
   features: ['Features'],
   security: ['UserManagement', 'SSL', 'AllowRootWildcardSubscription'],
-  extensions: ['RestApi', 'Dashboard', 'GenAI', 'Kafka', 'Zenoh'],
-  tuning: ['MqttTcpServer', 'Queues', 'BulkMessaging', 'BulkProcessing', 'Metrics', 'Logging', 'MaxPublishRate', 'MaxSubscribeRate', 'QueueVisibilityTimeoutSeconds', 'MaxQueuedMessagesPerClient']
+  extensions: ['RestApi', 'Dashboard', 'I3x', 'Redfish', 'HMI', 'GenAI', 'Kafka', 'Zenoh'],
+  tuning: ['NodeName', 'QueuedMessagesEnabled', 'MqttTcpServer', 'Queues', 'BulkMessaging', 'BulkProcessing', 'Metrics', 'Logging', 'MaxPublishRate', 'MaxSubscribeRate', 'QueueVisibilityTimeoutSeconds', 'MaxQueuedMessagesPerClient']
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -546,9 +547,10 @@ function renderFeaturesSection(container, filterQuery = '') {
   const card = document.createElement('div');
   card.className = 'config-field-card';
 
+  const count = Object.keys(featuresSchema.properties).length;
   const titleGroup = document.createElement('div');
   titleGroup.className = 'field-title-group';
-  titleGroup.innerHTML = '<span class="field-name">Broker Subsystems & Bridges</span><span class="field-type-badge">27 Features</span>';
+  titleGroup.innerHTML = `<span class="field-name">Broker Subsystems & Bridges</span><span class="field-type-badge">${count} Features</span>`;
   card.appendChild(titleGroup);
 
   const doc = document.createElement('div');
