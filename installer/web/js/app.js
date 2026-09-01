@@ -80,12 +80,16 @@ const defaultSQLiteConfig = {
 
 // Category Mapping for Schema Properties
 const categoryMapping = {
-  network: ['TCP', 'WS', 'TCPS', 'WSS', 'NATS', 'GraphQL', 'MCP', 'Prometheus', 'RedisServer', 'KafkaServer'],
+  network: ['TCP', 'WS', 'TCPS', 'WSS', 'NATS'],
   storage: ['DefaultStoreType', 'SessionStoreType', 'QueueStoreType', 'RetainedStoreType', 'ConfigStoreType', 'SQLite', 'Postgres', 'MongoDB', 'CrateDB', 'ArchiveGroups'],
-  features: ['Features'],
   security: ['UserManagement', 'SSL', 'AllowRootWildcardSubscription'],
-  extensions: ['RestApi', 'Dashboard', 'I3x', 'Redfish', 'HMI', 'GenAI', 'Kafka', 'Zenoh'],
-  tuning: ['NodeName', 'QueuedMessagesEnabled', 'MqttTcpServer', 'Queues', 'BulkMessaging', 'BulkProcessing', 'Metrics', 'Logging', 'MaxPublishRate', 'MaxSubscribeRate', 'QueueVisibilityTimeoutSeconds', 'MaxQueuedMessagesPerClient']
+  features: ['Features'],
+  web_services: ['Dashboard', 'GraphQL', 'HMI'],
+  industrial_apis: ['I3x', 'Redfish', 'RestApi'],
+  ai_services: ['MCP', 'GenAI'],
+  messaging_buses: ['Kafka', 'Zenoh', 'RedisServer', 'KafkaServer'],
+  observability: ['Metrics', 'Prometheus', 'Logging'],
+  tuning: ['NodeName', 'QueuedMessagesEnabled', 'MqttTcpServer', 'Queues', 'BulkMessaging', 'BulkProcessing', 'MaxPublishRate', 'MaxSubscribeRate', 'QueueVisibilityTimeoutSeconds', 'MaxQueuedMessagesPerClient']
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -310,6 +314,8 @@ function setupNavigation() {
       document.querySelectorAll('.category-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
       state.activeCategory = item.dataset.category;
+      const searchInput = document.getElementById('config-search');
+      if (searchInput) searchInput.value = '';
       renderActiveCategory();
     });
   });
@@ -538,6 +544,10 @@ function renderActiveCategory(filterQuery = '') {
     card.appendChild(controlRow);
     container.appendChild(card);
   });
+
+  if (container.children.length === 0) {
+    container.innerHTML = '<div class="field-hint" style="padding: 24px; text-align: center; color: var(--text-dim);">No settings matched your filter query in this category.</div>';
+  }
 }
 
 function renderFeaturesSection(container, filterQuery = '') {

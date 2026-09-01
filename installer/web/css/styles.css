@@ -619,7 +619,23 @@ select:focus, .text-input:focus {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+}
+
+.category-header {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 10px 8px 3px 8px;
+  margin-top: 4px;
+  user-select: none;
+}
+
+.category-header:first-child {
+  margin-top: 0;
+  padding-top: 2px;
 }
 
 .category-item {
