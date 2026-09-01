@@ -371,6 +371,7 @@ curl -u Admin:Admin -X POST \
 See `doc/` for full documentation:
 
 - [installation.md](doc/installation.md) - installation and setup
+- [windows-service.md](doc/windows-service.md) - running as a Windows Service (WinSW)
 - [configuration.md](doc/configuration.md) - configuration reference
 - [databases.md](doc/databases.md) - database backends and tuning
 - [archiving.md](doc/archiving.md) - archive groups and retention
