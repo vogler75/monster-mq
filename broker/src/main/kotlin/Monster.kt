@@ -1028,6 +1028,9 @@ MORE INFO:
         val trustStorePath = sslConfig.getString("TrustStorePath", "")
         val trustStorePassword = sslConfig.getString("TrustStorePassword", "")
         val trustStoreType = sslConfig.getString("TrustStoreType", "JKS")
+        // Use the verified client certificate's Common Name as the authenticated
+        // identity, skipping passwords.
+        val useIdentityAsUsername = sslConfig.getBoolean("UseIdentityAsUsername", false)
 
         // Optional independent certificate for the WSS listener. Falls back to the SSL settings
         // above when not set, so existing single-certificate configs are unaffected.
@@ -1369,7 +1372,7 @@ MORE INFO:
                     if (useTcpSsl>0) MqttServer(
                         useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
                         keyStorePath, keyStorePassword, keyStoreType, keyPath,
-                        clientAuth, trustStorePath, trustStorePassword, trustStoreType
+                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername
                     ) else null,
                     if (useWsSsl>0) MqttServer(
                         useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,

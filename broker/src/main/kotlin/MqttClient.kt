@@ -30,7 +30,11 @@ import java.util.concurrent.ConcurrentLinkedDeque
 class MqttClient(
     private val endpoint: MqttEndpoint,
     private val sessionHandler: SessionHandler,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    // When true, a verified TLS client certificate's Common Name is used as the client's
+    // authenticated identity, skipping password checks. Defaults to false so existing
+    // setups are unaffected.
+    private val useIdentityAsUsername: Boolean = false
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -128,11 +132,11 @@ class MqttClient(
         private val logger = Utils.getLogger(this::class.java)
 
 
-        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager) {
+        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false) {
             val clientId = endpoint.clientIdentifier()
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
             // TODO: check if the client is already connected (cluster wide)
-            val client = MqttClient(endpoint, sessionHandler, userManager)
+            val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername)
             vertx.deployVerticle(client).onComplete {
                 client.startEndpoint()
             }
@@ -487,6 +491,26 @@ class MqttClient(
 
             // Authentication check
             if (userManager.isUserManagementEnabled()) {
+                // If enabled, a verified TLS client certificate's Common Name becomes the
+                // authenticated identity directly - the certificate was already validated
+                // against the trusted CA during the TLS handshake, so no password is needed.
+                if (useIdentityAsUsername) {
+                    val certUsername = extractPeerCertificateCommonName()
+                    if (certUsername != null) {
+                        authenticatedUser = at.rocworks.data.User(
+                            username = certUsername,
+                            passwordHash = "",
+                            enabled = true,
+                            canSubscribe = true,
+                            canPublish = true,
+                            isAdmin = false
+                        )
+                        logger.info("Client [$clientId] Authenticated via TLS client certificate as [$certUsername]")
+                        proceedWithConnection()
+                        return
+                    }
+                }
+
                 // Check for MQTT v5.0 enhanced authentication first
                 if (isMqtt5 && mqtt5AuthMethod != null) {
                     // Enhanced authentication requested
@@ -550,6 +574,25 @@ class MqttClient(
                 // Authentication disabled, proceed normally
                 proceedWithConnection()
             }
+        }
+    }
+
+    // Extracts the Common Name from the client's TLS certificate, if one was presented.
+    // Returns null (rather than throwing) whenever no usable client certificate is
+    // available - e.g. ClientAuth is REQUEST and the client didn't offer one, or the
+    // connection isn't TLS at all. That's the normal/expected case, not an error.
+    private fun extractPeerCertificateCommonName(): String? {
+        if (!endpoint.isSsl) return null
+        return try {
+            val cert = endpoint.sslSession()?.peerCertificates?.firstOrNull() as? java.security.cert.X509Certificate
+                ?: return null
+            val ldapName = javax.naming.ldap.LdapName(cert.subjectX500Principal.name)
+            ldapName.rdns.firstOrNull { it.type.equals("CN", ignoreCase = true) }?.value?.toString()
+        } catch (e: javax.net.ssl.SSLPeerUnverifiedException) {
+            null
+        } catch (e: Exception) {
+            logger.warning("Client [$clientId] Failed to read Common Name from client certificate: ${e.message}")
+            null
         }
     }
 

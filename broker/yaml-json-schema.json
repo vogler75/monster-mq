@@ -450,6 +450,12 @@
           "description": "Truststore format: JKS, PKCS12 / PFX / P12, or PEM (a single CA certificate file).",
           "default": "JKS"
         },
+        "UseIdentityAsUsername": {
+          "type": "boolean",
+          "title": "Use Certificate Common Name as Username",
+          "description": "When ClientAuth is REQUEST or REQUIRED and the client presents a valid certificate, its Common Name (CN) is used directly as the authenticated identity, skipping password checks. Only applies to the MQTTS (TCPS) listener; has no effect if the client presents no certificate or if UserManagement is disabled.",
+          "default": false
+        },
         "WSS": {
           "type": "object",
           "title": "WSS Listener Certificate Override",

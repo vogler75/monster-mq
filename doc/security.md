@@ -129,6 +129,24 @@ SSL:
 
 `NONE` is the default and behaves exactly like before. `REQUEST` asks for a client cert but still connects if none is given. `REQUIRED` fails the handshake unless the client presents a cert that verifies against `TrustStorePath`.
 
+### Using the Certificate as the Login (No Password Needed)
+
+With `ClientAuth: REQUEST` or `REQUIRED`, you can also skip password authentication entirely for clients that present a certificate - their certificate's Common Name becomes their identity instead.
+
+```yaml
+UserManagement:
+  Enabled: true
+SSL:
+  ClientAuth: REQUEST                # cert optional, so non-cert clients can still use a password
+  TrustStorePath: ca.crt
+  TrustStoreType: PEM
+  UseIdentityAsUsername: true
+```
+
+A client presenting a certificate signed by the CA in `TrustStorePath` connects immediately, authenticated as the certificate's CN, no username or password required. A client with no certificate falls back to the normal username/password check. Both kinds of clients can connect to the same port at once.
+
+The certificate is already verified against the CA during the TLS handshake before this ever kicks in, so no separate user record needs to exist for that CN - the CA signature is treated as sufficient proof of identity. Per-topic permissions still work the same way they do for any other user.
+
 ## Authentication
 
 ### Username/Password Authentication
