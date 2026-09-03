@@ -129,6 +129,31 @@ SSL:
 
 `NONE` is the default and behaves exactly like before. `REQUEST` asks for a client cert but still connects if none is given. `REQUIRED` fails the handshake unless the client presents a cert that verifies against `TrustStorePath`.
 
+### Using the Certificate as the Login (No Password Needed)
+
+With `ClientAuth: REQUEST` or `REQUIRED`, you can skip password authentication for clients that present a certificate - the certificate's Common Name becomes their username instead.
+
+```yaml
+UserManagement:
+  Enabled: true
+SSL:
+  ClientAuth: REQUEST                # cert optional, so non-cert clients can still use a password
+  TrustStorePath: ca.crt
+  TrustStoreType: PEM
+  UseIdentityAsUsername: true
+  AutoCreateUser: false              # true to create accounts on first connect
+```
+
+A client presenting a certificate signed by the CA in `TrustStorePath` is authenticated as the certificate's Common Name, with no username or password required. A client with no certificate falls back to the normal username and password check, so both kinds of clients can use the same port.
+
+The certificate only replaces the password. The user account still decides what the client may do:
+
+- If an account exists for that Common Name, it is used, so its `canPublish`, `canSubscribe` and ACL rules apply exactly as they would for a password user.
+- If the account is disabled, the connection is rejected. This is how you cut off a decommissioned or compromised device.
+- If no account exists, the connection is rejected unless `AutoCreateUser` is enabled.
+
+With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so it cannot be used to log in with a password. Set it to `false` when you would rather create every account up front and reject anything unknown.
+
 ## Authentication
 
 ### Username/Password Authentication

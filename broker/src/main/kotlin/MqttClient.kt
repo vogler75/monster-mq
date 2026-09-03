@@ -30,7 +30,15 @@ import java.util.concurrent.ConcurrentLinkedDeque
 class MqttClient(
     private val endpoint: MqttEndpoint,
     private val sessionHandler: SessionHandler,
-    private val userManager: UserManager
+    private val userManager: UserManager,
+    // When true, a verified TLS client certificate's Common Name is used as the client's
+    // authenticated identity, skipping password checks. Defaults to false so existing
+    // setups are unaffected.
+    private val useIdentityAsUsername: Boolean = false,
+    // When true, a client certificate whose Common Name has no user account yet gets one
+    // created automatically with default, non-admin permissions. When false, such a client
+    // is rejected and accounts must be created up front.
+    private val autoCreateUser: Boolean = false
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -128,11 +136,11 @@ class MqttClient(
         private val logger = Utils.getLogger(this::class.java)
 
 
-        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager) {
+        fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false, autoCreateUser: Boolean = false) {
             val clientId = endpoint.clientIdentifier()
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
             // TODO: check if the client is already connected (cluster wide)
-            val client = MqttClient(endpoint, sessionHandler, userManager)
+            val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
             vertx.deployVerticle(client).onComplete {
                 client.startEndpoint()
             }
@@ -487,6 +495,57 @@ class MqttClient(
 
             // Authentication check
             if (userManager.isUserManagementEnabled()) {
+                // If enabled, a verified TLS client certificate's Common Name identifies the
+                // client - the certificate was already validated against the trusted CA during
+                // the TLS handshake, so it replaces the password. The user account still governs
+                // permissions and ACL rules, exactly like a password-authenticated user.
+                if (useIdentityAsUsername) {
+                    val certUsername = extractPeerCertificateCommonName()
+                    if (certUsername != null) {
+                        val existingUser = userManager.getUser(certUsername)
+                        if (existingUser != null) {
+                            if (!existingUser.enabled) {
+                                logger.warning("Client [$clientId] Certificate user [$certUsername] is disabled - rejecting connection")
+                                rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
+                                return
+                            }
+                            authenticatedUser = existingUser
+                            logger.info("Client [$clientId] Authenticated via TLS client certificate as [$certUsername]")
+                            proceedWithConnection()
+                            return
+                        }
+
+                        if (!autoCreateUser) {
+                            logger.warning("Client [$clientId] No user account for certificate Common Name [$certUsername] - rejecting connection")
+                            rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
+                            return
+                        }
+
+                        // Create the account with default, non-admin permissions. The password is a
+                        // random value that is never stored anywhere else, so the account cannot be
+                        // used for password authentication - the certificate remains the credential.
+                        userManager.createUser(
+                            username = certUsername,
+                            password = java.util.UUID.randomUUID().toString(),
+                            enabled = true,
+                            canSubscribe = true,
+                            canPublish = true,
+                            isAdmin = false
+                        ).onComplete { created ->
+                            val newUser = if (created.succeeded() && created.result()) userManager.getUser(certUsername) else null
+                            if (newUser != null) {
+                                authenticatedUser = newUser
+                                logger.info("Client [$clientId] Created user [$certUsername] from client certificate and authenticated")
+                                proceedWithConnection()
+                            } else {
+                                logger.warning("Client [$clientId] Could not create user [$certUsername] from client certificate - rejecting connection")
+                                rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_NOT_AUTHORIZED)
+                            }
+                        }
+                        return
+                    }
+                }
+
                 // Check for MQTT v5.0 enhanced authentication first
                 if (isMqtt5 && mqtt5AuthMethod != null) {
                     // Enhanced authentication requested
@@ -550,6 +609,26 @@ class MqttClient(
                 // Authentication disabled, proceed normally
                 proceedWithConnection()
             }
+        }
+    }
+
+    // Extracts the Common Name from the client's TLS certificate, if one was presented.
+    // Returns null (rather than throwing) whenever no usable client certificate is
+    // available - e.g. ClientAuth is REQUEST and the client didn't offer one, or the
+    // connection isn't TLS at all. That's the normal/expected case, not an error.
+    private fun extractPeerCertificateCommonName(): String? {
+        if (!endpoint.isSsl) return null
+        return try {
+            val cert = endpoint.sslSession()?.peerCertificates?.firstOrNull() as? java.security.cert.X509Certificate
+                ?: return null
+            val ldapName = javax.naming.ldap.LdapName(cert.subjectX500Principal.name)
+            val commonName = ldapName.rdns.firstOrNull { it.type.equals("CN", ignoreCase = true) }?.value?.toString()?.trim()
+            if (commonName.isNullOrBlank()) null else commonName
+        } catch (e: javax.net.ssl.SSLPeerUnverifiedException) {
+            null
+        } catch (e: Exception) {
+            logger.warning("Client [$clientId] Failed to read Common Name from client certificate: ${e.message}")
+            null
         }
     }
 

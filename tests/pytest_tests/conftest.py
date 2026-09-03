@@ -4,7 +4,7 @@ Pytest configuration and shared fixtures for Monster-MQ tests.
 Environment variables for skipping test groups:
   SKIP_MQTT3=1, SKIP_MQTT5=1, SKIP_GRAPHQL=1, SKIP_OPCUA=1,
   SKIP_DATABASE=1, SKIP_FLOW=1, SKIP_REST=1, SKIP_QUEUING=1,
-  SKIP_LATENCY=1, SKIP_I3X=1
+  SKIP_LATENCY=1, SKIP_I3X=1, SKIP_MTLS=1
 """
 import os
 import time
@@ -24,6 +24,7 @@ _SKIP_DIRS = {
     "queuing": os.getenv("SKIP_QUEUING", "0") == "1",
     "latency": os.getenv("SKIP_LATENCY", "0") == "1",
     "i3x": os.getenv("SKIP_I3X", "0") == "1",
+    "mtls": os.getenv("SKIP_MTLS", "0") == "1",
 }
 
 
