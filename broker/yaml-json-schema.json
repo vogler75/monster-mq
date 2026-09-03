@@ -453,7 +453,13 @@
         "UseIdentityAsUsername": {
           "type": "boolean",
           "title": "Use Certificate Common Name as Username",
-          "description": "When ClientAuth is REQUEST or REQUIRED and the client presents a valid certificate, its Common Name (CN) is used directly as the authenticated identity, skipping password checks. Only applies to the MQTTS (TCPS) listener; has no effect if the client presents no certificate or if UserManagement is disabled.",
+          "description": "When ClientAuth is REQUEST or REQUIRED and the client presents a valid certificate, its Common Name (CN) is used as the authenticated identity and the password check is skipped. The matching user account still governs permissions and ACL rules, and a disabled account is rejected. Only applies to the MQTTS (TCPS) listener; has no effect if the client presents no certificate or if UserManagement is disabled.",
+          "default": false
+        },
+        "AutoCreateUser": {
+          "type": "boolean",
+          "title": "Auto-Create User For Certificate Common Name",
+          "description": "Only used together with UseIdentityAsUsername. When false (default), a certificate whose Common Name has no user account is rejected, so accounts must be created up front. When true, the account is created automatically on first connect with default, non-admin permissions.",
           "default": false
         },
         "WSS": {

@@ -37,7 +37,10 @@ class MqttServer(
     private val trustStoreType: String = "JKS",
     // When true, a verified client certificate's Common Name is used as the client's
     // authenticated identity instead of a username/password. Defaults to false.
-    private val useIdentityAsUsername: Boolean = false
+    private val useIdentityAsUsername: Boolean = false,
+    // When true, a certificate Common Name without an existing user account gets one created
+    // automatically with default, non-admin permissions. Defaults to false.
+    private val autoCreateUser: Boolean = false
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -91,7 +94,7 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler, userManager, useIdentityAsUsername)
+            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
         }
 
         mqttServer.listen(port)

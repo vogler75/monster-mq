@@ -1031,6 +1031,8 @@ MORE INFO:
         // Use the verified client certificate's Common Name as the authenticated
         // identity, skipping passwords.
         val useIdentityAsUsername = sslConfig.getBoolean("UseIdentityAsUsername", false)
+        // Create a user account automatically for a certificate Common Name that has none yet.
+        val autoCreateUser = sslConfig.getBoolean("AutoCreateUser", false)
 
         // Optional independent certificate for the WSS listener. Falls back to the SSL settings
         // above when not set, so existing single-certificate configs are unaffected.
@@ -1372,7 +1374,7 @@ MORE INFO:
                     if (useTcpSsl>0) MqttServer(
                         useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
                         keyStorePath, keyStorePassword, keyStoreType, keyPath,
-                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername
+                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername, autoCreateUser
                     ) else null,
                     if (useWsSsl>0) MqttServer(
                         useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,

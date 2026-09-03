@@ -131,7 +131,7 @@ SSL:
 
 ### Using the Certificate as the Login (No Password Needed)
 
-With `ClientAuth: REQUEST` or `REQUIRED`, you can also skip password authentication entirely for clients that present a certificate - their certificate's Common Name becomes their identity instead.
+With `ClientAuth: REQUEST` or `REQUIRED`, you can skip password authentication for clients that present a certificate - the certificate's Common Name becomes their username instead.
 
 ```yaml
 UserManagement:
@@ -141,11 +141,18 @@ SSL:
   TrustStorePath: ca.crt
   TrustStoreType: PEM
   UseIdentityAsUsername: true
+  AutoCreateUser: false              # true to create accounts on first connect
 ```
 
-A client presenting a certificate signed by the CA in `TrustStorePath` connects immediately, authenticated as the certificate's CN, no username or password required. A client with no certificate falls back to the normal username/password check. Both kinds of clients can connect to the same port at once.
+A client presenting a certificate signed by the CA in `TrustStorePath` is authenticated as the certificate's Common Name, with no username or password required. A client with no certificate falls back to the normal username and password check, so both kinds of clients can use the same port.
 
-The certificate is already verified against the CA during the TLS handshake before this ever kicks in, so no separate user record needs to exist for that CN - the CA signature is treated as sufficient proof of identity. Per-topic permissions still work the same way they do for any other user.
+The certificate only replaces the password. The user account still decides what the client may do:
+
+- If an account exists for that Common Name, it is used, so its `canPublish`, `canSubscribe` and ACL rules apply exactly as they would for a password user.
+- If the account is disabled, the connection is rejected. This is how you cut off a decommissioned or compromised device.
+- If no account exists, the connection is rejected unless `AutoCreateUser` is enabled.
+
+With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so it cannot be used to log in with a password. Set it to `false` when you would rather create every account up front and reject anything unknown.
 
 ## Authentication
 
