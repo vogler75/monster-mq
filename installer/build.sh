@@ -15,7 +15,10 @@ echo -e "${GREEN}=== Building MonsterMQ Setup Binaries ===${NC}"
 
 # Ensure schema.json is up to date
 if [ -f "../broker/yaml-json-schema.json" ]; then
-    cp ../broker/yaml-json-schema.json schema.json
+    cp -f ../broker/yaml-json-schema.json schema.json
+elif [ ! -f "schema.json" ]; then
+    echo -e "${RED}Error: schema.json not found and ../broker/yaml-json-schema.json is missing!${NC}"
+    exit 1
 fi
 
 mkdir -p bin
