@@ -1020,6 +1020,27 @@ MORE INFO:
         val keyStorePath = sslConfig.getString("KeyStorePath", "server-keystore.jks")
         val keyStorePassword = sslConfig.getString("KeyStorePassword", "password")
         val keyStoreType = sslConfig.getString("KeyStoreType", "JKS")
+        val keyPath = sslConfig.getString("KeyPath", "")
+
+        // Optional mutual TLS (client certificate verification) for the MQTTS (TCPS) listener.
+        // Defaults preserve prior behavior exactly: ClientAuth "NONE" means no trust store is applied.
+        val clientAuth = sslConfig.getString("ClientAuth", "NONE")
+        val trustStorePath = sslConfig.getString("TrustStorePath", "")
+        val trustStorePassword = sslConfig.getString("TrustStorePassword", "")
+        val trustStoreType = sslConfig.getString("TrustStoreType", "JKS")
+        // Use the verified client certificate's Common Name as the authenticated
+        // identity, skipping passwords.
+        val useIdentityAsUsername = sslConfig.getBoolean("UseIdentityAsUsername", false)
+        // Create a user account automatically for a certificate Common Name that has none yet.
+        val autoCreateUser = sslConfig.getBoolean("AutoCreateUser", false)
+
+        // Optional independent certificate for the WSS listener. Falls back to the SSL settings
+        // above when not set, so existing single-certificate configs are unaffected.
+        val wssSslConfig = sslConfig.getJsonObject("WSS", JsonObject())
+        val wssKeyStorePath = wssSslConfig.getString("KeyStorePath", keyStorePath)
+        val wssKeyStorePassword = wssSslConfig.getString("KeyStorePassword", keyStorePassword)
+        val wssKeyStoreType = wssSslConfig.getString("KeyStoreType", keyStoreType)
+        val wssKeyPath = wssSslConfig.getString("KeyPath", keyPath)
 
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
@@ -1306,6 +1327,35 @@ MORE INFO:
                     null
                 }
 
+                // Redfish Server
+                val redfishConfig = configJson.getJsonObject("Redfish", JsonObject())
+                val redfishEnabled = Monster.isFeatureEnabled(Features.Redfish) && redfishConfig.getBoolean("Enabled", true)
+                val redfishPort = redfishConfig.getInteger("Port", 0)
+                val redfishServer = if (redfishEnabled) {
+                    val redfishMountPath = redfishConfig.getString("MountPath", "/redfish/v1")
+                    val defaultChassisId = redfishConfig.getString("DefaultChassisId", "EdgeNode")
+                    val defaultSystemId = redfishConfig.getString("DefaultSystemId", this.nodeName.ifBlank { "edge-node" })
+                    val defaultManagerId = redfishConfig.getString("DefaultManagerId", "monstermq")
+                    val anonymousEnabled = redfishConfig.getBoolean("AnonymousEnabled", true)
+
+                    at.rocworks.extensions.redfish.RedfishServer(
+                        host = "0.0.0.0",
+                        port = redfishPort,
+                        mountPath = redfishMountPath,
+                        defaultChassisId = defaultChassisId,
+                        defaultSystemId = defaultSystemId,
+                        defaultManagerId = defaultManagerId,
+                        anonymousEnabled = anonymousEnabled,
+                        archiveHandler = this.archiveHandler,
+                        sessionHandler = sessionHandler,
+                        deviceConfigStore = deviceConfigStore,
+                        userManager = userManager
+                    )
+                } else {
+                    if (!redfishEnabled) logger.fine("Redfish server is disabled in configuration")
+                    null
+                }
+
                 val graphQLServer = if (graphQLEnabled) {
                     val archiveGroupsMap = archiveGroups.associateBy { it.name }
 
@@ -1326,7 +1376,8 @@ MORE INFO:
                         dataCatalogStore,
                         genAiProvider,
                         dashboardPath,
-                        restApiServer
+                        restApiServer,
+                        redfishServer
                     )
                 } else {
                     logger.fine("GraphQL server is disabled in configuration")
@@ -1338,12 +1389,20 @@ MORE INFO:
                 val servers = listOfNotNull(
                     if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
                     if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
-                    if (useWsSsl>0) MqttServer(useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, keyStorePath, keyStorePassword, keyStoreType) else null,
+                    if (useTcpSsl>0) MqttServer(
+                        useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
+                        keyStorePath, keyStorePassword, keyStoreType, keyPath,
+                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername, autoCreateUser
+                    ) else null,
+                    if (useWsSsl>0) MqttServer(
+                        useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
+                        wssKeyStorePath, wssKeyStorePassword, wssKeyStoreType, wssKeyPath
+                    ) else null,
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     prometheusServer,
-                    i3xServer
+                    i3xServer,
+                    if (redfishServer != null && redfishPort > 0) redfishServer else null
                 )
 
                 // Deploy all verticles

@@ -419,6 +419,8 @@ enum DatabaseConnectionType {
     POSTGRES
     MONGODB
     SQLITE
+    CRATEDB
+    QUESTDB
 }
 
 type DatabaseConnectionInfo {

@@ -397,26 +397,102 @@
     "SSL": {
       "type": "object",
       "title": "SSL / TLS Encryption",
-      "description": "SSL/TLS certificate configuration for encrypted MQTT connections (TCPS and WSS)",
+      "description": "SSL/TLS certificate configuration for encrypted MQTT connections (TCPS and WSS). These settings are used by the MQTTS (TCPS) listener, and also serve as the fallback for the WSS listener when the optional 'WSS' override below is not set.",
       "properties": {
         "KeyStorePath": {
           "type": "string",
           "title": "KeyStore File Path",
-          "description": "Path to the keystore file containing the server certificate and private key",
+          "description": "Path to the keystore file containing the server certificate and private key. When KeyStoreType is PEM, this is the certificate (or fullchain) PEM file path instead.",
           "default": "server-keystore.jks"
         },
         "KeyStorePassword": {
           "type": "string",
           "title": "KeyStore Password",
-          "description": "Password for accessing the keystore file",
+          "description": "Password for accessing the keystore file. Ignored when KeyStoreType is PEM.",
           "default": "password"
         },
         "KeyStoreType": {
           "type": "string",
           "title": "KeyStore Format",
-          "enum": ["JKS", "PKCS12", "PFX", "P12"],
-          "description": "Keystore format: JKS (Java KeyStore) or PKCS12 / PFX / P12 (industry standard).",
+          "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+          "description": "Keystore format: JKS (Java KeyStore), PKCS12 / PFX / P12 (industry standard), or PEM (separate certificate + private key files, e.g. from Let's Encrypt/certbot).",
           "default": "JKS"
+        },
+        "KeyPath": {
+          "type": "string",
+          "title": "Private Key File Path (PEM only)",
+          "description": "Path to the private key PEM file. Only used when KeyStoreType is PEM.",
+          "default": ""
+        },
+        "ClientAuth": {
+          "type": "string",
+          "title": "Client Certificate Verification",
+          "enum": ["NONE", "REQUEST", "REQUIRED"],
+          "description": "Enables mutual TLS (mTLS) on the MQTTS (TCPS) listener by requesting/requiring a client certificate, verified against TrustStorePath. NONE is the default and matches prior behavior (no client certificate requested). Not applied to the WSS listener.",
+          "default": "NONE"
+        },
+        "TrustStorePath": {
+          "type": "string",
+          "title": "TrustStore / CA File Path",
+          "description": "Path to a truststore (JKS/PKCS12) or a CA certificate PEM file (when TrustStoreType is PEM) used to verify client certificates when ClientAuth is REQUEST or REQUIRED.",
+          "default": ""
+        },
+        "TrustStorePassword": {
+          "type": "string",
+          "title": "TrustStore Password",
+          "description": "Password for accessing the truststore file. Ignored when TrustStoreType is PEM.",
+          "default": ""
+        },
+        "TrustStoreType": {
+          "type": "string",
+          "title": "TrustStore Format",
+          "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+          "description": "Truststore format: JKS, PKCS12 / PFX / P12, or PEM (a single CA certificate file).",
+          "default": "JKS"
+        },
+        "UseIdentityAsUsername": {
+          "type": "boolean",
+          "title": "Use Certificate Common Name as Username",
+          "description": "When ClientAuth is REQUEST or REQUIRED and the client presents a valid certificate, its Common Name (CN) is used as the authenticated identity and the password check is skipped. The matching user account still governs permissions and ACL rules, and a disabled account is rejected. Only applies to the MQTTS (TCPS) listener; has no effect if the client presents no certificate or if UserManagement is disabled.",
+          "default": false
+        },
+        "AutoCreateUser": {
+          "type": "boolean",
+          "title": "Auto-Create User For Certificate Common Name",
+          "description": "Only used together with UseIdentityAsUsername. When false (default), a certificate whose Common Name has no user account is rejected, so accounts must be created up front. When true, the account is created automatically on first connect with default, non-admin permissions.",
+          "default": false
+        },
+        "WSS": {
+          "type": "object",
+          "title": "WSS Listener Certificate Override",
+          "description": "Optional independent certificate for the Secure WebSocket (WSS) listener. Falls back to the KeyStore settings above when not set. Use this when WSS should present a different certificate than MQTTS, e.g. a public domain certificate for WSS and an internal CA-issued certificate for MQTTS. There's no ClientAuth/TrustStore here since WSS stays server-authenticated TLS only.",
+          "properties": {
+            "KeyStorePath": {
+              "type": "string",
+              "title": "KeyStore File Path",
+              "description": "Path to the keystore file (or certificate/fullchain PEM file when KeyStoreType is PEM) for the WSS listener.",
+              "default": ""
+            },
+            "KeyStorePassword": {
+              "type": "string",
+              "title": "KeyStore Password",
+              "description": "Password for accessing the WSS keystore file. Ignored when KeyStoreType is PEM.",
+              "default": ""
+            },
+            "KeyStoreType": {
+              "type": "string",
+              "title": "KeyStore Format",
+              "enum": ["JKS", "PKCS12", "PFX", "P12", "PEM"],
+              "description": "Keystore format for the WSS certificate.",
+              "default": "JKS"
+            },
+            "KeyPath": {
+              "type": "string",
+              "title": "Private Key File Path (PEM only)",
+              "description": "Path to the WSS private key PEM file. Only used when KeyStoreType is PEM.",
+              "default": ""
+            }
+          }
         }
       }
     },
@@ -949,7 +1025,7 @@
           "ArchiveType": {
             "type": "string",
             "title": "Historical Archive Backend",
-            "enum": ["NONE", "POSTGRES", "CRATEDB", "MONGODB", "SQLITE"],
+            "enum": ["NONE", "POSTGRES", "CRATEDB", "QUESTDB", "MONGODB", "SQLITE"],
             "default": "NONE",
             "description": "Database backend used for long-term historical time-series storage"
           },
@@ -1109,7 +1185,8 @@
         "DeviceImportExport": { "type": "boolean", "title": "Device Import / Export", "default": true, "description": "JSON / YAML device and gateway configuration backup, import, and export" },
         "Zenoh": { "type": "boolean", "title": "Zenoh Transport", "default": true, "description": "Zenoh zero-overhead broker federation transport" },
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },
-        "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" }
+        "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" },
+        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": true, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" }
       },
       "additionalProperties": false
     },
@@ -1121,6 +1198,20 @@
         "Enabled": { "type": "boolean", "title": "Enable HMI Hosting", "default": true },
         "Path": { "type": "string", "title": "HMI Asset Path", "default": "./data/hmi", "description": "Filesystem path for HMI web asset files" },
         "MountPath": { "type": "string", "title": "HMI Mount URL Subpath", "default": "/hmi", "description": "HTTP subpath where HMI dashboards are mounted" }
+      }
+    },
+    "Redfish": {
+      "type": "object",
+      "title": "DMTF Redfish REST API Server",
+      "description": "Expose standard DMTF Redfish REST endpoints under /redfish/v1",
+      "properties": {
+        "Enabled": { "type": "boolean", "title": "Enable Redfish Server", "default": true },
+        "Port": { "type": "integer", "title": "Dedicated Listener Port", "default": 0, "description": "Dedicated TCP port for Redfish REST. 0 to multiplex onto GraphQL/HTTP port (default 4000)" },
+        "MountPath": { "type": "string", "title": "Mount URL Subpath", "default": "/redfish/v1", "description": "HTTP URL path prefix where Redfish APIs are mounted" },
+        "DefaultChassisId": { "type": "string", "title": "Default Chassis ID", "default": "EdgeNode" },
+        "DefaultSystemId": { "type": "string", "title": "Default System ID", "default": "edge-node" },
+        "DefaultManagerId": { "type": "string", "title": "Default Manager ID", "default": "monstermq" },
+        "AnonymousEnabled": { "type": "boolean", "title": "Allow Anonymous Read Access", "default": true }
       }
     }
   },

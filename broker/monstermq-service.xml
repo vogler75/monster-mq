@@ -1,0 +1,20 @@
+<service>
+  <id>MonsterMQ</id>
+  <name>MonsterMQ Broker</name>
+  <description>MonsterMQ MQTT Broker</description>
+
+  <executable>C:\Windows\System32\cmd.exe</executable>
+  <arguments>/c "C:\Program Files\MonsterMQ\run.bat"</arguments>
+  <workingdirectory>C:\Program Files\MonsterMQ</workingdirectory>
+
+  <startmode>Automatic</startmode>
+
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+
+  <logpath>C:\Program Files\MonsterMQ\log</logpath>
+  <log mode="roll"></log>
+
+  <stoptimeout>30sec</stoptimeout>
+</service>

@@ -4,9 +4,13 @@ import at.rocworks.auth.UserManager
 import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Promise
+import io.vertx.core.http.ClientAuth
 import io.vertx.core.net.JksOptions
 import io.vertx.core.net.KeyCertOptions
+import io.vertx.core.net.PemKeyCertOptions
+import io.vertx.core.net.PemTrustOptions
 import io.vertx.core.net.PfxOptions
+import io.vertx.core.net.TrustOptions
 
 import io.vertx.mqtt.MqttServer
 import io.vertx.mqtt.MqttServerOptions
@@ -23,13 +27,34 @@ class MqttServer(
     private val userManager: UserManager,
     private val keyStorePath: String = "server-keystore.jks",
     private val keyStorePassword: String = "password",
-    private val keyStoreType: String = "JKS"
+    private val keyStoreType: String = "JKS",
+    // Private key file path, only used when keyStoreType == "PEM" (keyStorePath is then the cert/fullchain PEM path)
+    private val keyPath: String = "",
+    // Mutual TLS (client certificate verification). Defaults preserve prior behavior exactly: no client auth.
+    private val clientAuth: String = "NONE",
+    private val trustStorePath: String = "",
+    private val trustStorePassword: String = "",
+    private val trustStoreType: String = "JKS",
+    // When true, a verified client certificate's Common Name is used as the client's
+    // authenticated identity instead of a username/password. Defaults to false.
+    private val useIdentityAsUsername: Boolean = false,
+    // When true, a certificate Common Name without an existing user account gets one created
+    // automatically with default, non-admin permissions. Defaults to false.
+    private val autoCreateUser: Boolean = false
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
     private val options = MqttServerOptions().let { it ->
         it.isSsl = ssl
-        it.keyCertOptions = buildKeyCertOptions(keyStorePath, keyStorePassword, keyStoreType)
+        it.keyCertOptions = buildKeyCertOptions(keyStorePath, keyStorePassword, keyStoreType, keyPath)
+        if (clientAuth.uppercase() != "NONE") {
+            if (trustStorePath.isNotBlank()) {
+                it.trustOptions = buildTrustOptions(trustStorePath, trustStorePassword, trustStoreType)
+                it.setClientAuth(ClientAuth.valueOf(clientAuth.uppercase()))
+            } else {
+                logger.warning("SSL ClientAuth is set to '$clientAuth' but no TrustStorePath is configured, so client certificates won't be checked.")
+            }
+        }
         it.isUseWebSocket = this.useWebSocket
         it.maxMessageSize = this.maxMessageSize
         it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce
@@ -69,12 +94,17 @@ class MqttServer(
         }
 
         mqttServer.endpointHandler { endpoint ->
-            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler, userManager)
+            MqttClient.deployEndpoint(vertx, endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
         }
 
         mqttServer.listen(port)
             .onSuccess { server ->
-                logger.info("MQTT Server is listening on port [${server.actualPort()}] [${if (useWebSocket) "WS " else "TCP"}][${if (ssl) "TLS" else "   "}]")
+                val tlsLabel = when {
+                    !ssl -> "   "
+                    clientAuth.uppercase() != "NONE" && trustStorePath.isNotBlank() -> "mTLS"
+                    else -> "TLS"
+                }
+                logger.info("MQTT Server is listening on port [${server.actualPort()}] [${if (useWebSocket) "WS " else "TCP"}][$tlsLabel]")
                 startPromise.complete()
             }
             .onFailure { error ->
@@ -84,9 +114,17 @@ class MqttServer(
     }
 
     companion object {
-        fun buildKeyCertOptions(path: String, password: String, type: String): KeyCertOptions =
+        fun buildKeyCertOptions(path: String, password: String, type: String, keyPath: String = ""): KeyCertOptions =
             when (type.uppercase()) {
                 "PKCS12", "PFX", "P12" -> PfxOptions().setPath(path).setPassword(password)
+                "PEM" -> PemKeyCertOptions().setCertPath(path).setKeyPath(keyPath.ifBlank { path })
+                else -> JksOptions().setPath(path).setPassword(password)
+            }
+
+        fun buildTrustOptions(path: String, password: String, type: String): TrustOptions =
+            when (type.uppercase()) {
+                "PKCS12", "PFX", "P12" -> PfxOptions().setPath(path).setPassword(password)
+                "PEM" -> PemTrustOptions().addCertPath(path)
                 else -> JksOptions().setPath(path).setPassword(password)
             }
     }

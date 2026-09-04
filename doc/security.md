@@ -20,17 +20,21 @@ Security features include:
 # Enable TLS on MQTT port
 TCPS: 8883
 
+# Enable TLS on the Secure WebSocket port
+WSS: 8884
+
 # Optional: Configure keystore (defaults shown)
 SSL:
   KeyStorePath: server-keystore.jks
   KeyStorePassword: password
+  KeyStoreType: JKS   # JKS (default) | PKCS12 / PFX / P12 | PEM
 ```
 
 By default, MonsterMQ looks for `server-keystore.jks` in the working directory with password `password`. You can customize this using the `SSL` configuration section.
 
 ### Certificate Requirements
 
-MonsterMQ requires a Java KeyStore (JKS) file for SSL/TLS functionality:
+`SSL.KeyStoreType` can be `JKS` (default), `PKCS12`/`PFX`/`P12`, or `PEM`. For `PEM`, point `SSL.KeyStorePath` at the certificate (or fullchain) file and `SSL.KeyPath` at the private key file - useful if you're using certs straight off certbot/Let's Encrypt without converting them first.
 
 - **Default filename**: `server-keystore.jks` (configurable via `SSL.KeyStorePath`)
 - **Default password**: `password` (configurable via `SSL.KeyStorePassword`)
@@ -92,9 +96,63 @@ keytool -importkeystore \
   -deststorepass changeit
 ```
 
-### Client Certificate Authentication
+### Different Certificates for TCPS and WSS
 
-Client certificate authentication is not currently configurable in MonsterMQ. The SSL implementation only supports server certificates for encrypted communication.
+`WSS` uses the same certificate as `TCPS` unless you override it. This is handy if, say, your WSS listener needs a normal domain cert for browser clients but MQTTS should use a cert from your own internal CA:
+
+```yaml
+SSL:
+  KeyStorePath: mqtts-server.p12   # used by TCPS, and by WSS unless overridden below
+  KeyStorePassword: password
+  KeyStoreType: PKCS12
+  WSS:
+    KeyStorePath: domain-cert.p12  # only used by WSS
+    KeyStorePassword: password
+    KeyStoreType: PKCS12
+```
+
+Leave out whichever fields you don't need to change in the `WSS` block - they fall back to the top-level `SSL` value.
+
+### Client Certificate Authentication (Mutual TLS)
+
+MQTTS can also require clients to present a certificate, verified against a trust store with your CA cert. `WSS` doesn't support this - it stays server-auth only.
+
+```yaml
+SSL:
+  KeyStorePath: mqtts-server.jks
+  KeyStorePassword: password
+  ClientAuth: REQUIRED              # NONE (default), REQUEST, or REQUIRED
+  TrustStorePath: ca-truststore.jks  # or a CA .crt with TrustStoreType: PEM
+  TrustStorePassword: password
+  TrustStoreType: JKS
+```
+
+`NONE` is the default and behaves exactly like before. `REQUEST` asks for a client cert but still connects if none is given. `REQUIRED` fails the handshake unless the client presents a cert that verifies against `TrustStorePath`.
+
+### Using the Certificate as the Login (No Password Needed)
+
+With `ClientAuth: REQUEST` or `REQUIRED`, you can skip password authentication for clients that present a certificate - the certificate's Common Name becomes their username instead.
+
+```yaml
+UserManagement:
+  Enabled: true
+SSL:
+  ClientAuth: REQUEST                # cert optional, so non-cert clients can still use a password
+  TrustStorePath: ca.crt
+  TrustStoreType: PEM
+  UseIdentityAsUsername: true
+  AutoCreateUser: false              # true to create accounts on first connect
+```
+
+A client presenting a certificate signed by the CA in `TrustStorePath` is authenticated as the certificate's Common Name, with no username or password required. A client with no certificate falls back to the normal username and password check, so both kinds of clients can use the same port.
+
+The certificate only replaces the password. The user account still decides what the client may do:
+
+- If an account exists for that Common Name, it is used, so its `canPublish`, `canSubscribe` and ACL rules apply exactly as they would for a password user.
+- If the account is disabled, the connection is rejected. This is how you cut off a decommissioned or compromised device.
+- If no account exists, the connection is rejected unless `AutoCreateUser` is enabled.
+
+With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so it cannot be used to log in with a password. Set it to `false` when you would rather create every account up front and reject anything unknown.
 
 ## Authentication
 

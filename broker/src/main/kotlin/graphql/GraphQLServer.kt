@@ -106,7 +106,8 @@ class GraphQLServer(
     private val dataCatalogStore: at.rocworks.stores.IDataCatalogStore? = null,
     private val genAiProvider: at.rocworks.genai.IGenAiProvider? = null,
     private val dashboardPath: String? = null,
-    private val restApiServer: at.rocworks.extensions.RestApiServer? = null
+    private val restApiServer: at.rocworks.extensions.RestApiServer? = null,
+    private val redfishServer: at.rocworks.extensions.redfish.RedfishServer? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(GraphQLServer::class.java)
@@ -236,6 +237,12 @@ class GraphQLServer(
 
         // REST API routes (must be registered BEFORE the catch-all static handler)
         restApiServer?.registerRoutes(router)
+
+        // Redfish REST API routes (must be registered BEFORE the catch-all static handler)
+        redfishServer?.let {
+            it.initIngestion()
+            it.registerRoutes(router)
+        }
 
         // HMI static file serving (/hmi/*)
         registerHmiRoutes(router)
@@ -801,8 +808,20 @@ class GraphQLServer(
                         }
                         future
                     }
-                    .dataFetcher("redfishLiveSensors") { _ ->
-                        java.util.concurrent.CompletableFuture.completedFuture(emptyList<Map<String, Any?>>())
+                    .dataFetcher("redfishLiveSensors") { env ->
+                        val future = java.util.concurrent.CompletableFuture<List<Map<String, Any?>>>()
+                        if (!Monster.isFeatureEnabled(Features.Redfish) || redfishServer == null) {
+                            future.complete(emptyList())
+                        } else {
+                            val chassisId: String? = env.getArgument("chassisId")
+                            try {
+                                val list = redfishServer.getLiveSensors(chassisId)
+                                future.complete(list)
+                            } catch (e: Exception) {
+                                future.completeExceptionally(e)
+                            }
+                        }
+                        future
                     }
             }
             // Register GenAI Query type
@@ -1120,6 +1139,7 @@ class GraphQLServer(
                             )
                             store.saveDevice(dev).onComplete { ar ->
                                 if (ar.succeeded()) {
+                                    vertx.eventBus().publish(at.rocworks.extensions.redfish.RedfishIngestion.ADDRESS_DEVICE_CONFIG_CHANGED, io.vertx.core.json.JsonObject())
                                     future.complete(mapOf(
                                         "success" to true,
                                         "redfish" to mapOf(
@@ -1147,6 +1167,9 @@ class GraphQLServer(
                             future.complete(false)
                         } else {
                             store.deleteDevice(name).onComplete { ar ->
+                                if (ar.succeeded()) {
+                                    vertx.eventBus().publish(at.rocworks.extensions.redfish.RedfishIngestion.ADDRESS_DEVICE_CONFIG_CHANGED, io.vertx.core.json.JsonObject())
+                                }
                                 future.complete(ar.succeeded())
                             }
                         }
@@ -1166,6 +1189,7 @@ class GraphQLServer(
                                     val updated = dev.copy(enabled = enabled)
                                     store.saveDevice(updated).onComplete { sar ->
                                         if (sar.succeeded()) {
+                                            vertx.eventBus().publish(at.rocworks.extensions.redfish.RedfishIngestion.ADDRESS_DEVICE_CONFIG_CHANGED, io.vertx.core.json.JsonObject())
                                             future.complete(mapOf(
                                                 "success" to true,
                                                 "redfish" to mapOf(

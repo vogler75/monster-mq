@@ -6,7 +6,9 @@ import io.vertx.core.Future
 enum class DatabaseConnectionType {
     POSTGRES,
     MONGODB,
-    SQLITE
+    SQLITE,
+    CRATEDB,
+    QUESTDB
 }
 
 data class DatabaseConnectionConfig(

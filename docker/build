@@ -85,34 +85,51 @@ fi
 
 # Build the broker with Maven (unless -d flag is set)
 if [ "$DOCKER_ONLY" = false ]; then
-    # Build dashboard and copy to broker resources
-    echo -e "${YELLOW}Building dashboard...${NC}"
-    DASHBOARD_DIR=$(cd ../dashboard && pwd)
+    # Resolve dashboard directory (supports monorepo, sibling checkouts, or separate repo names)
+    DASHBOARD_DIR=""
+    for candidate in "$(cd ../dashboard 2>/dev/null && pwd)" \
+                     "$(cd ../../dashboard 2>/dev/null && pwd)" \
+                     "$(cd ../../monster-mq-dashboard 2>/dev/null && pwd)" \
+                     "$(cd ../monster-mq-dashboard 2>/dev/null && pwd)"; do
+        if [ -n "$candidate" ] && [ -f "$candidate/package.json" ]; then
+            DASHBOARD_DIR="$candidate"
+            break
+        fi
+    done
+
     BROKER_RESOURCES_DIR=$(cd ../broker/src/main/resources && pwd)
 
-    if [ "$CONTAINER_BUILD" = true ]; then
-        echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
-        # Source bind-mounted read-only; node_modules in named volume to avoid root-owned files on host
-        docker run --rm \
-            -v "${DASHBOARD_DIR}:/app" \
-            -v "${DASHBOARD_VOLUME}:/app/node_modules" \
-            -w /app \
-            node:24-slim \
-            bash -c "set -e && npm ci && npm run build && chown -R $(id -u):$(id -g) /app/dist"
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}✗ Dashboard build failed${NC}"
-            exit 1
+    if [ -n "$DASHBOARD_DIR" ]; then
+        echo -e "${YELLOW}Building dashboard from ${DASHBOARD_DIR}...${NC}"
+        if [ "$CONTAINER_BUILD" = true ]; then
+            echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
+            # Source bind-mounted read-only; node_modules in named volume to avoid root-owned files on host
+            docker run --rm \
+                -v "${DASHBOARD_DIR}:/app" \
+                -v "${DASHBOARD_VOLUME}:/app/node_modules" \
+                -w /app \
+                node:24-slim \
+                bash -c "set -e && npm ci && npm run build && chown -R $(id -u):$(id -g) /app/dist"
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}✗ Dashboard build failed${NC}"
+                exit 1
+            fi
+        else
+            pushd "$DASHBOARD_DIR" > /dev/null
+            npm ci
+            npm run build
+            popd > /dev/null
         fi
-    else
-        cd ../dashboard
-        npm ci
-        npm run build
-        cd ../docker
-    fi
 
-    rm -rf "${BROKER_RESOURCES_DIR}/dashboard"
-    cp -r "${DASHBOARD_DIR}/dist" "${BROKER_RESOURCES_DIR}/dashboard"
-    rm -f "${BROKER_RESOURCES_DIR}/dashboard/config/brokers.json"
+        rm -rf "${BROKER_RESOURCES_DIR}/dashboard"
+        cp -r "${DASHBOARD_DIR}/dist" "${BROKER_RESOURCES_DIR}/dashboard"
+        rm -f "${BROKER_RESOURCES_DIR}/dashboard/config/brokers.json"
+        echo -e "${GREEN}✓ Dashboard built and copied to broker resources${NC}"
+    else
+        echo -e "${RED}Error: Dashboard checkout not found in any standard location (../dashboard, ../../dashboard, ../../monster-mq-dashboard).${NC}"
+        echo -e "${RED}Please create a symlink or clone https://github.com/vogler75/monster-mq-dashboard into a sibling folder.${NC}"
+        exit 1
+    fi
 
     if [ "$CONTAINER_BUILD" = true ]; then
         echo -e "${YELLOW}Running mvn package in Docker volume (GraalVM 21)...${NC}"

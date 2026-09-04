@@ -21,6 +21,7 @@ import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.mongodb.MessageStoreMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
 import at.rocworks.stores.postgres.MessageStorePostgres
+import at.rocworks.stores.questdb.MessageArchiveQuestDB
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.sqlite.MessageStoreSQLite
 import io.vertx.core.AbstractVerticle
@@ -161,6 +162,10 @@ class ArchiveGroup(
 
         isStopping = true
         stopRetentionScheduling()
+
+        // Directly stop stores in case child verticles were still connecting or not yet in childDeployments
+        try { lastValStore?.stopStore() } catch (e: Exception) { logger.fine { "Error stopping lastValStore: ${e.message}" } }
+        try { archiveStore?.stopStore() } catch (e: Exception) { logger.fine { "Error stopping archiveStore: ${e.message}" } }
 
         // Clean up child verticle deployments
         if (childDeployments.isNotEmpty()) {
@@ -487,7 +492,7 @@ class ArchiveGroup(
                 logger.info("MessageArchive [$archiveName] set to NONE")
                 callback(true)
             }
-            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.MONGODB, MessageArchiveType.SQLITE -> {
+            MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.QUESTDB, MessageArchiveType.MONGODB, MessageArchiveType.SQLITE -> {
                 createDatabaseMessageArchive(archiveType, archiveName) { success ->
                     callback(success)
                 }
@@ -515,6 +520,16 @@ class ArchiveGroup(
                         cratedb.getString("Url"),
                         cratedb.getString("User"),
                         cratedb.getString("Pass"),
+                        payloadFormat
+                    )
+                }
+                MessageArchiveType.QUESTDB -> {
+                    val questdb = databaseConfig.getJsonObject("QuestDB")
+                    MessageArchiveQuestDB(
+                        archiveName,
+                        questdb.getString("Url"),
+                        questdb.getString("User"),
+                        questdb.getString("Pass"),
                         payloadFormat
                     )
                 }
@@ -812,6 +827,12 @@ class ArchiveGroup(
                     val cratedb = databaseConfig.getJsonObject("CrateDB")
                     if (cratedb == null || cratedb.getString("Url").isNullOrEmpty()) {
                         throw IllegalArgumentException("Archive group '$archiveName' cannot use CRATEDB $storeTypeName: CrateDB configuration (Url) not found or empty")
+                    }
+                }
+                MessageArchiveType.QUESTDB -> {
+                    val questdb = databaseConfig.getJsonObject("QuestDB")
+                    if (questdb == null || questdb.getString("Url").isNullOrEmpty()) {
+                        throw IllegalArgumentException("Archive group '$archiveName' cannot use QUESTDB $storeTypeName: QuestDB configuration (Url) not found or empty")
                     }
                 }
                 MessageArchiveType.MONGODB -> {

@@ -6,6 +6,7 @@ import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.*
 import at.rocworks.stores.postgres.*
 import at.rocworks.stores.cratedb.*
+import at.rocworks.stores.questdb.*
 import at.rocworks.stores.mongodb.*
 import at.rocworks.stores.sqlite.*
 import graphql.schema.DataFetcher
@@ -67,6 +68,30 @@ class ArchiveGroupResolver(
                 ))
             }
         }
+        databaseConfig.getJsonObject("CrateDB")?.let {
+            val url = it.getString("Url")
+            if (!url.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.CRATEDB,
+                    url = url,
+                    username = it.getString("User"),
+                    readOnly = true
+                ))
+            }
+        }
+        databaseConfig.getJsonObject("QuestDB")?.let {
+            val url = it.getString("Url")
+            if (!url.isNullOrBlank()) {
+                connections.add(DatabaseConnectionConfig(
+                    name = "Default",
+                    type = DatabaseConnectionType.QUESTDB,
+                    url = url,
+                    username = it.getString("User"),
+                    readOnly = true
+                ))
+            }
+        }
         return connections
     }
 
@@ -95,12 +120,15 @@ class ArchiveGroupResolver(
         val requiredTypes = setOfNotNull(
             when (lastValType) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveType) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.CRATEDB -> DatabaseConnectionType.CRATEDB
+                MessageArchiveType.QUESTDB -> DatabaseConnectionType.QUESTDB
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
@@ -108,7 +136,7 @@ class ArchiveGroupResolver(
         )
 
         if (requiredTypes.isEmpty()) {
-            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL, MongoDB, or SQLite storage")
+            return io.vertx.core.Future.succeededFuture("A database connection can only be selected for PostgreSQL, CrateDB, QuestDB, MongoDB, or SQLite storage")
         }
         if (requiredTypes.size > 1) {
             return io.vertx.core.Future.succeededFuture(
@@ -1401,6 +1429,15 @@ class ArchiveGroupResolver(
                     cratedb.getString("Url"),
                     cratedb.getString("User"),
                     cratedb.getString("Pass")
+                )
+            }
+            MessageArchiveType.QUESTDB -> {
+                val questdb = databaseConfig.getJsonObject("QuestDB")
+                MessageArchiveQuestDB(
+                    archiveName,
+                    questdb.getString("Url"),
+                    questdb.getString("User"),
+                    questdb.getString("Pass")
                 )
             }
             MessageArchiveType.MONGODB -> {

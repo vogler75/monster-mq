@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# build.sh - Build script for MonsterMQ Main Broker, Desktop Apps, and Docker Images
+# build.sh - Build script for MonsterMQ Main Broker, Setup Executables, and Docker Images
 #
 # Usage:
-#   ./build.sh --all          Build all artifacts locally (broker zip, desktop apps, docker image)
+#   ./build.sh --all          Build all artifacts locally (broker zip, setup executables, docker image)
 #   ./build.sh --broker       Build Java broker zip bundle only
-#   ./build.sh --desktop      Build Electron desktop apps only
+#   ./build.sh --setup        Build cross-platform Go setup executables only
 #   ./build.sh --docker       Build local Docker image only
 
 set -e
@@ -27,7 +27,6 @@ RAW_VERSION=$(head -n 1 version.txt | tr -d '\r' | tr -d '\n')
 VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 
 BUILD_BROKER=false
-BUILD_DESKTOP=false
 BUILD_DOCKER=false
 BUILD_SETUP=false
 CLEAN=false
@@ -37,9 +36,8 @@ usage() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --all            Build all artifacts (broker zip, desktop apps, setup executables, docker image)"
+    echo "  --all            Build all artifacts (broker zip, setup executables, docker image)"
     echo "  --broker         Build standalone Java broker bundle (zip)"
-    echo "  --desktop        Build Electron desktop dashboard apps (mac/win)"
     echo "  --setup          Build cross-platform Go setup executables (setup.exe, setup-mac, setup-linux)"
     echo "  --docker         Build local Docker image (native platform)"
     echo "  --clean          Clean output build directories"
@@ -56,7 +54,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --all)
             BUILD_BROKER=true
-            BUILD_DESKTOP=true
             BUILD_SETUP=true
             BUILD_DOCKER=true
             EXPLICIT_TARGET=true
@@ -64,11 +61,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --broker)
             BUILD_BROKER=true
-            EXPLICIT_TARGET=true
-            shift
-            ;;
-        --desktop)
-            BUILD_DESKTOP=true
             EXPLICIT_TARGET=true
             shift
             ;;
@@ -99,7 +91,6 @@ done
 # Default to building all if no target or clean specified
 if [ "$EXPLICIT_TARGET" = false ] && [ "$CLEAN" = false ]; then
     BUILD_BROKER=true
-    BUILD_DESKTOP=true
     BUILD_SETUP=true
     BUILD_DOCKER=true
 fi
@@ -110,13 +101,12 @@ if [ "$CLEAN" = true ]; then
     echo -e "${YELLOW}Cleaning output build directories...${NC}"
     rm -rf broker/target
     rm -rf dashboard/dist
-    rm -rf dashboard/dist-desktop
     rm -rf dist
     rm -rf docker/target
     echo -e "${GREEN}✓ Clean complete${NC}"
 fi
 
-if [ "$BUILD_BROKER" = false ] && [ "$BUILD_DESKTOP" = false ] && [ "$BUILD_SETUP" = false ] && [ "$BUILD_DOCKER" = false ]; then
+if [ "$BUILD_BROKER" = false ] && [ "$BUILD_SETUP" = false ] && [ "$BUILD_DOCKER" = false ]; then
     echo -e "${GREEN}No build targets specified. Clean operation finished.${NC}"
     exit 0
 fi
@@ -126,13 +116,31 @@ fi
 if [ "$BUILD_BROKER" = true ]; then
     echo -e "${GREEN}[1/3] Building Web Dashboard and Java Broker...${NC}"
     
-    echo -e "${YELLOW}Building web dashboard frontend...${NC}"
-    (cd dashboard && npm ci && npm run build)
+    # Resolve dashboard directory (symlink or sibling checkouts)
+    DASHBOARD_DIR=""
+    for candidate in "dashboard" "../dashboard" "../../dashboard" "../monster-mq-dashboard" "../../monster-mq-dashboard"; do
+        if [ -f "$candidate/package.json" ]; then
+            DASHBOARD_DIR="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$DASHBOARD_DIR" ]; then
+        echo -e "${RED}Error: Dashboard checkout not found!${NC}"
+        echo -e "${RED}Please create a symlink to the dashboard repository or clone it into a sibling folder:${NC}"
+        echo -e "${YELLOW}  cd ${SCRIPT_DIR}${NC}"
+        echo -e "${YELLOW}  ln -s ../dashboard dashboard${NC}"
+        echo -e "${YELLOW}  # or clone: git clone https://github.com/vogler75/monster-mq-dashboard.git ../dashboard${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}Building web dashboard frontend from ${DASHBOARD_DIR}...${NC}"
+    (cd "$DASHBOARD_DIR" && npm ci && npm run build)
     
     echo -e "${YELLOW}Copying web dashboard to broker resources...${NC}"
     rm -rf broker/src/main/resources/dashboard
     mkdir -p broker/src/main/resources/dashboard
-    cp -r dashboard/dist/* broker/src/main/resources/dashboard/
+    cp -r "${DASHBOARD_DIR}/dist"/* broker/src/main/resources/dashboard/
     rm -f broker/src/main/resources/dashboard/config/brokers.json
     
     echo -e "${YELLOW}Compiling Java broker with Maven...${NC}"
@@ -263,16 +271,9 @@ EOF
     echo -e "${GREEN}✓ Broker bundle created: ${YELLOW}${ZIP_PATH}${NC}"
 fi
 
-# 2. Build Desktop Dashboard Apps
-if [ "$BUILD_DESKTOP" = true ]; then
-    echo -e "${GREEN}[2/3] Building Desktop Dashboard Apps...${NC}"
-    ./dashboard/build-desktop.sh --all
-    echo -e "${GREEN}✓ Desktop apps built in dashboard/dist-desktop/${NC}"
-fi
-
-# 3. Build Setup Executables (setup.exe, setup-mac, setup-linux)
+# 2. Build Setup Executables (setup.exe, setup-mac, setup-linux)
 if [ "$BUILD_SETUP" = true ]; then
-    echo -e "${GREEN}[3/4] Building Cross-Platform Setup Executables (Go)...${NC}"
+    echo -e "${GREEN}[2/3] Building Cross-Platform Setup Executables (Go)...${NC}"
     (cd installer && ./build.sh)
     mkdir -p dist
     cp installer/bin/setup.exe dist/setup.exe
@@ -284,9 +285,9 @@ if [ "$BUILD_SETUP" = true ]; then
     echo -e "${GREEN}✓ Setup executables copied to dist/${NC}"
 fi
 
-# 4. Build Docker Image (Local)
+# 3. Build Docker Image (Local)
 if [ "$BUILD_DOCKER" = true ]; then
-    echo -e "${GREEN}[4/4] Building Local Docker Image...${NC}"
+    echo -e "${GREEN}[3/3] Building Local Docker Image...${NC}"
     (cd docker && ./build -n)
     echo -e "${GREEN}✓ Local Docker image built${NC}"
 fi

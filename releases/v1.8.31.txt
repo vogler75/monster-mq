@@ -1,0 +1,10 @@
+Release v1.8.31
+Built from commit: 00153117
+Date: 2026-09-01 08:09:57
+
+Changes since v1.8.30:
+---
+00153117 feat(tls): support independent WSS certificate and mTLS for MQTTS (#170)
+75879ea5 docs: add Windows Service setup guide using WinSW
+5b5cea39 feat(archive): add QuestDB message archive destination with QWP and PGWire support
+68f59f43 Support CrateDB in named database connections and improve archive store resilience

@@ -67,13 +67,24 @@ goto parse_args
 REM Resolve script-relative directories
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-set "DASHBOARD_DIR=%SCRIPT_DIR%\..\dashboard"
 set "RESOURCES_DIR=%SCRIPT_DIR%\src\main\resources\dashboard"
+
+REM Resolve dashboard directory (supports monorepo, sibling checkouts, or separate repo names)
+set "DASHBOARD_DIR="
+if exist "%SCRIPT_DIR%\..\dashboard\package.json" (
+    set "DASHBOARD_DIR=%SCRIPT_DIR%\..\dashboard"
+) else if exist "%SCRIPT_DIR%\..\..\dashboard\package.json" (
+    set "DASHBOARD_DIR=%SCRIPT_DIR%\..\..\dashboard"
+) else if exist "%SCRIPT_DIR%\..\..\monster-mq-dashboard\package.json" (
+    set "DASHBOARD_DIR=%SCRIPT_DIR%\..\..\monster-mq-dashboard"
+) else if exist "%SCRIPT_DIR%\..\monster-mq-dashboard\package.json" (
+    set "DASHBOARD_DIR=%SCRIPT_DIR%\..\monster-mq-dashboard"
+)
 
 REM If -build option is specified, build dashboard and broker
 if "!BUILD_FIRST!"=="true" (
-    if exist "%DASHBOARD_DIR%\package.json" (
-        echo Building dashboard...
+    if defined DASHBOARD_DIR if exist "%DASHBOARD_DIR%\package.json" (
+        echo Building dashboard from %DASHBOARD_DIR%...
         pushd "%DASHBOARD_DIR%"
         call npm install
         if errorlevel 1 (
@@ -97,7 +108,9 @@ if "!BUILD_FIRST!"=="true" (
         )
         echo Dashboard build completed.
     ) else (
-        echo Dashboard not found, skipping.
+        echo Error: Dashboard checkout not found!
+        echo Please create a symlink or clone https://github.com/vogler75/monster-mq-dashboard into a sibling folder.
+        exit /b 1
     )
 
     echo Building MonsterMQ...
@@ -143,35 +156,40 @@ set "JAVA_OPTS=!JAVA_OPTS! --enable-native-access=ALL-UNNAMED"
 
 REM Serve dashboard from filesystem for development
 if "!DASHBOARD_DEV!"=="true" (
-    set "DASHBOARD_DIST=%DASHBOARD_DIR%\dist"
+    if defined DASHBOARD_DIR (
+        set "DASHBOARD_DIST=!DASHBOARD_DIR!\dist"
 
-    if "!BUILD_FIRST!"=="false" (
-        if exist "%DASHBOARD_DIR%\package.json" (
-            echo Always build requested by -d, building dashboard...
-            pushd "%DASHBOARD_DIR%"
-            call npm install
-            if errorlevel 1 (
-                echo Dashboard install failed!
+        if "!BUILD_FIRST!"=="false" (
+            if exist "!DASHBOARD_DIR!\package.json" (
+                echo Always build requested by -d, building dashboard from !DASHBOARD_DIR!...
+                pushd "!DASHBOARD_DIR!"
+                call npm install
+                if errorlevel 1 (
+                    echo Dashboard install failed!
+                    popd
+                    exit /b 1
+                )
+                call npm run build
+                if errorlevel 1 (
+                    echo Dashboard build failed!
+                    popd
+                    exit /b 1
+                )
                 popd
-                exit /b 1
             )
-            call npm run build
-            if errorlevel 1 (
-                echo Dashboard build failed!
-                popd
-                exit /b 1
-            )
-            popd
-        ) else (
-            echo Warning: Dashboard directory or package.json not found, skipping build.
         )
-    )
 
-    if exist "!DASHBOARD_DIST!" (
-        echo Dashboard serving from filesystem: !DASHBOARD_DIST!
-        set REMAINING_ARGS=!REMAINING_ARGS! -dashboardPath "!DASHBOARD_DIST!"
+        if exist "!DASHBOARD_DIST!" (
+            echo Dashboard serving from filesystem: !DASHBOARD_DIST!
+            set REMAINING_ARGS=!REMAINING_ARGS! -dashboardPath "!DASHBOARD_DIST!"
+        ) else (
+            echo Error: !DASHBOARD_DIST! not found after build attempt.
+            exit /b 1
+        )
     ) else (
-        echo Warning: dashboard\dist\ not found after build attempt.
+        echo Error: Dashboard checkout not found in any standard location (..\dashboard, ..\..\dashboard, ..\..\monster-mq-dashboard).
+        echo Please create a symlink or clone https://github.com/vogler75/monster-mq-dashboard into a sibling folder.
+        exit /b 1
     )
 )
 

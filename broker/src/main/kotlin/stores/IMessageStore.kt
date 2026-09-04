@@ -57,6 +57,7 @@ interface IMessageStore {
      * Returns true if table was created or already existed, false on error.
      */
     suspend fun createTable(): Boolean
+    fun stopStore(): io.vertx.core.Future<Void> = io.vertx.core.Future.succeededFuture()
 }
 
 interface IMessageStoreExtended : IMessageStore {

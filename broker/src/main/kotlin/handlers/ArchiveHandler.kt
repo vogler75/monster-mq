@@ -8,6 +8,7 @@ import at.rocworks.stores.MessageArchiveType
 import at.rocworks.stores.cratedb.MessageArchiveCrateDB
 import at.rocworks.stores.mongodb.MessageArchiveMongoDB
 import at.rocworks.stores.postgres.MessageArchivePostgres
+import at.rocworks.stores.questdb.MessageArchiveQuestDB
 import at.rocworks.stores.sqlite.MessageArchiveSQLite
 import at.rocworks.stores.PayloadFormat
 import io.vertx.core.*
@@ -463,12 +464,15 @@ class ArchiveHandler(
         val requiredTypes = setOfNotNull(
             when (archiveGroup.getLastValType()) {
                 MessageStoreType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageStoreType.CRATEDB -> DatabaseConnectionType.CRATEDB
                 MessageStoreType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageStoreType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
             },
             when (archiveGroup.getArchiveType()) {
                 MessageArchiveType.POSTGRES -> DatabaseConnectionType.POSTGRES
+                MessageArchiveType.CRATEDB -> DatabaseConnectionType.CRATEDB
+                MessageArchiveType.QUESTDB -> DatabaseConnectionType.QUESTDB
                 MessageArchiveType.MONGODB -> DatabaseConnectionType.MONGODB
                 MessageArchiveType.SQLITE -> DatabaseConnectionType.SQLITE
                 else -> null
@@ -494,6 +498,16 @@ class ArchiveHandler(
                     .put("Pass", connection.password ?: "")
                     .put("Schema", connection.schema)
                 )
+                DatabaseConnectionType.CRATEDB -> baseConfig.put("CrateDB", JsonObject()
+                    .put("Url", connection.url)
+                    .put("User", connection.username ?: "")
+                    .put("Pass", connection.password ?: "")
+                )
+                DatabaseConnectionType.QUESTDB -> baseConfig.put("QuestDB", JsonObject()
+                    .put("Url", connection.url)
+                    .put("User", connection.username ?: "")
+                    .put("Pass", connection.password ?: "")
+                )
                 DatabaseConnectionType.MONGODB -> baseConfig.put("MongoDB", JsonObject()
                     .put("Url", mongoUrlWithCredentials(connection.url, connection.username, connection.password))
                     .put("User", connection.username)
@@ -512,6 +526,8 @@ class ArchiveHandler(
                 val missingTypes = requiredTypes.filter {
                     when (it) {
                         DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.getString("Url").isNullOrBlank()
+                        DatabaseConnectionType.CRATEDB -> configJson.getJsonObject("CrateDB")?.getString("Url").isNullOrBlank()
+                        DatabaseConnectionType.QUESTDB -> configJson.getJsonObject("QuestDB")?.getString("Url").isNullOrBlank()
                         DatabaseConnectionType.MONGODB -> configJson.getJsonObject("MongoDB")?.getString("Url").isNullOrBlank()
                         DatabaseConnectionType.SQLITE -> configJson.getJsonObject("SQLite")?.getString("Path").isNullOrBlank()
                     }
@@ -524,7 +540,7 @@ class ArchiveHandler(
             }
 
             val requiredType = requiredTypes.firstOrNull()
-                ?: return Future.failedFuture("Default database connection can only be used for Postgres, MongoDB, or SQLite stores")
+                ?: return Future.failedFuture("Default database connection can only be used for Postgres, CrateDB, QuestDB, MongoDB, or SQLite stores")
             val connection = when (requiredType) {
                 DatabaseConnectionType.POSTGRES -> configJson.getJsonObject("Postgres")?.let {
                     val url = it.getString("Url")
@@ -535,6 +551,28 @@ class ArchiveHandler(
                         username = it.getString("User"),
                         password = it.getString("Pass"),
                         schema = it.getString("Schema"),
+                        readOnly = true
+                    )
+                }
+                DatabaseConnectionType.CRATEDB -> configJson.getJsonObject("CrateDB")?.let {
+                    val url = it.getString("Url")
+                    if (url.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.CRATEDB,
+                        url = url,
+                        username = it.getString("User"),
+                        password = it.getString("Pass"),
+                        readOnly = true
+                    )
+                }
+                DatabaseConnectionType.QUESTDB -> configJson.getJsonObject("QuestDB")?.let {
+                    val url = it.getString("Url")
+                    if (url.isNullOrEmpty()) null else DatabaseConnectionConfig(
+                        name = "Default",
+                        type = DatabaseConnectionType.QUESTDB,
+                        url = url,
+                        username = it.getString("User"),
+                        password = it.getString("Pass"),
                         readOnly = true
                     )
                 }
@@ -589,7 +627,9 @@ class ArchiveHandler(
             bulkSize = ag.bulkSize,
             bulkTimeoutMs = ag.bulkTimeoutMs,
             queueDiskPath = ag.queueDiskPath,
-            databaseConfig = databaseConfig
+            databaseConfig = databaseConfig,
+            lastValReadOnly = ag.lastValReadOnly,
+            archiveReadOnly = ag.archiveReadOnly
         )
     }
 
@@ -598,6 +638,7 @@ class ArchiveHandler(
         storeType: MessageArchiveType,
         postgresUrl: String, postgresUser: String, postgresPass: String,
         crateDbUrl: String, crateDbUser: String, crateDbPass: String,
+        questDbUrl: String = "", questDbUser: String = "", questDbPass: String = "",
         mongoDbUrl: String, mongoDbDatabase: String,
         sqlitePath: String,
         kafkaServers: String
@@ -622,6 +663,15 @@ class ArchiveHandler(
                 val store = MessageArchiveCrateDB(
                     name,
                     crateDbUrl, crateDbUser, crateDbPass
+                )
+                val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
+                vertx.deployVerticle(store, options).onComplete { promise.complete() }
+                store
+            }
+            MessageArchiveType.QUESTDB -> {
+                val store = MessageArchiveQuestDB(
+                    name,
+                    questDbUrl, questDbUser, questDbPass
                 )
                 val options: DeploymentOptions = DeploymentOptions().setThreadingModel(ThreadingModel.WORKER)
                 vertx.deployVerticle(store, options).onComplete { promise.complete() }

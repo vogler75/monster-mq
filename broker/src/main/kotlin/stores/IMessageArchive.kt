@@ -12,6 +12,7 @@ enum class MessageArchiveType {
     NONE,
     POSTGRES,
     CRATEDB,
+    QUESTDB,
     MONGODB,
     SQLITE
 }
@@ -54,6 +55,7 @@ interface IMessageArchive {
      * Returns true if table was created or already existed, false on error.
      */
     suspend fun createTable(): Boolean
+    fun stopStore(): io.vertx.core.Future<Void> = io.vertx.core.Future.succeededFuture()
 }
 
 interface IMessageArchiveExtended: IMessageArchive {

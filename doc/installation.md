@@ -4,6 +4,22 @@ This guide covers complete installation and setup of MonsterMQ for different env
 
 ## Quick Start
 
+### 1-Line Installer (Linux & macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/install.sh | bash
+cd monstermq && ./run.sh
+```
+
+### 1-Line Installer (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/vogler75/monster-mq/main/install.ps1 | iex
+cd .\monstermq; .\run.bat
+```
+
+To run MonsterMQ as a background Windows service with automatic startup and recovery, see [Windows Service Setup with WinSW](windows-service.md).
+
 ### Docker (Recommended)
 
 The fastest way to get MonsterMQ running:

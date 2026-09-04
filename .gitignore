@@ -45,3 +45,4 @@ tests/.env
 .antigravitycli
 dist/
 installer/bin/
+installer/schema.json

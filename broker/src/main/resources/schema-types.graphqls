@@ -38,6 +38,7 @@ enum MessageArchiveType {
     NONE
     POSTGRES
     CRATEDB
+    QUESTDB
     MONGODB
     SQLITE
 }
@@ -132,6 +133,8 @@ type BrokerConfig {
     postgresUser: String!
     crateDbUrl: String!
     crateDbUser: String!
+    questDbUrl: String!
+    questDbUser: String!
     mongoDbUrl: String!
     mongoDbDatabase: String!
     sqlitePath: String!
