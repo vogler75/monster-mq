@@ -301,7 +301,8 @@ class GraphQLServer(
             "schema-agents.graphqls",      // AI Agents
             "schema-mcp-servers.graphqls",  // MCP Servers
             "schema-genai-providers.graphqls", // GenAI Providers
-            "schema-kafka-servers.graphqls" // Kafka Servers
+            "schema-kafka-servers.graphqls", // Kafka Servers
+            "schema-redfish.graphqls"      // Redfish Gateway
         )
 
         return schemaFiles.joinToString("\n") { filename ->
