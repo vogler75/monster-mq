@@ -311,6 +311,8 @@ if not defined JAR_FILE (
 java -classpath "%JAR_FILE%;dependencies/*" at.rocworks.MonsterKt %*
 `
 	_ = os.WriteFile(runBat, []byte(batContent), 0644)
+	_ = os.MkdirAll(filepath.Join(destDir, "log"), 0755)
+	_ = os.MkdirAll(filepath.Join(destDir, "sqlite"), 0755)
 
 	if runtime.GOOS == "windows" {
 		return runBat
@@ -320,22 +322,25 @@ java -classpath "%JAR_FILE%;dependencies/*" at.rocworks.MonsterKt %*
 
 // BrokerProcess represents a running MonsterMQ instance managed by the setup tool.
 type BrokerProcess struct {
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	dir    string
-	logs   []string
-	active bool
+	mu          sync.Mutex
+	cmd         *exec.Cmd
+	pid         int
+	dir         string
+	logs        []string
+	active      bool
+	startedAt   time.Time
+	logCallback func(line string)
 }
 
 var globalProcess = &BrokerProcess{}
 
-// StartBroker launches the broker process in the background.
-func StartBroker(dir string, logCallback func(line string)) error {
+// StartBroker launches the broker process in the background and returns its PID.
+func StartBroker(dir string, logCallback func(line string)) (int, error) {
 	globalProcess.mu.Lock()
 	defer globalProcess.mu.Unlock()
 
 	if globalProcess.active && globalProcess.cmd != nil && globalProcess.cmd.Process != nil {
-		return fmt.Errorf("broker is already running")
+		return globalProcess.pid, fmt.Errorf("broker is already running (PID: %d)", globalProcess.pid)
 	}
 
 	var cmd *exec.Cmd
@@ -348,18 +353,22 @@ func StartBroker(dir string, logCallback func(line string)) error {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	cmd.Stderr = cmd.Stdout
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start broker process: %w", err)
+		return 0, fmt.Errorf("failed to start broker process: %w", err)
 	}
 
+	pid := cmd.Process.Pid
 	globalProcess.cmd = cmd
+	globalProcess.pid = pid
 	globalProcess.dir = dir
 	globalProcess.active = true
+	globalProcess.startedAt = time.Now()
 	globalProcess.logs = nil
+	globalProcess.logCallback = logCallback
 
 	go func() {
 		buf := make([]byte, 1024)
@@ -378,11 +387,12 @@ func StartBroker(dir string, logCallback func(line string)) error {
 							if len(globalProcess.logs) > 200 {
 								globalProcess.logs = globalProcess.logs[1:]
 							}
+							cb := globalProcess.logCallback
 							globalProcess.mu.Unlock()
-							if logCallback != nil {
+							if cb != nil {
 								func() {
 									defer func() { _ = recover() }()
-									logCallback(line)
+									cb(line)
 								}()
 							}
 						}
@@ -398,8 +408,54 @@ func StartBroker(dir string, logCallback func(line string)) error {
 		_ = cmd.Wait()
 		globalProcess.mu.Lock()
 		globalProcess.active = false
+		cb := globalProcess.logCallback
 		globalProcess.mu.Unlock()
+		if cb != nil {
+			func() {
+				defer func() { _ = recover() }()
+				cb("[SYSTEM] Broker process exited.")
+			}()
+		}
 	}()
 
-	return nil
+	return pid, nil
+}
+
+// StopBroker terminates the running broker process.
+func StopBroker() error {
+	globalProcess.mu.Lock()
+	defer globalProcess.mu.Unlock()
+
+	if !globalProcess.active || globalProcess.cmd == nil || globalProcess.cmd.Process == nil {
+		return fmt.Errorf("broker is not running")
+	}
+
+	pid := globalProcess.cmd.Process.Pid
+	var stopErr error
+
+	if runtime.GOOS == "windows" {
+		// On Windows, run.bat launches java.exe as a child process; taskkill /T /F terminates the entire process tree
+		stopErr = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", pid)).Run()
+	} else {
+		// On Unix, try graceful interrupt, then force kill
+		_ = globalProcess.cmd.Process.Signal(os.Interrupt)
+		time.Sleep(300 * time.Millisecond)
+		_ = globalProcess.cmd.Process.Kill()
+	}
+
+	globalProcess.active = false
+	return stopErr
+}
+
+// GetBrokerStatus returns the current broker runtime state.
+func GetBrokerStatus() map[string]interface{} {
+	globalProcess.mu.Lock()
+	defer globalProcess.mu.Unlock()
+
+	return map[string]interface{}{
+		"active":    globalProcess.active,
+		"pid":       globalProcess.pid,
+		"dir":       globalProcess.dir,
+		"startedAt": globalProcess.startedAt.Format(time.RFC3339),
+	}
 }

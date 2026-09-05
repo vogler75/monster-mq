@@ -25,10 +25,21 @@ object Utils {
 
     fun initLogging() {
         try {
-            println("Loading logging.properties...")
+            File("log").mkdirs()
+        } catch (e: Exception) {
+            // Ignore directory creation failure
+        }
+        try {
             val initialFile = File("logging.properties")
-            val targetStream: InputStream = FileInputStream(initialFile)
-            LogManager.getLogManager().readConfiguration(targetStream)
+            if (initialFile.exists()) {
+                println("Loading logging.properties...")
+                val targetStream: InputStream = FileInputStream(initialFile)
+                LogManager.getLogManager().readConfiguration(targetStream)
+            } else {
+                println("Using default logging.properties...")
+                val stream = this::class.java.classLoader.getResourceAsStream("logging.properties")
+                LogManager.getLogManager().readConfiguration(stream)
+            }
         } catch (e: Exception) {
             try {
                 println("Using default logging.properties...")

@@ -44,6 +44,8 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/validate-dir", s.handleValidateDir)
 	mux.HandleFunc("/api/install", s.handleInstall)
 	mux.HandleFunc("/api/start-broker", s.handleStartBroker)
+	mux.HandleFunc("/api/stop-broker", s.handleStopBroker)
+	mux.HandleFunc("/api/broker-status", s.handleBrokerStatus)
 	mux.HandleFunc("/api/open-dashboard", s.handleOpenDashboard)
 	mux.HandleFunc("/api/open-folder", s.handleOpenFolder)
 	mux.HandleFunc("/api/exit", s.handleExit)
@@ -170,7 +172,7 @@ func (s *Server) handleStartBroker(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logChan := make(chan string, 200)
 
-	err := install.StartBroker(req.TargetDir, func(line string) {
+	pid, err := install.StartBroker(req.TargetDir, func(line string) {
 		select {
 		case logChan <- line:
 		default:
@@ -181,9 +183,9 @@ func (s *Server) handleStartBroker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendSSE(w, flusher, "started", map[string]string{"status": "running"})
+	sendSSE(w, flusher, "started", map[string]interface{}{"status": "running", "pid": pid})
 
-	// Keep stream open to pump logs until client disconnects
+	// Keep stream open to pump logs until client disconnects or process finishes
 	for {
 		select {
 		case <-ctx.Done():
@@ -193,8 +195,38 @@ func (s *Server) handleStartBroker(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			sendSSE(w, flusher, "log", map[string]string{"line": line})
+			if strings.Contains(line, "[SYSTEM] Broker process exited") {
+				sendSSE(w, flusher, "stopped", map[string]string{"status": "stopped"})
+			}
 		}
 	}
+}
+
+func (s *Server) handleStopBroker(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := install.StopBroker()
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+	})
+}
+
+func (s *Server) handleBrokerStatus(w http.ResponseWriter, r *http.Request) {
+	status := install.GetBrokerStatus()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 func (s *Server) handleOpenDashboard(w http.ResponseWriter, r *http.Request) {

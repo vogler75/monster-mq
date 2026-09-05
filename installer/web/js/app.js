@@ -942,10 +942,39 @@ function markStepDone(id) {
 // -------------------------------------------------------------
 function setupLaunchActions() {
   const btnStart = document.getElementById('btn-start-broker');
+  const btnStop = document.getElementById('btn-stop-broker');
   const btnDashboard = document.getElementById('btn-open-dashboard');
   const btnFolder = document.getElementById('btn-open-folder');
   const statusBadge = document.getElementById('broker-status-badge');
+  const pidBadge = document.getElementById('broker-pid-badge');
   const consoleBox = document.getElementById('console-logs');
+
+  function setBrokerRunning(pid) {
+    statusBadge.className = 'badge-pill success';
+    statusBadge.textContent = 'Running';
+    if (pidBadge) {
+      pidBadge.textContent = `PID: ${pid || '-'}`;
+      pidBadge.classList.remove('hidden');
+    }
+    btnStart.classList.add('hidden');
+    btnStop.classList.remove('hidden');
+    btnStop.disabled = false;
+    btnStop.textContent = 'Stop MonsterMQ';
+    btnDashboard.disabled = false;
+  }
+
+  function setBrokerStopped() {
+    statusBadge.className = 'badge-pill neutral';
+    statusBadge.textContent = 'Stopped';
+    if (pidBadge) {
+      pidBadge.classList.add('hidden');
+    }
+    btnStart.classList.remove('hidden');
+    btnStart.disabled = false;
+    btnStart.textContent = 'Start MonsterMQ';
+    btnStop.classList.add('hidden');
+    btnDashboard.disabled = true;
+  }
 
   btnStart.addEventListener('click', () => {
     btnStart.disabled = true;
@@ -963,7 +992,10 @@ function setupLaunchActions() {
 
       function readLogs() {
         reader.read().then(({ done, value }) => {
-          if (done) return;
+          if (done) {
+            setBrokerStopped();
+            return;
+          }
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop();
@@ -980,27 +1012,51 @@ function setupLaunchActions() {
                 if (currentEvent === 'log' && data.line) {
                   appendConsoleLog(data.line);
                 } else if (currentEvent === 'started') {
-                  statusBadge.className = 'badge-pill success';
-                  statusBadge.textContent = 'Running';
-                  btnStart.textContent = 'Running';
-                  btnDashboard.disabled = false;
+                  setBrokerRunning(data.pid);
+                  appendConsoleLog(`[SYSTEM] MonsterMQ broker started with PID: ${data.pid}`);
+                } else if (currentEvent === 'stopped') {
+                  setBrokerStopped();
+                  appendConsoleLog('[SYSTEM] MonsterMQ broker stopped.');
                 } else if (currentEvent === 'error') {
                   appendConsoleLog(`[ERROR] ${data.error}`);
-                  btnStart.disabled = false;
-                  btnStart.textContent = 'Start MonsterMQ';
+                  setBrokerStopped();
                 }
               } catch (e) {}
             }
           }
           readLogs();
+        }).catch(err => {
+          setBrokerStopped();
         });
       }
       readLogs();
     }).catch(err => {
       appendConsoleLog(`[ERROR] ${err.message}`);
-      btnStart.disabled = false;
-      btnStart.textContent = 'Start MonsterMQ';
+      setBrokerStopped();
     });
+  });
+
+  btnStop.addEventListener('click', async () => {
+    btnStop.disabled = true;
+    btnStop.textContent = 'Stopping...';
+    appendConsoleLog('[SYSTEM] Stopping MonsterMQ broker process...');
+
+    try {
+      const res = await fetch('/api/stop-broker', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setBrokerStopped();
+        appendConsoleLog('[SYSTEM] MonsterMQ stopped successfully.');
+      } else {
+        appendConsoleLog(`[ERROR] Failed to stop broker: ${data.error || 'Unknown error'}`);
+        btnStop.disabled = false;
+        btnStop.textContent = 'Stop MonsterMQ';
+      }
+    } catch (err) {
+      appendConsoleLog(`[ERROR] ${err.message}`);
+      btnStop.disabled = false;
+      btnStop.textContent = 'Stop MonsterMQ';
+    }
   });
 
   btnDashboard.addEventListener('click', () => {

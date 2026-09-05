@@ -168,6 +168,10 @@ if [ "$BUILD_BROKER" = true ]; then
     if [ -f "broker/yaml-json-schema.json" ]; then
         cp broker/yaml-json-schema.json "${STAGE_DIR}/yaml-json-schema.json"
     fi
+
+    if [ -f "broker/logging.properties" ]; then
+        cp broker/logging.properties "${STAGE_DIR}/logging.properties"
+    fi
     
     cat << 'EOF' > "${STAGE_DIR}/run.sh"
 #!/bin/bash

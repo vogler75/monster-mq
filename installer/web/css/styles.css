@@ -1099,6 +1099,15 @@ select:focus, .text-input:focus {
   background: var(--bg-hover);
 }
 
+.btn-danger {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
 .hidden {
   display: none !important;
 }
