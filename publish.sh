@@ -140,13 +140,16 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
         exit 1
     fi
 
-    # Verify git tag on remote
-    if ! git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
-        echo -e "${YELLOW}Warning: Tag ${TAG} is not on remote. Pushing tag now...${NC}"
-        git push origin "$TAG" || {
-            echo -e "${RED}Failed to push tag ${TAG} to origin.${NC}"
-            exit 1
-        }
+    # Verify / sync git tag on remote
+    LOCAL_TAG_SHA=$(git rev-parse "${TAG}^{commit}" 2>/dev/null || git rev-parse "$TAG" 2>/dev/null || echo "")
+    REMOTE_TAG_SHA=$(git ls-remote --tags origin "$TAG" | awk '{print $1}')
+
+    if [ -z "$REMOTE_TAG_SHA" ]; then
+        echo -e "${YELLOW}Tag ${TAG} is not on remote. Pushing tag now...${NC}"
+        git push origin "$TAG"
+    elif [ -n "$LOCAL_TAG_SHA" ] && [ "$LOCAL_TAG_SHA" != "$REMOTE_TAG_SHA" ]; then
+        echo -e "${YELLOW}Remote tag ${TAG} is out of sync with local HEAD. Force-updating remote tag...${NC}"
+        git push -f origin "$TAG"
     fi
 
     RELEASE_FILES=()
