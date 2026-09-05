@@ -1,9 +1,14 @@
 Release v1.8.32
-Built from commit: 7a7b7459
-Date: 2026-09-05 13:29:31
+Built from commit: 8eb7cc44
+Date: 2026-09-05 14:50:11
 
 Changes since v1.8.31:
 ---
+8eb7cc44 feat(release): add --retag option to re-adjust latest release tag to current commit
+971889e7 chore(logging): keep ConsoleHandler in JAR default for Docker and ship FileHandler in distribution logging.properties
+0cea11f4 feat(installer): add PID tracking and stop broker button, enable file logging with rotation
+af3ade4c fix(installer): disable redfish by default, fix category scroll reset, and fix start broker SSE streaming panic
+692d0fbe Bump version to 1.8.32
 7a7b7459 feat(installer): update install.sh and install.ps1 to download and launch native setup installer
 3da394cb feat(installer): add remote setup launcher scripts (setup.sh and setup.ps1)
 65b724f4 fix(questdb): support topic wildcards in getHistory query
