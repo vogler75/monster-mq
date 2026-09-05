@@ -226,13 +226,14 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
     if gh release view "$TAG" &> /dev/null; then
         echo -e "${YELLOW}Uploading artifacts to existing GitHub release ${TAG}...${NC}"
         gh release upload "$TAG" "${UNIQUE_FILES[@]}" --clobber
+        gh release edit "$TAG" --draft=false 2>/dev/null || true
     else
         echo -e "${YELLOW}Creating new GitHub release ${TAG}...${NC}"
         RELEASE_NOTES="releases/${TAG}.txt"
         if [ -f "$RELEASE_NOTES" ]; then
-            gh release create "$TAG" "${UNIQUE_FILES[@]}" --title "Release ${TAG}" --notes-file "$RELEASE_NOTES"
+            gh release create "$TAG" "${UNIQUE_FILES[@]}" --title "Release ${TAG}" --notes-file "$RELEASE_NOTES" --draft=false
         else
-            gh release create "$TAG" "${UNIQUE_FILES[@]}" --title "Release ${TAG}" --generate-notes
+            gh release create "$TAG" "${UNIQUE_FILES[@]}" --title "Release ${TAG}" --generate-notes --draft=false
         fi
     fi
     echo -e "${GREEN}✓ GitHub Release published successfully!${NC}"
