@@ -1187,7 +1187,7 @@
         "Zenoh": { "type": "boolean", "title": "Zenoh Transport", "default": true, "description": "Zenoh zero-overhead broker federation transport" },
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },
         "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" },
-        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": true, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" }
+        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": false, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" }
       },
       "additionalProperties": false
     },
@@ -1206,7 +1206,7 @@
       "title": "DMTF Redfish REST API Server",
       "description": "Expose standard DMTF Redfish REST endpoints under /redfish/v1",
       "properties": {
-        "Enabled": { "type": "boolean", "title": "Enable Redfish Server", "default": true },
+        "Enabled": { "type": "boolean", "title": "Enable Redfish Server", "default": false },
         "Port": { "type": "integer", "title": "Dedicated Listener Port", "default": 0, "description": "Dedicated TCP port for Redfish REST. 0 to multiplex onto GraphQL/HTTP port (default 4000)" },
         "MountPath": { "type": "string", "title": "Mount URL Subpath", "default": "/redfish/v1", "description": "HTTP URL path prefix where Redfish APIs are mounted" },
         "DefaultChassisId": { "type": "string", "title": "Default Chassis ID", "default": "EdgeNode" },

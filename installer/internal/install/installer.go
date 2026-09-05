@@ -380,7 +380,10 @@ func StartBroker(dir string, logCallback func(line string)) error {
 							}
 							globalProcess.mu.Unlock()
 							if logCallback != nil {
-								logCallback(line)
+								func() {
+									defer func() { _ = recover() }()
+									logCallback(line)
+								}()
 							}
 						}
 					} else {

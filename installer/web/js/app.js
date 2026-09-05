@@ -75,7 +75,7 @@ const defaultSQLiteConfig = {
     Zenoh: true,
     Hmi: true,
     I3xClient: true,
-    Redfish: true
+    Redfish: false
   }
 };
 
@@ -317,6 +317,8 @@ function setupNavigation() {
       state.activeCategory = item.dataset.category;
       const searchInput = document.getElementById('config-search');
       if (searchInput) searchInput.value = '';
+      const configMain = document.querySelector('.config-main');
+      if (configMain) configMain.scrollTop = 0;
       renderActiveCategory();
     });
   });
@@ -333,6 +335,9 @@ function setupNavigation() {
 
 function goToStep(stepNumber) {
   state.currentStep = stepNumber;
+
+  const wizardBody = document.querySelector('.wizard-body');
+  if (wizardBody) wizardBody.scrollTop = 0;
 
   document.querySelectorAll('.wizard-step').forEach(step => step.classList.remove('active'));
   const current = document.getElementById(`step-${stepNumber}`);
@@ -476,6 +481,9 @@ function syncConfigFromActiveView() {
 function renderActiveCategory(filterQuery = '') {
   const container = document.getElementById('category-content');
   container.innerHTML = '';
+
+  const configMain = document.querySelector('.config-main');
+  if (configMain) configMain.scrollTop = 0;
 
   if (!state.schema || !state.schema.properties) {
     container.innerHTML = '<div class="field-hint">Loading schema properties...</div>';

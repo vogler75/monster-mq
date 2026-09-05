@@ -167,8 +167,14 @@ func (s *Server) handleStartBroker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := r.Context()
+	logChan := make(chan string, 200)
+
 	err := install.StartBroker(req.TargetDir, func(line string) {
-		sendSSE(w, flusher, "log", map[string]string{"line": line})
+		select {
+		case logChan <- line:
+		default:
+		}
 	})
 	if err != nil {
 		sendSSE(w, flusher, "error", map[string]string{"error": err.Error()})
@@ -176,6 +182,19 @@ func (s *Server) handleStartBroker(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sendSSE(w, flusher, "started", map[string]string{"status": "running"})
+
+	// Keep stream open to pump logs until client disconnects
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case line, ok := <-logChan:
+			if !ok {
+				return
+			}
+			sendSSE(w, flusher, "log", map[string]string{"line": line})
+		}
+	}
 }
 
 func (s *Server) handleOpenDashboard(w http.ResponseWriter, r *http.Request) {
@@ -222,9 +241,17 @@ func (s *Server) handleExit(w http.ResponseWriter, r *http.Request) {
 }
 
 func sendSSE(w http.ResponseWriter, flusher http.Flusher, event string, data interface{}) {
-	dataBytes, _ := json.Marshal(data)
+	defer func() {
+		_ = recover()
+	}()
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
 	_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, string(dataBytes))
-	flusher.Flush()
+	if flusher != nil {
+		flusher.Flush()
+	}
 }
 
 func openURL(url string) error {
