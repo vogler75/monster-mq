@@ -17,10 +17,10 @@ import (
 	"syscall"
 	"time"
 
-	"monstermq-installer/internal/api"
-	"monstermq-installer/internal/github"
-	"monstermq-installer/internal/install"
-	"monstermq-installer/internal/system"
+	"monstermq-setup/internal/api"
+	"monstermq-setup/internal/github"
+	"monstermq-setup/internal/install"
+	"monstermq-setup/internal/system"
 )
 
 //go:embed web/*

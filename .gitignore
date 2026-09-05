@@ -44,5 +44,5 @@ tests/.env
 ### Others ###
 .antigravitycli
 dist/
-installer/bin/
-installer/schema.json
+setup/bin/
+setup/schema.json

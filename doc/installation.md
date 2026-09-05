@@ -4,18 +4,18 @@ This guide covers complete installation and setup of MonsterMQ for different env
 
 ## Quick Start
 
-### 1-Line Setup & Installer (Linux & macOS)
+### 1-Line Setup (Linux & macOS)
 
 Downloads the native setup executable, verifies Java 21+, and launches the interactive configuration wizard in your browser:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/setup.sh | bash
 ```
 
-### 1-Line Setup & Installer (Windows PowerShell)
+### 1-Line Setup (Windows PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/vogler75/monster-mq/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/vogler75/monster-mq/main/setup.ps1 | iex
 ```
 
 ### Docker (Recommended)

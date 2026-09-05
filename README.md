@@ -17,18 +17,18 @@ MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time mes
 
 ## Quick Start
 
-### 1-Line Setup & Installer (macOS & Linux)
+### 1-Line Setup (macOS & Linux)
 
 Downloads the native setup tool, verifies Java 21+, and opens the interactive configuration wizard in your browser:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/vogler75/monster-mq/main/setup.sh | bash
 ```
 
-### 1-Line Setup & Installer (Windows PowerShell)
+### 1-Line Setup (Windows PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/vogler75/monster-mq/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/vogler75/monster-mq/main/setup.ps1 | iex
 ```
 
 ### Docker

@@ -174,7 +174,7 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
     if [ "$PUBLISH_SETUP" = true ]; then
         SETUP_FILES=()
         shopt -s nullglob
-        for f in dist/setup* installer/bin/setup*; do
+        for f in dist/setup* setup/bin/setup*; do
             if [[ -f "$f" ]]; then
                 SETUP_FILES+=("$f")
             fi
@@ -185,7 +185,7 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
             echo -e "${YELLOW}Setup executables not found. Building them now...${NC}"
             ./build.sh --setup
             shopt -s nullglob
-            for f in dist/setup* installer/bin/setup*; do
+            for f in dist/setup* setup/bin/setup*; do
                 if [[ -f "$f" ]]; then
                     SETUP_FILES+=("$f")
                 fi

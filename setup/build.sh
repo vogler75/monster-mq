@@ -57,5 +57,5 @@ GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -buildvcs=false -ldflags="-s -w" 
 chmod +x bin/setup-linux-arm64
 echo -e "${GREEN}✓ bin/setup-linux-arm64${NC}"
 
-echo -e "\n${GREEN}=== Build Complete! Output binaries in installer/bin/ ===${NC}"
+echo -e "\n${GREEN}=== Build Complete! Output binaries in setup/bin/ ===${NC}"
 ls -lh bin/

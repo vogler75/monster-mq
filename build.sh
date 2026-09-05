@@ -278,14 +278,14 @@ fi
 # 2. Build Setup Executables (setup.exe, setup-mac, setup-linux)
 if [ "$BUILD_SETUP" = true ]; then
     echo -e "${GREEN}[2/3] Building Cross-Platform Setup Executables (Go)...${NC}"
-    (cd installer && ./build.sh)
+    (cd setup && ./build.sh)
     mkdir -p dist
-    cp installer/bin/setup.exe dist/setup.exe
-    cp installer/bin/setup-win-arm64.exe dist/setup-win-arm64.exe
-    cp installer/bin/setup-mac-arm64 dist/setup-mac-arm64
-    cp installer/bin/setup-mac-x64 dist/setup-mac-x64
-    cp installer/bin/setup-linux-amd64 dist/setup-linux-amd64
-    cp installer/bin/setup-linux-arm64 dist/setup-linux-arm64
+    cp setup/bin/setup.exe dist/setup.exe
+    cp setup/bin/setup-win-arm64.exe dist/setup-win-arm64.exe
+    cp setup/bin/setup-mac-arm64 dist/setup-mac-arm64
+    cp setup/bin/setup-mac-x64 dist/setup-mac-x64
+    cp setup/bin/setup-linux-amd64 dist/setup-linux-amd64
+    cp setup/bin/setup-linux-arm64 dist/setup-linux-arm64
     echo -e "${GREEN}✓ Setup executables copied to dist/${NC}"
 fi
 

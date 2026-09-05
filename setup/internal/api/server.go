@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"monstermq-installer/internal/github"
-	"monstermq-installer/internal/install"
-	"monstermq-installer/internal/system"
+	"monstermq-setup/internal/github"
+	"monstermq-setup/internal/install"
+	"monstermq-setup/internal/system"
 )
 
 // Server coordinates the installer HTTP interface.

@@ -1,4 +1,4 @@
-module monstermq-installer
+module monstermq-setup
 
 go 1.22
 
