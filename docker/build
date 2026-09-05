@@ -75,8 +75,14 @@ fi
 # Clean output directories if requested
 if [ "$CLEAN" = true ]; then
     echo -e "${YELLOW}Cleaning output directories...${NC}"
+    if [ -d "../broker/target" ] && [ ! -w "../broker/target" ]; then
+        rmdir ../broker/target 2>/dev/null || docker run --rm -v "$(cd ../broker && pwd):/build" alpine rm -rf /build/target 2>/dev/null || true
+    fi
     rm -rf ../broker/target
     rm -rf ../dashboard/dist
+    if [ -d "../dashboard/node_modules" ] && [ ! -w "../dashboard/node_modules" ]; then
+        rmdir ../dashboard/node_modules 2>/dev/null || docker run --rm -v "$(cd ../dashboard 2>/dev/null && pwd):/app" alpine rm -rf /app/node_modules 2>/dev/null || true
+    fi
     rm -rf ../dashboard/node_modules
     rm -rf target
     docker volume rm "${DASHBOARD_VOLUME}" "${BROKER_VOLUME}" 2>/dev/null || true
@@ -103,6 +109,12 @@ if [ "$DOCKER_ONLY" = false ]; then
         echo -e "${YELLOW}Building dashboard from ${DASHBOARD_DIR}...${NC}"
         if [ "$CONTAINER_BUILD" = true ]; then
             echo -e "${YELLOW}Running npm build in Docker container (Node.js LTS)...${NC}"
+            # Ensure node_modules exists with host user ownership so Docker daemon does not create it as root
+            if [ -d "${DASHBOARD_DIR}/node_modules" ] && [ ! -w "${DASHBOARD_DIR}/node_modules" ]; then
+                rmdir "${DASHBOARD_DIR}/node_modules" 2>/dev/null || docker run --rm -v "${DASHBOARD_DIR}:/app" alpine rm -rf /app/node_modules 2>/dev/null || true
+            fi
+            mkdir -p "${DASHBOARD_DIR}/node_modules"
+
             # Source bind-mounted read-only; node_modules in named volume to avoid root-owned files on host
             docker run --rm \
                 -v "${DASHBOARD_DIR}:/app" \
@@ -114,6 +126,8 @@ if [ "$DOCKER_ONLY" = false ]; then
                 echo -e "${RED}✗ Dashboard build failed${NC}"
                 exit 1
             fi
+            # Clean up empty mountpoint if node_modules was only created for this container build
+            rmdir "${DASHBOARD_DIR}/node_modules" 2>/dev/null || true
         else
             pushd "$DASHBOARD_DIR" > /dev/null
             npm ci
@@ -147,6 +161,13 @@ if [ "$DOCKER_ONLY" = false ]; then
             echo -e "${GREEN}✓ Maven builder image created${NC}"
         fi
 
+        # Ensure broker/target directory exists with host user ownership before mounting volume,
+        # so Docker daemon does not create it as root. If it's already root-owned, clean it up first.
+        if [ -d "${BROKER_DIR}/target" ] && [ ! -w "${BROKER_DIR}/target" ]; then
+            rmdir "${BROKER_DIR}/target" 2>/dev/null || docker run --rm -v "${BROKER_DIR}:/build" alpine rm -rf /build/target 2>/dev/null || true
+        fi
+        mkdir -p "${BROKER_DIR}/target"
+
         # Source bind-mounted; target in named volume to avoid root-owned files on host
         docker run --rm \
             -v "${BROKER_DIR}:/build" \
@@ -157,6 +178,9 @@ if [ "$DOCKER_ONLY" = false ]; then
             "${MAVEN_BUILDER_IMAGE}" \
             mvn package -DskipTests
         BUILD_RESULT=$?
+
+        # Remove empty mountpoint directory if target was only created for this container build
+        rmdir "${BROKER_DIR}/target" 2>/dev/null || true
 
         if [ $BUILD_RESULT -eq 0 ]; then
             # Copy artifacts directly from volume into docker/target (no intermediate broker/target copy)

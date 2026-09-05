@@ -99,6 +99,9 @@ echo -e "${GREEN}=== MonsterMQ Main Build Pipeline (v${VERSION}) ===${NC}"
 
 if [ "$CLEAN" = true ]; then
     echo -e "${YELLOW}Cleaning output build directories...${NC}"
+    if [ -d "broker/target" ] && [ ! -w "broker/target" ]; then
+        rmdir broker/target 2>/dev/null || docker run --rm -v "$(pwd)/broker:/build" alpine rm -rf /build/target 2>/dev/null || true
+    fi
     rm -rf broker/target
     rm -rf dashboard/dist
     rm -rf dist
@@ -144,6 +147,9 @@ if [ "$BUILD_BROKER" = true ]; then
     rm -f broker/src/main/resources/dashboard/config/brokers.json
     
     echo -e "${YELLOW}Compiling Java broker with Maven...${NC}"
+    if [ -d "broker/target" ] && [ ! -w "broker/target" ]; then
+        rmdir broker/target 2>/dev/null || docker run --rm -v "$(pwd)/broker:/build" alpine rm -rf /build/target 2>/dev/null || true
+    fi
     (cd broker && mvn package -DskipTests)
     
     echo -e "${YELLOW}Packaging broker zip bundle...${NC}"
