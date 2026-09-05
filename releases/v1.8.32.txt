@@ -1,0 +1,21 @@
+Release v1.8.32
+Built from commit: 7a7b7459
+Date: 2026-09-05 13:29:31
+
+Changes since v1.8.31:
+---
+7a7b7459 feat(installer): update install.sh and install.ps1 to download and launch native setup installer
+3da394cb feat(installer): add remote setup launcher scripts (setup.sh and setup.ps1)
+65b724f4 fix(questdb): support topic wildcards in getHistory query
+c90e9ea2 feat(config): add DataCatalog feature flag to default and example configs
+a29961e8 Complete data catalog validation and optional i3X integration
+0c9fc2aa Merge branch 'main' into datacatalog
+746217a9 docs: refresh operator guides and move Redfish documentation
+92e0f829 Merge branch 'main' into datacatalog
+5be87243 fix(graphql): add schema-redfish.graphqls to loadSchema
+00faa80f fix(graphql): add schema-redfish.graphqls to loadSchema
+45f832ed build(installer): generate installer/schema.json on build instead of tracking in git
+2d12766a Use client certificate Common Name as username for mTLS clients (#172)
+232026b5 Merge branch 'main' into datacatalog
+1ccad9ae feat: add Data Catalog dashboard UI, AI & deterministic discovery, and storage table renaming
+9f83278a feat: implement Data Catalog for main broker with storage, GraphQL, MCP, and i3X integration
