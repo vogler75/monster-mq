@@ -158,16 +158,11 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
     if [ "$PUBLISH_BROKER" = true ]; then
         BROKER_ZIP="dist/monstermq-broker-${VERSION}.zip"
         if [ ! -f "$BROKER_ZIP" ]; then
-            echo -e "${YELLOW}Broker package ${BROKER_ZIP} not found. Building it now...${NC}"
-            ./build.sh --broker
-        fi
-
-        if [ -f "$BROKER_ZIP" ]; then
-            RELEASE_FILES+=("$BROKER_ZIP")
-        else
-            echo -e "${RED}Error: Failed to find or build ${BROKER_ZIP}.${NC}"
+            echo -e "${RED}Error: Broker bundle ${BROKER_ZIP} not found.${NC}"
+            echo -e "${YELLOW}Please build the broker bundle first with: ./build.sh --broker (or ./build.sh --all)${NC}"
             exit 1
         fi
+        RELEASE_FILES+=("$BROKER_ZIP")
     fi
 
     # 1b. Setup Executables
@@ -182,15 +177,9 @@ if [ "$PUBLISH_BROKER" = true ] || [ "$PUBLISH_DASHBOARD" = true ] || [ "$PUBLIS
         shopt -u nullglob
 
         if [ ${#SETUP_FILES[@]} -eq 0 ]; then
-            echo -e "${YELLOW}Setup executables not found. Building them now...${NC}"
-            ./build.sh --setup
-            shopt -s nullglob
-            for f in dist/setup* setup/bin/setup*; do
-                if [[ -f "$f" ]]; then
-                    SETUP_FILES+=("$f")
-                fi
-            done
-            shopt -u nullglob
+            echo -e "${RED}Error: Setup executables not found in dist/ or setup/bin/.${NC}"
+            echo -e "${YELLOW}Please build the setup executables first with: ./build.sh --setup (or ./build.sh --all)${NC}"
+            exit 1
         fi
 
         for f in "${SETUP_FILES[@]}"; do
@@ -242,7 +231,7 @@ fi
 # 2. Push Multi-Arch Docker Image to Docker Hub
 if [ "$PUBLISH_DOCKER" = true ]; then
     echo -e "${GREEN}[2/2] Publishing Multi-Arch Docker Images to Docker Hub...${NC}"
-    (cd docker && ./build -c -y --clean)
+    (cd docker && ./build -d -y)
     echo -e "${GREEN}✓ Docker Hub images published successfully!${NC}"
 fi
 

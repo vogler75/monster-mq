@@ -209,13 +209,26 @@ else
     echo -e "${YELLOW}Skipping Maven build (-d flag set)${NC}"
 fi
 
-# Copy files from broker/target to docker/target for Docker build (local/non-container builds only)
+# Copy files from broker/target or dist/ to docker/target for Docker build
 if [ "$DOCKER_ONLY" = true ] || [ "$CONTAINER_BUILD" = false ]; then
-    echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
     rm -rf target
     mkdir -p target
-    cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
-    cp -r ../broker/target/dependencies target/
+    if [ -f "../broker/target/broker-1.0-SNAPSHOT.jar" ] && [ -d "../broker/target/dependencies" ]; then
+        echo -e "${YELLOW}Copying JAR and dependencies from broker/target...${NC}"
+        cp ../broker/target/broker-1.0-SNAPSHOT.jar target/
+        cp -r ../broker/target/dependencies target/
+    elif [ -f "../dist/monstermq-broker-${version}.zip" ]; then
+        echo -e "${YELLOW}Extracting JAR and dependencies from dist/monstermq-broker-${version}.zip...${NC}"
+        unzip -q -o "../dist/monstermq-broker-${version}.zip" "monstermq-broker-${version}/monstermq-broker-${version}.jar" -d target/
+        unzip -q -o "../dist/monstermq-broker-${version}.zip" "monstermq-broker-${version}/dependencies/*" -d target/
+        mv target/monstermq-broker-${version}/monstermq-broker-${version}.jar target/broker-1.0-SNAPSHOT.jar
+        mv target/monstermq-broker-${version}/dependencies target/dependencies
+        rm -rf target/monstermq-broker-${version}
+    else
+        echo -e "${RED}Error: Neither broker/target nor dist/monstermq-broker-${version}.zip found!${NC}"
+        echo -e "${RED}Please build the broker first with ./build.sh --broker (or ./build.sh --all)${NC}"
+        exit 1
+    fi
 fi
 
 # Determine if we should push (needed before build because buildx combines build+push for multi-arch)
