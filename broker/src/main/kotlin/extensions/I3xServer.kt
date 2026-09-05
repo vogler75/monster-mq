@@ -102,6 +102,7 @@ class I3xServer(
         val subscriptionId: String,
         val displayName: String?,
         val registeredIds: MutableSet<String> = ConcurrentHashMap.newKeySet(),
+        var catalogTopics: Map<String, String> = emptyMap(),
         val pendingQueue: ArrayDeque<JsonObject> = ArrayDeque(),
         var nextSequence: AtomicLong = AtomicLong(1L),
         var maxDepth: Int = 1
@@ -165,7 +166,16 @@ class I3xServer(
                     logger.fine("I3X $method ${ctx.request().uri()} $body")
                 }
                 if (!validateAuthentication(ctx)) return@handler
-                ctx.next()
+                val store = dataCatalogStore
+                val requestPath = ctx.request().path()
+                val needsMapping = requestPath == "$path/subscriptions/register" ||
+                    (requestPath.startsWith("$path/objects/") &&
+                        (requestPath.endsWith("/value") || requestPath.endsWith("/history")))
+                if (store == null || !needsMapping) ctx.next()
+                else catalogRead { store.getInstances() }.onSuccess { instances ->
+                    ctx.put("catalogTopics", instances.associate { it.id to it.baseTopic })
+                    ctx.next()
+                }.onFailure { sendError(ctx, 500, "Catalog lookup failed: ${it.message}") }
             }
 
             // Explore
@@ -329,7 +339,7 @@ class I3xServer(
 
     private data class NamespaceEntry(val uri: String, val displayName: String)
 
-    private fun collectNamespaces(): List<NamespaceEntry> {
+    private fun collectNamespaces(): Future<List<NamespaceEntry>> {
         val result = mutableListOf<NamespaceEntry>()
         // Base broker namespace + synthetic.
         result.add(NamespaceEntry(baseNamespaceUri, brokerName))
@@ -342,7 +352,16 @@ class I3xServer(
                 val prefix = device.namespace.ifBlank { device.name }
                 result.add(NamespaceEntry("mqtt://$brokerName/$prefix", device.name))
             }
-        return result
+        val store = dataCatalogStore ?: return Future.succeededFuture(result)
+        return catalogRead { store.getTypes() }.map { types ->
+            val known = result.map { it.uri }.toMutableSet()
+            types.sortedBy { it.namespace }.forEach { type ->
+                if (known.add(type.namespace)) {
+                    result.add(NamespaceEntry(type.namespace, type.namespace))
+                }
+            }
+            result
+        }
     }
 
     private fun namespaceUriForPolicy(policyName: String, devices: List<DeviceConfig>): String {
@@ -360,11 +379,11 @@ class I3xServer(
     }
 
     private fun handleNamespaces(ctx: RoutingContext) {
-        val arr = JsonArray()
-        collectNamespaces().forEach {
-            arr.add(JsonObject().put("uri", it.uri).put("displayName", it.displayName))
-        }
-        sendOk(ctx, arr)
+        collectNamespaces().onSuccess { namespaces ->
+            val arr = JsonArray()
+            namespaces.forEach { arr.add(JsonObject().put("uri", it.uri).put("displayName", it.displayName)) }
+            sendOk(ctx, arr)
+        }.onFailure { sendError(ctx, 500, "Namespaces query failed: ${it.message}") }
     }
 
     // ---------------------------------------------------------------------
@@ -374,10 +393,11 @@ class I3xServer(
     private fun buildObjectType(
         elementId: String,
         namespaceUri: String,
-        schema: JsonObject
+        schema: JsonObject,
+        displayName: String = elementId
     ): JsonObject = JsonObject()
         .put("elementId", elementId)
-        .put("displayName", elementId)
+        .put("displayName", displayName)
         .put("namespaceUri", namespaceUri)
         .put("sourceTypeId", elementId)
         .put("schema", schema)
@@ -415,10 +435,10 @@ class I3xServer(
             }
             
         if (dataCatalogStore != null) {
-            dataCatalogStore.getTypes(null).onComplete { ar ->
+            catalogRead { dataCatalogStore.getTypes(null) }.onComplete { ar ->
                 if (ar.succeeded()) {
                     ar.result().forEach { t ->
-                        out.add(buildObjectType(t.id, t.namespace, t.structure))
+                        out.add(buildObjectType(t.id, t.namespace, t.structure, t.name))
                     }
                 }
                 promise.complete(out)
@@ -472,24 +492,35 @@ class I3xServer(
         .put("relationshipId", id)
         .put("reverseOf", reverse)
 
+    private fun collectRelationshipTypes(): Future<List<JsonObject>> {
+        val builtIns = REL_TYPES.map { buildRelType(it.first, it.second) }
+        val store = dataCatalogStore ?: return Future.succeededFuture(builtIns)
+        return catalogRead { store.getRelations() }.map { relations ->
+            val known = builtIns.map { it.getString("elementId") }.toSet()
+            builtIns + relations.map { it.relationType }.distinct().filter { it !in known }
+                .sorted().map { buildRelType(it, it) }
+        }
+    }
+
     private fun handleRelationshipTypes(ctx: RoutingContext) {
         val nsUri = ctx.queryParam("namespaceUri").firstOrNull()
-        val all = REL_TYPES.map { buildRelType(it.first, it.second) }
-        val filtered = if (nsUri != null) all.filter { it.getString("namespaceUri") == nsUri } else all
-        val arr = JsonArray()
-        filtered.forEach { arr.add(it) }
-        sendOk(ctx, arr)
+        collectRelationshipTypes().onSuccess { all ->
+            val filtered = if (nsUri != null) all.filter { it.getString("namespaceUri") == nsUri } else all
+            sendOk(ctx, JsonArray(filtered))
+        }.onFailure { sendError(ctx, 500, "Relationship types query failed: ${it.message}") }
     }
 
     private fun handleRelationshipTypesQuery(ctx: RoutingContext) {
         val ids = ctx.body().asJsonObject()?.getJsonArray("elementIds") ?: JsonArray()
-        val byId = REL_TYPES.associate { it.first to buildRelType(it.first, it.second) }
-        val items = (0 until ids.size()).map { i ->
-            val id = ids.getString(i) ?: return@map BulkItem.notFound("", "Missing elementId")
-            val t = byId[id] ?: return@map BulkItem.notFound(id, "RelationshipType not found")
-            BulkItem.ok(id, t)
-        }
-        sendBulk(ctx, items)
+        collectRelationshipTypes().onSuccess { all ->
+            val byId = all.associateBy { it.getString("elementId") }
+            val items = (0 until ids.size()).map { i ->
+                val id = ids.getString(i) ?: return@map BulkItem.notFound("", "Missing elementId")
+                val t = byId[id] ?: return@map BulkItem.notFound(id, "RelationshipType not found")
+                BulkItem.ok(id, t)
+            }
+            sendBulk(ctx, items)
+        }.onFailure { sendError(ctx, 500, "Relationship types query failed: ${it.message}") }
     }
 
     // ---------------------------------------------------------------------
@@ -509,6 +540,57 @@ class I3xServer(
         /** Retained messages, keyed by topic name — pre-fetched to avoid per-topic DB round-trips. */
         val messages: Map<String, BrokerMessage>
     )
+
+    private data class CatalogSnapshot(
+        val types: Map<String, at.rocworks.stores.DataCatalogType>,
+        val instances: Map<String, at.rocworks.stores.DataCatalogInstance>,
+        val relations: List<at.rocworks.stores.DataCatalogRelation>
+    ) {
+        fun parentId(id: String): String? = relations.firstOrNull {
+            it.targetId == id && it.relationType in setOf(REL_HAS_CHILDREN, REL_HAS_COMPONENT)
+        }?.sourceId ?: relations.firstOrNull {
+            it.sourceId == id && it.relationType == REL_HAS_PARENT
+        }?.targetId
+    }
+
+    private fun catalogSnapshot(): Future<CatalogSnapshot> {
+        val store = dataCatalogStore
+            ?: return Future.succeededFuture(CatalogSnapshot(emptyMap(), emptyMap(), emptyList()))
+        return catalogRead { store.getTypes() }.compose { types ->
+            catalogRead { store.getInstances() }.compose { instances ->
+                catalogRead { store.getRelations() }.map { relations ->
+                    CatalogSnapshot(types.associateBy { it.id }, instances.associateBy { it.id }, relations)
+                }
+            }
+        }
+    }
+
+    private fun buildCatalogObjectJson(
+        instance: at.rocworks.stores.DataCatalogInstance,
+        catalog: CatalogSnapshot,
+        includeMetadata: Boolean
+    ): JsonObject {
+        val type = catalog.types[instance.typeId]
+        val outgoing = catalog.relations.filter { it.sourceId == instance.id }
+        val obj = JsonObject()
+            .put("elementId", instance.id)
+            .put("displayName", instance.name)
+            .put("typeElementId", instance.typeId)
+            .put("parentId", catalog.parentId(instance.id))
+            .put("isComposition", outgoing.any { it.relationType in setOf(REL_HAS_CHILDREN, REL_HAS_COMPONENT) })
+            .put("isExtended", instance.properties.fieldNames().isNotEmpty())
+        if (includeMetadata) {
+            obj.put("metadata", JsonObject()
+                .put("typeNamespaceUri", type?.namespace ?: BASE_NAMESPACE_URI)
+                .put("sourceTypeId", instance.typeId)
+                .put("description", type?.description)
+                .put("relationships", JsonArray(outgoing.map { relation -> JsonObject()
+                    .put("relationshipType", relation.relationType).put("targetId", relation.targetId) }))
+                .put("extendedAttributes", instance.properties)
+                .put("system", null))
+        }
+        return obj
+    }
 
     /**
      * Build a full snapshot of the address-space from archive groups' last-value stores.
@@ -560,6 +642,41 @@ class I3xServer(
             }
         }
         return TopicTreeSnapshot(allLevels, storeTopics, hasChildren, roots, messages)
+    }
+
+    /** JDBC catalog stores execute synchronously before returning their Future. */
+    private fun <T> catalogRead(read: () -> Future<T>): Future<T> =
+        vertx.executeBlocking(java.util.concurrent.Callable { read() }).compose { it }
+
+    private fun catalogTopics(ctx: RoutingContext): Map<String, String> =
+        ctx.get<Map<String, String>>("catalogTopics") ?: emptyMap()
+
+    private fun mappedTopic(ctx: RoutingContext, id: String): String = mappedTopic(catalogTopics(ctx), id)
+
+    private fun mappedTopic(mappings: Map<String, String>, id: String): String {
+        return I3xCatalogMapping.topic(mappings, id)
+    }
+
+    /** Add catalog aliases while retaining the original MQTT address space. */
+    private fun mappedSnapshot(mappings: Map<String, String>): TopicTreeSnapshot {
+        val snapshot = snapshotRetainedTopics()
+        if (mappings.isEmpty()) return snapshot
+        fun aliases(topics: Set<String>): Set<String> = topics.filter { mappedTopic(mappings, it) == it }.toSet() + mappings.flatMap { (id, base) ->
+            topics.filter { it == base || it.startsWith("$base/") }
+                .map { id + it.removePrefix(base) }
+                .filter { alias -> mappedTopic(mappings, alias) in topics }
+        }
+        val messages = snapshot.messages.filterKeys { mappedTopic(mappings, it) == it }.toMutableMap()
+        mappings.forEach { (id, base) ->
+            snapshot.messages.forEach { (topic, message) ->
+                if (topic == base || topic.startsWith("$base/")) {
+                    val alias = id + topic.removePrefix(base)
+                    if (mappedTopic(mappings, alias) == topic) messages[alias] = message
+                }
+            }
+        }
+        return TopicTreeSnapshot(aliases(snapshot.allLevels), aliases(snapshot.withValue),
+            aliases(snapshot.hasChildren), snapshot.roots, messages)
     }
 
     private fun findRetainedMessage(snapshot: TopicTreeSnapshot, topic: String): BrokerMessage? =
@@ -643,26 +760,27 @@ class I3xServer(
         val rootOnly = ctx.queryParam("root").firstOrNull()?.toBooleanStrictOrNull() ?: false
         val parentIdParam = ctx.queryParam("parentId").firstOrNull()
 
-        vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
-            val candidates: Set<String> = when {
-                rootOnly -> snapshot.roots
-                parentIdParam != null -> {
-                    val prefix = "$parentIdParam/"
-                    snapshot.allLevels
-                        .filter { it.startsWith(prefix) && !it.removePrefix(prefix).contains("/") }
-                        .toSet()
+        catalogSnapshot().compose { catalog ->
+            vertx.executeBlocking(java.util.concurrent.Callable {
+                val snapshot = snapshotRetainedTopics()
+                val candidates: Set<String> = when {
+                    rootOnly -> snapshot.roots
+                    parentIdParam != null -> {
+                        val prefix = "$parentIdParam/"
+                        snapshot.allLevels.filter { it.startsWith(prefix) && !it.removePrefix(prefix).contains("/") }.toSet()
+                    }
+                    else -> snapshot.allLevels
                 }
-                else -> snapshot.allLevels
-            }
-            val arr = JsonArray()
-            for (topic in candidates.sorted()) {
-                val obj = buildObjectJson(topic, snapshot, includeMetadata)
-                if (typeIdParam != null && obj.getString("typeElementId") != typeIdParam) continue
-                arr.add(obj)
-            }
-            arr
-        }).onSuccess { result: JsonArray -> sendOk(ctx, result) }
+                val objects = linkedMapOf<String, JsonObject>()
+                candidates.sorted().forEach { topic -> objects[topic] = buildObjectJson(topic, snapshot, includeMetadata) }
+                catalog.instances.values.sortedBy { it.id }.forEach { instance ->
+                    val parentMatches = parentIdParam == null || catalog.parentId(instance.id) == parentIdParam
+                    val rootMatches = !rootOnly || catalog.parentId(instance.id) == null
+                    if (parentMatches && rootMatches) objects[instance.id] = buildCatalogObjectJson(instance, catalog, includeMetadata)
+                }
+                JsonArray(objects.values.filter { typeIdParam == null || it.getString("typeElementId") == typeIdParam })
+            })
+        }.onSuccess { result: JsonArray -> sendOk(ctx, result) }
             .onFailure { sendError(ctx, 500, "Objects query failed: ${it.message}") }
     }
 
@@ -670,17 +788,20 @@ class I3xServer(
         val body = ctx.body().asJsonObject() ?: JsonObject()
         val ids = body.getJsonArray("elementIds") ?: JsonArray()
         val includeMetadata = body.getBoolean("includeMetadata", false)
-        vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
-            (0 until ids.size()).map { i ->
-                val id = ids.getString(i)
-                when {
-                    id.isNullOrEmpty() -> BulkItem.notFound("", "Missing elementId")
-                    !snapshot.allLevels.contains(id) -> BulkItem.notFound(id)
-                    else -> BulkItem.ok(id, buildObjectJson(id, snapshot, includeMetadata))
+        catalogSnapshot().compose { catalog ->
+            vertx.executeBlocking(java.util.concurrent.Callable {
+                val snapshot = snapshotRetainedTopics()
+                (0 until ids.size()).map { i ->
+                    val id = ids.getString(i)
+                    when {
+                        id.isNullOrEmpty() -> BulkItem.notFound("", "Missing elementId")
+                        catalog.instances.containsKey(id) -> BulkItem.ok(id, buildCatalogObjectJson(catalog.instances.getValue(id), catalog, includeMetadata))
+                        snapshot.allLevels.contains(id) -> BulkItem.ok(id, buildObjectJson(id, snapshot, includeMetadata))
+                        else -> BulkItem.notFound(id)
+                    }
                 }
-            }
-        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
+            })
+        }.onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
             .onFailure { sendError(ctx, 500, "Objects list failed: ${it.message}") }
     }
 
@@ -690,62 +811,50 @@ class I3xServer(
         val relationshipType = body.getString("relationshipType")
         val includeMetadata = body.getBoolean("includeMetadata", false)
 
-        val supported = setOf(REL_HAS_CHILDREN, REL_HAS_PARENT, REL_HAS_COMPONENT, REL_COMPONENT_OF)
-        if (relationshipType != null && relationshipType !in supported) {
-            sendError(ctx, 400, "Unsupported relationshipType: $relationshipType")
-            return
-        }
-
-        vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
-            (0 until ids.size()).map { i ->
-                val id = ids.getString(i)
-                if (id.isNullOrEmpty()) return@map BulkItem.notFound("", "Missing elementId")
-                if (!snapshot.allLevels.contains(id)) return@map BulkItem.notFound(id)
-
-                val results = JsonArray()
-                if (relationshipType == null || relationshipType == REL_HAS_CHILDREN) {
-                    childTopics(id, snapshot).forEach { child ->
-                        results.add(
-                            JsonObject()
-                                .put("sourceRelationship", REL_HAS_CHILDREN)
-                                .put("object", buildObjectJson(child, snapshot, includeMetadata))
-                        )
-                    }
-                }
-                if (relationshipType == null || relationshipType == REL_HAS_PARENT) {
-                    val parent = id.substringBeforeLast("/", "")
-                    if (parent.isNotEmpty() && snapshot.allLevels.contains(parent)) {
-                        results.add(
-                            JsonObject()
-                                .put("sourceRelationship", REL_HAS_PARENT)
-                                .put("object", buildObjectJson(parent, snapshot, includeMetadata))
-                        )
-                    }
-                }
-                if (relationshipType == null || relationshipType == REL_HAS_COMPONENT) {
-                    jsonFieldComponents(snapshot, id).forEach { child ->
-                        results.add(
-                            JsonObject()
-                                .put("sourceRelationship", REL_HAS_COMPONENT)
-                                .put("object", buildObjectJson(child, snapshot, includeMetadata))
-                        )
-                    }
-                }
-                if (relationshipType == REL_COMPONENT_OF) {
-                    val parent = id.substringBeforeLast("/", "")
-                    if (parent.isNotEmpty() && snapshot.allLevels.contains(parent)) {
-                        results.add(
-                            JsonObject()
-                                .put("sourceRelationship", REL_COMPONENT_OF)
-                                .put("object", buildObjectJson(parent, snapshot, includeMetadata))
-                        )
-                    }
-                }
-                BulkItem.ok(id, results)
+        catalogSnapshot().compose { catalog ->
+            val supported = setOf(REL_HAS_CHILDREN, REL_HAS_PARENT, REL_HAS_COMPONENT, REL_COMPONENT_OF) +
+                catalog.relations.map { it.relationType }
+            if (relationshipType != null && relationshipType !in supported) {
+                return@compose Future.failedFuture<List<BulkItem>>("Unsupported relationshipType: $relationshipType")
             }
-        }).onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
-            .onFailure { sendError(ctx, 500, "Related query failed: ${it.message}") }
+            vertx.executeBlocking(java.util.concurrent.Callable {
+                val snapshot = snapshotRetainedTopics()
+                (0 until ids.size()).map { i ->
+                    val id = ids.getString(i)
+                    if (id.isNullOrEmpty()) return@map BulkItem.notFound("", "Missing elementId")
+                    if (catalog.instances.containsKey(id)) {
+                        val results = JsonArray()
+                        catalog.relations.filter { it.sourceId == id && (relationshipType == null || it.relationType == relationshipType) }
+                            .forEach { relation -> catalog.instances[relation.targetId]?.let { target ->
+                                results.add(JsonObject().put("sourceRelationship", relation.relationType)
+                                    .put("object", buildCatalogObjectJson(target, catalog, includeMetadata)))
+                            } }
+                        return@map BulkItem.ok(id, results)
+                    }
+                    if (!snapshot.allLevels.contains(id)) return@map BulkItem.notFound(id)
+                    val results = JsonArray()
+                    if (relationshipType == null || relationshipType == REL_HAS_CHILDREN) childTopics(id, snapshot).forEach { child ->
+                        results.add(JsonObject().put("sourceRelationship", REL_HAS_CHILDREN).put("object", buildObjectJson(child, snapshot, includeMetadata)))
+                    }
+                    if (relationshipType == null || relationshipType == REL_HAS_PARENT) {
+                        val parent = id.substringBeforeLast("/", "")
+                        if (parent.isNotEmpty() && snapshot.allLevels.contains(parent)) results.add(JsonObject().put("sourceRelationship", REL_HAS_PARENT).put("object", buildObjectJson(parent, snapshot, includeMetadata)))
+                    }
+                    if (relationshipType == null || relationshipType == REL_HAS_COMPONENT) jsonFieldComponents(snapshot, id).forEach { child ->
+                        results.add(JsonObject().put("sourceRelationship", REL_HAS_COMPONENT).put("object", buildObjectJson(child, snapshot, includeMetadata)))
+                    }
+                    if (relationshipType == REL_COMPONENT_OF) {
+                        val parent = id.substringBeforeLast("/", "")
+                        if (parent.isNotEmpty() && snapshot.allLevels.contains(parent)) results.add(JsonObject().put("sourceRelationship", REL_COMPONENT_OF).put("object", buildObjectJson(parent, snapshot, includeMetadata)))
+                    }
+                    BulkItem.ok(id, results)
+                }
+            })
+        }.onSuccess { items: List<BulkItem> -> sendBulk(ctx, items) }
+            .onFailure {
+                if (it.message?.startsWith("Unsupported relationshipType:") == true) sendError(ctx, 400, it.message!!)
+                else sendError(ctx, 500, "Related query failed: ${it.message}")
+            }
     }
 
     private fun childTopics(parent: String, snapshot: TopicTreeSnapshot): List<String> {
@@ -768,12 +877,12 @@ class I3xServer(
     //  Values
     // ---------------------------------------------------------------------
 
-    private fun qualityFor(topic: String, msg: BrokerMessage?): String {
+    private fun qualityFor(msg: BrokerMessage?): String {
         if (msg == null) return "GoodNoData"
         val decoded = try { PayloadDecoder.decode(msg.payload) } catch (_: Exception) { return "Bad" }
         if (decoded.payload == null && decoded.base64 == null) return "GoodNoData"
         // If a schema policy governs this topic and payload violates it, report Uncertain.
-        findMatchingSchemaPolicy(topic)?.let { entry ->
+        findMatchingSchemaPolicy(msg.topicName)?.let { entry ->
             val payloadText = when (val p = decoded.payload) {
                 is JsonObject -> p.encode()
                 is JsonArray -> p.encode()
@@ -801,7 +910,7 @@ class I3xServer(
     private fun buildVqt(topic: String, msg: BrokerMessage?): JsonObject {
         val obj = JsonObject()
             .put("value", decodedValue(msg))
-            .put("quality", qualityFor(topic, msg))
+            .put("quality", qualityFor(msg))
             .put("timestamp", (msg?.time ?: Instant.now()).toString())
         return obj
     }
@@ -852,7 +961,7 @@ class I3xServer(
         val ids = body.getJsonArray("elementIds") ?: JsonArray()
         val maxDepth = body.getInteger("maxDepth") ?: 1
         vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
+            val snapshot = mappedSnapshot(catalogTopics(ctx))
             (0 until ids.size()).map { i ->
                 val id = ids.getString(i)
                 when {
@@ -924,7 +1033,7 @@ class I3xServer(
             try {
                 val msg = BrokerMessage(
                     messageId = 0,
-                    topicName = elementId,
+                    topicName = mappedTopic(ctx, elementId),
                     payload = payloadBytes,
                     qosLevel = 0,
                     isRetain = true,
@@ -957,7 +1066,7 @@ class I3xServer(
 
         val msg = BrokerMessage(
             messageId = 0,
-            topicName = elementId,
+            topicName = mappedTopic(ctx, elementId),
             payload = payloadBytes,
             qosLevel = 0,
             isRetain = true,
@@ -1071,7 +1180,7 @@ class I3xServer(
         val maxDepth = body.getInteger("maxDepth", 1)
 
         vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
+            val snapshot = mappedSnapshot(catalogTopics(ctx))
             val items = mutableListOf<BulkItem>()
             for (i in 0 until ids.size()) {
                 val id = ids.getString(i)
@@ -1083,7 +1192,7 @@ class I3xServer(
                 }
                 try {
                     if (maxDepth == 1) {
-                        val values = historyForTopic(id, startTime, endTime, maxValues)
+                        val values = historyForTopic(mappedTopic(ctx, id), startTime, endTime, maxValues)
                         items.add(
                             BulkItem.ok(
                                 id,
@@ -1093,7 +1202,7 @@ class I3xServer(
                     } else {
                         val leaves = leavesForComposition(id, snapshot, maxDepth)
                         for (leaf in leaves) {
-                            val values = historyForTopic(leaf, startTime, endTime, maxValues)
+                            val values = historyForTopic(mappedTopic(ctx, leaf), startTime, endTime, maxValues)
                             items.add(
                                 BulkItem.ok(
                                     leaf,
@@ -1123,7 +1232,7 @@ class I3xServer(
         val maxValues = ctx.queryParam("maxValues").firstOrNull()?.toIntOrNull() ?: 1000
 
         vertx.executeBlocking(java.util.concurrent.Callable {
-            historyForTopic(elementId, startTime, endTime, maxValues)
+            historyForTopic(mappedTopic(ctx, elementId), startTime, endTime, maxValues)
         }).onSuccess { values: JsonArray ->
             sendOk(
                 ctx,
@@ -1196,7 +1305,7 @@ class I3xServer(
             val items = mutableListOf<BulkItem>()
             for (up in updates) {
                 val elementId = up.elementId
-                val archives = historyArchiveSupportingWrite(elementId)
+                val archives = historyArchiveSupportingWrite(mappedTopic(ctx, elementId))
                 if (archives.isEmpty()) {
                     items.add(BulkItem.notFound(elementId, "No archive group matches topic '$elementId'"))
                     continue
@@ -1209,7 +1318,7 @@ class I3xServer(
                     val payloadBytes = encodeValueToBytes(value)
                     BrokerMessage(
                         messageId = 0,
-                        topicName = elementId,
+                        topicName = mappedTopic(ctx, elementId),
                         payload = payloadBytes,
                         qosLevel = 0,
                         isRetain = false,
@@ -1252,7 +1361,7 @@ class I3xServer(
         val body = ctx.body().asJsonObject() ?: JsonObject()
         val dataArr = body.getJsonArray("data") ?: JsonArray()
 
-        val archives = historyArchiveSupportingWrite(elementId)
+        val archives = historyArchiveSupportingWrite(mappedTopic(ctx, elementId))
         if (archives.isEmpty()) {
             sendError(ctx, 404, "No archive group matches topic '$elementId'")
             return
@@ -1272,7 +1381,7 @@ class I3xServer(
             messages.add(
                 BrokerMessage(
                     messageId = 0,
-                    topicName = elementId,
+                    topicName = mappedTopic(ctx, elementId),
                     payload = payloadBytes,
                     qosLevel = 0,
                     isRetain = false,
@@ -1359,7 +1468,7 @@ class I3xServer(
 
     private fun enqueueInitialValues(sub: I3xSubscription, targetIds: List<String>) {
         vertx.executeBlocking(java.util.concurrent.Callable {
-            val snapshot = snapshotRetainedTopics()
+            val snapshot = mappedSnapshot(sub.catalogTopics)
             val initialUpdates = mutableListOf<JsonObject>()
             for (id in targetIds) {
                 if (sub.maxDepth == 1) {
@@ -1368,7 +1477,7 @@ class I3xServer(
                         val update = JsonObject()
                             .put("elementId", id)
                             .put("value", decodedValue(msg))
-                            .put("quality", qualityFor(id, msg))
+                            .put("quality", qualityFor(msg))
                             .put("timestamp", msg.time.toString())
                         initialUpdates.add(update)
                     }
@@ -1380,7 +1489,7 @@ class I3xServer(
                             val update = JsonObject()
                                 .put("elementId", leaf)
                                 .put("value", decodedValue(msg))
-                                .put("quality", qualityFor(leaf, msg))
+                                .put("quality", qualityFor(msg))
                                 .put("timestamp", msg.time.toString())
                             initialUpdates.add(update)
                         }
@@ -1423,6 +1532,7 @@ class I3xServer(
         val ids = body.getJsonArray("elementIds") ?: body.getJsonArray("elements") ?: JsonArray()
         val maxDepth = body.getInteger("maxDepth", sub.maxDepth)
         sub.maxDepth = maxDepth
+        sub.catalogTopics = catalogTopics(ctx)
         val addedIds = mutableListOf<String>()
         val items = mutableListOf<BulkItem>()
         for (i in 0 until ids.size()) {
@@ -1565,17 +1675,21 @@ class I3xServer(
     private fun rewireSubscriptions(sub: I3xSubscription) {
         sessionHandler.unregisterMessageListener(sub.listenerId)
 
-        val filters = sub.registeredIds
-            .flatMap { subscriptionFilters(it, sub.maxDepth) }
+        val filters = I3xCatalogMapping.subscriptionBindings(sub.catalogTopics, sub.registeredIds, sub.maxDepth)
+            .flatMap { (id, depth) -> subscriptionFilters(mappedTopic(sub.catalogTopics, id), depth) }
             .distinct()
         if (filters.isNotEmpty()) {
             sessionHandler.registerMessageListener(sub.listenerId, filters) { message ->
-                val entry = JsonObject()
-                    .put("elementId", message.topicName)
-                    .put("value", decodedValue(message))
-                    .put("quality", qualityFor(message.topicName, message))
-                    .put("timestamp", message.time.toString())
-                if (subscriptions[sub.subscriptionId] === sub) enqueueUpdate(sub, entry)
+                val ids = if (sub.catalogTopics.isEmpty()) listOf(message.topicName) else
+                    I3xCatalogMapping.subscriptionIds(sub.catalogTopics, sub.registeredIds, message.topicName, sub.maxDepth)
+                for (id in ids) {
+                    val entry = JsonObject()
+                        .put("elementId", id)
+                        .put("value", decodedValue(message))
+                        .put("quality", qualityFor(message))
+                        .put("timestamp", message.time.toString())
+                    if (subscriptions[sub.subscriptionId] === sub) enqueueUpdate(sub, entry)
+                }
             }
         }
     }

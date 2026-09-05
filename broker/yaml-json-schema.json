@@ -1182,6 +1182,7 @@
         "Mcp": { "type": "boolean", "title": "MCP Server Management", "default": true, "description": "Model Context Protocol server for AI assistant tools" },
         "SchemaPolicy": { "type": "boolean", "title": "Topic Schema Policies", "default": true, "description": "JSON Schema topic payload validation and schema enforcement policies" },
         "TopicNamespace": { "type": "boolean", "title": "Topic Namespaces", "default": true, "description": "Hierarchical topic namespace aliasing and multi-tenant isolation" },
+        "DataCatalog": { "type": "boolean", "title": "Data Catalog", "default": true, "description": "Semantic object types, instances, relationships, and i3X mappings" },
         "DeviceImportExport": { "type": "boolean", "title": "Device Import / Export", "default": true, "description": "JSON / YAML device and gateway configuration backup, import, and export" },
         "Zenoh": { "type": "boolean", "title": "Zenoh Transport", "default": true, "description": "Zenoh zero-overhead broker federation transport" },
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },

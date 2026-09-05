@@ -121,6 +121,11 @@ class DataCatalogStoreMongoDB(
     override fun deleteType(id: String): Future<Boolean> {
         val promise = Promise.promise<Boolean>()
         try {
+            val instanceIds = instancesCollection.find(eq("type_id", id))
+                .map { it.getString("id") }.toList()
+            val endpointIds = instanceIds + id
+            relationsCollection.deleteMany(or(`in`("source_id", endpointIds), `in`("target_id", endpointIds)))
+            instancesCollection.deleteMany(eq("type_id", id))
             val res = typesCollection.deleteOne(eq("id", id))
             promise.complete(res.deletedCount > 0)
         } catch (e: Exception) {
@@ -179,6 +184,7 @@ class DataCatalogStoreMongoDB(
     override fun deleteInstance(id: String): Future<Boolean> {
         val promise = Promise.promise<Boolean>()
         try {
+            relationsCollection.deleteMany(or(eq("source_id", id), eq("target_id", id)))
             val res = instancesCollection.deleteOne(eq("id", id))
             promise.complete(res.deletedCount > 0)
         } catch (e: Exception) {
@@ -253,110 +259,11 @@ class DataCatalogStoreMongoDB(
         return promise.future()
     }
 
-    override fun exportCatalog(namespace: String?): Future<JsonObject> {
-        val promise = Promise.promise<JsonObject>()
-        val result = JsonObject()
-        
-        getTypes(namespace).compose { types ->
-            val typesArr = JsonArray()
-            types.forEach { t -> 
-                val typeJson = JsonObject()
-                    .put("id", t.id)
-                    .put("namespace", t.namespace)
-                    .put("name", t.name)
-                    .put("description", t.description)
-                    .put("structure", t.structure)
-                    .put("topicPattern", t.topicPattern)
-                typesArr.add(typeJson)
-            }
-            result.put("types", typesArr)
-            
-            val instanceFutures = types.map { getInstances(it.id) }
-            Future.all(instanceFutures)
-        }.compose { instanceResults ->
-            val instancesArr = JsonArray()
-            instanceResults.list<List<DataCatalogInstance>>().flatten().forEach { i ->
-                val instJson = JsonObject()
-                    .put("id", i.id)
-                    .put("typeId", i.typeId)
-                    .put("name", i.name)
-                    .put("baseTopic", i.baseTopic)
-                    .put("properties", i.properties)
-                instancesArr.add(instJson)
-            }
-            result.put("instances", instancesArr)
-            
-            val allIds = result.getJsonArray("types").map { (it as JsonObject).getString("id") } +
-                         result.getJsonArray("instances").map { (it as JsonObject).getString("id") }
-            val relFutures = allIds.map { getRelations(sourceId = it) }
-            Future.all(relFutures)
-        }.onSuccess { relResults ->
-            val relationsArr = JsonArray()
-            relResults.list<List<DataCatalogRelation>>().flatten().distinctBy { "${it.sourceId}-${it.targetId}-${it.relationType}" }.forEach { r ->
-                val relJson = JsonObject()
-                    .put("sourceId", r.sourceId)
-                    .put("targetId", r.targetId)
-                    .put("relationType", r.relationType)
-                relationsArr.add(relJson)
-            }
-            result.put("relations", relationsArr)
-            promise.complete(result)
-        }.onFailure { promise.fail(it) }
-        
-        return promise.future()
-    }
+    override fun exportCatalog(namespace: String?): Future<JsonObject> =
+        at.rocworks.stores.DataCatalogTransfer.export(this, namespace)
 
-    override fun importCatalog(data: JsonObject): Future<ImportDataCatalogResult> {
-        val promise = Promise.promise<ImportDataCatalogResult>()
-        var typesCount = 0
-        var instancesCount = 0
-        var relationsCount = 0
-        
-        val types = data.getJsonArray("types", JsonArray()) ?: JsonArray()
-        val typeFutures = types.map { t ->
-            val typeObj = t as JsonObject
-            saveType(DataCatalogType(
-                id = typeObj.getString("id"),
-                namespace = typeObj.getString("namespace"),
-                name = typeObj.getString("name"),
-                description = typeObj.getString("description"),
-                structure = typeObj.getJsonObject("structure", JsonObject()),
-                topicPattern = typeObj.getString("topicPattern")
-            )).onSuccess { typesCount++ }
-        }
-        
-        Future.all(typeFutures).compose {
-            val instances = data.getJsonArray("instances", JsonArray()) ?: JsonArray()
-            val instanceFutures = instances.map { i ->
-                val instObj = i as JsonObject
-                saveInstance(DataCatalogInstance(
-                    id = instObj.getString("id"),
-                    typeId = instObj.getString("typeId"),
-                    name = instObj.getString("name"),
-                    baseTopic = instObj.getString("baseTopic"),
-                    properties = instObj.getJsonObject("properties", JsonObject())
-                )).onSuccess { instancesCount++ }
-            }
-            Future.all(instanceFutures)
-        }.compose {
-            val relations = data.getJsonArray("relations", JsonArray()) ?: JsonArray()
-            val relFutures = relations.map { r ->
-                val relObj = r as JsonObject
-                saveRelation(DataCatalogRelation(
-                    sourceId = relObj.getString("sourceId"),
-                    targetId = relObj.getString("targetId"),
-                    relationType = relObj.getString("relationType")
-                )).onSuccess { relationsCount++ }
-            }
-            Future.all(relFutures)
-        }.onSuccess {
-            promise.complete(ImportDataCatalogResult.success(typesCount, instancesCount, relationsCount))
-        }.onFailure { error ->
-            promise.complete(ImportDataCatalogResult.failure(listOf(error.message ?: "Unknown error")))
-        }
-        
-        return promise.future()
-    }
+    override fun importCatalog(data: JsonObject): Future<ImportDataCatalogResult> =
+        at.rocworks.stores.DataCatalogTransfer.import(this, data)
 
     private fun mapTypeToDocument(type: DataCatalogType): Document {
         return Document().apply {

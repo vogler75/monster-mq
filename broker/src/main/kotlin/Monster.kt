@@ -1161,7 +1161,9 @@ MORE INFO:
                     null
                 }
 
-                val dataCatalogStore = if (configStoreType != "NONE") {
+                val dataCatalogEnabled = configJson.getJsonObject("Features", JsonObject())
+                    .getBoolean(Features.DataCatalog, true)
+                val dataCatalogStore = if (configStoreType != "NONE" && dataCatalogEnabled) {
                     try {
                         val store = at.rocworks.stores.factories.DataCatalogStoreFactory.create(configStoreType, configJson, vertx)
                         at.rocworks.stores.factories.DataCatalogStoreFactory.setSharedInstance(store)

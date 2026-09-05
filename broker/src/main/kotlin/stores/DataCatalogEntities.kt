@@ -42,6 +42,6 @@ data class ImportDataCatalogResult(
         fun success(types: Int, instances: Int, relations: Int): ImportDataCatalogResult =
             ImportDataCatalogResult(true, types, instances, relations, 0)
         fun failure(errors: List<String>): ImportDataCatalogResult =
-            ImportDataCatalogResult(false, 0, 0, 0, 0, errors)
+            ImportDataCatalogResult(false, 0, 0, 0, errors.size, errors)
     }
 }

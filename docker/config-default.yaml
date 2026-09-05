@@ -122,4 +122,5 @@ Features:
   SparkplugB: true
   FlowEngine: true
   Agents: true
+  DataCatalog: true
   I3xClient: true

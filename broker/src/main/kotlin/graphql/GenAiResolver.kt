@@ -1,6 +1,8 @@
 package at.rocworks.extensions.graphql
 
 import at.rocworks.Const
+import at.rocworks.Features
+import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.genai.GenAiRequest
@@ -457,6 +459,17 @@ User question: $question
             val future = CompletableFuture<Map<String, Any?>>()
 
             try {
+                if (!Monster.isFeatureEnabled(Features.DataCatalog)) {
+                    future.complete(mapOf(
+                        "types" to emptyList<Map<String, Any?>>(),
+                        "instances" to emptyList<Map<String, Any?>>(),
+                        "relations" to emptyList<Map<String, Any?>>(),
+                        "topicsAnalyzed" to 0,
+                        "summary" to null,
+                        "error" to "Data Catalog is disabled"
+                    ))
+                    return@DataFetcher future
+                }
                 if (genAiProvider == null || !genAiProvider.isReady()) {
                     future.complete(mapOf(
                         "types" to emptyList<Map<String, Any?>>(),

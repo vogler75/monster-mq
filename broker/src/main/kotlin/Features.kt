@@ -24,6 +24,7 @@ object Features {
     const val KafkaServer = "KafkaServer"
     const val SchemaPolicy = "SchemaPolicy"
     const val TopicNamespace = "TopicNamespace"
+    const val DataCatalog = "DataCatalog"
     const val DeviceImportExport = "DeviceImportExport"
     const val Zenoh = "Zenoh"
     const val Hmi = "Hmi"
@@ -34,7 +35,7 @@ object Features {
         OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, RedisServer, Telegram,
         WinCCOa, WinCCUa, Plc4x, Neo4j, JdbcLogger, InfluxDBLogger, TimeBaseLogger,
         SparkplugB, FlowEngine, Agents,
-        GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DeviceImportExport,
+        GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DataCatalog, DeviceImportExport,
         Zenoh, Hmi, I3xClient, Redfish
     )
 }

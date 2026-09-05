@@ -1,5 +1,7 @@
 package at.rocworks.graphql
 
+import at.rocworks.Features
+import at.rocworks.Monster
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IDataCatalogStore
@@ -52,7 +54,7 @@ class DataCatalogQueries(
     fun dataCatalogTypes(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
-            if (dataCatalogStore == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || dataCatalogStore == null) {
                 future.complete(emptyList())
                 return@DataFetcher future
             }
@@ -71,7 +73,7 @@ class DataCatalogQueries(
     fun dataCatalogType(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
-            if (dataCatalogStore == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || dataCatalogStore == null) {
                 future.complete(null)
                 return@DataFetcher future
             }
@@ -94,7 +96,7 @@ class DataCatalogQueries(
     fun dataCatalogInstances(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
-            if (dataCatalogStore == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || dataCatalogStore == null) {
                 future.complete(emptyList())
                 return@DataFetcher future
             }
@@ -113,7 +115,7 @@ class DataCatalogQueries(
     fun dataCatalogInstance(): DataFetcher<CompletableFuture<Map<String, Any?>?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<Map<String, Any?>?>()
-            if (dataCatalogStore == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || dataCatalogStore == null) {
                 future.complete(null)
                 return@DataFetcher future
             }
@@ -136,7 +138,7 @@ class DataCatalogQueries(
     fun dataCatalogRelations(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { env ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
-            if (dataCatalogStore == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || dataCatalogStore == null) {
                 future.complete(emptyList())
                 return@DataFetcher future
             }
@@ -161,7 +163,7 @@ class DataCatalogQueries(
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
             val topicPattern = env.getArgument<String>("topicPattern") ?: "#"
 
-            if (archiveHandler == null) {
+            if (!Monster.isFeatureEnabled(Features.DataCatalog) || archiveHandler == null) {
                 future.complete(mapOf(
                     "types" to emptyList<Map<String, Any?>>(),
                     "instances" to emptyList<Map<String, Any?>>(),
@@ -396,4 +398,3 @@ class DataCatalogQueries(
         }
     }
 }
-
