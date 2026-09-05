@@ -70,6 +70,7 @@ const defaultSQLiteConfig = {
     Mcp: true,
     SchemaPolicy: true,
     TopicNamespace: true,
+    DataCatalog: true,
     DeviceImportExport: true,
     Zenoh: true,
     Hmi: true,

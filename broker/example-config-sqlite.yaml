@@ -104,7 +104,9 @@ Features:
   KafkaServer: true
   SchemaPolicy: true
   TopicNamespace: true
+  DataCatalog: true
   DeviceImportExport: true
   Zenoh: true
   Hmi: true
   I3xClient: true
+  Redfish: true
