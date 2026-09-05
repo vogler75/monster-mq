@@ -1,9 +1,12 @@
 Release v1.8.32
-Built from commit: a90b1362
-Date: 2026-09-05 14:51:02
+Built from commit: aa2a1dad
+Date: 2026-09-05 15:24:23
 
 Changes since v1.8.31:
 ---
+aa2a1dad refactor(setup): consolidate on setup.sh and rename installer to setup
+9f552318 fix(publish): automatically publish release as non-draft when uploading assets
+9369eb35 chore(release): re-adjust version.txt and release notes for v1.8.32
 a90b1362 feat(publish): automatically force-sync moved/retagged release tags
 2c62d875 chore(release): re-adjust version.txt and release notes for v1.8.32
 8eb7cc44 feat(release): add --retag option to re-adjust latest release tag to current commit
