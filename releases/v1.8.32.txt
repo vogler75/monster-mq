@@ -1,9 +1,11 @@
 Release v1.8.32
-Built from commit: 8eb7cc44
-Date: 2026-09-05 14:50:11
+Built from commit: a90b1362
+Date: 2026-09-05 14:51:02
 
 Changes since v1.8.31:
 ---
+a90b1362 feat(publish): automatically force-sync moved/retagged release tags
+2c62d875 chore(release): re-adjust version.txt and release notes for v1.8.32
 8eb7cc44 feat(release): add --retag option to re-adjust latest release tag to current commit
 971889e7 chore(logging): keep ConsoleHandler in JAR default for Docker and ship FileHandler in distribution logging.properties
 0cea11f4 feat(installer): add PID tracking and stop broker button, enable file logging with rotation
