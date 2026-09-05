@@ -1,45 +1,78 @@
 # Clustering
 
-MonsterMQ can join a Vert.x/Hazelcast cluster to share the event bus and coordinate message stores across nodes. The clustering feature is intentionally lightweight: the broker builds a default Hazelcast configuration at runtime and does not read any external Hazelcast YAML. This document explains what works today and the constraints you should plan for.
+MonsterMQ uses Vert.x and Hazelcast for a shared event bus, node discovery, and
+cluster coordination. Configure all nodes to use the same persistent databases
+for sessions, queues, and configuration. Local SQLite databases and `MEMORY`
+stores do not become shared simply by enabling clustering.
 
-## Enabling Cluster Mode
+## Start a Node
 
-Start the broker with the `-cluster` flag. The flag switches Vert.x into clustered mode and creates a Hazelcast cluster manager internally (`broker/src/main/kotlin/Monster.kt:360-438`).
+From the `broker` directory:
 
 ```bash
-java -cp "target/classes:target/dependencies/*" \
-  at.rocworks.MonsterKt \
-  -cluster \
-  -config config.yaml
+./run.sh -- -cluster -config config.yaml
 ```
 
-### Node Name
-
-Optionally set a node label in your `config.yaml`:
+Give each node a unique, stable name:
 
 ```yaml
 NodeName: node-a
+DefaultStoreType: POSTGRES
+RetainedStoreType: HAZELCAST
+Postgres:
+  Url: jdbc:postgresql://shared-db:5432/monster
+  User: system
+  Pass: manager
 ```
 
-When present, the name is stored as a Hazelcast member attribute and used by helper methods such as `Monster.getClusterNodeId(...)` (`broker/src/main/kotlin/Monster.kt:389-418`). Without it the broker falls back to the host name or the Hazelcast member UUID.
+In cluster mode `NodeName` is used as the Hazelcast instance name and member
+attribute. The fallback is the hostname, or a generated name if hostname lookup
+fails. Standalone brokers expose the node ID `local`.
 
-### Supported Store Types in Cluster Mode
+## Discovery and Hazelcast Configuration
 
-The only component that makes special use of Hazelcast is the message store. If a last-value store is configured with `HAZELCAST`, MonsterMQ wires it against the cluster’s shared Hazelcast instance (`broker/src/main/kotlin/Monster.kt:738-769`). All other store types (PostgreSQL, CrateDB, MongoDB, SQLite, Memory) continue to operate exactly as on a single node.
+`HAZELCAST_MEMBERS` accepts comma-separated TCP/IP member addresses and disables
+multicast discovery:
 
-Archive groups, session stores, retained stores, and user stores do not automatically replicate across nodes unless the chosen backend handles replication on its own.
+```bash
+HAZELCAST_MEMBERS=node-a:5701,node-b:5701 ./run.sh -- -cluster
+```
 
-## What Clustering Currently Provides
+`HAZELCAST_CONFIG` loads a Hazelcast **XML** file through `XmlConfigBuilder`:
 
-- **Shared event bus** – Vert.x uses Hazelcast to propagate internal events (GraphQL mutations, archive notifications, etc.) between nodes.
-- **Optional Hazelcast message store** – Choosing `HAZELCAST` for `LastValType` gives you a distributed in-memory last-value cache.
-- **Cluster-aware APIs** – Helper methods like `Monster.getClusterNodeIds(...)` and GraphQL fields (`broker/src/main/resources/schema.graphqls:240-356`) expose basic node information so you can build tooling around it.
+```bash
+HAZELCAST_CONFIG=/etc/monstermq/hazelcast.xml ./run.sh -- -cluster
+```
 
-## Limitations (Know Before You Deploy)
+If the file is missing the broker logs a warning and falls back to the default
+Hazelcast configuration. The broker overrides the cluster name with `MonsterMQ`
+and sets the node identity after loading XML. `HAZELCAST_MEMBERS`, when supplied,
+overrides the discovery settings afterward. See the repository's
+[Docker Hazelcast example](../docker/hazelcast.xml).
 
-- **No Hazelcast YAML support** – Settings such as multicast, TCP/IP member lists, SSL, or partition groups from the old documentation are not loaded. The broker relies on Hazelcast defaults plus the optional `NodeName` attribute.
-- **Manual failover** – Device connectors (OPC UA, archive groups, MQTT session ownership) stay with the node configured in the database. If a node fails you must reassign those resources yourself.
-- **Single topic bus** – If you enable the Kafka bus it still uses one Kafka topic across the cluster; there is no automatic sharding by node.
-- **External databases drive durability** – PostgreSQL, CrateDB, and MongoDB retain their own clustering semantics; MonsterMQ does not add another replication layer on top.
+## Shared State and Recovery
 
-If you need advanced Hazelcast tuning (custom discovery, TLS, partition control) you must fork the broker and extend `Monster.clusterSetup(...)` to apply your configuration before instantiating `HazelcastClusterManager`.
+- The Vert.x event bus routes publications and internal requests across nodes.
+- `HAZELCAST` retained and archive last-value stores use the shared Hazelcast
+  instance. They are distributed in-memory stores, not disk persistence.
+- Persistent MQTT sessions and queued messages use shared database storage.
+  Clients must reconnect to a surviving broker; an existing TCP connection is
+  not migrated. Client IDs and session-expiry/clean-start settings determine
+  whether the stored session is resumed.
+- Device connectors are assigned explicitly through `nodeId`. If their owner
+  fails, they remain offline until it returns or an operator reassigns them.
+- Use `brokers` and device queries in [GraphQL](graphql.md) to inspect the nodes.
+
+## Feature Flags and Message Buses
+
+Feature flags are configured per node. Assign devices only to nodes supporting
+their feature; device mutations check the target node's advertised feature set.
+The broker logs a warning when cluster members have different feature sets.
+
+The optional Kafka message bus uses its configured bus topic. It does not replace
+Hazelcast node coordination. [Zenoh federation](zenoh.md) connects independent
+brokers and has different session and delivery semantics; Kafka bus and Zenoh
+cannot be enabled together.
+
+Implementation: [Monster.kt](../broker/src/main/kotlin/Monster.kt), especially
+`clusterSetup`, store creation, and feature publication.

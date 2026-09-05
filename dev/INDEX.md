@@ -1,6 +1,6 @@
 # Developer and AI Coding Documentation
 
-This directory contains documentation for developers and AI coding agents working on the MonsterMQ codebase. For operator/user documentation, see `doc/` instead.
+This directory contains documentation for developers and AI coding agents working on the MonsterMQ codebase. For operator/user documentation, see [the documentation index](../doc/README.md) instead, including the [Redfish Gateway guide](../doc/redfish-gateway.md).
 
 Keep this index as the curated entry point for active and completed developer plans. Update it when files are added, moved between `plans/` and `done/`, or removed.
 
@@ -9,7 +9,6 @@ Keep this index as the curated entry point for active and completed developer pl
 - [development.md](development.md) — Environment setup, build commands, test execution, contribution guidelines
 - [iX.instructions.md](iX.instructions.md) — Siemens iX design system guidelines for dashboard development
 - [plugin-architecture-implementation.md](plugin-architecture-implementation.md) — Planned plugin architecture (v2.0.0, planning phase)
-- [REDFISH_GATEWAY_GUIDE.md](REDFISH_GATEWAY_GUIDE.md) — DMTF Redfish Gateway architecture, JSON Schema mappings, and REST API guide
 - [WinCC_Unified_OpenPipe_Reference.md](WinCC_Unified_OpenPipe_Reference.md) — WinCC Unified Open Pipe reference
 
 ## Implementation Plans (`plans/`)

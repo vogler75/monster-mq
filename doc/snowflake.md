@@ -75,10 +75,19 @@ GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE DATA_ROLE;
 GRANT USAGE ON DATABASE SCADA TO ROLE DATA_ROLE;
 GRANT USAGE ON SCHEMA SCADA.PUBLIC TO ROLE DATA_ROLE;
 GRANT INSERT ON ALL TABLES IN SCHEMA SCADA.PUBLIC TO ROLE DATA_ROLE;
+-- For tables created later by an administrator:
+GRANT INSERT ON FUTURE TABLES IN SCHEMA SCADA.PUBLIC TO ROLE DATA_ROLE;
+-- Only if the logger will create tables itself:
+GRANT CREATE TABLE ON SCHEMA SCADA.PUBLIC TO ROLE DATA_ROLE;
 GRANT ROLE DATA_ROLE TO USER mqtt_logger_user;
 ```
 
 ## Example Configurations
+
+These are dashboard field values, not top-level broker YAML keys. Create a JDBC
+logger device with database type `SNOWFLAKE`; Snowflake-specific values belong
+in `dbSpecificConfig`. Set an explicit dedicated role; the implementation falls
+back to `accountadmin` if `role` is absent.
 
 ### Organization Account Format
 
@@ -90,7 +99,7 @@ Private Key File: /etc/snowflake/keys/rsa_key.p8
 Warehouse: COMPUTE_WH
 Database: SCADA
 Schema: PUBLIC
-Role: (leave empty, defaults to ACCOUNTADMIN)
+Role: DATA_ROLE
 ```
 
 ### Regional Account Format
@@ -119,6 +128,9 @@ Schema: PUBLIC
 ```
 
 ## Table Creation
+
+The private-key loader expects an unencrypted PKCS#8 RSA key; it does not expose
+a passphrase option. The logger process must be able to read that file.
 
 The Snowflake logger can automatically create tables based on your JSON schema if the `autoCreateTable` option is enabled (enabled by default). Alternatively, you can pre-create tables manually in Snowflake.
 
@@ -368,12 +380,12 @@ When configured, the logger creates a JDBC connection with these properties:
 ```properties
 user=mqtt_logger_user
 account=MYORG-MYACCOUNT
-role=ACCOUNTADMIN
+role=DATA_ROLE
 db=SCADA
 schema=PUBLIC
 warehouse=COMPUTE_WH
 authenticator=snowflake_jwt
-privateKey=<base64-encoded-private-key>
+privateKey=<java.security.PrivateKey object>
 ssl=on
 ```
 
@@ -435,7 +447,7 @@ ssl=on
 **Error:** `Private key file not found: /path/to/key.p8`
 
 **Solutions:**
-1. Verify the file path is absolute (not relative)
+1. Resolve the path from the broker working directory; an absolute path is less ambiguous
 2. Check file permissions (must be readable)
 3. Verify the file exists:
    ```bash
@@ -446,14 +458,9 @@ ssl=on
 
 ### Warehouse Size
 
-Choose appropriate warehouse size based on ingestion rate:
-
-| Ingestion Rate | Warehouse Size | Recommended |
-|----------------|----------------|-------------|
-| < 1000 msg/s | X-SMALL | Testing/Development |
-| 1000-5000 msg/s | SMALL | Light Production |
-| 5000-20000 msg/s | MEDIUM | Production |
-| > 20000 msg/s | LARGE or X-LARGE | High Volume |
+Size the warehouse using measured ingest latency, batch sizes, concurrent
+queries, and cost. There is no verified messages-per-second mapping from broker
+traffic to a Snowflake warehouse size.
 
 ### Batch Size Configuration
 
@@ -484,7 +491,7 @@ CLUSTER BY ("TIMESTAMP");
 2. **User Permissions**
    - Use least-privilege principle
    - Create dedicated role for MQTT logger
-   - Grant only INSERT permissions, not DELETE/UPDATE
+   - For pre-created tables grant INSERT and the required USAGE privileges; automatic table creation also needs CREATE TABLE
 
 3. **Network Security**
    - Use SSL for connections (enabled by default)

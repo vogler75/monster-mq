@@ -27,18 +27,17 @@ Metrics show the batching and delivery of messages to clients and remote nodes.
 **`clientAddedPerSec`** - Messages/second being added to per-client buffers
 - Count of messages entering client delivery buffers
 - Only counted when subscribers exist for a topic
-- Reflects actual incoming publish rate that has subscribers
+- Counts deliveries added to buffers, so one publication with multiple subscribers can add multiple entries.
 
 **`clientFlushedPerSec`** - Messages/second being sent to clients via eventBus
 - Count of messages actually delivered from buffers
 - Flush triggers when:
   - Buffer reaches `BulkSize` messages (default 1000), OR
   - `TimeoutMS` milliseconds pass (default 100ms)
-- This is the actual client delivery rate
+- This measures dispatch from buffers, not MQTT acknowledgments or successful application processing.
 
 **`clientBuffers`** - Number of active per-client buffers
-- One buffer per client that has buffered messages
-- Example: 100 clients subscribe but only 5 get messages = 5 buffers
+- Number of buffer entries currently tracked; an allocated buffer may be empty after a flush.
 
 **`bufferedClientMessages`** - Total messages currently in all client buffers
 - Messages waiting to be flushed
@@ -81,11 +80,11 @@ Metrics show the batching and parallel processing of published messages.
 
 **`workersCount`** - Number of worker threads in the pool
 - Configured via `BulkProcessing.WorkerThreads` (default 4)
-- Typically tune to ~1 thread per 75k msg/s
+- Tune using measured throughput, latency, CPU usage, and queue growth for your workload.
 
 **`batchesPerSec`** - Batches processed per second across all workers
 - Batches are collections of messages grouped by topic
-- Higher is better (more grouping = better efficiency)
+- Compare with `messagesPerSec` to estimate average batch size; a higher batch rate alone is not an efficiency measure.
 
 **`messagesPerSec`** - Total messages processed per second across all workers
 - Sum of all messages in all batches
@@ -98,14 +97,14 @@ Metrics show the batching and parallel processing of published messages.
 - Should be roughly balanced across workers
 - Imbalance indicates uneven load distribution
 
-**`workers[].queueSize`** - Messages currently waiting in this worker's queue
+**`workers[].queueSize`** - Batches currently waiting in this worker’s queue
 - Shows backlog for this specific worker
 - High value indicates that worker is slow or overloaded
 
 ## Interpreting Metrics
 
 ### Healthy Bulk Messaging State
-```json
+```jsonc
 {
   "clientAddedPerSec": 100000,
   "clientFlushedPerSec": 100000,    // ← Same as added
@@ -116,7 +115,7 @@ Metrics show the batching and parallel processing of published messages.
 - No accumulation (batching working efficiently)
 
 ### Problem: Messages Accumulating
-```json
+```jsonc
 {
   "clientAddedPerSec": 100000,
   "clientFlushedPerSec": 50000,     // ← Half the incoming rate
@@ -127,7 +126,7 @@ Metrics show the batching and parallel processing of published messages.
 - Clients are slow or network is congested
 - Consider:
   - Increasing `BulkSize` (batch more messages)
-  - Increasing `TimeoutMS` (wait longer before sending)
+  - Measuring batch size and latency before changing `TimeoutMS` (a longer timeout adds delay)
   - Checking client performance
 
 ### Healthy Bulk Processing State
@@ -198,3 +197,7 @@ mosquitto_sub -h localhost -t '$SYS/brokers/+/processing'
 ```
 
 Or use any MQTT client/library to subscribe and forward to your monitoring system (Prometheus, InfluxDB, Grafana, etc.)
+
+## Broker and connector metrics
+
+The bulk `$SYS` topics above are separate from the broker metrics store. Configure `Metrics.Enabled`, `CollectionIntervalSeconds`, `RetentionHours`, and `StoreType` as described in [Databases](databases.md#metrics-store). GraphQL exposes current broker metrics and device `metrics`/`metricsHistory`; persistence determines how much history is available. See [GraphQL](graphql.md) for queries, [Grafana](grafana.md) for the Prometheus-compatible HTTP service, and [System logs](graphql-system-logs.md) for diagnostic logs. The numeric examples on this page are illustrative, not benchmarks.

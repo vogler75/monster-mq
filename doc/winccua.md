@@ -17,14 +17,14 @@ MonsterMQ includes a WinCC Unified client that connects to Siemens WinCC Unified
 
 WinCC Unified clients are **not configured in YAML files**. Instead, they are managed through:
 
-1. **Web Dashboard** - Navigate to "WinCC UA Clients" in the sidebar
+1. **Web Dashboard** - Navigate to "WinCC Unified Clients" in the sidebar
 2. **GraphQL API** - Use mutations to create/update/delete clients
 
 **Example GraphQL Mutation:**
 
 ```graphql
 mutation CreateWinCCUaClient {
-  winCCUaClient {
+  winCCUaDevice {
     create(input: {
       name: "winccua-plant1"
       namespace: "winccua/plant1"
@@ -34,20 +34,8 @@ mutation CreateWinCCUaClient {
         graphqlEndpoint: "http://winccua-server:4000/graphql"
         username: "admin"
         password: "password"
-        messageFormat: JSON_ISO
-        addresses: [
-          {
-            type: TAG_VALUES
-            topic: "tags"
-            nameFilters: ["HMI_*", "TANK_*"]
-            includeQuality: true
-          },
-          {
-            type: ACTIVE_ALARMS
-            topic: "alarms"
-            systemNames: ["System1"]
-          }
-        ]
+        messageFormat: "JSON_ISO"
+
       }
     }) {
       success
@@ -58,13 +46,42 @@ mutation CreateWinCCUaClient {
 }
 ```
 
+Add subscriptions after creating the connection:
+
+```graphql
+mutation {
+  winCCUaDevice {
+    tags: addAddress(deviceName: "winccua-plant1", input: {
+      type: TAG_VALUES
+      topic: "tags"
+      nameFilters: ["HMI_*", "TANK_*"]
+      includeQuality: true
+    }) { success errors }
+  }
+}
+```
+
+After that operation succeeds:
+
+```graphql
+mutation {
+  winCCUaDevice {
+    alarms: addAddress(deviceName: "winccua-plant1", input: {
+      type: ACTIVE_ALARMS
+      topic: "alarms"
+      systemNames: ["System1"]
+    }) { success errors }
+  }
+}
+```
+
 WinCC Unified client configurations are stored in the database and persist across restarts.
 
 ## Message Formats
 
 - **JSON_ISO** - JSON with ISO 8601 timestamps
 - **JSON_MS** - JSON with millisecond epoch timestamps
-- **RAW** - Raw value without formatting
+- **RAW_VALUE** - Raw value without formatting
 
 ## Address Types
 
@@ -92,8 +109,8 @@ Tag names are automatically transformed to MQTT topics:
 
 ## Management via Web Dashboard
 
-1. Navigate to **WinCC UA Clients** in the sidebar
-2. Click **+ New WinCC UA Client**
+1. Navigate to **WinCC Unified Clients** in the sidebar
+2. Click **New WinCC Unified Client**
 3. Configure:
    - Name (unique identifier)
    - Namespace (MQTT topic prefix)
@@ -117,7 +134,6 @@ WinCC UA clients are cluster-aware:
 Real-time metrics available via GraphQL:
 
 - **messagesIn** - Messages received from WinCC Unified per second
-- **connected** - Connection status
 - **timestamp** - Last update time
 
 ## Troubleshooting

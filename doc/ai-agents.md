@@ -17,7 +17,7 @@ AgentExtension (per cluster node)
 
 ## Configuration
 
-Agents are configured via the GraphQL API or dashboard. All fields with their defaults:
+Agents are configured via the GraphQL API or dashboard. Key fields and runtime defaults (the linked schema contains the complete input):
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -27,22 +27,22 @@ Agents are configured via the GraphQL API or dashboard. All fields with their de
 | `description` | String | `""` | Human-readable description |
 | `version` | String | `"1.0.0"` | Agent version |
 | `namespace` | String | required | Organizational namespace |
-| `nodeId` | String | required | Cluster node to run on (`*` for any) |
+| `nodeId` | String | required | Cluster node to run on (`local` for standalone; `*` deploys on every eligible node) |
 | `enabled` | Boolean | `false` | Whether the agent is deployed |
-| `provider` | String | `"gemini"` | AI provider: `gemini`, `claude`, `openai`, `ollama` |
-| `model` | String | provider default | Model name (e.g., `gemini-2.0-flash`) |
+| `provider` | String | `"gemini"` | AI provider ID (see supported providers below) |
+| `model` | String | required here or in provider configuration | Provider model ID |
 | `apiKey` | String | global config | Per-agent API key (supports `${ENV_VAR}` syntax) |
 | `systemPrompt` | String | `""` | System prompt sent to the LLM |
 | `temperature` | Double | `0.7` | LLM temperature (0.0-2.0) |
 | `maxTokens` | Int | provider default | Max output tokens |
 | `maxToolIterations` | Int | `10` | Max tool calls per invocation |
-| `memoryWindowSize` | Int | `20` | Chat messages retained in memory |
+| `memoryWindowSize` | Int | `40` | Chat messages retained in memory |
 | `triggerType` | Enum | `MQTT` | `MQTT`, `CRON`, or `MANUAL` |
 | `cronExpression` | String | null | Quartz cron expression (for CRON trigger) |
 | `cronIntervalMs` | Long | null | Periodic interval in ms (for CRON trigger) |
 | `inputTopics` | List | `[]` | MQTT topics that trigger the agent |
 | `cronPrompt` | String | null | Custom prompt for scheduled executions (CRON trigger) |
-| `outputTopics` | List | `[]` | Where responses are published (default: `agents/{name}/response`) |
+| `outputTopics` | List | `[]` | Where responses are published (default: `a2a/v1/{org}/{site}/agents/{name}/response`) |
 | `stateEnabled` | Boolean | `true` | Enable persistent state |
 | `mcpServers` | List | `[]` | External MCP server names to connect |
 | `useMonsterMqMcp` | Boolean | `false` | Connect to MonsterMQ's built-in MCP server |
@@ -56,12 +56,10 @@ Agents are configured via the GraphQL API or dashboard. All fields with their de
 
 ### AI Providers
 
-| Provider | Default Model | API Key Env Var | Config Path |
-|----------|--------------|-----------------|-------------|
-| `gemini` | `gemini-2.0-flash` | `GEMINI_API_KEY` | `GenAI.Providers.Gemini.ApiKey` |
-| `claude` | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` | `GenAI.Providers.Claude.ApiKey` |
-| `openai` | `gpt-4o` | `OPENAI_API_KEY` | `GenAI.Providers.OpenAI.ApiKey` |
-| `ollama` | `llama3` | `OLLAMA_BASE_URL` | `GenAI.Providers.Ollama.BaseUrl` |
+Supported provider IDs are `gemini`, `claude`, `openai`, `ollama`,
+`azure-openai`, and `llamacpp`. Configure an explicit model on the agent/stored
+provider or in `GenAI.Providers.<Provider>.Model`; the factory no longer supplies
+hard-coded default model names. Use `providerName` to reference a saved provider.
 
 API keys are resolved in order: agent-level `apiKey` field > global `config.yaml` > environment variable.
 
@@ -70,10 +68,13 @@ Global config example (`config.yaml`):
 GenAI:
   Providers:
     Gemini:
+      Model: "your-available-model"
       ApiKey: "${GEMINI_API_KEY}"
     Claude:
+      Model: "your-available-model"
       ApiKey: "${ANTHROPIC_API_KEY}"
     Ollama:
+      Model: "your-installed-model"
       BaseUrl: "http://localhost:11434"
 ```
 
@@ -113,7 +114,7 @@ All agents have access to these tools via LangChain4j `@Tool` annotations:
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `publishMessage` | `topic`, `payload` | Publish a message to any MQTT topic |
+| `publishMessage` | `topic`, `payload` | Publish a message, restricted by `allowedPublishTopics` when configured |
 
 ### Data Queries
 
@@ -125,7 +126,7 @@ All agents have access to these tools via LangChain4j `@Tool` annotations:
 
 ### Agent Notes (Persistent Memory)
 
-Notes are stored as retained MQTT messages under `a2a/v1/{org}/{site}/agents/{name}/memory/{key}` and persist across restarts.
+Notes are stored as retained MQTT messages under `a2a/v1/{org}/{site}/agents/{name}/memory/{key}`. Restart durability depends on using a persistent retained store.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
@@ -337,10 +338,16 @@ By default, an agent can discover and invoke any other agent. To restrict this, 
 }
 ```
 
-When `subAgents` is non-empty:
+When `subAgents` is non-empty and `subAgentsAllowAll` is false:
 - `listAgents()` only returns agents in the list (self is always excluded)
 - `invokeAgent()` rejects targets not in the list with an error message
 - When empty (default), all agents are visible (backward-compatible)
+
+Additional controls: `isolatedAgent: true` prevents discovery/invocation of other
+agents; `visibleAgentTags` restricts targets by tag. `allowedPublishTopics` limits
+the built-in `publishMessage` tool when non-empty. `timezone` controls scheduled
+execution; `conversationLogEnabled` enables full conversation logging. See
+[schema-agents.graphqls](../broker/src/main/resources/schema-agents.graphqls).
 
 ## MQTT Topic Structure
 
@@ -368,30 +375,17 @@ a2a/v1/{org}/{site}/
 ### Queries
 
 ```graphql
-# List all agents (optionally filter by node or enabled state)
-query {
-  agents(nodeId: String, enabled: Boolean): [Agent!]!
-}
-
-# Get a single agent by name
-query {
-  agent(name: String!): Agent
+query Agents {
+  agents { name nodeId enabled provider model }
+  agent(name: "temp-monitor") { name enabled inputTopics outputTopics }
 }
 ```
 
 ### Mutations
 
-```graphql
-mutation {
-  agent {
-    create(input: AgentInput!): Agent!      # Create a new agent
-    update(name: String!, input: AgentInput!): Agent!  # Update config
-    delete(name: String!): Boolean!         # Delete an agent
-    start(name: String!): Agent!            # Enable and deploy
-    stop(name: String!): Agent!             # Disable and undeploy
-  }
-}
-```
+The `agent` group exposes `create(input)`, `update(name, input)`, `delete(name)`,
+`start(name)`, and `stop(name)`. Create/update return the agent directly; delete
+returns a boolean. Input must include `name`, `namespace`, and `nodeId`.
 
 ### Example: Create an Agent
 
@@ -401,18 +395,18 @@ mutation {
     create(input: {
       name: "temp-monitor"
       namespace: "production"
-      nodeId: "*"
+      nodeId: "local"
       description: "Monitors temperature sensors and alerts on anomalies"
       enabled: true
       provider: "gemini"
-      model: "gemini-2.0-flash"
+      model: "your-available-model"
       triggerType: "MQTT"
       inputTopics: ["sensors/+/temperature"]
       outputTopics: ["alerts/temperature"]
       systemPrompt: "You monitor temperature sensors. Alert if values exceed 30°C."
       temperature: 0.3
       maxToolIterations: 5
-      contextLastvalTopics: { "Default": ["sensors/+/temperature"] }
+      contextLastvalTopics: { Default: ["sensors/+/temperature"] }
     }) {
       name
       enabled
@@ -448,7 +442,7 @@ Agents can connect to MCP (Model Context Protocol) servers for additional tools:
 
 ## Dashboard
 
-The agent management UI is available at `http://localhost:4000/pages/agents.html`:
+Open **Agents** in the dashboard sidebar (served on the configured GraphQL port):
 
 - **Agent List** - Overview of all agents with status, provider, trigger type, and enable/disable toggles
 - **Agent Detail** - Full configuration editor with sections for:

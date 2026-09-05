@@ -6,7 +6,7 @@ MonsterMQ includes a native WinCC OA (Open Architecture) client that connects to
 
 ## Key Features
 
-- **Massive Scale** - Subscribe to millions of datapoints with minimal configuration
+- **Bulk subscriptions** - Subscribe to datapoint patterns through continuous queries
 - **Continuous SQL Queries** - Leverage WinCC OA's `dpQueryConnectSingle` for efficient bulk updates
 - **Real-time Streaming** - GraphQL subscription-based updates via WebSocket
 - **Flexible Topic Mapping** - Transform WinCC OA datapoint names to MQTT topic hierarchies with regex support
@@ -16,12 +16,12 @@ MonsterMQ includes a native WinCC OA (Open Architecture) client that connects to
 
 ## Why WinCC OA SQL Queries?
 
-The MQTT protocol doesn't support bulk messages, making it inefficient for transferring large numbers of topic value changes. MonsterMQ's WinCC OA client leverages WinCC OA's powerful **continuous SQL queries** (`dpQueryConnectSingle`), making it possible to **subscribe to 5 million tags with just a single SQL query**.
+The MQTT protocol doesn't support bulk messages, making it inefficient for transferring large numbers of topic value changes. MonsterMQ's WinCC OA client leverages WinCC OA's powerful **continuous SQL queries** (`dpQueryConnectSingle`), so one query can cover many datapoints. Capacity depends on the WinCC OA server, selected columns, change rate, network, and broker resources.
 
 ### Key Benefits
 
 - **Efficient Bulk Transfer** - Process high-volume tag changes without MQTT per-message overhead
-- **Single Query, Millions of Tags** - Use wildcards to subscribe to entire systems
+- **One Query, Many Tags** - Use wildcards to subscribe to entire systems
 - **Real-time Updates** - Continuous queries stream changes as they occur
 - **Flexible Data Selection** - Choose which datapoint elements to retrieve (value, timestamp, quality, etc.)
 
@@ -36,7 +36,7 @@ WinCC OA clients are **not configured in YAML files**. Instead, they are managed
 
 ```graphql
 mutation CreateWinCCOaClient {
-  winCCOaClient {
+  winCCOaDevice {
     create(input: {
       name: "winccoa-plant1"
       namespace: "winccoa/plant1"
@@ -207,7 +207,7 @@ The final MQTT topic is composed as:
 WinCC OA clients support three authentication modes:
 
 ### 1. Username/Password (Login Mutation)
-```graphql
+```text
 config: {
   graphqlEndpoint: "http://winccoa-server:4000/graphql"
   username: "admin"
@@ -218,7 +218,7 @@ config: {
 The client performs a GraphQL login mutation to obtain a token.
 
 ### 2. Direct Token
-```graphql
+```text
 config: {
   graphqlEndpoint: "http://winccoa-server:4000/graphql"
   token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -228,7 +228,7 @@ config: {
 Use a pre-configured authentication token.
 
 ### 3. Anonymous Access
-```graphql
+```text
 config: {
   graphqlEndpoint: "http://winccoa-server:4000/graphql"
 }
@@ -282,26 +282,24 @@ WinCC OA clients are cluster-aware:
 - Only the assigned node runs the client
 - Clients can be reassigned to different nodes via web dashboard or GraphQL
 - Configuration is shared across the cluster via database
-- Automatic failover if assigned node goes down (manual reassignment required)
+- If the assigned node fails, the connector stays offline until recovery or manual reassignment
 
 ## Metrics
 
 Real-time metrics available via GraphQL:
 
 ```graphql
-query {
-  winCCOaClientMetrics(name: "winccoa-plant1") {
-    device
-    messagesInRate
-    connected
-    elapsedMs
+query WinCCOaMetrics {
+  winCCOaClients(name: "winccoa-plant1") {
+    name
+    metrics { messagesIn timestamp }
+    metricsHistory(lastMinutes: 15) { messagesIn timestamp }
   }
 }
 ```
 
-- **messagesInRate** - Messages received from WinCC OA per second
-- **connected** - Connection status (true/false)
-- **elapsedMs** - Time since last metrics reset
+`messagesIn` is the incoming message rate; `timestamp` identifies the sample.
+Use connector logs to diagnose connection and authentication failures.
 
 ## WebSocket Protocol
 
@@ -365,10 +363,10 @@ The client uses the **graphql-transport-ws** subprotocol for WebSocket communica
 
 ### Simple Temperature Monitoring
 
-```graphql
+```text
 addresses: [
   {
-    query: "SELECT '_original.._value', '_original.._stime' FROM 'System1:Temperature_*'"
+    query: "SELECT '_original.._value', '_original.._stime' FROM 'System1:Temperature_*.'"
     topic: "sensors/temperature"
     description: "All temperature sensors"
     answer: true
@@ -379,7 +377,7 @@ addresses: [
 
 ### Multi-System Production Monitoring
 
-```graphql
+```text
 addresses: [
   {
     query: "SELECT '_original.._value', '_original.._stime', '_original.._status64' FROM '*:Production_Line_*.'"
@@ -389,7 +387,7 @@ addresses: [
     retained: true
   },
   {
-    query: "SELECT '_original.._value', '_original.._stime' FROM '*:Alarm_*'"
+    query: "SELECT '_original.._value', '_original.._stime' FROM '*:Alarm_*.'"
     topic: "alarms"
     description: "All alarm datapoints"
     answer: false
@@ -400,7 +398,7 @@ addresses: [
 
 ### Advanced Topic Transformation
 
-```graphql
+```text
 transformConfig: {
   removeSystemName: true
   convertDotToSlash: true
@@ -423,7 +421,7 @@ This configuration transforms:
 5. **Monitor Metrics** - Track message rates and connection status
 6. **Test Queries First** - Validate SQL queries in WinCC OA before deploying
 7. **Plan Topic Hierarchy** - Design topic transformation for your MQTT consumers
-8. **Use Clustering** - Distribute clients across nodes for high availability
+8. **Use Clustering** - Assign clients across nodes; plan explicit reassignment for failures
 9. **Configure Reconnection** - Set appropriate reconnect delays for network conditions
 10. **Log Analysis** - Enable fine logging for debugging, reduce for production
 

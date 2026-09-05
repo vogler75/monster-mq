@@ -19,23 +19,24 @@ Use GraphQL API to create and manage archive groups:
 
 ```graphql
 mutation {
-  createArchiveGroup(input: {
-    name: "ProductionSensors"
-    enabled: true
-    topicFilter: ["sensors/#", "devices/#", "production/#"]
-    retainedOnly: false
-    lastValType: POSTGRES       # Current values storage
-    archiveType: POSTGRES       # Historical messages storage
-    lastValRetention: "7d"      # Keep current values for 7 days
-    archiveRetention: "30d"     # Keep history for 30 days
-    purgeInterval: "1h"         # Clean up every hour
-  }) {
-    success
-    message
-    archiveGroup {
-      name
-      enabled
-      deployed
+  archiveGroup {
+    create(input: {
+      name: "ProductionSensors"
+      topicFilter: ["sensors/#", "devices/#", "production/#"]
+      retainedOnly: false
+      lastValType: POSTGRES       # Current values storage
+      archiveType: POSTGRES       # Historical messages storage
+      lastValRetention: "7d"      # Keep current values for 7 days
+      archiveRetention: "30d"     # Keep history for 30 days
+      purgeInterval: "1h"         # Clean up every hour
+    }) {
+      success
+      message
+      archiveGroup {
+        name
+        enabled
+        deployed
+      }
     }
   }
 }
@@ -46,12 +47,12 @@ mutation {
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `name` | Unique identifier for the archive group | `"ProductionSensors"` |
-| `enabled` | Whether the archive group is active | `true` |
+| `enabled` | Read current state; change through `enable`/`disable` mutations | `true` |
 | `topicFilter` | MQTT topic patterns to archive | `["sensors/#", "devices/+/data"]` |
 | `retainedOnly` | Archive only retained messages | `false` |
 | `lastValType` | Storage backend for current values | `POSTGRES`, `MEMORY`, `HAZELCAST` |
-| `archiveType` | Storage backend for historical data | `POSTGRES`, `MONGODB`, `KAFKA` |
-| `lastValRetention` | How long to keep current values | `"7d"`, `"24h"`, `"30m"` |
+| `archiveType` | Storage backend for historical data | `POSTGRES`, `CRATEDB`, `QUESTDB`, `MONGODB`, `SQLITE`, `NONE` |
+| `lastValRetention` | Age limit for persistent stores; MEMORY uses a count such as `50k` | `"7d"`, `"24h"`, `"30m"` |
 | `archiveRetention` | How long to keep historical data | `"30d"`, `"1y"`, `"6M"` |
 | `purgeInterval` | How often to run cleanup | `"1h"`, `"6h"`, `"24h"` |
 | `payloadFormat` | Message encoding: `DEFAULT` (recommended) or `JSON` | `DEFAULT` |
@@ -70,10 +71,10 @@ If omitted, the system uses `DEFAULT`.
 ### Database Storage
 
 **PostgreSQL**
-- Best for production environments
+- Persistent relational storage
 - SQL queries and analytics
 - ACID compliance and reliability
-- Excellent performance for time-series data
+- Historical queries and aggregations
 
 **CrateDB**
 - Optimized for time-series and analytics
@@ -84,14 +85,14 @@ If omitted, the system uses `DEFAULT`.
 **MongoDB**
 - NoSQL document-based storage
 - Flexible schema for varying message formats
-- Good performance for high-volume inserts
+- Document-oriented message storage
 - Built-in sharding and replication
 
 **SQLite**
-- Perfect for development and testing
+- Embedded persistence for standalone/edge deployments
 - Single-file database
 - No network overhead
-- Cannot be used in cluster mode
+- Local storage; not shared across cluster nodes
 
 ### Memory Storage
 
@@ -107,13 +108,13 @@ If omitted, the system uses `DEFAULT`.
 - Automatic replication and failover
 - Good for cluster-wide current values
 
-### Streaming Storage
+### QuestDB and Kafka
 
-**Kafka**
-- Stream messages to Kafka topics
-- Archive group name becomes Kafka topic
-- Custom binary serialization format
-- Perfect for real-time analytics
+`QUESTDB` is supported for historical archives using a configured database
+connection. It is not a session, queue, or retained-store type. `KAFKA` and
+`MEMORY` are not valid historical archive types. Use the [Kafka client
+bridge](kafka.md) to forward MQTT messages to Kafka; the old Kafka archive store
+has been removed.
 
 ## Retention Policies
 
@@ -129,52 +130,62 @@ Retention periods support flexible time units:
 | `d` | Days | `1d`, `7d`, `30d` |
 | `w` | Weeks | `1w`, `2w`, `4w` |
 | `M` | Months | `1M`, `3M`, `6M` |
-| `y` | Years | `1y`, `2y`, `5y` |
+| `y` | Years (365 days) | `1y`, `2y`, `5y` |
+
+Months use 30 days. For `MEMORY` last-value stores, use size-based retention such
+as `50k` (50,000 topic entries), or omit it. Time-based retention such as `1h` is
+rejected for `MEMORY`. Persistent last-value stores support time-based retention.
 
 ### Example Configurations
 
 **High-Volume IoT Sensors**
 ```graphql
 mutation {
-  createArchiveGroup(input: {
-    name: "HighVolumeSensors"
-    topicFilter: ["sensors/+/raw"]
-    lastValRetention: "1h"      # Current readings for 1 hour
-    archiveRetention: "7d"      # History for 1 week
-    purgeInterval: "15m"        # Clean up every 15 minutes
-    lastValType: MEMORY         # Fast access
-    archiveType: POSTGRES       # Reliable storage
-  }) { success }
+  archiveGroup {
+    create(input: {
+      name: "HighVolumeSensors"
+      topicFilter: ["sensors/+/raw"]
+      lastValRetention: "50k"     # Bound the MEMORY cache to 50,000 topics
+      archiveRetention: "7d"      # History for 1 week
+      purgeInterval: "15m"        # Clean up every 15 minutes
+      lastValType: MEMORY         # Fast access
+      archiveType: POSTGRES       # Reliable storage
+    }) { success }
+  }
 }
 ```
 
 **Long-Term Analytics**
 ```graphql
 mutation {
-  createArchiveGroup(input: {
-    name: "Analytics"
-    topicFilter: ["metrics/#", "events/#"]
-    lastValRetention: "30d"     # Current state for 30 days
-    archiveRetention: "2y"      # Keep history for 2 years
-    purgeInterval: "24h"        # Daily cleanup
-    lastValType: POSTGRES
-    archiveType: POSTGRES
-  }) { success }
+  archiveGroup {
+    create(input: {
+      name: "Analytics"
+      topicFilter: ["metrics/#", "events/#"]
+      lastValRetention: "30d"     # Current state for 30 days
+      archiveRetention: "2y"      # Keep history for 2 years
+      purgeInterval: "24h"        # Daily cleanup
+      lastValType: POSTGRES
+      archiveType: POSTGRES
+    }) { success }
+  }
 }
 ```
 
 **Development/Testing**
 ```graphql
 mutation {
-  createArchiveGroup(input: {
-    name: "Development"
-    topicFilter: ["test/#", "debug/#"]
-    lastValRetention: "1h"      # Current for 1 hour
-    archiveRetention: "6h"      # History for 6 hours
-    purgeInterval: "30m"        # Clean up every 30 minutes
-    lastValType: MEMORY         # Fast, volatile
-    archiveType: MEMORY         # No persistence needed
-  }) { success }
+  archiveGroup {
+    create(input: {
+      name: "Development"
+      topicFilter: ["test/#", "debug/#"]
+      lastValRetention: "10k"     # Bound the MEMORY cache to 10,000 topics
+      archiveRetention: "6h"      # History for 6 hours
+      purgeInterval: "30m"        # Clean up every 30 minutes
+      lastValType: MEMORY         # Fast, volatile
+      archiveType: SQLITE         # No persistence needed
+    }) { success }
+  }
 }
 ```
 
@@ -185,22 +196,28 @@ mutation {
 ```graphql
 # Enable archive group
 mutation {
-  enableArchiveGroup(name: "ProductionSensors") {
-    success
-    message
-    archiveGroup {
-      name
-      enabled
-      deployed
+  archiveGroup {
+    enable(name: "ProductionSensors") {
+      success
+      message
+      archiveGroup {
+        name
+        enabled
+        deployed
+      }
     }
   }
 }
+```
 
+```graphql
 # Disable archive group
 mutation {
-  disableArchiveGroup(name: "ProductionSensors") {
-    success
-    message
+  archiveGroup {
+    disable(name: "ProductionSensors") {
+      success
+      message
+    }
   }
 }
 ```
@@ -209,20 +226,21 @@ mutation {
 
 ```graphql
 mutation {
-  updateArchiveGroup(
-    name: "ProductionSensors"
-    input: {
-      topicFilter: ["sensors/#", "devices/#", "production/#", "alerts/#"]
-      archiveRetention: "60d"    # Extend retention to 60 days
-      purgeInterval: "2h"        # Change cleanup frequency
-    }
-  ) {
-    success
-    message
-    archiveGroup {
-      name
-      topicFilter
-      archiveRetention
+  archiveGroup {
+    update(input: {
+        name: "ProductionSensors"
+        topicFilter: ["sensors/#", "devices/#", "production/#", "alerts/#"]
+        archiveRetention: "60d"    # Extend retention to 60 days
+        purgeInterval: "2h"        # Change cleanup frequency
+      }
+    ) {
+      success
+      message
+      archiveGroup {
+        name
+        topicFilter
+        archiveRetention
+      }
     }
   }
 }
@@ -247,7 +265,9 @@ query {
     updatedAt
   }
 }
+```
 
+```graphql
 # Get specific archive group
 query {
   archiveGroup(name: "ProductionSensors") {
@@ -263,92 +283,34 @@ query {
 
 ```graphql
 mutation {
-  deleteArchiveGroup(name: "ProductionSensors") {
-    success
-    message
+  archiveGroup {
+    delete(name: "ProductionSensors") {
+      success
+      message
+    }
   }
 }
 ```
 
-**⚠️ Warning:** Deleting an archive group also drops all associated database tables/collections and their data.
+Disable the group and wait until `deployed` is false before deleting it. The
+current delete resolver removes configuration and explicitly skips storage
+cleanup. Existing tables/collections are not dropped automatically.
 
 ## Storage Lifecycle Management
 
-### Automatic Table Creation
+Stores create their required tables, collections, and indexes when deployed.
+Schema and payload columns differ by backend and payload format; use the store
+implementation instead of generic hand-written DDL. Enabling or disabling a
+group updates message routing without restarting the broker.
 
-When an archive group is enabled, MonsterMQ automatically creates database tables:
-
-**PostgreSQL**
-```sql
--- Current values table
-CREATE TABLE productionsensorslastval (
-    topic VARCHAR PRIMARY KEY,
-    time TIMESTAMPTZ NOT NULL,
-    payload_b64 VARCHAR,
-    qos INTEGER,
-    is_retained BOOLEAN,
-    client_id VARCHAR
-);
-
--- Historical archive table
-CREATE TABLE productionsensorsarchive (
-    message_uuid VARCHAR PRIMARY KEY,
-    topic VARCHAR NOT NULL,
-    time TIMESTAMPTZ NOT NULL,
-    payload_b64 VARCHAR,
-    qos INTEGER,
-    is_retained BOOLEAN,
-    client_id VARCHAR
-);
-
--- Create indexes for performance
-CREATE INDEX idx_archive_topic_time ON productionsensorsarchive(topic, time);
-CREATE INDEX idx_archive_time ON productionsensorsarchive(time);
-```
-
-**MongoDB**
-```javascript
-// Collections are created automatically
-db.createCollection("productionsensorslastval");
-db.createCollection("productionsensorsarchive");
-
-// Create indexes
-db.productionsensorsarchive.createIndex({"topic": 1, "time": 1});
-db.productionsensorsarchive.createIndex({"time": 1});
-```
-
-### Automatic Storage Cleanup
-
-When an archive group is deleted, all associated storage is automatically cleaned up:
-
-```sql
--- PostgreSQL
-DROP TABLE IF EXISTS productionsensorslastval CASCADE;
-DROP TABLE IF EXISTS productionsensorsarchive CASCADE;
-
--- MongoDB
-db.productionsensorslastval.drop();
-db.productionsensorsarchive.drop();
-```
-
-## Real-Time Message Routing
-
-Archive groups automatically start/stop message routing when enabled/disabled:
-
-```kotlin
-// When archive group is enabled
-archiveHandler.registerArchiveGroup(archiveGroup)
-messageHandler.registerArchiveGroup(archiveGroup)
-
-// When archive group is disabled
-messageHandler.unregisterArchiveGroup(archiveGroupName)
-```
-
-**Benefits:**
-- No broker restart required
-- Zero downtime for existing connections
-- Instant message routing updates
-- Automatic cleanup when disabled
+Groups can select a saved database connection through `databaseConnectionName`.
+Manage connections with `archiveGroup.createDatabaseConnection`,
+`updateDatabaseConnection`, and `deleteDatabaseConnection`. Buffering settings
+include `queueType`, `queueSize`, `bulkSize`, `bulkTimeoutMs`, and `queueDiskPath`.
+`lastValReadOnly` and `archiveReadOnly` support access to existing data without
+normal writes. See the current
+[mutation input definitions](../broker/src/main/resources/schema-mutations.graphqls)
+for the complete fields.
 
 ## Bulk Import Configuration
 
@@ -361,10 +323,10 @@ These two arguments cannot be used together.
 
 ```bash
 # Full sync: import archive groups, delete any not in the file
-./run.sh -archiveConfigs archive-setup.json
+./run.sh -- -archiveConfigs archive-setup.json
 
 # Merge: import/update archive groups, keep existing ones
-./run.sh -archiveConfigsMerge archive-setup.json
+./run.sh -- -archiveConfigsMerge archive-setup.json
 ```
 
 **archive-setup.json example:**
@@ -387,7 +349,7 @@ These two arguments cannot be used together.
     "TopicFilter": ["debug/+", "test/#"],
     "LastValType": "MEMORY",
     "ArchiveType": "POSTGRES",
-    "LastValRetention": "1h",
+    "LastValRetention": "10k",
     "ArchiveRetention": "24h",
     "PurgeInterval": "30m"
   }
@@ -404,9 +366,10 @@ The exported JSON uses the same format as the import files and can be used direc
 
 ### Database Requirements
 
-- **Clustering requires central database** (PostgreSQL, CrateDB, or MongoDB)
-- **SQLite cannot be used** in cluster mode
-- **All nodes must connect** to the same database instance
+- Use shared PostgreSQL or MongoDB for cluster session, queue, and configuration stores.
+- Archive data can use a different supported backend, including CrateDB or QuestDB.
+- SQLite files are local and do not provide shared cluster state.
+- Nodes serving the same archive group must reach the same data.
 
 ### Distributed Purging
 
@@ -414,13 +377,14 @@ In cluster deployments, purging is coordinated across nodes:
 
 - **Distributed locks** prevent duplicate cleanup operations
 - **Only one node** per archive group performs purging
-- **Lock timeout** prevents deadlocks (30 seconds)
+- Lock acquisition is bounded; a node skips a purge when another node holds the lock
 - **Automatic coordination** requires no manual intervention
 
 ### Example Cluster Configuration
 
 ```yaml
 # All cluster nodes use same configuration
+DefaultStoreType: POSTGRES
 SessionStoreType: POSTGRES
 RetainedStoreType: HAZELCAST
 ConfigStoreType: POSTGRES
@@ -438,7 +402,7 @@ Postgres:
 1. **Use appropriate backends:**
    - Memory/Hazelcast for high-frequency current values
    - PostgreSQL/MongoDB for reliable historical storage
-   - Kafka for real-time streaming and analytics
+   - Kafka client bridge for forwarding publications to Kafka
 
 2. **Set realistic retention:**
    - Balance storage costs with data requirements
@@ -461,7 +425,7 @@ CREATE INDEX idx_lastval_topic ON lastval_table(topic);
 ```
 
 2. **Topic filter specificity:**
-```graphql
+```text
 # Good - specific patterns
 topicFilter: ["sensors/temperature/#", "devices/+/status"]
 
@@ -470,7 +434,7 @@ topicFilter: ["#"]  # Archives ALL messages
 ```
 
 3. **Retention tuning:**
-```graphql
+```text
 # High-volume: shorter retention, frequent cleanup
 lastValRetention: "1h"
 archiveRetention: "7d"
@@ -486,17 +450,10 @@ purgeInterval: "24h"
 
 ### Log Monitoring
 
-Monitor purge operations:
-```bash
-# Successful operations
-tail -f log/monstermq.log | grep "Purge completed"
-
-# Cluster coordination
-tail -f log/monstermq.log | grep "purge lock"
-
-# Error conditions
-tail -f log/monstermq.log | grep "Failed to.*purge"
-```
+Inspect the broker console, container logs, or configured service log capture for
+`Purge completed`, `purge lock`, and purge errors. Use `-log FINE` temporarily if
+more detail is needed. The default logger writes to the console, not a fixed
+`log/monstermq.log` file. See [System logs](graphql-system-logs.md).
 
 ### Performance Metrics
 
@@ -528,4 +485,4 @@ Key metrics to monitor:
 - **[Configuration Reference](configuration.md)** - Archive group parameters
 - **[Database Setup](databases.md)** - Backend-specific configuration
 - **[GraphQL API](graphql.md)** - Management API documentation
-- **[Performance](performance.md)** - Optimization and monitoring
+- **[Monitoring](monitoring.md)** - Optimization and monitoring

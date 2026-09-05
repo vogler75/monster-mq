@@ -1,89 +1,53 @@
 # Kafka Integration
 
-MonsterMQ offers a minimal Kafka integration that lets you:
-- replace the internal Vert.x event bus with a single Kafka topic for inter-node communication
-- push archive-group traffic into Kafka topics for downstream processing
+MonsterMQ provides three Kafka interfaces: an optional Kafka message bus, managed
+Kafka client bridges, and a Kafka-compatible server. They have separate purposes
+and configuration.
 
-Kafka support is intentionally simple. There is no automatic topic provisioning, no SASL/SSL support, and no advanced producer or consumer configuration beyond what is hard-coded in the implementation.
-
-## Configuration
-
-### Global Kafka settings
-
-Set the broker connection string once. The same value is reused by the message bus and every Kafka archive store.
+## Kafka Message Bus
 
 ```yaml
 Kafka:
   Servers: "localhost:9092"
   Bus:
     Enabled: true
-    Topic: "monster"   # Kafka topic used as message bus when enabled
+    Topic: "monster"
+  Config:
+    acks: "all"
+    # Native Kafka client properties, including security.protocol/SASL/SSL
 ```
 
-`Servers` must point to a reachable Kafka bootstrap server list. When `Bus.Enabled` is `false` the broker falls back to the in-memory Vert.x bus.
+The bus sends `BrokerMessageCodec` binary records with the MQTT topic as the Kafka
+key. `Kafka.Config` is merged into producer and consumer properties by
+[KafkaConfigBuilder.kt](../broker/src/main/kotlin/bus/KafkaConfigBuilder.kt).
+Defaults include producer `acks=1`, `retries=3`, consumer group `Monster`,
+`auto.offset.reset=earliest`, and automatic commits. Preserve serializers and
+deserializers compatible with the broker's binary codec.
 
-### Kafka as Message Bus
+Provision the bus topic in Kafka with the partitions and replication required by
+your deployment. MonsterMQ does not manage that topic's lifecycle. Kafka bus and
+Zenoh federation are mutually exclusive. With neither enabled, the broker uses
+the Vert.x message bus.
 
-When `Bus.Enabled` is `true`, MonsterMQ deploys `MessageBusKafka` (`broker/src/main/kotlin/bus/MessageBusKafka.kt`).
-- Producer properties are fixed to `acks=1`, string keys, and byte-array values.
-- Consumer properties use group id `Monster`, `auto.offset.reset=earliest`, and automatic commits.
-- No TLS/SASL configuration hooks exist; the integration expects a PLAINTEXT Kafka endpoint.
+## Kafka Archive Migration
 
-### Kafka Archive Groups
-
-Archive groups can target Kafka by selecting the `KAFKA` store type. The archive name becomes the Kafka topic name (e.g. an archive group called `Telemetry` produces records on `TelemetryArchive`).
-
-```yaml
-ArchiveGroups:
-  - Name: Telemetry
-    Filter: "sensors/+"
-    Enabled: true
-    Store: KAFKA
-```
-
-Internally `MessageArchiveKafka` (`broker/src/main/kotlin/stores/others/MessageArchiveKafka.kt`) writes every message with the MQTT topic as the Kafka record key and a payload encoded according to the configured `payloadFormat` (default: `BrokerMessageCodec` binary format).
-
-There is no configuration field to override the topic name, partition count, or replication factor from MonsterMQ.
-
-## Topic Management
-
-MonsterMQ never creates Kafka topics. Ensure the required topics exist before enabling the integration:
-
-```bash
-kafka-topics.sh --create \
-  --bootstrap-server localhost:9092 \
-  --topic monster \
-  --partitions 3 \
-  --replication-factor 1
-
-kafka-topics.sh --create \
-  --bootstrap-server localhost:9092 \
-  --topic TelemetryArchive \
-  --partitions 3 \
-  --replication-factor 1
-```
-
-Choose partition and replication settings that match your Kafka cluster—MonsterMQ neither validates nor adjusts them.
-
-## Record Format
-
-Both the message bus and archive producer send the same structure:
-- Record key: the original MQTT topic name (`message.topicName`).
-- Record value: the `BrokerMessage` encoded by `BrokerMessageCodec`, which contains the message UUID, MQTT message-id, QoS/flags, client id, event timestamp, and the raw MQTT payload bytes.
-
-Downstream consumers must decode this binary format using the same codec or a compatible implementation.
+`KAFKA` is no longer an `ArchiveType`. The old `MessageArchiveKafka` implementation
+has been removed. To forward selected MQTT publications to an external Kafka
+topic, configure outbound mappings on a Kafka client bridge. For Kafka consumers
+reading broker-managed streams, use the Kafka-compatible server below.
 
 ## Kafka Client Bridge
 
-MonsterMQ now exposes per-client runtime metrics via GraphQL. See the new section "Kafka Client Metrics" below for details.
-
-MonsterMQ provides a unidirectional Kafka Client bridge device that subscribes to a single Kafka topic and republishes records as MQTT messages.
+MonsterMQ provides a bidirectional Kafka client bridge. Inbound consumption is enabled by default; outbound publishing can be enabled independently. `Features.Kafka` enables the extension.
 
 Key characteristics:
-- Topic Selection: The Kafka topic name is always the device Namespace value.
-- Simplicity: No per-device override of the Kafka topic name; create one device per topic.
+- Inbound topic selection: The consumer subscribes to the device namespace.
+- Create separate devices for different inbound Kafka topics; outbound publishing can use `outboundKafkaTopic`.
 - Consumer Group: Configurable `groupId` (defaults to `monstermq-subscriber`).
-- Extra Config: Optional JSON map of raw Kafka consumer properties (string values only) merged over defaults.
+- Extra Config: `extraConsumerConfig` and `extraProducerConfig` override native Kafka client properties, including security settings.
+- Inbound controls: `inboundEnabled`, `destinationTopicPrefix`, `topicKeyRegex`, and `topicKeyReplacement`.
+- Outbound controls: `outboundEnabled`, `outboundTopicFilters`, `outboundKafkaTopic`, `outboundTopicKeyRegex`, and `outboundTopicKeyReplacement`. The outbound Kafka topic defaults to the device namespace.
+- The bridge consumer defaults to automatic commits and `auto.offset.reset=latest`. Override through `extraConsumerConfig` if replay from earlier offsets is intended.
 
 ### Payload Formats
 
@@ -95,7 +59,7 @@ The `payloadFormat` setting controls how Kafka record values are interpreted and
 - **Payload**: Decoded via `BrokerMessageCodec.decodeFromWire()`
 - **Metadata**: Fully preserved (QoS, retain, dup, clientId, timestamp, etc.)
 - **Fallback**: If binary decoding fails, automatically attempts JSON parsing before dropping the message
-- **Use case**: Consuming messages produced by another MonsterMQ instance via `MessageArchiveKafka` (lossless round-trip)
+- **Use case**: Consuming binary `BrokerMessage` envelopes produced by a MonsterMQ bridge
 
 #### JSON
 - **Deserializer**: `StringDeserializer`
@@ -179,10 +143,12 @@ Query examples:
     metrics { messagesIn messagesOut timestamp }
   }
 }
+```
 
+```graphql
 # Retrieve the most recent 15 minutes of metrics for a single client
 {
-  kafkaClient(name: "MyKafkaClient") {
+  kafkaClients(name: "MyKafkaClient") {
     name
     metricsHistory(lastMinutes: 15) { messagesIn messagesOut timestamp }
   }
@@ -202,7 +168,7 @@ Behavior & Semantics:
 Operational Notes:
 - No backfill: History starts only after the client first produces metrics.
 - Clock Source: Timestamps use the broker node system clock in ISO-8601 UTC.
-- Aggregation: An aggregate across all Kafka clients (sum of messagesIn/messagesOut) is planned for BrokerMetrics but currently not exposed; consumers can sum client samples client-side.
+- Broker metrics expose `kafkaClientIn` and `kafkaClientOut`.
 - Rates vs Counts: Cumulative counts are not stored; only per-second rates. To approximate counts over a period, integrate (sum rate * interval duration) across successive samples client-side.
 
 Troubleshooting Metrics:
@@ -211,16 +177,29 @@ Troubleshooting Metrics:
 3. Spiky rates: Aggregate samples client-side to smooth out rate fluctuations.
 4. Missing history: Ensure a supported metrics store is configured; otherwise only the live single-sample endpoint is available.
 
-## Limitations
+## Kafka-Compatible Server
 
-- PLAINTEXT Kafka only (no SASL, SCRAM, or TLS).
-- Single topic for the message bus, configured via `Kafka.Bus.Topic`.
-- Archive topics are derived from the archive group name and cannot be customised.
-- No consumer-side lag tracking or offset management utilities are exposed.
-- Producer retries are minimal (`acks=1`, `retries=3` in the archive store) and should be tuned at the Kafka cluster level if stricter guarantees are needed.
+`Features.KafkaServer` enables the managed server extension. Create a server
+through `kafkaServer.add`, supplying a name, namespace, node ID, port, and stream
+mappings. Each stream has a `streamName`, MQTT `topicFilter`, retention period,
+optional store type, and `allowWrite` flag. Configure advertised host/port values
+that Kafka clients can reach.
+
+The API exposes `kafkaServers`, `kafkaServer(name:)`, `kafkaMessages`,
+`kafkaTopicOffsets`, and `kafkaConsumerGroups`. See
+[schema-kafka-servers.graphqls](../broker/src/main/resources/schema-kafka-servers.graphqls)
+for inputs and returned fields. This is a compatibility server backed by broker
+storage, not an external Kafka cluster installation.
 
 ## Troubleshooting
 
-1. **Connection failures** – verify `Kafka.Servers` addresses, firewall rules, and that the target topic already exists.
-2. **Missing records** – confirm the archive group or message bus is enabled, check broker logs for `Kafka` warnings, and review Kafka broker logs for rejected writes.
-3. **Incompatible payloads** – ensure downstream consumers decode messages with `BrokerMessageCodec` when using DEFAULT format; use JSON format for easier interoperability.
+Check which interface is involved first: bus, client bridge, or server. For an
+external Kafka connection, verify bootstrap addresses, credentials/security
+properties, topic existence, and consumer group offsets. For a client bridge,
+check `inboundEnabled`/`outboundEnabled`, mapping filters, and payload format.
+TEXT/BINARY inbound records need a Kafka key; DEFAULT/JSON records need a valid
+BrokerMessage envelope.
+
+Use the device metrics and broker logs to distinguish idle clients, filtered or
+dropped records, and connection failures. A bridge assigned to a failed node
+requires node recovery or explicit reassignment.

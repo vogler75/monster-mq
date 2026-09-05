@@ -1,333 +1,114 @@
-# MCP Server
+# MCP server
 
-MonsterMQ includes a Model Context Protocol (MCP) server that enables AI models to interact with MQTT data. The MCP server provides tools for querying archived messages, retrieving current values, and analyzing IoT data patterns.
+MonsterMQ exposes MQTT discovery, reads, publishing, and archive queries through
+MCP JSON-RPC over HTTP. The implementation is in
+[`McpServer.kt`](../broker/src/main/kotlin/extensions/McpServer.kt) and
+[`McpHandler.kt`](../broker/src/main/kotlin/extensions/McpHandler.kt).
 
-## Overview
-
-The MCP (Model Context Protocol) server allows AI assistants like Claude to:
-- **Query Historical Data** - Access archived MQTT messages
-- **Get Current Values** - Retrieve latest values for topics
-- **Analyze Patterns** - Identify trends and anomalies in IoT data
-- **Generate Insights** - Provide real-time analytics and predictions
-
-## Quick Start
-
-### Enable MCP Server
+## Configuration
 
 ```yaml
-# config.yaml
 MCP:
   Enabled: true
   Port: 3000
 
-# Required: Must have an archive group named "Default"
+# Needed for non-retained current values and historical queries in this example.
 ArchiveGroups:
   - Name: Default
-    Filter: "#"  # Archive all topics
-    Enabled: true
+    TopicFilter: ["sensors/#"]
+    LastValType: MEMORY
+    LastValRetention: "50k"
+    ArchiveType: SQLITE
+    ArchiveRetention: "7d"
 ```
 
-### Connect with Claude Desktop
+An archive group named `Default` is not a startup requirement. It is the default
+selection for archive-aware tools when `archiveGroup` is omitted. Select another
+name explicitly, or create `Default` with the stores needed by your tools. The
+SQLite archive uses the broker's SQLite directory; see [Archiving](archiving.md).
 
-MonsterMQ's MCP server uses HTTP transport (Streamable HTTP). Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "monstermq": {
-      "type": "url",
-      "url": "http://localhost:3000/mcp"
-    }
-  }
-}
-```
-
-### Direct MCP Connection
-
-The MCP server endpoint is available at `http://<host>:<port>/mcp`:
-
-- **POST /mcp** - Send JSON-RPC 2.0 requests and receive responses
-- **GET /mcp** - Server-Sent Events (SSE) stream for real-time updates
+Configure an MCP client that supports HTTP with URL `http://localhost:3000/mcp`.
+Client-specific setup differs; do not configure this URL as a local stdio command.
+`POST /mcp` accepts JSON-RPC requests and returns JSON responses; notifications
+receive HTTP 202. `GET /mcp` opens an SSE connection with endpoint and heartbeat
+events. Tool results from POST requests are returned in the HTTP response.
 
 ```bash
-# Example: Send initialize request
-curl -X POST http://localhost:3000/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"example","version":"1.0"}}}'
+
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
 ```
 
-## Authentication
+## Authentication and access scope
 
-When user management is enabled in MonsterMQ, the MCP server requires authentication using JWT Bearer tokens. These are the same tokens used by the GraphQL API.
-
-### Obtaining a Token
-
-Use the GraphQL login mutation to obtain a JWT token:
+With user management enabled, use a GraphQL or REST login token in
+`Authorization: Bearer <token>` on each request. Tokens expire after 24 hours.
+The MCP handler also accepts requests without a Bearer token when the broker's
+Anonymous account is enabled; disable that account when authentication is required.
+With user management disabled, MCP does not require authentication.
 
 ```bash
-curl -X POST http://localhost:8080/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query":"mutation { login(username: \"admin\", password: \"your-password\") { success token message } }"}'
+curl -s http://localhost:4000/graphql \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"mutation { login(username: \"Admin\", password: \"replace-with-your-password\") { success token message } }"}'
 ```
 
-Response:
-```json
-{
-  "data": {
-    "login": {
-      "success": true,
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "message": "Login successful"
-    }
-  }
-}
-```
+The current MCP server authenticates the HTTP request, but does not pass a user
+permission context into individual tools. Its data tools and `set-topic-value`
+therefore do not enforce per-user MQTT topic ACLs. Limit MCP access to callers
+trusted for the exposed data and publishing operations; MQTT ACLs alone do not
+isolate MCP callers. See [Security](security.md) for the other broker interfaces.
 
-### Using the Token
+## Tools
 
-Include the token in the `Authorization` header for all MCP requests:
+Call `tools/list` for complete parameter schemas. The current tool set is:
+
+| Tool | Required arguments | Optional arguments and behavior |
+|---|---|---|
+| `list-archive-groups` | None | Lists deployed groups and store capabilities. |
+| `find-topics-by-name` | `name` | `ignoreCase` (true), `namespace`, `archiveGroup`, `limit` (10000, capped at 10000). Searches retained and selected last-value stores; use wildcard patterns such as `*temperature*`. |
+| `find-topics-by-description` | `description` | `ignoreCase` (true), `namespace`. Searches retained configuration descriptions. The accepted `archiveGroup` argument currently does not change this search. |
+| `get-topic-value` | `topics` (array) | `archiveGroup`. Retained values take precedence over the selected group's last-value store. |
+| `set-topic-value` | `topic`, `payload` (string) | `qos` (0), `retained` (false). Publishes into the broker as the internal `mcp-server` client. |
+| `query-message-archive` | `topic` | `startTime`, `endTime`, `lastSeconds`, `limit`, `archiveGroup`. `lastSeconds` overrides explicit boundaries; the handler's default limit is 1000, although the tool description still says 100. Specify a limit explicitly. |
+| `query-message-archive-by-sql` | `sql` | `archiveGroup`. Requires an archive backend supporting SQL; use that backend's dialect and actual table names. |
+| `query-message-archive-aggregated` | `topics`, `interval` | Also provide `lastSeconds` or both `startTime` and `endTime`. Additional arguments include `fields`, `functions`, `archiveGroup`; availability depends on the selected archive backend. |
+
+Historical times use ISO 8601 instants, for example `2026-09-01T00:00:00Z`.
+Use `list-archive-groups` before choosing an archive backend; a last-value store
+alone cannot answer historical queries.
 
 ```bash
-curl -X POST http://localhost:3000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}'
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <token>' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get-topic-value","arguments":{"topics":["sensors/temperature"],"archiveGroup":"Default"}}}'
 ```
 
-### Claude Desktop with Authentication
+## Topic descriptions
 
-When user management is enabled, configure Claude Desktop with authentication headers:
-
-```json
-{
-  "mcpServers": {
-    "monstermq": {
-      "type": "url",
-      "url": "http://localhost:3000/mcp",
-      "headers": {
-        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-      }
-    }
-  }
-}
-```
-
-> **Note:** JWT tokens expire after 24 hours. You'll need to obtain a new token and update the configuration when the token expires.
-
-### Authentication Disabled
-
-If user management is disabled in MonsterMQ (`UserManagement.Enabled: false` in config), the MCP server allows unauthenticated access.
-
-## Architecture
-
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  AI Model   │────▶│  MCP Server  │────▶│  MonsterMQ  │
-│  (Claude)   │     │  Port 3000   │     │   Broker    │
-└─────────────┘     └──────────────┘     └──────┬──────┘
-                                                 │
-                                          ┌──────┴──────┐
-                                          │   Archive   │
-                                          │  Database   │
-                                          └─────────────┘
-```
-
-## MCP Tools
-
-The MCP server exposes the following tools to AI models:
-
-### 1. find-topics-by-name
-
-Search for topics using name patterns with wildcard support.
-
-```typescript
-interface FindTopicsByNameParams {
-  name: string;            // Name pattern to search for
-  ignoreCase?: boolean;    // Case insensitive search (default: true)
-  namespace?: string;      // Optional topic prefix filter
-}
-
-// Example usage by AI
-{
-  "tool": "find-topics-by-name",
-  "params": {
-    "name": "*temperature*",
-    "ignoreCase": true,
-    "namespace": "sensors"
-  }
-}
-```
-
-### 2. find-topics-by-description
-
-Search for topics by matching their description text using regex patterns.
-
-```typescript
-interface FindTopicsByDescriptionParams {
-  description: string;     // Regex pattern for description search
-  ignoreCase?: boolean;    // Case insensitive search (default: true)
-  namespace?: string;      // Optional topic prefix filter
-}
-
-// Example usage by AI
-{
-  "tool": "find-topics-by-description",
-  "params": {
-    "description": ".*temperature.*sensor.*",
-    "ignoreCase": true
-  }
-}
-```
-
-### 3. get-topic-value
-
-Get current/recent values for one or more MQTT topics.
-
-```typescript
-interface GetTopicValueParams {
-  topics: string[];        // Array of exact topic names
-}
-
-// Example usage by AI
-{
-  "tool": "get-topic-value",
-  "params": {
-    "topics": ["sensors/temperature/room1", "sensors/humidity/room1"]
-  }
-}
-```
-
-### 4. query-message-archive
-
-Query historical MQTT messages for a specific topic within a time range.
-
-```typescript
-interface QueryMessageArchiveParams {
-  topic: string;           // Exact topic name
-  startTime?: string;      // ISO 8601 timestamp
-  endTime?: string;        // ISO 8601 timestamp
-  limit?: number;          // Max messages (default: 100)
-}
-
-// Example usage by AI
-{
-  "tool": "query-message-archive",
-  "params": {
-    "topic": "sensors/temperature",
-    "startTime": "2024-01-01T00:00:00Z",
-    "endTime": "2024-01-01T12:00:00Z",
-    "limit": 1000
-  }
-}
-```
-
-### 5. query-message-archive-by-sql
-
-Execute PostgreSQL queries against historical MQTT data for advanced analysis.
-
-```typescript
-interface QueryMessageArchiveBySqlParams {
-  sql: string;             // PostgreSQL query string
-}
-
-// Example usage by AI
-{
-  "tool": "query-message-archive-by-sql",
-  "params": {
-    "sql": "SELECT date_trunc('hour', time) as hour, AVG((payload_json->>'temperature')::numeric) as avg_temp FROM defaultarchive WHERE topic = 'sensors/temp' AND time >= NOW() - INTERVAL '24 hours' GROUP BY hour ORDER BY hour"
-  }
-}
-```
-
-## Topic Configuration and Metadata
-
-### MCP Config Topic
-
-MonsterMQ uses a special configuration topic suffix `<config>` to store metadata and descriptions for MQTT topics. This enables AI models to better understand the purpose and context of data streams.
-
-#### How It Works
-
-For any MQTT topic, you can publish a configuration message to `{topic}/<config>` containing metadata:
+Publish retained JSON metadata to `{topic}/<config>` to make descriptions available
+to discovery tools. Use the exact key `Description`: description search requests
+that key from the retained store. Other keys can provide context but do not add
+new server-side search filters.
 
 ```bash
-# Publish configuration for a temperature sensor
-mosquitto_pub -t "sensors/temperature/room1/<config>" -m '{
-  "description": "Temperature sensor in conference room 1",
+mosquitto_pub -h localhost -r -t 'sensors/temperature/<config>' -m '{
+  "Description": "Temperature sensor in conference room 1",
   "unit": "°C",
-  "type": "temperature",
-  "location": "Conference Room 1",
-  "range": {"min": 15, "max": 35}
-}'
-
-# Publish configuration for a humidity sensor
-mosquitto_pub -t "sensors/humidity/office/<config>" -m '{
-  "description": "Humidity monitoring for office environment",
-  "unit": "%RH",
-  "type": "humidity",
-  "location": "Main Office",
-  "critical_threshold": 80
+  "location": "Conference Room 1"
 }'
 ```
 
-#### Configuration Format
-
-The configuration message should be valid JSON and can contain any metadata fields:
-
-```json
-{
-  "description": "Human-readable description of the topic",
-  "unit": "Measurement unit (°C, %RH, ppm, etc.)",
-  "type": "Data type or sensor category",
-  "location": "Physical location description",
-  "range": {"min": 0, "max": 100},
-  "thresholds": {
-    "warning": 75,
-    "critical": 90
-  },
-  "tags": ["sensor", "environmental", "critical"],
-  "owner": "maintenance-team",
-  "installation_date": "2024-01-15"
-}
-```
-
-#### MCP Integration
-
-The MCP server uses these configuration topics to provide richer context to AI models:
-
-1. **Enhanced Topic Discovery**: The `find-topics-by-description` tool searches through these configuration descriptions
-2. **Contextual Information**: AI models receive topic metadata alongside data values
-3. **Smart Filtering**: Configuration allows filtering by location, type, or other attributes
-
-#### Best Practices
-
-- **Use Descriptive Names**: Include clear, human-readable descriptions
-- **Standardize Units**: Use consistent unit formats (°C, %RH, ppm)
-- **Include Context**: Add location, installation date, and ownership information
-- **Set Thresholds**: Define warning and critical thresholds for monitoring
-- **Use Tags**: Add searchable tags for categorization
-
-#### Example: Environmental Monitoring Setup
-
-```bash
-# Temperature sensors
-mosquitto_pub -t "building/floor1/room101/temperature/<config>" -m '{
-  "description": "Temperature sensor for server room environmental monitoring",
-  "unit": "°C",
-  "type": "temperature",
-  "location": "Server Room 101, Floor 1",
-  "critical_max": 25,
-  "tags": ["environmental", "server-room", "critical"]
-}'
-
-# Humidity sensors
-mosquitto_pub -t "building/floor1/room101/humidity/<config>" -m '{
-  "description": "Humidity sensor for server room environmental monitoring",
-  "unit": "%RH",
-  "type": "humidity",
-  "location": "Server Room 101, Floor 1",
-  "critical_max": 60,
-  "tags": ["environmental", "server-room", "critical"]
-}'
-```
-
-This allows AI models to understand that these are critical environmental sensors in a server room and respond appropriately to threshold violations.
+Add MQTT credentials when user management requires them. The retained backend must
+support extended searches for description discovery. A tool response may contain
+Markdown tables in MCP text content rather than structured JSON rows.

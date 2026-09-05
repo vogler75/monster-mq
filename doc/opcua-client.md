@@ -6,19 +6,20 @@ MonsterMQ's OPC UA client extension (`broker/src/main/kotlin/devices/opcua`) mai
 
 Use the following mutations and queries (registered in `GraphQLServer.kt`) to manage client devices:
 
-- `addOpcUaDevice(input: OpcUaDeviceInput!)` – create a new device and deploy its connector on the assigned node.
-- `updateOpcUaDevice(name: String!, input: OpcUaDeviceInput!)` – replace the stored configuration; the connector is redeployed with the new settings.
-- `deleteOpcUaDevice(name: String!)` – remove the device and tear down its connector.
-- `toggleOpcUaDevice(name: String!, enabled: Boolean!)` – enable or disable an existing device without deleting it.
-- `reassignOpcUaDevice(name: String!, nodeId: String!)` – move the device to a different cluster node.
-- `addOpcUaAddress(deviceName: String!, input: OpcUaAddressInput!)` / `deleteOpcUaAddress(deviceName: String!, address: String!)` – manage static subscriptions on a device.
-- Queries: `opcUaDevices`, `opcUaDevice`, `opcUaDevicesByNode`, and `clusterNodes` expose stored configurations (connection status is not currently tracked).
+- `opcUaDevice.add(input: OpcUaDeviceInput!)` – create a new device and deploy its connector on the assigned node.
+- `opcUaDevice.update(name: String!, input: OpcUaDeviceInput!)` – replace the stored configuration; the connector is redeployed with the new settings.
+- `opcUaDevice.delete(name: String!)` – remove the device and tear down its connector.
+- `opcUaDevice.toggle(name: String!, enabled: Boolean!)` – enable or disable an existing device without deleting it.
+- `opcUaDevice.reassign(name: String!, nodeId: String!)` – move the device to a different cluster node.
+- `opcUaDevice.addAddress(deviceName: String!, input: OpcUaAddressInput!)` / `opcUaDevice.deleteAddress(deviceName: String!, address: String!)` – manage static subscriptions on a device.
+- Queries: `opcUaDevices(name:, node:)` and `clusterNodes` expose stored configurations (connection status is not currently tracked).
 
 ### Example – add a device
 
 ```graphql
 mutation {
-  addOpcUaDevice(input: {
+  opcUaDevice {
+  add(input: {
     name: "plc01"
     namespace: "opcua/factory/plc01"
     nodeId: "node-a"
@@ -29,19 +30,6 @@ mutation {
       subscriptionSamplingInterval: 1000.0
       keepAliveFailuresAllowed: 3
       reconnectDelay: 5000
-      addresses: [
-        {
-          address: "NodeId://ns=2;i=1001"
-          topic: "temperature"
-          publishMode: SEPARATE
-        },
-        {
-          address: "BrowsePath://Objects/Factory/Line1/#"
-          topic: "production"
-          publishMode: SEPARATE
-          removePath: true
-        }
-      ]
       certificateConfig: {
         securityDir: "security"
         applicationName: "MonsterMQ@factory"
@@ -55,6 +43,34 @@ mutation {
   }) {
     success
     errors
+  }
+  }
+}
+```
+
+Create address mappings separately after the device exists:
+
+```graphql
+mutation AddTemperature {
+  opcUaDevice {
+    addAddress(deviceName: "plc01", input: {
+      address: "NodeId://ns=2;i=1001"
+      topic: "temperature"
+      publishMode: SEPARATE
+    }) { success errors }
+  }
+}
+```
+
+```graphql
+mutation AddProduction {
+  opcUaDevice {
+    addAddress(deviceName: "plc01", input: {
+      address: "BrowsePath://Objects/Factory/Line1/#"
+      topic: "production"
+      publishMode: SEPARATE
+      removePath: true
+    }) { success errors }
   }
 }
 ```
@@ -74,7 +90,7 @@ mutation {
 | Field | Default | Description |
 | ----- | ------- | ----------- |
 | `endpointUrl` | — | OPC UA endpoint URL, must start with `opc.tcp://`. |
-| `updateEndpointUrl` | `true` | Automatically switch to the endpoint returned by the server if it differs from the configured URL. |
+| `updateEndpointUrl` | `true` | Rewrite the discovered endpoint host/port using the configured URL (useful behind NAT or a proxy). |
 | `securityPolicy` | `None` | Accepted values: `None`, `Basic128Rsa15`, `Basic256`, `Basic256Sha256`, `Aes128_Sha256_RsaOaep`, `Aes256_Sha256_RsaPss`. Certificates are only loaded when the policy is not `None`. |
 | `username` / `password` | `null` | Optional user credentials. When omitted the connector uses anonymous authentication. |
 | `subscriptionSamplingInterval` | `0.0` | Requested sampling interval (ms) passed to the OPC UA subscription. |
@@ -110,7 +126,11 @@ Every address must use the explicit scheme:
 - `SEPARATE` (default) publishes values to `Namespace/Topic/[Path]`. For browse paths with wildcards, `removePath: true` removes the static prefix before distributing the wildcard tail.
 - `SINGLE` publishes each value to the same `Namespace/Topic` without aggregating multiple values; the last write wins on that topic.
 
-NodeId subscriptions ignore `removePath` and always publish to `Namespace/Topic`.
+NodeId subscriptions ignore `removePath` and publish to `Namespace/Topic`.
+
+Addresses also support `publishRaw` (publish the raw value as text) and `writable`
+(allow writes through the mapped MQTT topic); both default to false. Use the
+current GraphQL input schema for these fields.
 
 ## MQTT Topics and Payload
 
@@ -136,7 +156,7 @@ The connector supports writing values to OPC UA server nodes and reading values 
 
 Add a `writeConfig` block to the device's `config`:
 
-```graphql
+```text
 config: {
   endpointUrl: "opc.tcp://192.168.1.100:4840"
   # ... other settings ...
@@ -186,7 +206,7 @@ Publish:  opcua/factory/plc01/request/ns=2;i=1001
 Payload:  {"value": 42.5}
 
 Response: opcua/factory/plc01/response/ns=2;i=1001
-Payload:  {"nodeId": "ns=2;i=1001", "status": "Good", "statusCode": 0, "timestamp": "2025-01-15T10:30:00Z"}
+Payload:  {"nodeId": "ns=2;i=1001", "status": 0, "timestamp": "2025-01-15T10:30:00Z"}
 ```
 
 ### Request/Response Read
@@ -198,7 +218,7 @@ Publish:  opcua/factory/plc01/request/ns=2;i=1001
 Payload:  {}
 
 Response: opcua/factory/plc01/response/ns=2;i=1001
-Payload:  {"nodeId": "ns=2;i=1001", "value": 42.5, "status": "Good", "statusCode": 0, "timestamp": "2025-01-15T10:30:00Z"}
+Payload:  {"nodeId": "ns=2;i=1001", "value": 42.5, "status": 0, "timestamp": "2025-01-15T10:30:00Z"}
 ```
 
 ### Batch Requests
@@ -215,9 +235,9 @@ Payload:  [
 
 Response: opcua/factory/plc01/response
 Payload:  [
-            {"nodeId": "ns=2;i=1001", "value": 23.1, "status": "Good", "statusCode": 0, "timestamp": "..."},
-            {"nodeId": "ns=2;i=1002", "status": "Good", "statusCode": 0, "timestamp": "..."},
-            {"nodeId": "ns=2;i=1003", "status": "Good", "statusCode": 0, "timestamp": "..."}
+            {"nodeId": "ns=2;i=1001", "value": 23.1, "status": 0, "timestamp": "..."},
+            {"nodeId": "ns=2;i=1002", "status": 0, "timestamp": "..."},
+            {"nodeId": "ns=2;i=1003", "status": 0, "timestamp": "..."}
           ]
 ```
 
