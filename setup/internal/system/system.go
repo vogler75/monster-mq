@@ -54,6 +54,20 @@ func Detect() Info {
 		info.DefaultDir = filepath.Join(home, "monstermq")
 	}
 
+	// Check if running from within an existing installation directory
+	if exePath, err := os.Executable(); err == nil {
+		if evalPath, err := filepath.EvalSymlinks(exePath); err == nil {
+			exeDir := filepath.Dir(evalPath)
+			if _, err := os.Stat(filepath.Join(exeDir, "config.yaml")); err == nil {
+				info.DefaultDir = exeDir
+			}
+		}
+	} else if cwd, err := os.Getwd(); err == nil {
+		if _, err := os.Stat(filepath.Join(cwd, "config.yaml")); err == nil {
+			info.DefaultDir = cwd
+		}
+	}
+
 	// Java 21+ inspection
 	info.CheckJava()
 
@@ -232,42 +246,68 @@ func getJavaInstallHelp(osName string) []string {
 	}
 }
 
-// ValidateInstallDir checks whether the given path can be written to.
-func ValidateInstallDir(path string) (bool, string, error) {
+// DirValidationResult contains the validation status and any existing configuration.
+type DirValidationResult struct {
+	Valid     bool   `json:"valid"`
+	AbsPath   string `json:"absPath"`
+	HasConfig bool   `json:"hasConfig"`
+	RawConfig string `json:"rawConfig,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// ValidateInstallDir checks whether the given path can be written to and checks for an existing config.yaml.
+func ValidateInstallDir(path string) DirValidationResult {
 	if strings.TrimSpace(path) == "" {
-		return false, "", fmt.Errorf("path cannot be empty")
+		return DirValidationResult{Valid: false, Error: "path cannot be empty"}
 	}
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return false, "", fmt.Errorf("invalid path: %w", err)
+		return DirValidationResult{Valid: false, Error: fmt.Sprintf("invalid path: %v", err)}
 	}
 
 	// Check if already exists
 	stat, err := os.Stat(absPath)
 	if err == nil {
 		if !stat.IsDir() {
-			return false, absPath, fmt.Errorf("target path is an existing file, not a directory")
+			return DirValidationResult{Valid: false, AbsPath: absPath, Error: "target path is an existing file, not a directory"}
 		}
 		// Test write permission
 		testFile := filepath.Join(absPath, ".tmp_monstermq_write_test")
 		if err := os.WriteFile(testFile, []byte("ok"), 0644); err != nil {
-			return false, absPath, fmt.Errorf("directory is not writable: %w", err)
+			return DirValidationResult{Valid: false, AbsPath: absPath, Error: fmt.Sprintf("directory is not writable: %v", err)}
 		}
 		_ = os.Remove(testFile)
-		return true, absPath, nil
+
+		hasConfig := false
+		var rawConfig string
+		configPath := filepath.Join(absPath, "config.yaml")
+		if content, err := os.ReadFile(configPath); err == nil {
+			hasConfig = true
+			rawConfig = string(content)
+		}
+
+		return DirValidationResult{
+			Valid:     true,
+			AbsPath:   absPath,
+			HasConfig: hasConfig,
+			RawConfig: rawConfig,
+		}
 	}
 
 	// Try creating parent / directory
 	if err := os.MkdirAll(absPath, 0755); err != nil {
-		return false, absPath, fmt.Errorf("unable to create directory: %w", err)
+		return DirValidationResult{Valid: false, AbsPath: absPath, Error: fmt.Sprintf("unable to create directory: %v", err)}
 	}
 
 	testFile := filepath.Join(absPath, ".tmp_monstermq_write_test")
 	if err := os.WriteFile(testFile, []byte("ok"), 0644); err != nil {
-		return false, absPath, fmt.Errorf("directory is not writable: %w", err)
+		return DirValidationResult{Valid: false, AbsPath: absPath, Error: fmt.Sprintf("directory is not writable: %v", err)}
 	}
 	_ = os.Remove(testFile)
 
-	return true, absPath, nil
+	return DirValidationResult{
+		Valid:   true,
+		AbsPath: absPath,
+	}
 }

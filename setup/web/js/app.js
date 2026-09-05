@@ -261,8 +261,24 @@ async function validateDirectory(dirPath) {
     });
     const data = await res.json();
     if (data.valid) {
-      statusHint.textContent = `✓ Target folder ready: ${data.absPath}`;
-      statusHint.className = 'field-hint success';
+      if (data.hasConfig && data.rawConfig) {
+        statusHint.textContent = `✓ Existing MonsterMQ installation found at ${data.absPath} (config.yaml loaded)`;
+        statusHint.className = 'field-hint success';
+        try {
+          const parsed = parseYamlToObject(data.rawConfig);
+          if (parsed && typeof parsed === 'object') {
+            state.config = parsed;
+            state.existingConfigLoaded = true;
+            state.rawExistingConfig = data.rawConfig;
+            updatePresetsForExistingConfig();
+          }
+        } catch (e) {
+          console.warn('Could not parse existing config.yaml:', e);
+        }
+      } else {
+        statusHint.textContent = `✓ Target folder ready: ${data.absPath}`;
+        statusHint.className = 'field-hint success';
+      }
       return true;
     } else {
       statusHint.textContent = `Error: ${data.error || 'Cannot write to target directory'}`;
@@ -273,6 +289,45 @@ async function validateDirectory(dirPath) {
     statusHint.textContent = 'Error validating path.';
     statusHint.className = 'field-hint error';
     return false;
+  }
+}
+
+function updatePresetsForExistingConfig() {
+  const presetsBar = document.querySelector('.presets-bar');
+  if (!presetsBar) return;
+  let existingChip = document.getElementById('chip-existing-config');
+  if (!existingChip) {
+    existingChip = document.createElement('button');
+    existingChip.id = 'chip-existing-config';
+    existingChip.className = 'preset-chip active';
+    existingChip.type = 'button';
+    existingChip.dataset.preset = 'existing';
+    existingChip.textContent = 'Current (Existing)';
+    existingChip.addEventListener('click', () => {
+      document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+      existingChip.classList.add('active');
+      if (state.rawExistingConfig) {
+        state.config = parseYamlToObject(state.rawExistingConfig);
+        if (state.viewMode === 'form') {
+          renderActiveCategory();
+        } else {
+          document.getElementById('raw-yaml-input').value = dumpObjectToYaml(state.config);
+        }
+      }
+    });
+    const label = presetsBar.querySelector('.preset-label');
+    if (label && label.nextSibling) {
+      presetsBar.insertBefore(existingChip, label.nextSibling);
+    } else {
+      presetsBar.appendChild(existingChip);
+    }
+  }
+  document.querySelectorAll('.preset-chip').forEach(c => c.classList.remove('active'));
+  existingChip.classList.add('active');
+  if (state.viewMode === 'form') {
+    renderActiveCategory();
+  } else {
+    document.getElementById('raw-yaml-input').value = dumpObjectToYaml(state.config);
   }
 }
 
@@ -371,7 +426,7 @@ function goToStep(stepNumber) {
     btnExit.classList.add('hidden');
   } else if (stepNumber === 3) {
     btnPrev.classList.remove('hidden');
-    btnNext.textContent = 'Install Now';
+    btnNext.textContent = state.existingConfigLoaded ? 'Update & Run' : 'Install Now';
     btnNext.classList.remove('hidden');
     btnExit.classList.add('hidden');
   } else if (stepNumber === 4) {

@@ -90,15 +90,7 @@ func (s *Server) handleValidateDir(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, absPath, err := system.ValidateInstallDir(req.Path)
-	res := map[string]interface{}{
-		"valid":   valid,
-		"absPath": absPath,
-	}
-	if err != nil {
-		res["error"] = err.Error()
-	}
-
+	res := system.ValidateInstallDir(req.Path)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(res)
 }

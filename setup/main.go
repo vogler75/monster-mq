@@ -169,10 +169,18 @@ func runCLIMode(targetDir, version string, unattended bool) {
 
 	fmt.Printf("Selected: %s (Zip: %s)\n", chosenRel.Name, chosenRel.BrokerZip.Name)
 
+	var rawConfig string
+	existingConfigPath := filepath.Join(absDir, "config.yaml")
+	if cfgData, err := os.ReadFile(existingConfigPath); err == nil {
+		fmt.Printf("Found existing configuration at %s (preserving settings)\n", existingConfigPath)
+		rawConfig = string(cfgData)
+	}
+
 	opts := install.Options{
 		TargetDir:   absDir,
 		DownloadURL: chosenRel.BrokerZip.DownloadURL,
 		Version:     chosenRel.TagName,
+		RawConfig:   rawConfig,
 		SchemaJSON:  embeddedSchemaJSON,
 	}
 

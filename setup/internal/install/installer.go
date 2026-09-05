@@ -115,6 +115,12 @@ func Perform(opts Options, progress ProgressCallback) (*Result, error) {
 	progress("finalize", 96, "Finalizing installation and scripts...")
 	runScript := setupRunScripts(absTarget, jarFile)
 
+	// 8. Copy setup executable to target directory
+	progress("finalize", 98, "Installing setup tool in target directory...")
+	if err := copySetupExecutable(absTarget); err != nil {
+		fmt.Printf("Warning: Could not copy setup tool to %s: %v\n", absTarget, err)
+	}
+
 	progress("complete", 100, "Installation completed successfully!")
 
 	// Determine endpoints
@@ -318,6 +324,57 @@ java -classpath "%JAR_FILE%;dependencies/*" at.rocworks.MonsterKt %*
 		return runBat
 	}
 	return runSh
+}
+
+// copySetupExecutable copies the currently executing setup binary to destDir as setup (or setup.exe on Windows).
+func copySetupExecutable(destDir string) error {
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	realExePath, err := filepath.EvalSymlinks(exePath)
+	if err == nil {
+		exePath = realExePath
+	}
+
+	exeName := "setup"
+	if runtime.GOOS == "windows" {
+		exeName = "setup.exe"
+	}
+	destPath := filepath.Join(destDir, exeName)
+
+	if exePath == destPath {
+		return nil
+	}
+
+	srcStat, err := os.Stat(exePath)
+	if err != nil {
+		return err
+	}
+	if destStat, err := os.Stat(destPath); err == nil {
+		if os.SameFile(srcStat, destStat) {
+			return nil
+		}
+	}
+
+	srcFile, err := os.Open(exePath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return err
+	}
+
+	_ = os.Chmod(destPath, 0755)
+	return nil
 }
 
 // BrokerProcess represents a running MonsterMQ instance managed by the setup tool.
