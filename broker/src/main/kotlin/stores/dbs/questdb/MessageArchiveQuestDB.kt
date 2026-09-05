@@ -246,8 +246,9 @@ class MessageArchiveQuestDB(
             val startMs = System.currentTimeMillis()
             db.connection?.let { connection ->
                 val tsCol = getTimestampColumn(connection)
-                val sql = StringBuilder("SELECT topic, $tsCol, payload_b64, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic = ?")
-                val params = mutableListOf<Any>(topic)
+                val sql = StringBuilder("SELECT topic, $tsCol, payload_b64, payload_json, qos, retained, client_id, message_uuid FROM $tableName WHERE topic LIKE ?")
+                val topicPattern = topic.replace("#", "%").replace("+", "%")
+                val params = mutableListOf<Any>(topicPattern)
 
                 if (startTime != null) {
                     sql.append(" AND $tsCol >= ?")
