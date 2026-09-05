@@ -4,21 +4,16 @@ The MonsterMQ GraphQL API provides a real-time subscription for streaming system
 
 ## Overview
 
-The `systemLogs` subscription allows you to monitor broker logs in real-time via GraphQL WebSocket subscriptions. Logs are published to internal MQTT topics under `$SYS/syslogs/<node>/<level>` and can be filtered on the server side to reduce network traffic.
+The `systemLogs` subscription allows you to monitor broker logs in real-time via GraphQL WebSocket subscriptions. Logs arrive on a dedicated internal event-bus address and are filtered on the server side. MQTT log publishing is no longer used.
 
 ## Subscription Query
 
 ```graphql
-subscription {
-  systemLogs(
-    node: String = "+"
-    level: String = "+"
-    logger: String
-    thread: Long
-    sourceClass: String
-    sourceMethod: String
-    message: String
-  ) {
+subscription Logs($node: String = "+", $levels: [String!], $logger: String,
+                  $thread: Long, $sourceClass: String, $sourceMethod: String,
+                  $message: String) {
+  systemLogs(node: $node, level: $levels, logger: $logger, thread: $thread,
+             sourceClass: $sourceClass, sourceMethod: $sourceMethod, message: $message) {
     timestamp
     level
     logger
@@ -28,23 +23,19 @@ subscription {
     sourceClass
     sourceMethod
     parameters
-    exception {
-      class
-      message
-      stackTrace
-    }
+    exception { class message stackTrace }
   }
 }
 ```
 
 ## Filter Parameters
 
-### Topic-Level Filters
+### Node and Level Filters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `node` | String | `"+"` | Node identifier (use `+` for all nodes, or specific node ID) |
-| `level` | String | `"+"` | Log level (use `+` for all levels, or `INFO`, `WARNING`, `SEVERE`) |
+| `level` | [String!] | all levels | Log level (use `+` for all levels, or `INFO`, `WARNING`, `SEVERE`) |
 
 ### Field Filters
 
@@ -103,7 +94,7 @@ Monitor only warnings and severe errors:
 
 ```graphql
 subscription {
-  systemLogs(level: "WARNING") {
+  systemLogs(level: ["WARNING", "SEVERE"]) {
     timestamp
     level
     message
@@ -222,22 +213,21 @@ subscription {
 
 ## Configuration Requirements
 
-To enable MQTT logging (which feeds the GraphQL subscription):
+Enable system-wide capture and the bounded log buffer explicitly:
 
 ```yaml
-MonsterMQ:
-  # ... other config ...
-  Mqtt:
+Logging:
+  Memory:
     Enabled: true
-    LogLevel: INFO  # or WARNING, SEVERE
+    Entries: 1000
 ```
 
-See [MQTT Logging](mqtt-logging.md) for more details on MQTT logging configuration.
+Logger levels determine which records are generated. The buffer is in-memory and does not survive restarts.
 
 ## Technical Details
 
-- **Transport**: GraphQL subscriptions use WebSocket protocol
-- **Message Format**: Logs are published to the internal event bus (`mq.cluster.bc`) and forwarded to subscribed GraphQL clients
+- **Transport**: GraphQL subscriptions use `graphql-transport-ws` at `/graphql` by default. See [GraphQL authentication limits](graphql.md#subscriptions) before exposing the WebSocket endpoint.
+- **Message Format**: Logs are published to the dedicated internal syslog event-bus address and forwarded to subscribed GraphQL clients
 - **Filtering**: Server-side filtering reduces network traffic by only sending matching log entries
 - **Regex Performance**: Regex patterns are compiled once when the subscription is created
 - **Backpressure**: Uses reactive streams with request/cancel support for flow control

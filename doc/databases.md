@@ -4,7 +4,7 @@ MonsterMQ supports several backends for sessions, retained messages, archive gro
 
 ## Choosing Store Types
 
-At start-up MonsterMQ determines which implementation to use for each logical store (`broker/src/main/kotlin/Monster.kt:721-812`). You can either set individual store types or rely on `DefaultStoreType` as a fallback.
+At start-up MonsterMQ determines which implementation to use for each logical store (`broker/src/main/kotlin/Monster.kt`). You can either set individual store types or rely on `DefaultStoreType` as a fallback.
 
 ```yaml
 # Optional global default (used whenever a specific type is not supplied)
@@ -16,11 +16,11 @@ RetainedStoreType: SQLITE
 ConfigStoreType: POSTGRES
 ```
 
-Valid values are `POSTGRES`, `CRATEDB`, `MONGODB`, `SQLITE`, `MEMORY`, `HAZELCAST`, and `NONE` depending on the store. Pick only the types supported by the component you are configuring (e.g. `SessionStoreType` does not accept `MEMORY`).
+Valid values are `POSTGRES`, `CRATEDB`, `MONGODB`, `SQLITE`, `MEMORY`, `HAZELCAST`, and `NONE` depending on the store. Pick only the types supported by the component you are configuring (e.g. `SessionStoreType` accepts `POSTGRES`, `MONGODB`, `SQLITE`, and `MEMORY`; it does not accept `CRATEDB`).
 
 ## Backend Sections
 
-For each backend provide the minimal set of properties below. The broker does not read pooling, shard, or SSL tuning parameters—configure those on the database server itself.
+For each backend provide the minimal set of properties below. Connection properties are backend-specific. JDBC URL options can also affect client connection behavior; do not assume arbitrary YAML pool or SSL keys are parsed.
 
 ### PostgreSQL
 
@@ -43,8 +43,8 @@ By default, all PostgreSQL objects are created in the `public` schema. You can o
 **Features:**
 - The specified schema is **automatically created** if it doesn't exist
 - Schema is applied to all PostgreSQL stores (sessions, messages, archives, metrics, users)
-- Uses PostgreSQL's native `SET search_path` for clean, efficient schema switching
-- **100% backward compatible** - Existing configs without `Schema` parameter work unchanged
+- Uses `SET search_path` on connections managed by these stores
+- Omit `Schema` to retain the default schema behavior
 
 **Example - Multi-environment setup:**
 
@@ -56,7 +56,11 @@ Postgres:
   Pass: manager
   Schema: prod_mqtt_broker
 
-# Staging environment (same database, different schema)
+```
+
+Use a separate configuration for staging:
+
+```yaml
 Postgres:
   Url: jdbc:postgresql://db.example.com:5432/monstermq
   User: system
@@ -64,7 +68,7 @@ Postgres:
   Schema: staging_mqtt_broker
 ```
 
-The JDBC URL is passed straight to the Vert.x SQL client. All message/metrics/user stores create their tables automatically (`broker/src/main/kotlin/stores/dbs/postgres/MessageStorePostgres.kt:16-88`).
+PostgreSQL stores manage JDBC connections internally. Message, metrics, and user stores create their tables automatically (`broker/src/main/kotlin/stores/dbs/postgres/MessageStorePostgres.kt`).
 
 ### CrateDB
 
@@ -83,39 +87,78 @@ CrateDB uses the PostgreSQL protocol; the URL format matches the standard JDBC c
 MongoDB:
   Url: mongodb://system:manager@mongo-host:27017
   Database: monstermq
+  ReadTimeoutMs: 60000  # Cursor read timeout
 ```
 
-Only the connection string and database name are consumed (`broker/src/main/kotlin/stores/dbs/mongodb/MessageStoreMongoDB.kt:17-26`, `UserFactory` for user storage).
+The connection string, database name, and optional read timeout are consumed (`broker/src/main/kotlin/stores/dbs/mongodb/MessageStoreMongoDB.kt`, `UserFactory` for user storage).
 
 ### SQLite
 
 ```yaml
 SQLite:
   Path: "./data"
+  EnableWAL: true
 ```
 
-`Path` must point to an existing writable directory. The broker creates `monstermq.db` (and per-archive files) inside that directory and validates the path on start (`broker/src/main/kotlin/Monster.kt:792-812`).
+`Path` names a writable directory, which the broker creates if missing. The broker creates `monstermq.db` (and per-archive files) inside that directory and validates the path on start (`broker/src/main/kotlin/Monster.kt`).
 
-### Kafka (Archive Only)
+### QuestDB (historical archives)
 
-Kafka is configured separately under the `Kafka` section. See `doc/kafka.md` for details. The database stores never pull additional settings from that section.
+```yaml
+QuestDB:
+  Url: "ws::addr=questdb:9000;"
+  User: admin
+  Pass: replace-with-your-password
+```
+
+Select `ArchiveType: QUESTDB` in an archive group. Ingestion uses the QuestDB client
+connection string; reads use PGWire on port 8812 for that host. A JDBC URL can be
+supplied instead; the broker then derives ingestion on port 9000. The URL parser
+is in `MessageArchiveQuestDB.parseQuestDbUrls()`. Credentials for an authenticated
+ingestion endpoint must also be included in its connection string as required by
+the QuestDB client; the separate `User`/`Pass` fields feed the JDBC connection.
+QuestDB is not a session, queue, or last-value store.
+
+### Saved database connections
+
+Archive groups can select a saved database connection through
+`databaseConnectionName` instead of the global backend section. Manage these
+through the dashboard or the `archiveGroup` GraphQL mutation group (`createDatabaseConnection`,
+`updateDatabaseConnection`, `deleteDatabaseConnection`); consult
+[`schema-mutations.graphqls`](../broker/src/main/resources/schema-mutations.graphqls)
+for supported connection fields. See [Archiving](archiving.md) for group selection.
+
+Kafka integration is a message bus/bridge/server feature, not a current historical
+archive backend; see [Kafka](kafka.md).
 
 ## Metrics Store
 
-The metrics collector reuses the same backend configuration and defaults as other stores. When enabled (`Metrics.Enabled = true`) the broker either auto-detects a backend with available configuration or honours `MetricsStore.Type` if present (`broker/src/main/kotlin/stores/factories/MetricsStoreFactory.kt:23-62`).
+The running broker defaults to `StoreType`, then `DefaultStoreType`, then
+`SQLITE`. An explicit persistent metrics store must match this broker store type;
+`MEMORY` and `NONE` can be selected independently.
 
 ```yaml
 Metrics:
   Enabled: true
-  CollectionInterval: 5   # seconds (optional)
-
-# Optional explicit store override
-MetricsStore:
-  Type: POSTGRES
+  CollectionIntervalSeconds: 10
+  RetentionHours: 24
+  MaxHistoryRows: 3600
+  StoreType: MEMORY
 ```
+
+`MetricsStore.Type` is a legacy alias for `Metrics.StoreType`;
+`CollectionInterval` is a legacy alias for `CollectionIntervalSeconds`.
 
 ## Recap
 
-- Only the keys listed above are read; properties such as `MaxPoolSize`, `ReplicationFactor`, or retention/partition settings are ignored by the current implementation.
-- Schema creation, indices, and connection pooling are handled internally by each Vert.x store class. Adjust database-level performance settings directly on your database server.
-- When using SQLite, create the target directory up front and ensure the broker has write permissions.
+- Arbitrary connection-pool or replication keys are not generic broker settings. Configure database-server behavior in the database, and archive retention on the archive group.
+- Schema creation, indices, and connection management are handled internally by each store implementation. Adjust database-level performance settings directly on your database server.
+- When using SQLite, ensure the broker can create and write its target directory.
+
+## Queue Storage
+
+`QueueStoreType` accepts `POSTGRES`, `MONGODB`, or `SQLITE`. If omitted, it
+follows `DefaultStoreType`, then a non-memory `SessionStoreType`, then `SQLITE`.
+Set it explicitly when a global default is unsuitable for queues. Current queue
+stores use the V2 single-table implementation. A `MEMORY` session store uses an
+in-memory SQLite database; it does not make the separate queue store volatile.

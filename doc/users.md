@@ -1,645 +1,169 @@
-# User Management & ACL System
+# User Management
 
-MonsterMQ includes a comprehensive user authentication and authorization system with fine-grained control over MQTT client access and topic permissions.
+MonsterMQ stores users and ACL rules in PostgreSQL, SQLite, CrateDB, or MongoDB.
+Use this guide for account administration and [ACL rules](acl.md) for topic
+permissions. User management is disabled in the starter configuration.
 
-## Overview
-
-The user management system provides:
-- **Multi-database user storage** - PostgreSQL, SQLite, CrateDB, MongoDB support
-- **BCrypt password security** - Industry-standard password hashing
-- **Fine-grained ACL rules** - Topic-level permissions with MQTT wildcards
-- **Anonymous user support** - Configurable unauthenticated access
-- **GraphQL API** - Complete user and ACL management interface
-
-## Quick Start
-
-### Enable User Management
-
-Add to your `config.yaml`:
+## Enable Authentication
 
 ```yaml
+DefaultStoreType: SQLITE
+SQLite:
+  Path: ./sqlite
 UserManagement:
   Enabled: true
-  StoreType: POSTGRES           # POSTGRES, SQLITE, CRATEDB, MONGODB
-  PasswordAlgorithm: bcrypt      # Industry-standard hashing
-  CacheRefreshInterval: 60       # Seconds between cache updates
-  DisconnectOnUnauthorized: true # Disconnect on ACL violations
-  AclCheckOnSubscription: true   # true=check at subscribe time, false=check at delivery time
-
-# Database configuration
-Postgres:
-  Url: jdbc:postgresql://localhost:5432/monster
-  User: system
-  Pass: manager
-
-# GraphQL API for management
+  StoreType: SQLITE
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60
+  DisconnectOnUnauthorized: true
+  AclCheckOnSubscription: true
 GraphQL:
   Enabled: true
   Port: 4000
 ```
 
-### Default Admin User
+Database connection settings belong in the top-level `Postgres`, `CrateDB`,
+`MongoDB`, or `SQLite` block, not inside `UserManagement`. When its `StoreType` is
+omitted, user storage follows `StoreType`, then `DefaultStoreType`, then `SQLITE`.
+See [Databases](databases.md).
 
-⚠️ **Important:** MonsterMQ automatically creates a default admin user on first startup:
+On initialization the broker ensures the `Admin` and `Anonymous` accounts exist.
+The initial administrator credentials are `Admin` / `Admin`; change the password
+before exposing the broker. `Anonymous` starts enabled with both global topic
+permissions disabled.
 
-- **Username:** `Admin`
-- **Password:** `Admin`
+## Authenticate to GraphQL
 
-**Change this password immediately for security!**
+Send requests to `http://localhost:4000/graphql`:
 
 ```graphql
-mutation {
-  setPassword(input: {
-    username: "Admin"
-    password: "NewSecurePassword123!"
-  }) {
+mutation Login {
+  login(username: "Admin", password: "Admin") {
     success
-    message
+    token
+    isAdmin
   }
 }
 ```
 
-## Permission Model
+Supply the returned token as `Authorization: Bearer <token>` on subsequent
+requests. User and ACL mutations are nested under `user`; the old root-level
+`createUser`, `setPassword`, and ACL mutations are no longer available.
 
-### Hierarchy
-
-MonsterMQ uses a hierarchical permission system:
-
-1. **Admin Override** - Admin users bypass all ACL checks
-2. **Global Permissions** - User-level `canSubscribe`/`canPublish` settings
-3. **ACL Rules** - Topic-specific permissions with wildcards
-4. **Anonymous Access** - Configurable anonymous user permissions
-
-### Permission Resolution
-
-When a client attempts to publish or subscribe:
-
-```
-Is Admin User? → Allow
-     ↓ No
-Has Global Permission? → Check ACL Rules
-     ↓ No                    ↓
-     Deny              Matches ACL Rule? → Allow/Deny based on rule
-                            ↓ No
-                      Anonymous Allowed? → Allow/Deny
-```
-
-### ACL Check Timing
-
-By default (`AclCheckOnSubscription: true`), ACL rules are checked when a client subscribes. This means wildcard subscriptions like `#` are rejected unless an ACL rule explicitly covers the filter.
-
-Setting `AclCheckOnSubscription: false` enables Mosquitto-compatible behavior: wildcard subscriptions are accepted, and ACL is checked at **delivery time** per message. Clients only receive messages on topics their ACL rules allow. Exact (non-wildcard) subscriptions are still checked at subscribe time.
-
-See [Configuration > ACL Check Mode](configuration.md#acl-check-mode) for details and examples.
-
-## ACL Rules
-
-### MQTT Topic Wildcards
-
-ACL rules support full MQTT wildcard syntax:
-
-| Wildcard | Description | Example | Matches |
-|----------|-------------|---------|---------|
-| `+` | Single-level wildcard | `sensors/+/temp` | `sensors/room1/temp`, `sensors/room2/temp` |
-| `#` | Multi-level wildcard | `sensors/#` | `sensors/temp`, `sensors/room1/temp`, `sensors/room1/device1/temp` |
-| Combined | Both wildcards | `+/+/status/#` | `building/floor1/status`, `building/floor1/status/device1` |
-
-### ACL Rule Priority
-
-Rules are evaluated by priority (lower number = higher priority):
+## Change a Password
 
 ```graphql
-# Priority 1 - Specific override
-topicPattern: "sensors/room1/temp", priority: 1
-
-# Priority 10 - General department access
-topicPattern: "sensors/#", priority: 10
-
-# Priority 100 - Fallback rule
-topicPattern: "#", priority: 100
-```
-
-## GraphQL User Management API
-
-### API Endpoint
-
-- **URL:** `http://localhost:4000/graphql`
-- **Playground:** Access the same URL in a browser for interactive GraphQL playground
-
-### User Operations
-
-#### Create User
-
-```graphql
-mutation {
-  createUser(input: {
-    username: "sensor_device"
-    password: "secure_password_123"
-    canSubscribe: false
-    canPublish: true
-    isAdmin: false
-    enabled: true
-  }) {
-    success
-    message
-    user {
-      username
-      enabled
-      canSubscribe
-      canPublish
-      isAdmin
+mutation ChangePassword {
+  user {
+    setPassword(input: {username: "Admin", password: "ReplaceWithYourOwnSecret123!"}) {
+      success
+      message
     }
   }
 }
 ```
 
-#### Update User
+The password encoder uses BCrypt with a fixed cost of 12. There is no YAML work
+factor setting. Password hashes are not returned by the users query. For a
+migration from another broker, provision new passwords through the API; there is
+no documented password-hash import endpoint.
+
+## Create and Update Accounts
+
+This account may publish; its ACL rules will restrict the allowed topics:
 
 ```graphql
-mutation {
-  updateUser(
-    username: "sensor_device"
-    input: {
-      canSubscribe: true
-      canPublish: true
+mutation CreateSensor {
+  user {
+    createUser(input: {
+      username: "sensor_001"
+      password: "ReplaceWithYourOwnSecret123!"
       enabled: true
-    }
-  ) {
-    success
-    message
-    user {
-      username
-      canSubscribe
-      canPublish
-    }
-  }
-}
-```
-
-#### Delete User
-
-```graphql
-mutation {
-  deleteUser(username: "sensor_device") {
-    success
-    message
-  }
-}
-```
-
-#### Query Users
-
-```graphql
-# Get all users
-query {
-  users {
-    username
-    enabled
-    canSubscribe
-    canPublish
-    isAdmin
-    createdAt
-    updatedAt
-  }
-}
-
-# Get specific user (with ACL rules)
-query {
-  users(username: "sensor_device") {
-    username
-    enabled
-    canSubscribe
-    canPublish
-    isAdmin
-    aclRules {
-      topicPattern
-      canPublish
-      canSubscribe
-      priority
-    }
-  }
-}
-```
-
-### ACL Rule Operations
-
-#### Create ACL Rule
-
-```graphql
-mutation {
-  createAclRule(input: {
-    username: "sensor_device"
-    topicPattern: "sensors/+/data"
-    canPublish: true
-    canSubscribe: false
-    priority: 1
-  }) {
-    success
-    message
-    aclRule {
-      id
-      username
-      topicPattern
-      canPublish
-      canSubscribe
-      priority
-    }
-  }
-}
-```
-
-#### Update ACL Rule
-
-```graphql
-mutation {
-  updateAclRule(
-    id: 123
-    input: {
+      canSubscribe: false
       canPublish: true
-      canSubscribe: true
-      priority: 5
-    }
-  ) {
-    success
-    message
-    aclRule {
-      id
-      canPublish
-      canSubscribe
-      priority
+      isAdmin: false
+    }) {
+      success
+      message
+      user { username enabled canSubscribe canPublish isAdmin }
     }
   }
 }
 ```
 
-#### Delete ACL Rule
+Until an account has ACL rules, each enabled global permission allows all topics
+for that operation. Create accounts disabled if they must not connect before
+rules are installed, then enable them after setup.
 
 ```graphql
-mutation {
-  deleteAclRule(id: 123) {
-    success
-    message
+mutation UpdateSensor {
+  user {
+    updateUser(input: {username: "sensor_001", enabled: true, canPublish: true}) {
+      success
+      message
+      user { username enabled canPublish }
+    }
   }
 }
 ```
 
-#### Query ACL Rules
+`username` belongs inside the update input. It identifies the account and is not
+a rename operation. Change passwords separately with `setPassword`.
 
-Use the `users` query to inspect ACL rules; the current schema does not expose the legacy `getAllAclRules` or `getUserAclRules` fields (`broker/src/main/resources/schema.graphqls:300-356`).
-
-## Real-World Examples
-
-### IoT Sensor Network
-
-Create a sensor network with publish-only devices and subscribe-only dashboards:
+## Inspect Accounts and Rule IDs
 
 ```graphql
-# 1. Create sensor device user
-mutation {
-  createUser(input: {
-    username: "sensor_001"
-    password: "sensor_secret_key"
-    canSubscribe: false
-    canPublish: false  # No global permissions
-  }) { success }
-}
-
-# 2. Allow sensor to publish data
-mutation {
-  createAclRule(input: {
-    username: "sensor_001"
-    topicPattern: "sensors/sensor_001/+"
-    canPublish: true
-    canSubscribe: false
-    priority: 1
-  }) { success }
-}
-
-# 3. Create dashboard user
-mutation {
-  createUser(input: {
-    username: "dashboard"
-    password: "dashboard_secret"
-    canSubscribe: false
-    canPublish: false
-  }) { success }
-}
-
-# 4. Allow dashboard to subscribe to all sensors
-mutation {
-  createAclRule(input: {
-    username: "dashboard"
-    topicPattern: "sensors/#"
-    canPublish: false
-    canSubscribe: true
-    priority: 1
-  }) { success }
-}
-
-# 5. Allow dashboard to send commands
-mutation {
-  createAclRule(input: {
-    username: "dashboard"
-    topicPattern: "commands/+/restart"
-    canPublish: true
-    canSubscribe: false
-    priority: 2
-  }) { success }
-}
-```
-
-### Multi-Tenant System
-
-Isolate tenants with their own namespaces:
-
-```graphql
-# Tenant A configuration
-mutation CreateTenantA {
-  createUser(input: {
-    username: "tenant_a_app"
-    password: "tenant_a_secret"
-  }) { success }
-}
-
-mutation TenantAPermissions {
-  createAclRule(input: {
-    username: "tenant_a_app"
-    topicPattern: "tenant/a/#"
-    canPublish: true
-    canSubscribe: true
-    priority: 1
-  }) { success }
-}
-
-# Tenant B configuration
-mutation CreateTenantB {
-  createUser(input: {
-    username: "tenant_b_app"
-    password: "tenant_b_secret"
-  }) { success }
-}
-
-mutation TenantBPermissions {
-  createAclRule(input: {
-    username: "tenant_b_app"
-    topicPattern: "tenant/b/#"
-    canPublish: true
-    canSubscribe: true
-    priority: 1
-  }) { success }
-}
-
-# Shared read-only topics
-mutation SharedTopics {
-  createAclRule(input: {
-    username: "tenant_a_app"
-    topicPattern: "shared/news/#"
-    canPublish: false
-    canSubscribe: true
-    priority: 10
-  }) { success }
-}
-```
-
-### Department-Based Access
-
-Organize access by department with hierarchical permissions:
-
-```graphql
-# Engineering full access
-mutation EngineeringAdmin {
-  createUser(input: {
-    username: "eng_admin"
-    password: "eng_admin_pass"
-    isAdmin: false
-  }) { success }
-}
-
-mutation EngineeringAccess {
-  createAclRule(input: {
-    username: "eng_admin"
-    topicPattern: "factory/engineering/#"
-    canPublish: true
-    canSubscribe: true
-    priority: 1
-  }) { success }
-}
-
-# Production read-only to engineering
-mutation ProductionReadEngineering {
-  createUser(input: {
-    username: "prod_user"
-    password: "prod_pass"
-  }) { success }
-}
-
-mutation ProductionAccess {
-  createAclRule(input: {
-    username: "prod_user"
-    topicPattern: "factory/engineering/status/+"
-    canPublish: false
-    canSubscribe: true
-    priority: 5
-  }) { success }
-}
-
-# Production full access to their area
-mutation ProductionOwnAccess {
-  createAclRule(input: {
-    username: "prod_user"
-    topicPattern: "factory/production/#"
-    canPublish: true
-    canSubscribe: true
-    priority: 1
-  }) { success }
-}
-```
-
-## Anonymous Access
-
-The anonymous account is always present when user management is enabled. It is created with global permissions disabled (`canSubscribe=false`, `canPublish=false`). Grant access by adding ACL rules for the `Anonymous` username:
-
-```graphql
-mutation {
-  createAclRule(input: {
-    username: "Anonymous"
-    topicPattern: "public/#"
-    canPublish: false
-    canSubscribe: true
-    priority: 100
-  }) { success }
-}
-```
-
-## Security Features
-
-### Password Security
-
-- **BCrypt Hashing** - Industry-standard with configurable work factor
-- **No Plain Text** - Passwords never stored in plain text
-- **Salt Per Password** - Unique salt for each password
-
-### Performance Optimization
-
-- **In-Memory Caching** - ACL rules cached for fast lookup
-- **Tree Structure** - Optimized topic pattern matching
-- **Automatic Refresh** - Cache updates based on `CacheRefreshInterval`
-
-### Audit and Monitoring
-
-The current schema exposes account metadata (created/updated timestamps and ACL rules). Query the `users` field to review this information:
-
-```graphql
-query {
+query InspectSensor {
   users(username: "sensor_001") {
     username
     enabled
+    canSubscribe
+    canPublish
+    isAdmin
     createdAt
     updatedAt
-    aclRules {
-      topicPattern
-      canPublish
-      canSubscribe
-      priority
-    }
+    aclRules { id topicPattern canSubscribe canPublish priority }
   }
 }
 ```
 
-## Database Schema
+Omit `username` to list all users. This administrative query requires admin access
+when authentication is enabled. Use returned ACL IDs for updates and deletion;
+they are strings, not numeric sequence IDs.
 
-### Users Table
-
-```sql
-CREATE TABLE users (
-    username VARCHAR(255) PRIMARY KEY,
-    password_hash VARCHAR(255) NOT NULL,
-    enabled BOOLEAN DEFAULT true,
-    can_subscribe BOOLEAN DEFAULT true,
-    can_publish BOOLEAN DEFAULT true,
-    is_admin BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW(),
-    last_login TIMESTAMP,
-    last_activity TIMESTAMP
-);
-```
-
-### ACL Rules Table
-
-```sql
-CREATE TABLE acl_rules (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(255) REFERENCES users(username) ON DELETE CASCADE,
-    topic_pattern VARCHAR(255) NOT NULL,
-    can_publish BOOLEAN DEFAULT false,
-    can_subscribe BOOLEAN DEFAULT false,
-    priority INTEGER DEFAULT 50,
-    created_at TIMESTAMP DEFAULT NOW(),
-    INDEX idx_username (username),
-    INDEX idx_priority (priority)
-);
-```
-
-## Best Practices
-
-### Security Guidelines
-
-1. **Change Default Admin Password** - Immediately after installation
-2. **Use Strong Passwords** - Enforce minimum complexity
-3. **Principle of Least Privilege** - Grant minimal required permissions
-4. **Regular Audits** - Review user permissions periodically
-5. **Disable Unused Accounts** - Set `enabled: false` instead of deleting
-
-### ACL Design Patterns
-
-1. **Namespace Isolation**
-```
-tenant/a/#  - Tenant A full access
-tenant/b/#  - Tenant B full access
-shared/#    - Shared read-only area
-```
-
-2. **Device-Specific Topics**
-```
-devices/{deviceId}/status  - Device publishes
-devices/{deviceId}/command - Device subscribes
-```
-
-3. **Hierarchical Departments**
-```
-company/engineering/#     - Engineering department
-company/production/#      - Production department
-company/management/reports/# - Management reports
-```
-
-### Performance Tips
-
-1. **Optimize ACL Rules** - Use specific patterns over broad wildcards
-2. **Set Appropriate Cache Interval** - Balance freshness vs. performance
-3. **Index Database** - Ensure proper indexes on username and topic columns
-4. **Monitor Cache Hit Rate** - Adjust cache settings based on usage
-
-## Troubleshooting
-
-### Common Issues
-
-**Authentication Failed**
-- Check username and password
-- Verify user is enabled
-- Check database connectivity
-
-**Authorization Denied**
-- Verify ACL rules with GraphQL query
-- Check rule priority order
-- Ensure wildcards are correct
-
-**Performance Issues**
-- Increase cache refresh interval
-- Add database indexes
-- Optimize ACL rule patterns
-
-### Debug Logging
-
-Enable debug logging for user management:
-
-```bash
-./run.sh -log FINE
-```
-
-Monitor authentication and authorization:
-```bash
-tail -f log/monstermq.log | grep "UserManager"
-tail -f log/monstermq.log | grep "ACL"
-```
-
-## Migration from Other Systems
-
-### From Mosquitto
-
-Convert Mosquitto password file:
-```bash
-# Export from Mosquitto
-mosquitto_passwd -U passwordfile
-
-# Import via GraphQL API
-# Script to parse and create users
-```
-
-### From Other MQTT Brokers
-
-Most MQTT brokers can export user lists. Use the GraphQL API to bulk import:
+## Delete an Account
 
 ```graphql
-mutation BulkImport {
-  user1: createUser(input: {username: "user1", password: "pass1"}) { success }
-  user2: createUser(input: {username: "user2", password: "pass2"}) { success }
-  # ... more users
+mutation DeleteSensor {
+  user {
+    deleteUser(username: "sensor_001") { success message }
+  }
 }
 ```
 
-## Related Documentation
+To temporarily revoke login instead, set `enabled: false` with `updateUser`.
 
-- **[Configuration Reference](configuration.md)** - User management configuration
-- **[GraphQL API](graphql.md)** - Complete API documentation
-- **[Security](security.md)** - Security best practices
-- **[Database Setup](databases.md)** - Database-specific configuration
+## Anonymous Access
+
+A connection without credentials can use the enabled `Anonymous` account.
+Adding ACL rules alone does not enable its global permissions. To grant public
+read access, set `canSubscribe: true` and add a subscribe rule for `public/#`.
+Keep `canPublish: false` if anonymous publications are not intended. Disable the
+account with `user.updateUser(input: {username: "Anonymous", enabled: false})`
+when unauthenticated access is unwanted.
+
+## Operations and Troubleshooting
+
+User and ACL data are cached. Changes trigger cache refreshes, and
+`CacheRefreshInterval` controls periodic refresh. Inspect the actual account and
+rules when diagnosing access failures; do not assume a broad rule overrides a
+disabled global permission.
+
+For authentication failures, check the username, password, enabled state, and
+user-store connectivity. For authorization failures, follow [ACL resolution](acl.md).
+Use the dashboard log viewer or [GraphQL logs](graphql-system-logs.md); a temporary
+`./run.sh -- -log FINE` enables more verbose broker logging.
+
+The broker creates its own database tables and indexes. Their definitions vary
+by backend; use [UserFactory.kt](../broker/src/main/kotlin/stores/UserFactory.kt)
+and the selected store implementation instead of copying generic SQL DDL.

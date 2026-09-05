@@ -26,11 +26,13 @@ The fastest way to get MonsterMQ running:
 
 ```bash
 # Run with default configuration (SQLite)
-docker run -p 1883:1883 -p 3000:3000 rocworks/monstermq:latest
+docker run -p 1883:1883 -p 4000:4000 -v monstermq-data:/cfg-data rocworks/monstermq:latest
 
 # Test MQTT connection
-mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello MonsterMQ"
+# Terminal 1: start the subscriber first
 mosquitto_sub -h localhost -p 1883 -t "test/#"
+# Terminal 2: publish
+mosquitto_pub -h localhost -p 1883 -t "test/topic" -m "Hello MonsterMQ"
 ```
 
 ### Docker Compose with PostgreSQL
@@ -76,6 +78,7 @@ TCPS: 8883
 WS: 9000
 WSS: 9001
 
+DefaultStoreType: POSTGRES
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
 ConfigStoreType: POSTGRES
@@ -97,7 +100,7 @@ GraphQL:
 
 3. **Start services:**
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Build from Source
@@ -112,8 +115,8 @@ docker-compose up -d
 
 ```bash
 # Clone repository
-git clone https://github.com/rocworks/monstermq.git
-cd monstermq/broker
+git clone https://github.com/vogler75/monster-mq.git
+cd monster-mq/broker
 
 # Build with Maven
 mvn clean package
@@ -135,9 +138,11 @@ java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -co
 java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config-hazelcast.yaml
 
 # Or use the convenience script
-./run.sh -config config.yaml
-./run.sh -cluster -config config-hazelcast.yaml
+./run.sh -- -config config.yaml
+./run.sh -- -cluster -config config-hazelcast.yaml
 ```
+
+The configuration filenames below are examples to create; they are not all shipped in the broker working directory. Start from [example-config.yaml](../broker/example-config.yaml). TLS listeners require configured certificates; see [Security](security.md). The source starter uses WebSocket port 1884 and MCP port 3000; the Docker defaults currently use WebSocket port 9000 and MCP port 4001.
 
 ## Configuration Examples
 
@@ -156,7 +161,7 @@ ConfigStoreType: SQLITE
 QueuedMessagesEnabled: true
 
 SQLite:
-  Path: "monstermq.db"
+  Path: "./sqlite"  # Directory; created automatically if needed
 
 MCP:
   Enabled: true
@@ -178,6 +183,7 @@ TCPS: 8883
 WS: 9000
 WSS: 9001
 
+DefaultStoreType: POSTGRES
 SessionStoreType: POSTGRES
 RetainedStoreType: POSTGRES
 ConfigStoreType: POSTGRES
@@ -200,8 +206,8 @@ GraphQL:
   Enabled: true
   Port: 4000
 
-SparkplugMetricExpansion:
-  Enabled: true
+Features:
+  SparkplugB: true  # Configure decoder devices through GraphQL/dashboard
 ```
 
 ### Clustering with Hazelcast
@@ -214,6 +220,7 @@ TCP: 1883
 WS: 9000
 
 # Clustering requires central database
+DefaultStoreType: POSTGRES
 SessionStoreType: POSTGRES
 RetainedStoreType: HAZELCAST  # Distributed across cluster
 ConfigStoreType: POSTGRES
@@ -248,8 +255,7 @@ java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cl
 sudo netstat -tulpn | grep 1883
 sudo lsof -i :1883
 
-# Kill process if needed
-sudo kill -9 <PID>
+# Stop the owning service gracefully or choose a different broker port.
 ```
 
 **2. Database Connection Failed**
@@ -284,14 +290,19 @@ mvn -version
 
 ### Log Analysis
 
+The default logging configuration writes to the console. For a local diagnostic
+run, capture console output explicitly:
+
 ```bash
-# Start with debug logging
-./run.sh -log FINE
-
-# Monitor log files
-tail -f log/monstermq.log
-
-# Check for specific errors
-grep ERROR log/monstermq.log
-grep "Failed to" log/monstermq.log
+./run.sh -- -log FINE > broker-debug.log 2>&1
 ```
+
+In another terminal:
+
+```bash
+tail -f broker-debug.log
+rg 'SEVERE|Failed to' broker-debug.log
+```
+
+For Docker, use `docker logs <container-name>`. The dashboard log viewer requires
+[the in-memory log buffer](graphql-system-logs.md); it is separate from console capture.

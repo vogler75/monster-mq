@@ -1,23 +1,23 @@
 # GraphQL API
 
-The GraphQL extension exposes MonsterMQ state and control operations over HTTP/WebSocket (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt`). This page documents the configuration switches and the queries/mutations that exist today.
+The GraphQL extension exposes MonsterMQ state and control operations over HTTP/WebSocket (`broker/src/main/kotlin/graphql/GraphQLServer.kt`). This page documents the configuration switches and the queries/mutations that exist today.
 
 ## Enabling the Server
 
 ```yaml
 GraphQL:
   Enabled: true
-  Port: 4000      # Defaults to 8080 when omitted
+  Port: 4000      # Defaults to 4000 when omitted
   Path: /graphql  # Defaults to /graphql
 ```
 
-Once enabled the server listens on `http://<host>:<port><path>` and serves both the HTTP API and a WebSocket endpoint for subscriptions (`ws://<host>:<port><path>ws`).
+Once enabled the server listens on `http://<host>:<port><path>` and serves both the HTTP API and a WebSocket endpoint for subscriptions (`ws://<host>:<port><path>`).
 
 ## Authentication
 
-- User management disabled? `login` returns `success: true` with `token = null` and no further checks are enforced (`broker/src/main/kotlin/extensions/graphql/AuthenticationResolver.kt:20-80`).
+- User management disabled? `login` returns `success: true` with `token = null` and no further checks are enforced (`broker/src/main/kotlin/graphql/AuthenticationResolver.kt`).
 - User management enabled? Call the `login` mutation and supply the returned JWT in the `Authorization: Bearer <token>` header for subsequent requests.
-- Admin-only mutations/queries (user management, ACLs, archive administration, etc.) are enforced through `GraphQLAuthContext` (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:205-356`).
+- Admin-only mutations/queries (user management, ACLs, archive administration, etc.) are enforced through `GraphQLAuthContext` (`broker/src/main/kotlin/graphql/GraphQLServer.kt`).
 
 Example login:
 
@@ -50,21 +50,21 @@ Example:
 Historical window:
 ```graphql
 {
-  kafkaClient(name: "MyKafkaClient") {
+  kafkaClients(name: "MyKafkaClient") {
     metricsHistory(lastMinutes: 30) { messagesIn messagesOut timestamp }
   }
 }
 ```
 Semantics:
 - messagesIn: Kafka records/sec consumed (latest sample).
-- messagesOut: MQTT messages/sec published (after transformation & filtering).
+- messagesOut: MQTT messages/sec forwarded to Kafka.
 - Live fallback: If no persisted sample exists, resolver fetches a live point via the Vert.x event bus for immediate visibility.
 - History requires a configured metrics store; otherwise only a single current sample is returned.
 
-(Planned) Aggregate broker-level sums will surface as `kafkaClientIn` / `kafkaClientOut` fields in Broker metrics once implemented; for now derive aggregates client-side.
+Broker metrics expose aggregate `kafkaClientIn` and `kafkaClientOut` rates.
 
 
-The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema.graphqls:141-356`):
+The top-level `Query` type exposes the following fields (`broker/src/main/resources/schema-queries.graphqls`):
 
 ### OPC UA Device Metrics (Embedded Fields)
 
@@ -72,7 +72,7 @@ OPC UA device metrics are now accessed as embedded fields on `OpcUaDevice`:
 
 ```graphql
 {
-  opcUaDevice(name: "MyDevice") {
+  opcUaDevices(name: "MyDevice") {
     name
     metrics { messagesIn messagesOut timestamp }
     metricsHistory(lastMinutes: 15) { messagesIn messagesOut timestamp }
@@ -84,7 +84,7 @@ Previously exposed root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHist
 
 | Category | Field | Description |
 |----------|-------|-------------|
-| Current values | `currentValue(topic, archiveGroup)` | Latest retained value for a single topic. |
+| Current values | `currentValue(topic, archiveGroup)` | Latest value from the selected archive group’s last-value store. |
 | | `currentValues(topicFilter, archiveGroup, limit)` | Latest values for topics matching the MQTT filter. |
 | Retained messages | `retainedMessage(topic)` / `retainedMessages(topicFilter)` | Access the retained store. |
 | Historical data | `archivedMessages(topicFilter, startTime, endTime, limit, archiveGroup)` | Query time-series data from archive groups. |
@@ -94,35 +94,37 @@ Previously exposed root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHist
 | | `sessions(nodeId, cleanSession, connected)` / `session(clientId, nodeId)` | MQTT session information. |
 | User management | `users(username)` | List users and their ACL rules (admin only). |
 | Archive groups | `archiveGroups` / `archiveGroup(name)` | Inspect archive configuration and connection status. |
-| OPC UA client | `opcUaDevices`, `opcUaDevice`, `opcUaDevicesByNode`, `clusterNodes` | Available when a device config store is configured. |
-| OPC UA server | `opcUaServers`, `opcUaServer`, `opcUaServersByNode`, `opcUaServerCertificates` | Available when the config store supports server records. |
+| OPC UA client | `opcUaDevices(name, node)`, `clusterNodes` | Available when a device config store is configured. |
+| OPC UA server | `opcUaServers(name, node)`, `opcUaServerCertificates` | Available when the config store supports server records. |
 
 ## Mutations
 
-Available mutations are wired in `GraphQLServer.buildRuntimeWiring()` (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:236-356`). Highlights:
+Available mutations are wired in `GraphQLServer.buildRuntimeWiring()` (`broker/src/main/kotlin/graphql/GraphQLServer.kt`). Highlights:
 
 | Category | Mutations |
 |----------|-----------|
 | Authentication | `login` |
 | Publishing | `publish`, `publishBatch` |
 | Queued messages | `purgeQueuedMessages(clientId)` |
-| User management | `createUser`, `updateUser`, `deleteUser`, `setPassword` |
-| ACL management | `createAclRule`, `updateAclRule`, `deleteAclRule` |
-| Archive groups | `createArchiveGroup`, `updateArchiveGroup`, `deleteArchiveGroup`, `enableArchiveGroup`, `disableArchiveGroup` |
-| OPC UA client | `addOpcUaDevice`, `updateOpcUaDevice`, `deleteOpcUaDevice`, `toggleOpcUaDevice`, `reassignOpcUaDevice`, `addOpcUaAddress`, `deleteOpcUaAddress` |
-| OPC UA server | `createOpcUaServer`, `startOpcUaServer`, `stopOpcUaServer`, `deleteOpcUaServer`, `addOpcUaServerAddress`, `removeOpcUaServerAddress`, `trustOpcUaServerCertificates`, `deleteOpcUaServerCertificates` |
+| User management | `user { createUser, updateUser, deleteUser, setPassword }` — see [Users](users.md) |
+| ACL management | `user { createAclRule, updateAclRule, deleteAclRule }` — see [ACLs](acl.md) |
+| Archive groups | `archiveGroup { create, update, delete, enable, disable }` — see [Archiving](archiving.md) |
+| OPC UA client | `opcUaDevice { add, update, delete, toggle, reassign, addAddress, deleteAddress }` |
+| OPC UA server | `opcUaServer { create, add, update, delete, toggle, addAddress, removeAddress }` |
+
+These tables summarize the API; consult the split `schema-*.graphqls` files for exact arguments and the connector guides for complete operations.
 
 All user and archive mutations require an admin-level JWT. Publishing requires publish permission for the target topic (enforced through the ACL system).
 
 ## Subscriptions
 
-WebSocket subscriptions stream real-time data via the configured message bus (`broker/src/main/kotlin/extensions/graphql/GraphQLServer.kt:358-365`):
+WebSocket subscriptions stream real-time data via the configured message bus (`broker/src/main/kotlin/graphql/GraphQLServer.kt`):
 
-- `topicUpdates(topicFilter: String!)` - Stream updates from a single MQTT topic pattern
-- `multiTopicUpdates(topicFilters: [String!]!)` - Stream updates from multiple MQTT topic patterns
+- `topicUpdates(topicFilters: [String!]!)` — Stream updates from one or more MQTT filters
+- `topicUpdatesBulk(topicFilters: [String!]!, timeoutMs, maxSize)` — Batch updates by size or timeout
 - `systemLogs(...)` - Stream system logs with advanced filtering (see [GraphQL System Logs](graphql-system-logs.md))
 
-Authentication rules for subscriptions mirror the ones used for queries and mutations.
+The current WebSocket route does not install the HTTP authentication-context handler, and topic subscription resolvers do not check per-user ACLs. Do not rely on HTTP JWT enforcement to restrict WebSocket subscriptions; restrict access at the HTTP gateway when needed.
 
 ### WebSocket Protocol
 
@@ -131,39 +133,22 @@ MonsterMQ uses the **GraphQL over WebSocket Protocol** (also known as **graphql-
 **Connection Flow:**
 
 ```javascript
-// 1. Connect with subprotocol 'graphql-transport-ws'
-const ws = new WebSocket('ws://localhost:4000/graphqlws', 'graphql-transport-ws');
-
-// 2. Initialize connection
-ws.send(JSON.stringify({
-  type: 'connection_init',
-  payload: {}
-}));
-
-// 3. Server acknowledges
-// <- { type: 'connection_ack' }
-
-// 4. Subscribe to a query
-ws.send(JSON.stringify({
-  id: '1',
-  type: 'subscribe',
-  payload: {
-    query: 'subscription { topicUpdates(topicFilter: "sensor/#") { ... } }',
-    variables: {}
+const ws = new WebSocket('ws://localhost:4000/graphql', 'graphql-transport-ws');
+ws.onopen = () => ws.send(JSON.stringify({ type: 'connection_init', payload: {} }));
+ws.onmessage = ({ data }) => {
+  const message = JSON.parse(data);
+  if (message.type === 'connection_ack') {
+    ws.send(JSON.stringify({
+      id: '1', type: 'subscribe',
+      payload: { query: 'subscription { topicUpdates(topicFilters: ["sensor/#"], format: TEXT) { topic payload timestamp } }' }
+    }));
+  } else if (message.type === 'ping') {
+    ws.send(JSON.stringify({ type: 'pong', payload: message.payload }));
+  } else {
+    console.log(message); // next, error, or complete
   }
-}));
-
-// 5. Receive data
-// <- { type: 'next', id: '1', payload: { data: { ... } } }
-
-// 6. Complete subscription
-ws.send(JSON.stringify({
-  id: '1',
-  type: 'complete'
-}));
-
-// 7. Close connection
-ws.close();
+};
+// When finished: ws.send(JSON.stringify({ id: '1', type: 'complete' })); ws.close();
 ```
 
 **Message Types:**
@@ -187,37 +172,33 @@ ws.close();
 | Ping/Pong: `type: 'ping'/'pong'` | Keep-alive: `type: 'ka'` |
 | No explicit termination | Terminate: `type: 'connection_terminate'` |
 
-| Ping/Pong: `type: 'ping'/'pong'` | Keep-alive: `type: 'ka'` |
-| No explicit termination | Terminate: `type: 'connection_terminate'` |
-
 **Client Libraries:**
 - JavaScript/Browser: Use `graphql-ws` npm package or raw WebSocket implementation as shown above
-- Python: Use `websockets` library with `subprotocols=["graphql-transport-ws"]` (see `tests/test_graphql_system_logs.py`)
+- Python: Use `websockets` library with `subprotocols=["graphql-transport-ws"]` (see `tests/pytest_tests/graphql/`)
 - Apollo Client v3+: Use `graphql-ws` package's `createClient`
 - For legacy clients expecting `subscriptions-transport-ws`: Not compatible - use adapter or upgrade
 
 ## Usage Notes
 
-1. Payloads are returned according to the `DataFormat` argument (`JSON` or `BINARY`). JSON mode automatically parses payloads that contain valid JSON strings.
-2. When user management is disabled you can still call `login`; it simply announces that authentication is off.
-3. The OPC UA fields appear only when a device configuration store is available. If you run without a persistent config store those queries/mutations are absent from the schema at runtime.
-4. The HTTP endpoint also serves the static dashboard under `/dashboard` (see `GraphQLServer.start()` for details).
-5. Migration: Root queries `opcUaDeviceMetrics` and `opcUaDeviceMetricsHistory` were removed in favor of embedded fields on `OpcUaDevice` (`metrics` and `metricsHistory`). Update clients accordingly.
-6. PayloadFormat enum: Supported values are `DEFAULT` and `JSON`. The former `JAVA` name has been removed; use `DEFAULT`.
+1. Payload fields are GraphQL strings. `JSON`, `TEXT`, and `BINARY` select conversion, not a different GraphQL return type; see Data Formats below.
+2. The schema is loaded independently of connector availability. Disabled features or missing stores can return empty results, nulls, or mutation errors. Read `broker { enabledFeatures }` before exposing feature-specific controls.
+3. The dashboard is served at `/` on the same HTTP server, when packaged or supplied using `-dashboardPath`.
+4. Use list queries with a `name` filter for device lookups and embedded `metrics`/`metricsHistory` fields for device rates.
+5. Archive `PayloadFormat` (`DEFAULT` or `JSON`) is separate from API `DataFormat`.
 
 ## Endpoints
 
 Unless overridden in configuration:
 
 - HTTP GraphQL endpoint: `http://localhost:4000/graphql` (example port)
-- WebSocket endpoint (subscriptions): `ws://localhost:4000/graphqlws` (server appends `ws` to GraphQL path)
+- WebSocket endpoint (subscriptions): `ws://localhost:4000/graphql` (same path as HTTP GraphQL)
 - Health endpoint: `http://localhost:4000/health`
 
 Adjust host/port/path according to your `GraphQL` configuration block.
 
 ## Examples
 
-The following end‑to‑end examples consolidate and supersede the legacy `broker/graphql-examples.md` file.
+These examples use the current split schema and grouped mutation API.
 
 ### Current Value
 
@@ -354,7 +335,7 @@ mutation BatchPublish {
 
 ```graphql
 subscription SubscribeToTopic {
-  topicUpdates(topicFilter: "sensor/+/temperature", format: JSON) {
+  topicUpdates(topicFilters: ["sensor/+/temperature"], format: JSON) {
     topic
     payload
     format
@@ -370,7 +351,7 @@ subscription SubscribeToTopic {
 
 ```graphql
 subscription SubscribeToMultipleTopics {
-  multiTopicUpdates(
+  topicUpdates(
     topicFilters: ["sensor/temperature", "sensor/humidity", "sensor/pressure"]
     format: JSON
   ) {
@@ -400,7 +381,7 @@ query GetMqttClientMetrics {
 
 ```graphql
 query GetMqttClientMetricsHistory {
-  mqttClient(name: "bridge-client-1") {
+  mqttClients(name: "bridge-client-1") {
     name
     metricsHistory(lastMinutes: 60) {
       messagesIn
@@ -423,7 +404,7 @@ curl -X POST http://localhost:4000/graphql \
 curl -X POST http://localhost:4000/graphql \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "mutation { publish(input: { topic: \"test/topic\", payload: \"Hello MQTT\", format: JSON }) { success timestamp } }"
+    "query": "mutation { publish(input: { topic: \"test/topic\", payload: \"Hello MQTT\", format: TEXT }) { success timestamp } }"
   }'
 ```
 
@@ -439,13 +420,18 @@ All ISO‑8601 variants supported, e.g.:
 
 ## Data Formats
 
-Two payload formats are supported when publishing / querying:
+Three API data formats are available:
 
-- JSON  – Payload treated (and validated) as JSON text
-- BINARY – Base64 encoded arbitrary bytes (images, protobuf, etc.)
+- `JSON`: decodes payload bytes as UTF-8 and returns a string marked `JSON`. It does not verify JSON syntax or return a structured GraphQL object; parse it in the client when appropriate.
+- `TEXT`: reads/writes UTF-8 text; use it for plain strings and numeric sensor payloads. `JSON` and `TEXT` are not reliable binary detectors.
+- `BINARY`: reads/writes Base64-encoded bytes.
 
-If a stored payload is binary but requested as JSON it is returned as Base64 with `format: BINARY`.
+Publishing `JSON` and `TEXT` currently converts the input string to UTF-8 bytes; `JSON` does not perform full JSON validation. Query timestamps are Unix epoch milliseconds. Historical query boundaries use ISO 8601 instants with a timezone.
 
 ## Migration Notes
 
-The standalone examples file `broker/graphql-examples.md` has been merged into this document for a single source of truth. Remove or stop referencing the old file to avoid drift.
+Use `topicUpdates(topicFilters: [...])` for both single and multiple topic filters.
+The former `multiTopicUpdates` field and singular device lookup fields are absent
+from the schema. Device lookups now use a list query with a `name` filter. Management
+operations are grouped beneath `user`, `archiveGroup`, and the respective device
+mutation fields; see the linked guides for exact input shapes.

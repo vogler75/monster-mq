@@ -105,7 +105,8 @@ An address mapping declares one data flow between MQTT and NATS. Each mapping ha
 | `natsSubject` | String | required | NATS subject (with NATS wildcards if desired) |
 | `mqttTopic` | String | required | Local MQTT topic (with MQTT wildcards if desired) |
 | `qos` | 0 \| 1 \| 2 | `0` | QoS for local MQTT subscriptions or publications |
-| `autoConvert` | Boolean | `true` | Enable automatic separator and wildcard translation |
+| `autoConvert` | Boolean | `true` | Enable separator conversion |
+| `removePath` | Boolean | `true` | Replace the source prefix before its first wildcard with the target prefix |
 
 ### Separator and wildcard conversion
 
@@ -126,7 +127,7 @@ When `autoConvert` is `true`, the bridge transparently converts between the MQTT
 | `sensors/+/temperature` | `sensors.*.temperature` |
 | `#` | `>` |
 
-Set `autoConvert: false` to pass topics and subjects through without any modification.
+`removePath` (default `true`) strips the source prefix before its first wildcard and prepends the target prefix. For example, MQTT `test/#` to NATS `abc` maps `test/a/b` to `abc.a.b`. `autoConvert` controls separator conversion; turning it off does not disable prefix remapping. Use concrete target prefixes, not publication wildcards.
 
 ---
 
@@ -165,20 +166,20 @@ Single shared-secret token auth.
 | `token` | Yes | NATS authentication token |
 
 #### `TLS`
-Mutual TLS or server-only TLS verification.
+TLS connection options. This device configuration does not expose a client certificate/private key pair for mutual TLS.
 
 | Field | Required | Description |
 |---|---|---|
-| `tlsCaCertPath` | No | Absolute path to a JKS trust store containing the CA certificate. When absent, the JVM default trust store is used (`opentls` mode). |
-| `tlsVerify` | No (default `true`) | Set to `false` to disable certificate validation (development/self-signed only — do not use in production). |
+| `tlsCaCertPath` | No | Path to a Java trust store loaded with the JVM default keystore type and a null password; this is not a PEM CA loader. Supply a trust store explicitly for verified TLS. |
+| `tlsVerify` | No (default `true`) | When false, installs a trust-all context. When true with a trust store path, verifies against that store. Without a path, the implementation calls jnats `opentls()`, which trusts all certificates even when `tlsVerify` is true. |
 
-> ⚠️ `tlsVerify: false` installs a trust-all `SSLContext`. Never use in production.
+Verified TLS requires `tlsVerify: true` **and** an explicit trusted `tlsCaCertPath` in the current implementation. Neither `tlsVerify: false` nor the no-path `opentls()` fallback verifies the server certificate.
 
 ---
 
 ## JetStream
 
-When `useJetStream` is `true`, the bridge uses the JetStream API for both producing and consuming messages instead of Core NATS. This provides at-least-once delivery and durable consumers.
+When `useJetStream` is `true`, the bridge uses the JetStream API for both producing and consuming messages instead of Core NATS. This uses JetStream acknowledgments and optionally durable consumers. The inbound connector acknowledges after handing a message to the broker; this is not an end-to-end durable MQTT delivery guarantee.
 
 | Field | Required | Description |
 |---|---|---|
@@ -235,7 +236,7 @@ Filter by name or node:
 
 ```graphql
 {
-  natsClients(name: "my-nats-bridge") { name enabled }
+  byName: natsClients(name: "my-nats-bridge") { name enabled }
   natsClients(node: "node-1") { name nodeId }
 }
 ```

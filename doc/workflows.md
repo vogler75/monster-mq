@@ -58,7 +58,7 @@ Think of a Flow Class as a function definition - it describes the logic but does
 ### Flow Instances
 
 A **Flow Instance** is a deployed, running instance of a Flow Class with:
-- **Input Mappings**: Connect MQTT topics or constants to node inputs
+- **Input Mappings**: Connect MQTT topics; use instance variables for constants to node inputs
 - **Output Mappings**: Publish node outputs to MQTT topics
 - **Variables**: Instance-specific configuration values
 - **Runtime State**: Execution statistics and current status
@@ -124,21 +124,21 @@ Click **"+ New Flow Instance"** to deploy your flow.
 
 Configure the instance:
 1. **Select Flow Class** to instantiate
-2. **Map Inputs** to MQTT topics or constants
+2. **Map Inputs** to MQTT topics; use instance variables for constants
 3. **Map Outputs** to MQTT topics
 4. **Set Variables** for instance-specific config
 5. **Enable** and save
 
 ### 3. Test Your Flow
 
-Publish a message to your input topic:
-```bash
-mosquitto_pub -t "sensors/temperature" -m "25"
-```
-
-Monitor the output topic:
+Start an output subscriber in one terminal before publishing in another:
 ```bash
 mosquitto_sub -t "sensors/temperature/converted"
+```
+
+Then publish to your configured input topic:
+```bash
+mosquitto_pub -t "sensors/temperature" -m "25"
 ```
 
 ## Visual Flow Editor
@@ -269,12 +269,12 @@ Logs appear in:
 **Flow Class: "TemperatureAlert"**
 
 Node: "check_threshold"
-- Inputs: `temp`, `threshold`
+- Inputs: `temp`
 - Outputs: `normal`, `alert`
 - Script:
 ```javascript
 let temperature = inputs.temp.value;
-let threshold = inputs.threshold.value;
+let threshold = Number(flow.threshold);
 
 if (temperature > threshold) {
     outputs.send("alert", {
@@ -351,7 +351,7 @@ Node 1: "parse"
 ```javascript
 let raw = inputs.raw.value;
 try {
-    let parsed = JSON.parse(raw);
+    let parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     outputs.send("json", parsed);
 } catch (e) {
     console.error("Parse error:", e);
@@ -406,7 +406,7 @@ if (data.temperature > 0 && data.temperature < 150) {
 ### Variable Usage
 - **Configuration**: Use variables for thresholds, URLs, API keys
 - **Instance Reuse**: Design flows to be configurable via variables
-- **Secrets**: Consider using variables for sensitive data
+- **Secrets**: Variables are stored configuration and exposed to scripts; they are not a dedicated secret store
 
 ### State Management
 - **Initialize**: Always initialize state properties before use
@@ -538,12 +538,10 @@ mutation {
 - **Single Node**: Flows run on a single node (no distributed execution)
 - **No Async**: Scripts are synchronous (no async/await)
 
-## Future Enhancements
+## Runtime Reference
 
-Planned features:
-- **Python Support**: Execute Python scripts using GraalPy
-- **Persistent State**: Save node state to database
-- **Scheduled Execution**: Trigger flows on schedules (not just topics)
-- **Sub-flows**: Nest flows within flows
-- **Debugging Tools**: Step-through debugger, breakpoints
-- **Testing Framework**: Unit tests for nodes and flows
+Timer and database nodes are implemented. Timer nodes can trigger processing
+without an incoming MQTT message. Query `flowNodeTypes` for the current palette
+and use [Flow Engine Runtime](flow-engine.md) for lifecycle, diagnostics, and
+source references. Enable `Features.FlowEngine` and configure a persistent device
+configuration store before deploying flows.

@@ -1,4 +1,4 @@
-# MonsterMQ Redfish Gateway Guide
+# Redfish Gateway
 
 This document provides a comprehensive overview of what **DMTF Redfish** is, how the **MonsterMQ Redfish Gateway** works, how MQTT telemetry is mapped to standard Redfish REST endpoints, and how to configure and use it with practical examples.
 
@@ -49,14 +49,14 @@ Redfish organizes resources as a hypermedia tree rooted at `/redfish/v1`:
 
 Industrial edge nodes, IoT sensors, and PLCs typically publish telemetry via **MQTT** topics (e.g. `sensors/rack1/temperature`, `factory/line1/power`).
 
-However, standard data center monitoring tools, DCIM (Data Center Infrastructure Management) platforms, and IT infrastructure systems (such as **Prometheus Redfish Exporter**, **Zabbix**, **Nagios**, **OpenManage**, **Grafana**) natively speak **Redfish REST APIs**, not MQTT.
+Monitoring systems can consume Redfish resources directly or through a compatible collector/exporter. Compatibility depends on the resources that the particular client expects.
 
 The **MonsterMQ Redfish Gateway** bridges this gap:
 
 1. **Subscribes** to MQTT topics matching configured wildcard filters.
-2. **Extracts & Normalizes** incoming payloads using JSON Schema, JSONPath, or array unrolling.
+2. **Extracts & Normalizes** incoming payloads using the configured JSONPath mappings and array expansion. The `jsonSchema` field is a mapping configuration; the current mapper does not perform full JSON Schema validation.
 3. **Calculates Health State** automatically against warning/caution/critical thresholds.
-4. **Caches** normalized sensor states in the broker's high-speed in-memory store (`LastValue`).
+4. **Caches** normalized sensor states in a last-value store: the `Default` archive group's store when available, otherwise another deployed group's store, then an in-memory fallback.
 5. **Serves standard DMTF Redfish REST APIs** under `/redfish/v1/...` to external monitoring tools.
 
 ```text
@@ -78,7 +78,7 @@ The **MonsterMQ Redfish Gateway** bridges this gap:
 │                           │ Writes normalized sensor   │
 │                           ▼                            │
 │   ┌────────────────────────────────────────────────┐   │
-│   │ LastValue Memory Store                         │   │
+│   │ Last-Value Store                         │   │
 │   │ ({topicPrefix}/{chassisId}/sensors/{sensorId}) │   │
 │   └───────────────────────┬────────────────────────┘   │
 │                           │                            │
@@ -107,6 +107,10 @@ Redfish configuration consists of two layers:
 Enable the Redfish feature in `config.yaml`:
 
 ```yaml
+GraphQL:
+  Enabled: true
+  Port: 4000
+
 Features:
   Redfish: true
 
@@ -122,6 +126,8 @@ Redfish:
 > **Note**: When `Port` is 0 (or omitted), Redfish is multiplexed onto the main HTTP/GraphQL port (default `4000`).
 
 ---
+
+A positive `Redfish.Port` starts a separate HTTP listener. Keep the default mount path when clients follow returned links: the current response models embed `/redfish/v1` URLs.
 
 ### 3.2 Gateway Configuration Model
 
@@ -139,7 +145,7 @@ Each Redfish gateway configuration defines how MQTT messages are mapped to Redfi
 | `thresholds` | `Object` | Numeric threshold limits for automatic health calculation | `null` |
 | `jsonSchema` | `Object` | Schema containing `mapping` (JSONPath) and `arrayPath` | `{}` |
 
-#### Supported Reading Types & Standard Units
+#### Reading type and unit examples
 - `Temperature` (`Cel`, `Fah`, `K`)
 - `Voltage` (`V`, `mV`, `kV`)
 - `Current` (`A`, `mA`)
@@ -152,6 +158,8 @@ Each Redfish gateway configuration defines how MQTT messages are mapped to Redfi
 - `Percent` (`%`)
 - `AirFlow` (`CFM`, `m3/h`)
 
+The mapper passes through type/unit strings without validating the complete Redfish vocabulary or converting units. Choose values accepted by your target client. For fan speed, the examples below use `Rotational` with `RPM`.
+
 #### Health Calculation Rules
 When `thresholds` (`upperCaution`, `upperCritical`, `lowerCaution`, `lowerCritical`) are defined:
 - **`Critical`**: `reading >= upperCritical` OR `reading <= lowerCritical`
@@ -161,6 +169,8 @@ When `thresholds` (`upperCaution`, `upperCritical`, `lowerCaution`, `lowerCritic
 ---
 
 ## 4. Practical Examples
+
+The gateway JSON examples below show a name, enabled flag, and configuration object. To save one, pass its `config` object as the `$cfg` variable in the GraphQL mutation in section 6, and use its `name` and `enabled` values. REST responses are illustrative excerpts; additional fields may be returned.
 
 ### Example 1: Simple Flat JSON Payload
 
@@ -268,8 +278,6 @@ curl http://localhost:4000/redfish/v1/Chassis/Rack-01/Sensors/temp-cpu
       "mapping": {
         "sensorId": "$.device",
         "reading": "$.metrics.electrical.power_draw_watts",
-        "readingType": "Power",
-        "readingUnits": "W",
         "ts": "$.timestamp"
       }
     }
@@ -291,8 +299,8 @@ Many edge gateways and loggers send a batch of multiple readings in a single mes
     "rack": "Rack-A",
     "timestamp": "2026-08-20T14:35:00Z",
     "readings": [
-      { "id": "fan-inlet-1", "label": "Inlet Fan 1", "value": 3200, "type": "AirFlow", "unit": "RPM" },
-      { "id": "fan-inlet-2", "label": "Inlet Fan 2", "value": 3150, "type": "AirFlow", "unit": "RPM" },
+      { "id": "fan-inlet-1", "label": "Inlet Fan 1", "value": 3200, "type": "Rotational", "unit": "RPM" },
+      { "id": "fan-inlet-2", "label": "Inlet Fan 2", "value": 3150, "type": "Rotational", "unit": "RPM" },
       { "id": "temp-exhaust", "label": "Exhaust Air", "value": 41.8, "type": "Temperature", "unit": "Cel" },
       { "id": "bus-voltage", "label": "48V Bus", "value": 48.1, "type": "Voltage", "unit": "V" }
     ]
@@ -371,7 +379,7 @@ Older monitoring systems that predate Redfish v1.6 look for aggregated thermal a
       "Name": "Exhaust Air",
       "ReadingCelsius": 41.8,
       "Status": { "State": "Enabled", "Health": "OK" },
-      "UpperThresholdCaution": 70,
+      "UpperThresholdNonCritical": 70,
       "UpperThresholdCritical": 85
     }
   ],
@@ -408,9 +416,14 @@ Older monitoring systems that predate Redfish v1.6 look for aggregated thermal a
 | `GET` | `/redfish/v1/Managers` | Manager collection |
 | `GET` | `/redfish/v1/Managers/{managerId}` | Management controller/broker daemon details |
 | `GET` | `/redfish/v1/TelemetryService` | Telemetry service information |
+| `GET` | `/redfish/v1/TelemetryService/MetricReports` | Available metric reports |
 | `GET` | `/redfish/v1/TelemetryService/MetricReports/{reportId}` | Aggregated sensor metric report |
 | `GET` | `/redfish/v1/EventService` | Redfish event notifications |
-| `GET` | `/redfish/v1/EventService/SSE` | Server-Sent Events stream for live threshold alerts |
+| `GET` | `/redfish/v1/EventService/Subscriptions` | Empty event subscription collection |
+| `GET` | `/redfish/v1/JsonSchemas` | Schema resource collection |
+| `GET` | `/redfish/v1/JsonSchemas/{schemaId}` | Schema resource description |
+
+The EventService response advertises `ServerSentEventUri`, but the current server does not register an SSE route or deliver webhook notifications. EventService and schema/metadata resources are limited descriptions, not a claim of full Redfish service conformance.
 
 ---
 
@@ -455,7 +468,7 @@ query {
     readingType
     readingUnits
     health
-    timestamp
+    lastUpdated
   }
 }
 ```
@@ -465,7 +478,7 @@ query {
 mutation SaveGateway($cfg: RedfishMappingConfigInput!) {
   saveRedfishMapping(name: "EnvGateway", config: $cfg, enabled: true) {
     success
-    errorMessage
+    message
     redfish {
       name
       enabled
@@ -490,4 +503,11 @@ You can point Prometheus exporters (e.g. `prometheus-redfish-exporter` or custom
 ```text
 http://<monstermq-host>:4000/redfish/v1/Chassis/EdgeNode/Sensors
 ```
-Because the endpoints output standard DMTF OData JSON, standard scraping agents discover all sensors, reading values, and health statuses automatically.
+Verify that the chosen exporter supports the sensor resources this gateway exposes; automatic discovery is client-specific. Prometheus itself does not scrape arbitrary Redfish JSON. For MonsterMQ’s own Prometheus-compatible API, see [Grafana integration](grafana.md).
+
+## Implementation references
+
+- [Redfish GraphQL schema](../broker/src/main/resources/schema-redfish.graphqls)
+- [REST routes](../broker/src/main/kotlin/extensions/redfish/RedfishServer.kt)
+- [Payload mapping](../broker/src/main/kotlin/extensions/redfish/RedfishMapper.kt)
+- [Ingestion and last-value storage](../broker/src/main/kotlin/extensions/redfish/RedfishIngestion.kt)

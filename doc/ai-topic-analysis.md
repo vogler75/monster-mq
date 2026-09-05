@@ -8,23 +8,27 @@ The AI Topic Analysis feature provides LLM-powered analysis of your MQTT topic t
 
 ```yaml
 GenAI:
-  Provider: gemini  # or: claude, openai
-  ApiKey: your-api-key
-  Model: gemini-2.5-flash  # optional, provider-specific default used if omitted
-  MaxTokens: 0  # 0 = no limit (use model default)
-  Temperature: 0.7
+  Enabled: true
+  Assistant:
+    Provider: gemini
+    Model: "your-available-model"
+    Temperature: 0.7
+  Providers:
+    Gemini:
+      ApiKey: "${GEMINI_API_KEY}"
+Features:
+  GenAi: true
 ```
 
 2. **Archive Group with LastValueStore** - The analysis reads current topic values from a LastValueStore:
 
 ```yaml
-Archive:
-  Groups:
-    - Name: Default
-      Topics:
-        - "#"
-      LastValueStore:
-        Type: Memory  # or Hazelcast, PostgreSQL, CrateDB
+ArchiveGroups:
+  - Name: Default
+    TopicFilter: ["#"]
+    LastValType: MEMORY
+    LastValRetention: "50k"
+    ArchiveType: NONE
 ```
 
 ## Using the Feature
@@ -46,7 +50,7 @@ Quick action buttons provide pre-configured prompts for common analysis tasks. T
 
 ### Configuration
 
-Quick actions are defined in `/config/ai-prompts.json`:
+Quick actions are defined in `/config/prompts.json`:
 
 ```json
 {
@@ -182,19 +186,20 @@ Topics are formatted as a hierarchical ASCII tree to reduce token usage:
 
 ### Supported LLM Providers
 
-- **Gemini** (`com.google.genai.Client`) - Default
-- **Claude** (Anthropic API)
-- **OpenAI** (OpenAI API)
+- Gemini, Claude, OpenAI, Ollama, Azure OpenAI, and llama.cpp through the shared provider factory.
+- A model must be configured explicitly. Availability depends on the selected provider deployment.
 
-Each provider implements `IGenAiProvider` interface. The API is stateless - full context is sent with each request.
+Providers use the shared LangChain4j factory and `LangChain4jProviderAdapter`. The API is stateless - full context is sent with each request.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `broker/src/main/resources/dashboard/config/ai-prompts.json` | Quick action button configuration |
-| `broker/src/main/resources/dashboard/js/topic-browser.js` | Frontend AI panel (`TopicBrowserAI` class) |
-| `broker/src/main/resources/dashboard/pages/topic-browser.html` | AI panel HTML/CSS |
+| `monster-mq-dashboard/src/config/prompts.json` | Quick action button configuration |
+| `monster-mq-dashboard/src/js/topic-browser.js` | Frontend AI panel (`TopicBrowserAI` class) |
+| `monster-mq-dashboard/src/pages/topic-browser.html` | AI panel HTML/CSS |
 | `broker/src/main/kotlin/graphql/GenAiResolver.kt` | GraphQL resolver (`analyzeTopics`) |
 | `broker/src/main/resources/schema-genai.graphqls` | GraphQL schema |
-| `broker/src/main/kotlin/genai/GeminiProvider.kt` | Gemini LLM provider |
+| `broker/src/main/kotlin/agents/LangChain4jFactory.kt` | Shared provider configuration |
+
+Dashboard files belong to the separate [monster-mq-dashboard repository](https://github.com/vogler75/monster-mq-dashboard); do not edit generated broker resources.

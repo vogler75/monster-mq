@@ -72,7 +72,7 @@ Neo4j client configurations are stored in the database and persist across restar
 - **topicFilters** - Array of MQTT topic patterns to subscribe to
   - One filter per line in the UI
   - Supports MQTT wildcards: `#` (multi-level) and `+` (single-level)
-  - Examples: `sensors/#`, `factory/+/temperature`, `machines/*/status`
+  - Examples: `sensors/#`, `factory/+/temperature`, `machines/+/status`
 
 ### Performance Tuning
 
@@ -89,75 +89,39 @@ Neo4j client configurations are stored in the database and persist across restar
 
 This is particularly useful for high-frequency sensors that update multiple times per second but don't need every value stored in the database.
 
-## Example Neo4j Queries
+## Graph Data Model and Queries
 
-### Find a Specific Node by Path
+The connector creates a namespace root and path nodes labeled `MqttNode`, with
+case-sensitive properties `System`, `Path`, and `Name`. Leaf values have label
+`MqttValue` and properties `System`, `NodeId`, `Name`, `Value`, `ServerTime`, and
+`Topic`. Parent-to-child edges use `HAS`.
+
+`System` is the connector's namespace. Query values using their full topic:
 
 ```cypher
-MATCH (n)
-WHERE n.nodeId = "input/Meter_Output/Value" OR n.id = "input/Meter_Output/Value"
-RETURN n
+MATCH (n:MqttValue {System: "factory", Topic: "sensors/temperature"})
+RETURN n.Topic, n.Value, n.ServerTime
 ```
 
-### Find All Sensors in a Building
+Inspect a subtree:
 
 ```cypher
-MATCH (building {name: "Building1"})-[:CHILD*]->(sensor)
-WHERE sensor.type = "sensor"
-RETURN sensor
-```
-
-### Get Full Path Hierarchy
-
-```cypher
-MATCH path = (root)-[*]->(leaf {name: "temperature"})
-WHERE root.name = "factory"
+MATCH path = (root:MqttNode {System: "factory", Path: "sensors"})-[:HAS*]->(leaf:MqttValue)
 RETURN path
 ```
 
-### Find All Topics Under a Path
+Find latest values under a prefix:
 
 ```cypher
-MATCH path = (root {name: "sensors"})-[:CHILD*]->(leaf)
-WHERE NOT (leaf)-[:CHILD]->()  // Leaf nodes only
-RETURN leaf.name, leaf.value, leaf.timestamp
-```
-
-### Find Topics by Pattern
-
-```cypher
-MATCH (n)
-WHERE n.nodeId STARTS WITH "factory/building1/"
-RETURN n.nodeId, n.value, n.timestamp
-ORDER BY n.timestamp DESC
+MATCH (n:MqttValue {System: "factory"})
+WHERE n.Topic STARTS WITH "factory/building1/"
+RETURN n.Topic, n.Value, n.ServerTime
+ORDER BY n.ServerTime DESC
 LIMIT 10
 ```
 
-## Graph Data Model
-
-MonsterMQ creates the following graph structure:
-
-### Nodes
-
-Each segment of an MQTT topic becomes a node:
-
-- **name** - The segment name (e.g., "sensors", "temperature")
-- **nodeId** - Full path to this node (e.g., "factory/building1/sensor1")
-- **value** - Latest value (for leaf nodes)
-- **timestamp** - Last update timestamp
-- **type** - Node type classification (optional)
-
-### Relationships
-
-- **CHILD** - Parent-to-child relationship between topic segments
-
-### Example Structure
-
-For topic `factory/building1/floor2/sensor5/temperature`:
-
-```
-(factory) -[:CHILD]-> (building1) -[:CHILD]-> (floor2) -[:CHILD]-> (sensor5) -[:CHILD]-> (temperature)
-```
+Lowercase `nodeId`, `value`, and `timestamp` properties and a `CHILD` relationship
+from older examples do not describe the current connector's graph.
 
 ## Management via Web Dashboard
 
@@ -186,8 +150,8 @@ Neo4j clients are cluster-aware:
 
 Real-time metrics available via GraphQL and web dashboard:
 
-- **messagesIn** - Total messages received from MQTT
-- **messagesWritten** - Total messages successfully written to Neo4j
+- **messagesIn** - MQTT input rate in persisted metrics (the live event-bus fallback counts the sampling interval)
+- **messagesWritten** - Neo4j write rate in persisted metrics (the live event-bus fallback counts the sampling interval)
 - **messagesSuppressed** - Messages suppressed due to rate limiting
 - **errors** - Number of write errors
 - **pathQueueSize** - Current size of the write queue

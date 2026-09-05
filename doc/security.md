@@ -1,6 +1,6 @@
 # Security
 
-MonsterMQ provides comprehensive security features including TLS/SSL encryption, authentication, authorization, and certificate management. This guide covers all security aspects of MonsterMQ deployment.
+MonsterMQ provides comprehensive security features including TLS/SSL encryption, authentication, authorization, and certificate management. This guide describes the security controls implemented in this broker.
 
 ## Overview
 
@@ -46,21 +46,24 @@ By default, MonsterMQ looks for `server-keystore.jks` in the working directory w
 #### Self-Signed Certificates (Development)
 
 ```bash
-# Generate server keystore (must use these exact names/passwords for MonsterMQ)
+# Generate a development JKS keystore matching the example SSL settings
 keytool -genkeypair \
   -alias server \
   -keyalg RSA \
   -keysize 2048 \
   -validity 365 \
+  -ext "SAN=dns:localhost,ip:127.0.0.1" \
   -keystore server-keystore.jks \
+  -storetype JKS \
   -storepass password \
   -dname "CN=localhost, OU=Development, O=MonsterMQ, L=Vienna, C=AT"
 
 # Export server certificate
 keytool -exportcert \
   -alias server \
-  -keystore server.jks \
-  -storepass changeit \
+  -keystore server-keystore.jks \
+  -storepass password \
+  -rfc \
   -file server.crt
 
 # Create truststore and import server certificate
@@ -95,6 +98,10 @@ keytool -importkeystore \
   -deststoretype JKS \
   -deststorepass changeit
 ```
+
+Configure `SSL.KeyStorePath: server.jks`, `SSL.KeyStorePassword: changeit`, and
+`SSL.KeyStoreType: JKS` to use the converted keystore, or configure the PEM files
+directly. Restart the broker after replacing listener certificates.
 
 ### Different Certificates for TCPS and WSS
 
@@ -152,457 +159,97 @@ The certificate only replaces the password. The user account still decides what 
 - If the account is disabled, the connection is rejected. This is how you cut off a decommissioned or compromised device.
 - If no account exists, the connection is rejected unless `AutoCreateUser` is enabled.
 
-With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so it cannot be used to log in with a password. Set it to `false` when you would rather create every account up front and reject anything unknown.
+With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so the connecting device does not know a password for that account. An administrator can later set a password through the user API. Set it to `false` when you would rather create every account up front and reject anything unknown.
 
-## Authentication
-
-### Username/Password Authentication
+## Authentication and Authorization
 
 ```yaml
-Authentication:
+UserManagement:
   Enabled: true
-  Type: INTERNAL  # Use internal user database
-
-  # Password requirements
-  PasswordPolicy:
-    MinLength: 8
-    RequireUppercase: true
-    RequireLowercase: true
-    RequireDigits: true
-    RequireSpecialChars: true
-
-  # Account lockout
-  Lockout:
-    Enabled: true
-    MaxAttempts: 5
-    LockoutDuration: 300  # seconds
+  PasswordAlgorithm: bcrypt
+  CacheRefreshInterval: 60
+  DisconnectOnUnauthorized: true
+  AclCheckOnSubscription: true
 ```
 
-> External identity providers and token-based authentication flows are not supported in the current broker build.
+Use the [user API](users.md) to change the initial `Admin` password, manage
+accounts, and disable `Anonymous` if unauthenticated connections are unwanted.
+[ACL rules](acl.md) restrict topics after the account's global operation
+permission is enabled. Admin accounts bypass topic ACL checks.
 
-## Authorization (ACL)
+HTTP APIs support JWTs obtained with the GraphQL or REST login endpoint. See
+[GraphQL](graphql.md), [REST](rest-api.md), and [MCP](mcp.md) for their respective
+transport and authentication requirements. MQTT uses credentials in CONNECT or
+the configured certificate identity mechanism.
 
-### ACL Configuration
+## Listener Exposure and Rate Limits
+
+The broker reads these per-MQTT-client message-rate settings:
 
 ```yaml
-Authorization:
-  Enabled: true
-  DefaultPolicy: DENY  # Deny by default
-
-  # Anonymous access
-  Anonymous:
-    Enabled: false
-    Permissions:
-      - topic: "public/+"
-        actions: [SUBSCRIBE]
+MaxPublishRate: 1000
+MaxSubscribeRate: 1000
 ```
 
-### ACL Rules
-
-```yaml
-# User-specific ACLs
-Users:
-  - Username: sensor-device
-    Permissions:
-      - topic: "sensors/+/data"
-        actions: [PUBLISH]
-      - topic: "commands/+/request"
-        actions: [SUBSCRIBE]
-
-  - Username: admin
-    Permissions:
-      - topic: "#"  # All topics
-        actions: [PUBLISH, SUBSCRIBE]
-
-# Group-based ACLs
-Groups:
-  - Name: operators
-    Permissions:
-      - topic: "production/+"
-        actions: [SUBSCRIBE]
-      - topic: "alerts/+"
-        actions: [PUBLISH, SUBSCRIBE]
-```
-
-### Dynamic ACL Management
-
-```graphql
-# Add ACL rule via GraphQL
-mutation AddACL {
-  addACL(
-    username: "device-001"
-    topic: "devices/001/+"
-    actions: [PUBLISH, SUBSCRIBE]
-  ) {
-    success
-  }
-}
-
-# Remove ACL rule
-mutation RemoveACL {
-  removeACL(
-    username: "device-001"
-    topic: "devices/001/+"
-  ) {
-    success
-  }
-}
-```
-
-## Security Headers
-
-### HTTP Security Headers (GraphQL/Dashboard)
-
-```yaml
-HTTP:
-  Security:
-    Headers:
-      X-Frame-Options: DENY
-      X-Content-Type-Options: nosniff
-      X-XSS-Protection: "1; mode=block"
-      Content-Security-Policy: "default-src 'self'"
-      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
-```
-
-## Rate Limiting
-
-### Connection Rate Limiting
-
-```yaml
-RateLimiting:
-  Enabled: true
-
-  # Per-IP limits
-  ConnectionsPerIP:
-    Limit: 10
-    Window: 60  # seconds
-
-  # Global limits
-  MaxConnectionsPerSecond: 100
-
-  # Message rate limiting
-  MessagesPerClient:
-    Limit: 1000
-    Window: 60  # seconds
-
-  # Subscription limits
-  MaxSubscriptionsPerClient: 100
-```
-
-## Audit Logging
-
-### Audit Configuration
-
-```yaml
-Audit:
-  Enabled: true
-  LogLevel: INFO
-
-  # What to audit
-  Events:
-    - LOGIN_SUCCESS
-    - LOGIN_FAILURE
-    - PUBLISH
-    - SUBSCRIBE
-    - ACL_VIOLATION
-    - CERTIFICATE_ERROR
-    - ADMIN_ACTION
-
-  # Output configuration
-  Output:
-    Type: FILE  # FILE, SYSLOG, DATABASE
-    Path: "/var/log/monstermq/audit.log"
-    Format: JSON
-    Rotation:
-      Size: 100MB
-      Keep: 30
-```
-
-### Audit Log Format
-
-```json
-{
-  "timestamp": "2024-01-15T10:30:00Z",
-  "event": "LOGIN_SUCCESS",
-  "username": "user123",
-  "clientId": "client-001",
-  "ipAddress": "192.168.1.100",
-  "details": {
-    "authMethod": "password",
-    "protocol": "MQTT",
-    "tlsVersion": "TLSv1.3"
-  }
-}
-```
-
-## Network Security
-
-### Firewall Configuration
-
-```bash
-# Allow MQTT ports
-ufw allow 1883/tcp comment 'MQTT'
-ufw allow 8883/tcp comment 'MQTT TLS'
-ufw allow 9000/tcp comment 'WebSocket'
-ufw allow 9001/tcp comment 'WebSocket TLS'
-
-# Allow cluster communication
-ufw allow from 10.0.0.0/24 to any port 5701 comment 'Hazelcast'
-
-# Allow monitoring
-ufw allow from 10.0.0.0/24 to any port 4000 comment 'GraphQL'
-```
-
-### IP Whitelisting
-
-```yaml
-Network:
-  IPFilter:
-    Enabled: true
-    DefaultPolicy: DENY
-
-    Whitelist:
-      - 192.168.1.0/24
-      - 10.0.0.0/8
-
-    Blacklist:
-      - 192.168.1.100  # Specific IP
-
-    # Per-protocol filtering
-    MQTT:
-      Whitelist: ["192.168.1.0/24"]
-    GraphQL:
-      Whitelist: ["10.0.0.0/24"]
-```
-
-## Data Encryption
-
-### Encryption at Rest
-
-```yaml
-Storage:
-  Encryption:
-    Enabled: true
-    Algorithm: AES-256-GCM
-
-    # Key management
-    KeyStore:
-      Type: FILE  # FILE, HSM, KMS
-      Path: "/app/security/data-keys.jks"
-      Password: "${KEYSTORE_PASSWORD}"
-
-    # Encrypt specific data
-    EncryptPayloads: true
-    EncryptRetained: true
-    EncryptArchive: true
-```
-
-### Field-Level Encryption
-
-```yaml
-Encryption:
-  Fields:
-    - Field: payload
-      Topics: ["sensitive/+"]
-      Algorithm: AES-256-GCM
-
-    - Field: clientId
-      Algorithm: SHA256  # Hash instead of encrypt
-```
-
-## Security Best Practices
-
-### 1. Certificate Management
-
-```bash
-# Regular certificate rotation
-0 0 1 * * /app/scripts/rotate-certificates.sh
-
-# Certificate expiry monitoring
-0 8 * * * /app/scripts/check-certificate-expiry.sh
-```
-
-### 2. Password Management
-
-```yaml
-# Enforce strong passwords
-PasswordPolicy:
-  MinLength: 12
-  MaxLength: 128
-  RequireUppercase: true
-  RequireLowercase: true
-  RequireDigits: true
-  RequireSpecialChars: true
-  DisallowCommon: true  # Check against common passwords
-  DisallowUsername: true  # Password can't contain username
-  HistoryCount: 5  # Can't reuse last 5 passwords
-```
-
-### 3. Secure Defaults
-
-```yaml
-# Production configuration template
-Security:
-  # Disable insecure protocols
-  DisableInsecure: true
-
-  # Require authentication
-  Authentication:
-    Required: true
-    Anonymous: false
-
-  # Enable all security features
-  TLS:
-    Required: true
-    MinVersion: TLSv1.2
-
-  # Strict ACLs
-  Authorization:
-    DefaultPolicy: DENY
-```
-
-## Compliance
-
-### GDPR Compliance
-
-```yaml
-Privacy:
-  GDPR:
-    Enabled: true
-
-    # Data retention
-    Retention:
-      DefaultDays: 90
-      MinimumDays: 30
-
-    # Right to erasure
-    Erasure:
-      Enabled: true
-      API: true
-
-    # Data portability
-    Export:
-      Enabled: true
-      Format: JSON
-```
-
-### PCI DSS Compliance
-
-```yaml
-PCI:
-  # Encryption requirements
-  Encryption:
-    MinKeyLength: 2048
-    Protocols: [TLSv1.2, TLSv1.3]
-
-  # Access logging
-  Audit:
-    LogAllAccess: true
-    RetentionDays: 365
-
-  # Network segmentation
-  NetworkSegmentation:
-    Enabled: true
-    CardholderDataTopics: ["payments/+"]
-```
-
-## Security Monitoring
-
-### Intrusion Detection
-
-```yaml
-IDS:
-  Enabled: true
-
-  Rules:
-    - Name: "Brute Force Detection"
-      Pattern: "LOGIN_FAILURE"
-      Threshold: 5
-      Window: 300  # seconds
-      Action: BLOCK_IP
-
-    - Name: "Unusual Topic Access"
-      Pattern: "SUBSCRIBE system/#"
-      Action: ALERT
-```
-
-### Security Metrics
-
-```yaml
-Metrics:
-  Security:
-    - failed_authentications
-    - certificate_errors
-    - acl_violations
-    - suspicious_patterns
-    - encryption_operations
-```
-
-## Incident Response
-
-### Automated Response
-
-```yaml
-IncidentResponse:
-  AutoResponse:
-    - Trigger: BRUTE_FORCE
-      Actions:
-        - BLOCK_IP
-        - ALERT_ADMIN
-        - LOG_INCIDENT
-
-    - Trigger: CERTIFICATE_EXPIRED
-      Actions:
-        - REJECT_CONNECTION
-        - NOTIFY_CLIENT
-        - LOG_ERROR
-```
-
-### Security Hardening Checklist
-
-- [ ] Enable TLS/SSL for all connections
-- [ ] Require strong passwords
-- [ ] Implement rate limiting
-- [ ] Enable audit logging
-- [ ] Configure firewall rules
-- [ ] Set up intrusion detection
-- [ ] Regular security updates
-- [ ] Certificate rotation schedule
-- [ ] Backup encryption keys
-- [ ] Test disaster recovery
-- [ ] Security training for operators
-- [ ] Regular security audits
+A value of 0 disables the corresponding limit. These are message throughput
+limits, not per-IP connection limits or account lockout controls. See
+[Configuration](configuration.md#rate-limiting).
+
+Set `TCP: 0` and `WS: 0` if only encrypted MQTT listeners should be available.
+The MQTT `SSL` settings do not enable HTTPS for GraphQL, REST, or the dashboard;
+provide HTTPS at a reverse proxy. Configure network access restrictions and
+HTTP security headers in the firewall/proxy used for the deployment.
+
+## Logging and Storage
+
+Enable `Logging.Memory.Enabled` for the dashboard and [GraphQL system logs](graphql-system-logs.md).
+This is a bounded runtime log buffer, not a persistent security audit trail.
+Arrange persistent collection separately if needed. Archive retention settings
+control message deletion schedules; they do not encrypt stored data.
+
+The broker does not parse the old documentation's `Authentication`,
+`Authorization`, `Users`, `Groups`, `HTTP.Security`, `RateLimiting`, `Audit`,
+`Network.IPFilter`, `Storage.Encryption`, `Encryption`, `PasswordPolicy`,
+`Security`, `Privacy`, `PCI`, `IDS`, or `IncidentResponse` blocks. They do not
+enable lockout, encryption at rest, intrusion detection, certificate rotation,
+or compliance controls. Do not rely on those obsolete examples.
 
 ## Troubleshooting
 
-### Common Security Issues
+Inspect a TLS handshake and certificate chain:
 
-1. **Certificate Validation Errors**
-   ```bash
-   # Check certificate
-   openssl s_client -connect localhost:8883 -showcerts
+```bash
+openssl s_client -connect mqtt.example.com:8883 -servername mqtt.example.com -showcerts
+openssl verify -CAfile ca.crt server.crt
+```
 
-   # Verify certificate chain
-   openssl verify -CAfile ca.crt server.crt
-   ```
+For mTLS, verify that `TrustStorePath` is configured as well as `ClientAuth`.
+Without a trust-store path, the broker warns and does not check client
+certificates. For identity login, check the certificate Common Name, the account's
+enabled state, and `UseIdentityAsUsername`.
 
-2. **Authentication Failures**
-   ```bash
-   # Check audit logs
-   tail -f /var/log/monstermq/audit.log | grep LOGIN_FAILURE
+For access failures, inspect the account and its rules:
 
-   # Test authentication
-   mosquitto_pub -h localhost -p 8883 --cafile ca.crt \
-     -u testuser -P testpass -t test -m "test"
-   ```
+```graphql
+query InspectAccess {
+  users(username: "sensor_001") {
+    username enabled canSubscribe canPublish isAdmin
+    aclRules { topicPattern canSubscribe canPublish priority }
+  }
+}
+```
 
-3. **ACL Violations**
-   ```graphql
-   # Check user permissions
-   query {
-     userPermissions(username: "user123") {
-       topic
-       actions
-     }
-   }
-   ```
+Implementation references: [MqttServer.kt](../broker/src/main/kotlin/MqttServer.kt),
+[Monster.kt](../broker/src/main/kotlin/Monster.kt), and the
+[authentication code](../broker/src/main/kotlin/auth/).
+
+## Interface-specific enforcement limits
+
+Authentication and topic ACL enforcement are not uniform across every extension.
+The current [GraphQL WebSocket route](graphql.md#subscriptions),
+[MCP tools](mcp.md#authentication-and-access-scope), and
+[Zenoh current-value queries](zenoh.md#current-value-queries) have the specific
+limits documented in those guides. The [OPC UA server](opcua-server.md#security-block-security)
+does not wire a MonsterMQ username identity validator. Restrict access to those
+interfaces according to their actual enforcement, rather than assuming the MQTT
+client authorization path applies to every protocol.

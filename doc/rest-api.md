@@ -42,7 +42,7 @@ Pass the JWT in subsequent requests:
 
 ```bash
 curl -H "Authorization: Bearer <token>" \
-  http://localhost:4000/api/v1/topics/sensor/temperature?retained
+  "http://localhost:4000/api/v1/topics/sensor/temperature?retained"
 ```
 
 ### Alternative: Basic Auth
@@ -69,7 +69,8 @@ curl -u "Admin:Admin" \
 | `POST` | `/api/v1/login` | Authenticate and get JWT token (no auth required) |
 | `POST` | `/api/v1/topics/{topic}` | Publish with raw body as payload |
 | `PUT` | `/api/v1/topics/{topic}` | Publish with inline query-param payload |
-| `POST` | `/api/v1/write` | Bulk publish (JSON array) |
+| `POST` | `/api/v1/write/influx` | Ingest line protocol |
+| `POST` | `/api/v1/write` | Bulk publish (`messages` or `records` envelope) |
 | `GET` | `/api/v1/topics/{topic}?retained` | Read retained value(s) |
 | `GET` | `/api/v1/topics/{topic}?group=X` | Read last value from archive group |
 | `GET` | `/api/v1/topics/{topic}?group=X&start=...&end=...` | Read history |
@@ -131,7 +132,7 @@ curl -u Admin:Admin -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "messages": [
-      {"topic": "sensor/temp", "value": "23.5", "retain": true},
+      {"topic": "sensor/temp", "value": 23.5, "retain": true},
       {"topic": "sensor/humidity", "value": "65", "qos": 1},
       {"topic": "actuator/valve", "value": "open"}
     ]
@@ -172,8 +173,10 @@ Ingest raw InfluxDB Line Protocol metrics. Telegraf and other Influx-compatible 
 curl -u Admin:Admin -X POST \
   "http://localhost:4000/api/v1/write/influx?base=enterpriseA/siteA/" \
   -H "Content-Type: text/plain" \
-  -d 'sensor,room=living temp=22.5,hum=50i 123456789'
+  -d 'sensor,room=living temp=22.5,hum=50i 1704067200000000000'
 ```
+
+The current parser infers timestamp units from digit count (seconds, milliseconds, microseconds, or nanoseconds); `timestamp_ns` preserves the input integer. Use a full nanosecond timestamp as above for conventional InfluxDB input. This endpoint implements a limited line-protocol parser, not a complete InfluxDB server.
 
 Query parameters:
 - `base` (optional): Prefix added to the generated MQTT topics.
@@ -183,7 +186,7 @@ Query parameters:
     - Topic: `enterpriseA/siteA/sensor/living/hum` → Payload: `50`
   - `json`: Creates a single comprehensive JSON payload per line. From the example: 
     - Topic: `enterpriseA/siteA/sensor/living` 
-    - Payload: `{"temp": 22.5, "hum": 50, "timestamp_ns": 123456789, "timestamp": "1970-01-02T10:17:36.789Z"}`
+    - Payload: `{"temp": 22.5, "hum": 50, "timestamp_ns": 1704067200000000000, "timestamp": "2024-01-01T00:00:00Z"}`
 
 ## Reading Data
 
@@ -207,7 +210,7 @@ Response:
   "messages": [
     {
       "topic": "sensor/temperature",
-      "value": "23.5",
+      "value": 23.5,
       "timestamp": "2026-04-01T10:30:00Z",
       "qos": 0,
       "retain": true
@@ -259,33 +262,25 @@ curl -u Admin:Admin \
 Each event is a JSON object:
 
 ```
-data: {"topic":"sensor/temperature","value":"23.5","timestamp":"2026-04-01T10:30:00.123Z"}
+data: {"topic":"sensor/temperature","value":23.5,"timestamp":"2026-04-01T10:30:00.123Z"}
 
-data: {"topic":"sensor/humidity","value":"65","timestamp":"2026-04-01T10:30:01.456Z"}
+data: {"topic":"sensor/humidity","value":65,"timestamp":"2026-04-01T10:30:01.456Z"}
 ```
 
 The server sends `:keepalive` comments every 30 seconds to detect broken connections.
 
 ### Browser usage
 
+Native `EventSource` cannot set an `Authorization` header. For an authenticated deployment, use an SSE client based on `fetch` that supplies a Bearer token, or a same-origin authenticated gateway that forwards the header. Do not embed credentials in URLs.
+
+For an endpoint already authenticated by such a gateway:
+
 ```javascript
-const source = new EventSource(
-  'http://localhost:4000/api/v1/subscribe?topic=sensor/%23',
-  // Note: EventSource doesn't support custom headers.
-  // Use Basic auth in the URL or disable UserManagement for browser SSE.
-);
-
-source.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log(`${data.topic}: ${data.value} @ ${data.timestamp}`);
-};
-
-source.onerror = (err) => {
-  console.error('SSE connection error', err);
-};
+const source = new EventSource('/api/v1/subscribe?topic=sensor/%23');
+source.onmessage = ({ data }) => console.log(JSON.parse(data));
+source.onerror = (error) => console.error('SSE connection error', error);
+// Call source.close() when leaving the page.
 ```
-
-For authenticated browser SSE, pass credentials via the URL if Basic auth is configured, or use a proxy that injects the JWT header.
 
 ## Topic Path Encoding
 
@@ -343,6 +338,6 @@ The REST API covers the **data plane** — publish, read, subscribe. The **manag
 
 1. The REST API and GraphQL API share the same HTTP port and authentication backend.
 2. JWT tokens obtained via `POST /api/v1/login` are identical to those from the GraphQL `login` mutation — they work interchangeably.
-3. Binary payloads that cannot be decoded as UTF-8 are returned as `value_base64` (Base64-encoded) instead of `value`.
+3. Read and SSE responses always use `value`: valid JSON is decoded to a JSON value, and other payloads are decoded as text. There is no `value_base64` field or reliable binary format marker; use GraphQL `format: BINARY` for byte-preserving reads.
 4. SSE connections create internal MQTT subscriptions. They are automatically cleaned up when the client disconnects.
 5. The `RestApi.Enabled` config key defaults to `true`. Set it to `false` to disable the REST API while keeping GraphQL active.
