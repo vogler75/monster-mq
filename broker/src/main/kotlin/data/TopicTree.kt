@@ -110,6 +110,11 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         if (xs.isNotEmpty()) delTopicNode(root, xs.first(), xs.drop(1))
     }
 
+    override fun clear() {
+        root.children.clear()
+        root.dataset.clear()
+    }
+
     override fun isTopicNameMatching(topicName: String): Boolean {
         // MQTT 3.1.1 spec: Check if the topic starts with '$'
         // Wildcards at level 1 should NOT match topics starting with '$'

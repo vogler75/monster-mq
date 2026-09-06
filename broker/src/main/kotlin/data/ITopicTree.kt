@@ -22,6 +22,8 @@ interface ITopicTree<K, V> {
         topicNames.forEach(::del)
     }
 
+    fun clear()
+
     /*
        The given topicName will be matched with potential wildcard topics of the tree (tree contains wildcard topics),
        and the data of all matching topics will be returned
