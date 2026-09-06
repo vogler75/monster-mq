@@ -210,7 +210,16 @@ class GraphQLServer(
                     }
 
                     // Extract auth context and set it in thread-local for resolvers
-                    val authCtx = authContext.extractAuthContext(ctx)
+                    val authCtx = try {
+                        authContext.extractAuthContext(ctx)
+                    } catch (e: InvalidTokenException) {
+                        ctx.response()
+                            .setStatusCode(401)
+                            .putHeader("content-type", "application/json")
+                            .putHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+                            .end(JsonObject().put("error", e.message ?: "Invalid token").encode())
+                        return@handler
+                    }
                     AuthContextService.setAuthContext(authCtx)
                     ctx.next()
                 } catch (e: Exception) {

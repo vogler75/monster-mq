@@ -61,7 +61,11 @@ class GraphQLAuthContext(
     }
 
     fun extractAuthContextFromHeader(authHeader: String?): AuthContext? {
+        if (authHeader == null) {
+            return null
+        }
         val token = JwtService.extractTokenFromHeader(authHeader)
+            ?: throw InvalidTokenException("Invalid Authorization header format")
         return extractAuthContextFromToken(token)
     }
 
@@ -73,13 +77,13 @@ class GraphQLAuthContext(
         val username = JwtService.extractUsername(token)
         
         if (username == null || JwtService.isTokenExpired(token)) {
-            return null
+            throw InvalidTokenException("Invalid or expired token")
         }
 
         val isAdmin = if (userManager.isUserManagementEnabled()) {
             val user = userManager.getUser(username)
             if (user == null || !user.enabled) {
-                return null
+                throw InvalidTokenException("User account is disabled or deleted")
             }
             user.isAdmin
         } else {
@@ -274,3 +278,9 @@ data class AuthorizationResult(
         fun denied(message: String) = AuthorizationResult(false, message)
     }
 }
+
+/**
+ * Thrown when an Authorization header or token is provided but is invalid, expired,
+ * or belongs to a disabled or deleted user account.
+ */
+class InvalidTokenException(message: String) : RuntimeException(message)

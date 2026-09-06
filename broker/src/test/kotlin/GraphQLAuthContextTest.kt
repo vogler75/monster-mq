@@ -5,6 +5,7 @@ import at.rocworks.data.User
 import at.rocworks.extensions.graphql.AuthContextService
 import at.rocworks.extensions.graphql.GraphQLAuthContext
 import at.rocworks.extensions.graphql.JwtService
+import at.rocworks.extensions.graphql.InvalidTokenException
 import at.rocworks.stores.sqlite.SQLiteVerticle
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -14,6 +15,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -155,9 +157,13 @@ class GraphQLAuthContextTest {
         userManager.updateUser(user.copy(enabled = false)).onComplete { disableFuture.complete(it.result() ?: false) }
         assertTrue(disableFuture.get(10, TimeUnit.SECONDS))
 
-        // Token should now be rejected as unauthenticated
-        val ctx = authContext.extractAuthContextFromToken(token)
-        assertNull("Disabled user token must produce null AuthContext", ctx)
+        // Token should now be explicitly rejected
+        try {
+            authContext.extractAuthContextFromToken(token)
+            fail("Disabled user token must throw InvalidTokenException")
+        } catch (e: InvalidTokenException) {
+            assertEquals("User account is disabled or deleted", e.message)
+        }
 
         // If a stale AuthContext for a disabled user was in thread local, validateFieldAccess must deny it
         val staleCtx = at.rocworks.extensions.graphql.AuthContext("user_to_disable", isAdmin = true, token = token)
@@ -185,9 +191,13 @@ class GraphQLAuthContextTest {
         userManager.deleteUser("user_to_delete").onComplete { deleteFuture.complete(it.result() ?: false) }
         assertTrue(deleteFuture.get(10, TimeUnit.SECONDS))
 
-        // Token should now be rejected
-        val ctx = authContext.extractAuthContextFromToken(token)
-        assertNull("Deleted user token must produce null AuthContext", ctx)
+        // Token should now be explicitly rejected
+        try {
+            authContext.extractAuthContextFromToken(token)
+            fail("Deleted user token must throw InvalidTokenException")
+        } catch (e: InvalidTokenException) {
+            assertEquals("User account is disabled or deleted", e.message)
+        }
 
         val staleCtx = at.rocworks.extensions.graphql.AuthContext("user_to_delete", isAdmin = true, token = token)
         AuthContextService.setAuthContext(staleCtx)
@@ -239,5 +249,32 @@ class GraphQLAuthContextTest {
         AuthContextService.setAuthContext(ctx)
         val result = authContext.validateFieldAccess("user")
         assertTrue("When user management is disabled, all operations should be allowed", result.allowed)
+    }
+
+    @Test
+    fun testAnonymousRequestWithoutAuthHeaderReturnsNull() {
+        val userManager = createUserManager(enabled = true)
+        val authContext = GraphQLAuthContext(userManager)
+        assertNull(authContext.extractAuthContextFromHeader(null))
+        assertNull(authContext.extractAuthContextFromToken(null))
+    }
+
+    @Test
+    fun testInvalidOrMalformedHeaderThrowsInvalidTokenException() {
+        val userManager = createUserManager(enabled = true)
+        val authContext = GraphQLAuthContext(userManager)
+        try {
+            authContext.extractAuthContextFromHeader("Basic YWRtaW46YWRtaW4=")
+            fail("Non-Bearer header must throw InvalidTokenException")
+        } catch (e: InvalidTokenException) {
+            assertEquals("Invalid Authorization header format", e.message)
+        }
+
+        try {
+            authContext.extractAuthContextFromHeader("Bearer not-a-jwt")
+            fail("Malformed JWT token must throw InvalidTokenException")
+        } catch (e: InvalidTokenException) {
+            assertEquals("Invalid or expired token", e.message)
+        }
     }
 }
