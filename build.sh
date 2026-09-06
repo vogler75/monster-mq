@@ -3,10 +3,12 @@
 # build.sh - Build script for MonsterMQ Main Broker, Setup Executables, and Docker Images
 #
 # Usage:
-#   ./build.sh --all          Build all artifacts locally (broker zip, setup executables, docker image)
-#   ./build.sh --broker       Build Java broker zip bundle only
-#   ./build.sh --setup        Build cross-platform Go setup executables only
-#   ./build.sh --docker       Build local Docker image only
+#   ./build.sh --all            Build all artifacts locally (broker zip, setup executables, docker image)
+#   ./build.sh --broker         Build Java broker zip bundle only
+#   ./build.sh --setup          Build cross-platform Go setup executables only
+#   ./build.sh --docker         Build local Docker image only
+#   ./build.sh --testing, -t    Build local Docker image tagged as rocworks/monstermq:testing
+#   ./build.sh -c [targets]     Build inside Docker containers (Node.js LTS / GraalVM 21)
 
 set -e
 
@@ -28,9 +30,15 @@ VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 
 BUILD_BROKER=false
 BUILD_DOCKER=false
+DOCKER_TESTING=false
 BUILD_SETUP=false
+CONTAINER_BUILD=false
 CLEAN=false
 EXPLICIT_TARGET=false
+
+DASHBOARD_VOLUME="monstermq-dashboard-build"
+BROKER_VOLUME="monstermq-broker-build"
+M2_VOLUME="monstermq-m2-cache"
 
 usage() {
     echo "Usage: $0 [options]"
@@ -40,6 +48,8 @@ usage() {
     echo "  --broker         Build standalone Java broker bundle (zip)"
     echo "  --setup          Build cross-platform Go setup executables (setup.exe, setup-mac, setup-linux)"
     echo "  --docker         Build local Docker image (native platform)"
+    echo "  --testing, -t    Build local Docker image tagged as rocworks/monstermq:testing"
+    echo "  -c, --container  Build dashboard (and broker) inside Docker containers (Node.js LTS / GraalVM 21)"
     echo "  --clean          Clean output build directories"
     echo "  -h, --help       Show this help message"
     echo ""
@@ -74,6 +84,16 @@ while [[ $# -gt 0 ]]; do
             EXPLICIT_TARGET=true
             shift
             ;;
+        --testing|-t)
+            BUILD_DOCKER=true
+            DOCKER_TESTING=true
+            EXPLICIT_TARGET=true
+            shift
+            ;;
+        -c|--container)
+            CONTAINER_BUILD=true
+            shift
+            ;;
         --clean)
             CLEAN=true
             shift
@@ -106,6 +126,7 @@ if [ "$CLEAN" = true ]; then
     rm -rf dashboard/dist
     rm -rf dist
     rm -rf docker/target
+    docker volume rm "${DASHBOARD_VOLUME}" "${BROKER_VOLUME}" 2>/dev/null || true
     echo -e "${GREEN}✓ Clean complete${NC}"
 fi
 
@@ -137,8 +158,28 @@ if [ "$BUILD_BROKER" = true ]; then
         exit 1
     fi
 
-    echo -e "${YELLOW}Building web dashboard frontend from ${DASHBOARD_DIR}...${NC}"
-    (cd "$DASHBOARD_DIR" && npm ci && npm run build)
+    # Convert DASHBOARD_DIR to absolute path for Docker volume mounting
+    ABS_DASHBOARD_DIR=$(cd "$DASHBOARD_DIR" && pwd)
+
+    if [ "$CONTAINER_BUILD" = true ]; then
+        echo -e "${YELLOW}Building web dashboard frontend in Docker container (Node.js LTS) from ${DASHBOARD_DIR}...${NC}"
+        if [ -d "${ABS_DASHBOARD_DIR}/node_modules" ] && [ ! -w "${ABS_DASHBOARD_DIR}/node_modules" ]; then
+            rmdir "${ABS_DASHBOARD_DIR}/node_modules" 2>/dev/null || docker run --rm -v "${ABS_DASHBOARD_DIR}:/app" alpine rm -rf /app/node_modules 2>/dev/null || true
+        fi
+        mkdir -p "${ABS_DASHBOARD_DIR}/node_modules"
+
+        docker run --rm \
+            -v "${ABS_DASHBOARD_DIR}:/app" \
+            -v "${DASHBOARD_VOLUME}:/app/node_modules" \
+            -w /app \
+            node:24-slim \
+            bash -c "set -e && npm ci && npm run build && chown -R $(id -u):$(id -g) /app/dist"
+        
+        rmdir "${ABS_DASHBOARD_DIR}/node_modules" 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Building web dashboard frontend from ${DASHBOARD_DIR}...${NC}"
+        (cd "$DASHBOARD_DIR" && npm ci && npm run build)
+    fi
     
     echo -e "${YELLOW}Copying web dashboard to broker resources...${NC}"
     rm -rf broker/src/main/resources/dashboard
@@ -146,11 +187,45 @@ if [ "$BUILD_BROKER" = true ]; then
     cp -r "${DASHBOARD_DIR}/dist"/* broker/src/main/resources/dashboard/
     rm -f broker/src/main/resources/dashboard/config/brokers.json
     
-    echo -e "${YELLOW}Compiling Java broker with Maven...${NC}"
-    if [ -d "broker/target" ] && [ ! -w "broker/target" ]; then
-        rmdir broker/target 2>/dev/null || docker run --rm -v "$(pwd)/broker:/build" alpine rm -rf /build/target 2>/dev/null || true
+    if [ "$CONTAINER_BUILD" = true ]; then
+        echo -e "${YELLOW}Compiling Java broker with Maven in Docker container (GraalVM 21)...${NC}"
+        MAVEN_BUILDER_IMAGE="monstermq-maven-builder:graalvm21"
+        if ! docker image inspect "${MAVEN_BUILDER_IMAGE}" > /dev/null 2>&1; then
+            echo -e "${YELLOW}Building Maven builder image (first time only)...${NC}"
+            docker build -t "${MAVEN_BUILDER_IMAGE}" -f docker/Dockerfile.maven-builder docker/
+        fi
+
+        BROKER_DIR="$(pwd)/broker"
+        if [ -d "${BROKER_DIR}/target" ] && [ ! -w "${BROKER_DIR}/target" ]; then
+            rmdir "${BROKER_DIR}/target" 2>/dev/null || docker run --rm -v "${BROKER_DIR}:/build" alpine rm -rf /build/target 2>/dev/null || true
+        fi
+        mkdir -p "${BROKER_DIR}/target"
+
+        docker run --rm \
+            -v "${BROKER_DIR}:/build" \
+            -v "${BROKER_VOLUME}:/build/target" \
+            -v "${M2_VOLUME}:/root/.m2" \
+            -e MAVEN_OPTS="-Duser.home=/root" \
+            -w /build \
+            "${MAVEN_BUILDER_IMAGE}" \
+            mvn package -DskipTests
+
+        rmdir "${BROKER_DIR}/target" 2>/dev/null || true
+
+        # Copy built jar and dependencies from volume into broker/target
+        TEMP_CID=$(docker create -v "${BROKER_VOLUME}:/build/target" "${MAVEN_BUILDER_IMAGE}" sh)
+        rm -rf broker/target
+        mkdir -p broker/target
+        docker cp "${TEMP_CID}:/build/target/broker-1.0-SNAPSHOT.jar" broker/target/
+        docker cp "${TEMP_CID}:/build/target/dependencies" broker/target/
+        docker rm "${TEMP_CID}" > /dev/null
+    else
+        echo -e "${YELLOW}Compiling Java broker with Maven...${NC}"
+        if [ -d "broker/target" ] && [ ! -w "broker/target" ]; then
+            rmdir broker/target 2>/dev/null || docker run --rm -v "$(pwd)/broker:/build" alpine rm -rf /build/target 2>/dev/null || true
+        fi
+        (cd broker && mvn package -DskipTests)
     fi
-    (cd broker && mvn package -DskipTests)
     
     echo -e "${YELLOW}Packaging broker zip bundle...${NC}"
     mkdir -p dist
@@ -297,8 +372,21 @@ fi
 
 # 3. Build Docker Image (Local)
 if [ "$BUILD_DOCKER" = true ]; then
-    echo -e "${GREEN}[3/3] Building Local Docker Image...${NC}"
-    (cd docker && ./build -n)
+    DOCKER_BUILD_FLAGS="-n"
+    if [ "$BUILD_BROKER" = true ]; then
+        # Broker was already compiled and staged in step 1, skip rebuilding Maven/dashboard in docker/build
+        DOCKER_BUILD_FLAGS="$DOCKER_BUILD_FLAGS -d"
+    elif [ "$CONTAINER_BUILD" = true ]; then
+        # Broker was not built in step 1; let docker/build build inside container
+        DOCKER_BUILD_FLAGS="$DOCKER_BUILD_FLAGS -c"
+    fi
+    if [ "$DOCKER_TESTING" = true ]; then
+        DOCKER_BUILD_FLAGS="$DOCKER_BUILD_FLAGS --testing"
+        echo -e "${GREEN}[3/3] Building Local Docker Image (testing)...${NC}"
+    else
+        echo -e "${GREEN}[3/3] Building Local Docker Image...${NC}"
+    fi
+    (cd docker && ./build $DOCKER_BUILD_FLAGS)
     echo -e "${GREEN}✓ Local Docker image built${NC}"
 fi
 
