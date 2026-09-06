@@ -1,6 +1,5 @@
 docker/entrypoint.sh text eol=lf
 docker/build.sh text eol=lf
-docker/build text eol=lf
 docker/build-testing.sh text eol=lf
 docker/build-version.sh text eol=lf
 docker/run text eol=lf
