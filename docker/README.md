@@ -48,3 +48,11 @@ Usage: ./build.sh [options]
   --testing, -t      Build testing image (rocworks/monstermq:testing)
   --clean            Clean output directories before build
 ```
+
+---
+
+## Helper Scripts
+
+- **`./build-testing.sh`**: Convenience wrapper running `./build.sh -c -t -n` (builds `rocworks/monstermq:testing` locally in container).
+- **`./build-version.sh`**: Convenience wrapper running `./build.sh -c -y --clean` (clean, multi-arch build and publish to Docker Hub).
+

@@ -1,1 +1,1 @@
-./build.sh -c -t -n
+build-testing.sh
