@@ -267,6 +267,24 @@ class McpServer(
             return false
         }
 
+        if (userManager.isUserManagementEnabled()) {
+            val user = userManager.getUser(username)
+            if (user == null || !user.enabled) {
+                logger.warning("MCP request rejected: User account disabled or not found")
+                ctx.response()
+                    .setStatusCode(401)
+                    .putHeader("Content-Type", "application/json")
+                    .putHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+                    .end(JsonObject()
+                        .put("jsonrpc", "2.0")
+                        .put("error", JsonObject()
+                            .put("code", -32600)
+                            .put("message", "User account disabled or not found"))
+                        .encode())
+                return false
+            }
+        }
+
         logger.fine("MCP request authenticated for user: $username")
         return true
     }

@@ -178,8 +178,16 @@ class RestApiServer(
             val token = authHeader.substring(7)
             val username = JwtService.extractUsername(token)
             if (username != null && !JwtService.isTokenExpired(token)) {
-                onSuccess(username)
-                return
+                if (userManager.isUserManagementEnabled()) {
+                    val user = userManager.getUser(username)
+                    if (user != null && user.enabled) {
+                        onSuccess(username)
+                        return
+                    }
+                } else {
+                    onSuccess(username)
+                    return
+                }
             }
             ctx.response().setStatusCode(401)
                 .putHeader("Content-Type", "application/json")

@@ -512,7 +512,7 @@ class GraphQLServer(
                             if (userManager.isUserManagementEnabled() && user?.enabled == true) {
                                 mapOf(
                                     "username" to auth.username,
-                                    "isAdmin" to auth.isAdmin
+                                    "isAdmin" to user.isAdmin
                                 )
                             } else {
                                 null

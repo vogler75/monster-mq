@@ -57,17 +57,33 @@ class GraphQLAuthContext(
      */
     fun extractAuthContext(routingContext: RoutingContext): AuthContext? {
         val authHeader = routingContext.request().getHeader("Authorization")
+        return extractAuthContextFromHeader(authHeader)
+    }
+
+    fun extractAuthContextFromHeader(authHeader: String?): AuthContext? {
         val token = JwtService.extractTokenFromHeader(authHeader)
-        
+        return extractAuthContextFromToken(token)
+    }
+
+    fun extractAuthContextFromToken(token: String?): AuthContext? {
         if (token == null) {
             return null
         }
         
         val username = JwtService.extractUsername(token)
-        val isAdmin = JwtService.extractIsAdmin(token)
         
         if (username == null || JwtService.isTokenExpired(token)) {
             return null
+        }
+
+        val isAdmin = if (userManager.isUserManagementEnabled()) {
+            val user = userManager.getUser(username)
+            if (user == null || !user.enabled) {
+                return null
+            }
+            user.isAdmin
+        } else {
+            JwtService.extractIsAdmin(token)
         }
         
         return AuthContext(
@@ -129,7 +145,8 @@ class GraphQLAuthContext(
             return result
         }
 
-        if (authContext.isAdmin) {
+        val isAdmin = if (userManager.isUserManagementEnabled()) userManager.isAdmin(authContext.username) else authContext.isAdmin
+        if (isAdmin) {
             logger.fine("Admin user ${authContext.username} allowed to subscribe to $topic")
             return true // Admin can access everything
         }
@@ -155,7 +172,8 @@ class GraphQLAuthContext(
             return result
         }
 
-        if (authContext.isAdmin) {
+        val isAdmin = if (userManager.isUserManagementEnabled()) userManager.isAdmin(authContext.username) else authContext.isAdmin
+        if (isAdmin) {
             logger.fine("Admin user ${authContext.username} allowed to publish to $topic")
             return true // Admin can access everything
         }
@@ -179,7 +197,8 @@ class GraphQLAuthContext(
             return anonymousUser?.canSubscribe == true
         }
         
-        if (authContext.isAdmin) {
+        val isAdmin = if (userManager.isUserManagementEnabled()) userManager.isAdmin(authContext.username) else authContext.isAdmin
+        if (isAdmin) {
             return true // Admin can access everything
         }
         
@@ -191,7 +210,10 @@ class GraphQLAuthContext(
      * Validate authorization for a GraphQL field
      */
     fun validateFieldAccess(env: DataFetchingEnvironment): AuthorizationResult {
-        val fieldName = env.field.name
+        return validateFieldAccess(env.field.name)
+    }
+
+    fun validateFieldAccess(fieldName: String): AuthorizationResult {
         // Get auth context from thread-local service
         val authContext: AuthContext? = AuthContextService.getAuthContext()
         
@@ -210,6 +232,14 @@ class GraphQLAuthContext(
             return AuthorizationResult.allowed()
         }
 
+        // Check if user account is disabled or deleted
+        if (authContext != null) {
+            val user = userManager.getUser(authContext.username)
+            if (user == null || !user.enabled) {
+                return AuthorizationResult.denied("Authentication required")
+            }
+        }
+
         // Write-protected mutations require a valid auth context
         if (fieldName in WRITE_PROTECTED_MUTATIONS) {
             if (authContext == null) {
@@ -222,7 +252,7 @@ class GraphQLAuthContext(
             if (authContext == null) {
                 return AuthorizationResult.denied("Authentication required")
             }
-            if (!authContext.isAdmin) {
+            if (!userManager.isAdmin(authContext.username)) {
                 return AuthorizationResult.denied("Admin privileges required")
             }
         }
