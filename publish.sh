@@ -231,7 +231,7 @@ fi
 # 2. Push Multi-Arch Docker Image to Docker Hub
 if [ "$PUBLISH_DOCKER" = true ]; then
     echo -e "${GREEN}[2/2] Publishing Multi-Arch Docker Images to Docker Hub...${NC}"
-    (cd docker && ./build -d -y)
+    (cd docker && ./build.sh -d -y)
     echo -e "${GREEN}✓ Docker Hub images published successfully!${NC}"
 fi
 
