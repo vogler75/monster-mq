@@ -182,7 +182,7 @@ cd broker
 ### Build Image
 ```bash
 cd docker
-./build
+./build.sh
 ```
 
 ### Run Container

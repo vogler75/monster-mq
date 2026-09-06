@@ -1,1 +1,1 @@
-./build -c -y --clean
+./build.sh -c -y --clean

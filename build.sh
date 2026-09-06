@@ -205,7 +205,7 @@ if [ "$BUILD_BROKER" = true ]; then
             -v "${BROKER_DIR}:/build" \
             -v "${BROKER_VOLUME}:/build/target" \
             -v "${M2_VOLUME}:/root/.m2" \
-            -e MAVEN_OPTS="-Duser.home=/root" \
+            -e MAVEN_OPTS="${MAVEN_OPTS:--XX:MaxRAMPercentage=75.0} -Duser.home=/root" \
             -w /build \
             "${MAVEN_BUILDER_IMAGE}" \
             mvn package -DskipTests
@@ -374,10 +374,10 @@ fi
 if [ "$BUILD_DOCKER" = true ]; then
     DOCKER_BUILD_FLAGS="-n"
     if [ "$BUILD_BROKER" = true ]; then
-        # Broker was already compiled and staged in step 1, skip rebuilding Maven/dashboard in docker/build
+        # Broker was already compiled and staged in step 1, skip rebuilding Maven/dashboard in docker/build.sh
         DOCKER_BUILD_FLAGS="$DOCKER_BUILD_FLAGS -d"
     elif [ "$CONTAINER_BUILD" = true ]; then
-        # Broker was not built in step 1; let docker/build build inside container
+        # Broker was not built in step 1; let docker/build.sh build inside container
         DOCKER_BUILD_FLAGS="$DOCKER_BUILD_FLAGS -c"
     fi
     if [ "$DOCKER_TESTING" = true ]; then
@@ -386,7 +386,7 @@ if [ "$BUILD_DOCKER" = true ]; then
     else
         echo -e "${GREEN}[3/3] Building Local Docker Image...${NC}"
     fi
-    (cd docker && ./build $DOCKER_BUILD_FLAGS)
+    (cd docker && ./build.sh $DOCKER_BUILD_FLAGS)
     echo -e "${GREEN}✓ Local Docker image built${NC}"
 fi
 

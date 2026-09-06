@@ -76,7 +76,7 @@ GRAPHQL_URL=http://localhost:4000/graphql
 ```bash
 # Build Docker image
 cd docker
-./build
+./build.sh
 
 # Run with Docker
 docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
