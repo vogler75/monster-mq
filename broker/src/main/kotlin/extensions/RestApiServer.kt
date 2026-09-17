@@ -646,19 +646,15 @@ class RestApiServer(
 
         // Determine which mode based on query parameters
         val hasRetained = ctx.request().params().contains("retained")
-        val group = ctx.request().getParam("group")
+        // Archive reads use the Default group when the caller does not select one.
+        val group = ctx.request().getParam("group") ?: "Default"
         val start = ctx.request().getParam("start")
         val end = ctx.request().getParam("end")
 
         when {
             hasRetained -> handleReadRetained(ctx, topic)
-            group != null && (start != null || end != null) -> handleReadHistory(ctx, topic, group, start, end)
-            group != null -> handleReadLastValue(ctx, topic, group)
-            else -> {
-                ctx.response().setStatusCode(400)
-                    .putHeader("Content-Type", "application/json")
-                    .end(errorJson("Specify ?retained or ?group=<name>. See API docs at $API_PREFIX/docs"))
-            }
+            start != null || end != null -> handleReadHistory(ctx, topic, group, start, end)
+            else -> handleReadLastValue(ctx, topic, group)
         }
     }
 

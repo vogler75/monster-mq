@@ -72,8 +72,8 @@ curl -u "Admin:Admin" \
 | `POST` | `/api/v1/write/influx` | Ingest line protocol |
 | `POST` | `/api/v1/write` | Bulk publish (`messages` or `records` envelope) |
 | `GET` | `/api/v1/topics/{topic}?retained` | Read retained value(s) |
-| `GET` | `/api/v1/topics/{topic}?group=X` | Read last value from archive group |
-| `GET` | `/api/v1/topics/{topic}?group=X&start=...&end=...` | Read history |
+| `GET` | `/api/v1/topics/{topic}?group=X` | Read last value from archive group (`Default` when omitted) |
+| `GET` | `/api/v1/topics/{topic}?group=X&start=...&end=...` | Read history (`Default` when omitted) |
 | `GET` | `/api/v1/subscribe?topic=...` | SSE live subscription |
 | `GET` | `/api/v1/docs` | Swagger UI |
 | `GET` | `/api/v1/openapi.yaml` | OpenAPI 3.0 specification |
@@ -221,24 +221,26 @@ Response:
 
 ### Last value (from archive group)
 
-Read the most recent value from a configured archive group's last-value store.
+Read the most recent value from a configured archive group's last-value store. When
+`group` is omitted, the API uses the `Default` archive group.
 
 ```bash
 curl -u Admin:Admin \
-  "http://localhost:4000/api/v1/topics/sensor/temperature?group=Default"
+  "http://localhost:4000/api/v1/topics/sensor/temperature"
 ```
 
 ### Historical data
 
-Query time-series data from an archive group. Times are in ISO 8601 format.
+Query time-series data from an archive group. Times are in ISO 8601 format. When
+`group` is omitted, the API uses the `Default` archive group.
 
 ```bash
 curl -u Admin:Admin \
-  "http://localhost:4000/api/v1/topics/sensor/temperature?group=Default&start=2026-04-01T00:00:00Z&end=2026-04-01T12:00:00Z&limit=100"
+  "http://localhost:4000/api/v1/topics/sensor/temperature?start=2026-04-01T00:00:00Z&end=2026-04-01T12:00:00Z&limit=100"
 ```
 
 Query parameters:
-- `group` (required) — Archive group name
+- `group` — Archive group name (defaults to `Default`)
 - `start` — Start time (ISO 8601), defaults to 1 hour ago
 - `end` — End time (ISO 8601), defaults to now
 - `limit` — Maximum number of records (default: 1000)
