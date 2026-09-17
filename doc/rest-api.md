@@ -219,6 +219,43 @@ Response:
 }
 ```
 
+### Multiple topics
+
+Use MQTT wildcards in the topic path to retrieve a set of related topics. URL-encode
+`+` as `%2B` and `#` as `%23`.
+
+```bash
+# All retained values below sensor/
+curl -u Admin:Admin \
+  "http://localhost:4000/api/v1/topics/sensor/%23?retained"
+
+# Last values for all temperature topics in the Default archive group
+curl -u Admin:Admin \
+  "http://localhost:4000/api/v1/topics/sensor/%2B/temperature"
+```
+
+The read route accepts one topic filter, rather than a list of unrelated topic names.
+For live updates, `/subscribe` accepts multiple `topic` query parameters.
+
+### Raw binary payload
+
+Add `raw` (or `raw=true`) to return a single retained or last-value MQTT payload directly as
+the HTTP response body, rather than in the JSON `messages` envelope. This is useful
+for images and other binary assets. It requires exactly one matching message, so use
+an exact topic rather than a wildcard. Archive-history reads do not support raw mode.
+
+```bash
+# Download a retained JPEG exactly as published
+curl -u Admin:Admin \
+  "http://localhost:4000/api/v1/topics/camera/front.jpg?retained&raw" \
+  --output front.jpg
+```
+
+The response uses the MQTT 5 content type when it was supplied; otherwise it uses
+`application/octet-stream`. A raw HTTP publish records its request `Content-Type`
+on the broker message, so publishing an image with `Content-Type: image/jpeg` lets
+clients receive the appropriate MIME type on a subsequent raw read.
+
 ### Last value (from archive group)
 
 Read the most recent value from a configured archive group's last-value store. When

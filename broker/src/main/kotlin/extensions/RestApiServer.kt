@@ -14,6 +14,7 @@ import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 
 import io.vertx.core.Vertx
+import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
@@ -276,7 +277,11 @@ class RestApiServer(
             isRetain = retain,
             isDup = false,
             isQueued = false,
-            clientId = "$REST_CLIENT_PREFIX$username"
+            clientId = "$REST_CLIENT_PREFIX$username",
+            contentType = ctx.request().getHeader("Content-Type")
+                ?.substringBefore(';')
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
         )
 
         sessionHandler.publishMessage(message)
@@ -646,23 +651,41 @@ class RestApiServer(
 
         // Determine which mode based on query parameters
         val hasRetained = ctx.request().params().contains("retained")
+        // Like retained, raw may be supplied as a presence flag (?raw) or explicitly (?raw=true).
+        val raw = ctx.request().params().contains("raw") &&
+            ctx.request().getParam("raw")?.let { it.isEmpty() || it.toBoolean() } != false
         // Archive reads use the Default group when the caller does not select one.
         val group = ctx.request().getParam("group") ?: "Default"
         val start = ctx.request().getParam("start")
         val end = ctx.request().getParam("end")
 
         when {
-            hasRetained -> handleReadRetained(ctx, topic)
-            start != null || end != null -> handleReadHistory(ctx, topic, group, start, end)
-            else -> handleReadLastValue(ctx, topic, group)
+            hasRetained -> handleReadRetained(ctx, topic, raw)
+            start != null || end != null -> {
+                if (raw) {
+                    ctx.response().setStatusCode(400)
+                        .putHeader("Content-Type", "application/json")
+                        .end(errorJson("raw=true is not supported for archive history reads"))
+                } else {
+                    handleReadHistory(ctx, topic, group, start, end)
+                }
+            }
+            else -> handleReadLastValue(ctx, topic, group, raw)
         }
     }
 
-    private fun handleReadRetained(ctx: RoutingContext, topic: String) {
+    private fun handleReadRetained(ctx: RoutingContext, topic: String, raw: Boolean) {
         if (retainedStore == null) {
             ctx.response().setStatusCode(404)
                 .putHeader("Content-Type", "application/json")
                 .end(errorJson("Retained store is not available"))
+            return
+        }
+
+        if (raw) {
+            respondWithRawPayload(ctx, topic, "retained store") { callback ->
+                retainedStore.findMatchingMessages(topic, callback)
+            }
             return
         }
 
@@ -677,7 +700,7 @@ class RestApiServer(
             .end(JsonObject().put("messages", messages).encode())
     }
 
-    private fun handleReadLastValue(ctx: RoutingContext, topic: String, group: String) {
+    private fun handleReadLastValue(ctx: RoutingContext, topic: String, group: String, raw: Boolean) {
         val archiveGroup = archiveHandler.getDeployedArchiveGroups()[group]
         if (archiveGroup == null) {
             ctx.response().setStatusCode(404)
@@ -691,6 +714,13 @@ class RestApiServer(
             ctx.response().setStatusCode(404)
                 .putHeader("Content-Type", "application/json")
                 .end(errorJson("Archive group '$group' has no last value store"))
+            return
+        }
+
+        if (raw) {
+            respondWithRawPayload(ctx, topic, "archive group '$group'") { callback ->
+                lastValStore.findMatchingMessages(topic, callback)
+            }
             return
         }
 
@@ -747,6 +777,41 @@ class RestApiServer(
         ctx.response().setStatusCode(200)
             .putHeader("Content-Type", "application/json")
             .end(JsonObject().put("messages", history).encode())
+    }
+
+    /**
+     * Return the MQTT payload as the HTTP response body. Raw output deliberately
+     * requires one exact match: a single byte stream cannot represent multiple
+     * topics or multiple values without introducing an envelope format.
+     */
+    private fun respondWithRawPayload(
+        ctx: RoutingContext,
+        topic: String,
+        source: String,
+        findMessages: ((BrokerMessage) -> Boolean) -> Unit
+    ) {
+        val matches = mutableListOf<BrokerMessage>()
+        findMessages { message ->
+            matches.add(message)
+            matches.size < 2
+        }
+
+        when (matches.size) {
+            0 -> ctx.response().setStatusCode(404)
+                .putHeader("Content-Type", "application/json")
+                .end(errorJson("No message found for topic: $topic"))
+            1 -> {
+                val message = matches.single()
+                ctx.response().setStatusCode(200)
+                    .putHeader("Content-Type", message.contentType ?: "application/octet-stream")
+                    .putHeader("X-MonsterMQ-Topic", message.topicName)
+                    .putHeader("X-MonsterMQ-Timestamp", message.time.toString())
+                    .end(Buffer.buffer(message.payload))
+            }
+            else -> ctx.response().setStatusCode(400)
+                .putHeader("Content-Type", "application/json")
+                .end(errorJson("raw=true requires exactly one matching message in $source; use an exact topic"))
+        }
     }
 
     // ========== SSE Subscribe Handler ==========

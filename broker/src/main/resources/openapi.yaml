@@ -156,10 +156,11 @@ paths:
         Read topic data. Behavior depends on query parameters:
 
         - `?retained` → Read retained value from broker's retained store
-        - `?group=X` → Read last value from archive group
-        - `?group=X&start=...&end=...` → Read history from archive group
+        - no mode parameter or `?group=X` → Read the last value from an archive group (`Default` when omitted)
+        - `?group=X&start=...&end=...` → Read history from an archive group
 
-        Supports MQTT wildcards (`+` and `#`) in the topic path (URL-encoded).
+        Supports MQTT wildcards (`+` and `#`) in the topic path (URL-encoded). Use
+        `raw=true` to return the unwrapped bytes for one retained or last-value match.
       operationId: readTopics
       tags: [Read]
       parameters:
@@ -172,9 +173,16 @@ paths:
           allowEmptyValue: true
         - name: group
           in: query
-          description: Archive group name (e.g. "Default")
+          description: Archive group name (defaults to "Default")
           schema:
             type: string
+        - name: raw
+          in: query
+          description: Return the raw MQTT payload for exactly one retained or last-value match. Presence (`?raw`) is equivalent to `?raw=true`; not supported for history reads.
+          schema:
+            type: boolean
+            default: false
+          allowEmptyValue: true
         - name: start
           in: query
           description: History start time (ISO 8601, e.g. 2024-01-01T00:00:00Z)
@@ -202,6 +210,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TopicDataResponse'
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
