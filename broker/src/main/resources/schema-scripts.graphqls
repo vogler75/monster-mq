@@ -92,9 +92,17 @@ type ScriptMutations {
     test(input: ScriptInput!, testTopic: String, testPayload: String, testArgs: String): ScriptTestResult!
 }
 
+type ScriptLanguage {
+    name: String!
+    displayName: String!
+    description: String
+    isDefault: Boolean
+}
+
 extend type Query {
     scripts(name: String, nodeId: String): [Script!]!
     script(name: String!): Script
+    scriptLanguages: [ScriptLanguage!]!
 }
 
 extend type Mutation {

@@ -844,6 +844,7 @@ class GraphQLServer(
                         scriptQueries?.let { resolver ->
                             dataFetcher("scripts", resolver.scripts())
                             dataFetcher("script", resolver.script())
+                            dataFetcher("scriptLanguages", resolver.scriptLanguages())
                         }
                     }
             }

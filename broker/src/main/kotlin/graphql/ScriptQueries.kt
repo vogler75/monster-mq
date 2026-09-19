@@ -78,6 +78,31 @@ class ScriptQueries(
         }
     }
 
+    fun scriptLanguages(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
+        return DataFetcher { _ ->
+            val future = CompletableFuture<List<Map<String, Any?>>>()
+            if (!Monster.isFeatureEnabled(Features.PythonScripts)) {
+                return@DataFetcher future.apply { complete(emptyList()) }
+            }
+            val list = listOf(
+                mapOf(
+                    "name" to "python",
+                    "displayName" to "Python (GraalPy / Truffle)",
+                    "description" to "Full Python 3 runtime powered by GraalVM Truffle.",
+                    "isDefault" to true
+                ),
+                mapOf(
+                    "name" to "javascript",
+                    "displayName" to "JavaScript (GraalJS / Truffle)",
+                    "description" to "Modern ECMAScript JavaScript runtime powered by GraalJS.",
+                    "isDefault" to false
+                )
+            )
+            future.complete(list)
+            future
+        }
+    }
+
     companion object {
         private val isoFormatter = DateTimeFormatter.ISO_INSTANT
 
