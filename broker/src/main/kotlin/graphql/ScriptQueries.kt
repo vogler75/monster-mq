@@ -78,6 +78,42 @@ class ScriptQueries(
         }
     }
 
+    private fun loadDoc(filename: String): String {
+        return try {
+            val resourcePath = "docs/$filename"
+            val stream = this::class.java.classLoader.getResourceAsStream(resourcePath)
+            if (stream != null) {
+                stream.bufferedReader().use { it.readText() }
+            } else {
+                val candidate1 = java.io.File("src/main/resources/docs/$filename")
+                if (candidate1.exists()) candidate1.readText()
+                else {
+                    val candidate2 = java.io.File("broker/src/main/resources/docs/$filename")
+                    if (candidate2.exists()) candidate2.readText() else ""
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("Failed to load script doc $filename: ${e.message}")
+            ""
+        }
+    }
+
+    private fun getLanguageDocumentation(lang: String?): String {
+        return when (lang?.lowercase()?.trim()) {
+            "javascript", "js" -> loadDoc("broker-script-javascript.md")
+            "python", "py" -> loadDoc("broker-script-python.md")
+            else -> loadDoc("broker-script-python.md")
+        }
+    }
+
+    private fun getLanguageSkill(lang: String?): String {
+        return when (lang?.lowercase()?.trim()) {
+            "javascript", "js" -> loadDoc("broker-script-javascript-skill.md")
+            "python", "py" -> loadDoc("broker-script-python-skill.md")
+            else -> loadDoc("broker-script-python-skill.md")
+        }
+    }
+
     fun scriptLanguages(): DataFetcher<CompletableFuture<List<Map<String, Any?>>>> {
         return DataFetcher { _ ->
             val future = CompletableFuture<List<Map<String, Any?>>>()
@@ -89,16 +125,44 @@ class ScriptQueries(
                     "name" to "python",
                     "displayName" to "Python (GraalPy / Truffle)",
                     "description" to "Full Python 3 runtime powered by GraalVM Truffle.",
-                    "isDefault" to true
+                    "isDefault" to true,
+                    "documentation" to getLanguageDocumentation("python"),
+                    "skill" to getLanguageSkill("python")
                 ),
                 mapOf(
                     "name" to "javascript",
                     "displayName" to "JavaScript (GraalJS / Truffle)",
                     "description" to "Modern ECMAScript JavaScript runtime powered by GraalJS.",
-                    "isDefault" to false
+                    "isDefault" to false,
+                    "documentation" to getLanguageDocumentation("javascript"),
+                    "skill" to getLanguageSkill("javascript")
                 )
             )
             future.complete(list)
+            future
+        }
+    }
+
+    fun scriptDocumentation(): DataFetcher<CompletableFuture<String>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<String>()
+            if (!Monster.isFeatureEnabled(Features.PythonScripts)) {
+                return@DataFetcher future.apply { complete("") }
+            }
+            val lang = env.getArgument<String>("language")
+            future.complete(getLanguageDocumentation(lang))
+            future
+        }
+    }
+
+    fun scriptSkill(): DataFetcher<CompletableFuture<String>> {
+        return DataFetcher { env ->
+            val future = CompletableFuture<String>()
+            if (!Monster.isFeatureEnabled(Features.PythonScripts)) {
+                return@DataFetcher future.apply { complete("") }
+            }
+            val lang = env.getArgument<String>("language")
+            future.complete(getLanguageSkill(lang))
             future
         }
     }

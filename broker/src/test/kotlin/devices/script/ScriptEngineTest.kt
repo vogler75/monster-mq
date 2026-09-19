@@ -225,4 +225,27 @@ result = decoded["status"]
         assertTrue(res.outputMessages[0].retain)
         assertTrue(res.outputMessages[0].payload.contains("ALARM"))
     }
+
+    @Test
+    fun testScriptDocumentationAndSkillFiles() {
+        val pyDocStream = this::class.java.classLoader.getResourceAsStream("docs/broker-script-python.md")
+        assertNotNull("broker-script-python.md should exist in resources", pyDocStream)
+        val pyDoc = pyDocStream!!.bufferedReader().use { it.readText() }
+        assertTrue(pyDoc.contains("MonsterMQ Main Python Script Reference"))
+
+        val pySkillStream = this::class.java.classLoader.getResourceAsStream("docs/broker-script-python-skill.md")
+        assertNotNull("broker-script-python-skill.md should exist in resources", pySkillStream)
+        val pySkill = pySkillStream!!.bufferedReader().use { it.readText() }
+        assertTrue(pySkill.contains("MonsterMQ Main Python Script Skill"))
+
+        val jsDocStream = this::class.java.classLoader.getResourceAsStream("docs/broker-script-javascript.md")
+        assertNotNull("broker-script-javascript.md should exist in resources", jsDocStream)
+        val jsDoc = jsDocStream!!.bufferedReader().use { it.readText() }
+        assertTrue(jsDoc.contains("MonsterMQ Main JavaScript Script Reference"))
+
+        val jsSkillStream = this::class.java.classLoader.getResourceAsStream("docs/broker-script-javascript-skill.md")
+        assertNotNull("broker-script-javascript-skill.md should exist in resources", jsSkillStream)
+        val jsSkill = jsSkillStream!!.bufferedReader().use { it.readText() }
+        assertTrue(jsSkill.contains("MonsterMQ Main JavaScript Script Skill"))
+    }
 }

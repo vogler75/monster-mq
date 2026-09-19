@@ -97,12 +97,16 @@ type ScriptLanguage {
     displayName: String!
     description: String
     isDefault: Boolean
+    documentation: String!
+    skill: String!
 }
 
 extend type Query {
     scripts(name: String, nodeId: String): [Script!]!
     script(name: String!): Script
     scriptLanguages: [ScriptLanguage!]!
+    scriptDocumentation(language: String): String!
+    scriptSkill(language: String): String!
 }
 
 extend type Mutation {

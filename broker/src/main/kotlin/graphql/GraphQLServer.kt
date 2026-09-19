@@ -845,6 +845,8 @@ class GraphQLServer(
                             dataFetcher("scripts", resolver.scripts())
                             dataFetcher("script", resolver.script())
                             dataFetcher("scriptLanguages", resolver.scriptLanguages())
+                            dataFetcher("scriptDocumentation", resolver.scriptDocumentation())
+                            dataFetcher("scriptSkill", resolver.scriptSkill())
                         }
                     }
             }
