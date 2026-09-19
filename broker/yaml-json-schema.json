@@ -1187,7 +1187,8 @@
         "Zenoh": { "type": "boolean", "title": "Zenoh Transport", "default": true, "description": "Zenoh zero-overhead broker federation transport" },
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },
         "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" },
-        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": false, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" }
+        "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": false, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" },
+        "PythonScripts": { "type": "boolean", "title": "Python/Starlark Script Engine", "default": true, "description": "Standalone Python and Starlark script execution engine" }
       },
       "additionalProperties": false
     },

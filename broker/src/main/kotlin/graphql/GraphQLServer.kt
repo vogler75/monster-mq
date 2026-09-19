@@ -64,6 +64,8 @@ import at.rocworks.graphql.TopicSchemaQueries
 import at.rocworks.graphql.TopicSchemaMutations
 import at.rocworks.graphql.DataCatalogQueries
 import at.rocworks.graphql.DataCatalogMutations
+import at.rocworks.graphql.ScriptQueries
+import at.rocworks.graphql.ScriptMutations
 import at.rocworks.schema.TopicSchemaPolicyCache
 import at.rocworks.stores.DeviceConfigStoreFactory
 import at.rocworks.stores.DeviceConfig
@@ -315,7 +317,8 @@ class GraphQLServer(
             "schema-genai-providers.graphqls", // GenAI Providers
             "schema-kafka-servers.graphqls", // Kafka Servers
             "schema-datacatalog.graphqls",  // Data Catalog
-            "schema-redfish.graphqls"      // Redfish Gateway
+            "schema-redfish.graphqls",      // Redfish Gateway
+            "schema-scripts.graphqls"       // Standalone Python/Starlark Scripts
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -490,6 +493,10 @@ class GraphQLServer(
         // Initialize Data Catalog resolvers
         val dataCatalogQueries = DataCatalogQueries(dataCatalogStore, archiveHandler)
         val dataCatalogMutations = DataCatalogMutations(dataCatalogStore)
+
+        // Initialize Script resolvers
+        val scriptQueries = deviceStore?.let { ScriptQueries(vertx, it) }
+        val scriptMutations = deviceStore?.let { ScriptMutations(vertx, it) }
 
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
@@ -831,6 +838,14 @@ class GraphQLServer(
                             }
                         }
                         future
+                    }
+                    // Standalone Script queries
+                    .apply {
+                        scriptQueries?.let { resolver ->
+                            dataFetcher("scripts", resolver.scripts())
+                            dataFetcher("script", resolver.script())
+                            dataFetcher("scriptLanguages", resolver.scriptLanguages())
+                        }
                     }
             }
             // Register GenAI Query type
@@ -1222,6 +1237,16 @@ class GraphQLServer(
                         }
                         future
                     }
+                    // Standalone Script mutations - grouped under script
+                    .apply {
+                        scriptMutations?.let { _ ->
+                            dataFetcher("script") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                emptyMap<String, Any>()
+                            }
+                        }
+                    }
             }
             // Register Data Catalog Mutations type
             .type("DataCatalogMutations") { builder ->
@@ -1578,6 +1603,20 @@ class GraphQLServer(
             .type("SessionMutations") { builder ->
                 builder.apply {
                     dataFetcher("removeSessions", sessionResolver.removeSessions())
+                }
+            }
+            // Register Script Mutations type
+            .type("ScriptMutations") { builder ->
+                builder.apply {
+                    scriptMutations?.let { resolver ->
+                        dataFetcher("create", resolver.create())
+                        dataFetcher("update", resolver.update())
+                        dataFetcher("delete", resolver.delete())
+                        dataFetcher("toggle", resolver.toggle())
+                        dataFetcher("start", resolver.start())
+                        dataFetcher("stop", resolver.stop())
+                        dataFetcher("test", resolver.test())
+                    }
                 }
             }
             // Register subscription resolvers

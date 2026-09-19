@@ -66,9 +66,9 @@ data class ScriptConfig(
     val triggerType: String = "TOPIC",       // "TOPIC", "TIMER", "BOTH", "CALLABLE"
     val topicFilters: List<String> = emptyList(), // MQTT topic patterns (+ and # supported)
     val triggerOnChangeOnly: Boolean = false, // Skip execution if payload has not changed
-    val timerIntervalMs: Long = 0L,          // Periodic interval in ms (0 = disabled)
+    val timerIntervalMs: Int = 0,            // Periodic interval in ms (0 = disabled)
     val instanceMode: String = "SINGLETON",   // "SINGLETON" or "MULTI_INSTANCE"
-    val timeoutMs: Long = 200L,              // Execution timeout in ms
+    val timeoutMs: Int = 200,                // Execution timeout in ms
     val script: String = "",                 // Python / JS code
     val description: String? = null          // Human description
 )
@@ -196,28 +196,28 @@ type ScriptConfig {
     triggerType: ScriptTriggerType!
     topicFilters: [String!]!
     triggerOnChangeOnly: Boolean
-    timerIntervalMs: Long
+    timerIntervalMs: Int
     instanceMode: ScriptInstanceMode!
-    timeoutMs: Long
+    timeoutMs: Int
     description: String
 }
 
 input ScriptConfigInput {
-    language: String! = "python"
+    language: String! = "starlark"
     script: String!
     triggerType: ScriptTriggerType! = TOPIC
     topicFilters: [String!]! = []
     triggerOnChangeOnly: Boolean = false
-    timerIntervalMs: Long = 0
+    timerIntervalMs: Int = 0
     instanceMode: ScriptInstanceMode! = SINGLETON
-    timeoutMs: Long = 200
+    timeoutMs: Int = 200
     description: String
 }
 
 input ScriptInput {
     name: String!
     namespace: String! = "script"
-    nodeId: String! = "*"
+    nodeId: String! = "local"
     enabled: Boolean = true
     config: ScriptConfigInput!
 }
@@ -244,15 +244,6 @@ type ScriptResult {
     errors: [String!]!
 }
 
-type ScriptTestResult {
-    success: Boolean!
-    returnValue: String
-    outputMessages: [ScriptPublishedMessage!]!
-    logs: [String!]!
-    errors: [String!]!
-    executionTimeMs: Float!
-}
-
 type ScriptPublishedMessage {
     topic: String!
     payload: String!
@@ -260,13 +251,13 @@ type ScriptPublishedMessage {
     retain: Boolean!
 }
 
-extend type Query {
-    scripts(name: String, nodeId: String): [Script!]!
-    script(name: String!): Script
-}
-
-extend type Mutation {
-    script: ScriptMutations!
+type ScriptTestResult {
+    success: Boolean!
+    returnValue: String
+    outputMessages: [ScriptPublishedMessage!]!
+    logs: [String!]!
+    errors: [String!]!
+    executionTimeMs: Float!
 }
 
 type ScriptMutations {
@@ -277,6 +268,15 @@ type ScriptMutations {
     start(name: String!): ScriptResult!
     stop(name: String!): ScriptResult!
     test(input: ScriptInput!, testTopic: String, testPayload: String, testArgs: String): ScriptTestResult!
+}
+
+extend type Query {
+    scripts(name: String, nodeId: String): [Script!]!
+    script(name: String!): Script
+}
+
+extend type Mutation {
+    script: ScriptMutations!
 }
 ```
 
