@@ -235,6 +235,18 @@ The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard
 - **API**: GraphQL (graphql-java)
 - **Testing**: pytest (Python integration tests), JUnit (Kotlin unit tests)
 
+## GraphQL Interface Policy
+
+**CRITICAL: AVOID CHANGING THE GRAPHQL INTERFACE**
+
+- **Avoid changes at all costs**: The GraphQL interface is the central shared contract connecting the Kotlin broker, Go edge broker (`monster-mq-edge`), web dashboard (`monster-mq-dashboard`), and external integrations. Modifying or extending the GraphQL interface (types, fields, queries, mutations, subscriptions, inputs, arguments, or enums) must be strictly avoided whenever possible.
+- **Human commitment required**: Any change to the GraphQL interface must ONLY be done with explicit commitment from the human. Never modify the GraphQL schema or resolvers unilaterally.
+- **Give a clear hint if the GraphQL interface must be changed**: If a task, feature, or bugfix appears to necessitate changing or extending the GraphQL interface:
+  1. **Flag it clearly and prominently**: Immediately give a clear hint to the human up front before making any changes.
+  2. **Explain the rationale**: Explain why the interface change is needed and what alternatives were evaluated to avoid altering the interface.
+  3. **Detail the impact**: Specify the exact proposed schema modifications and detail the cross-ecosystem impact (including compatibility with the Go edge broker schema parity and the web dashboard).
+  4. **Wait for commitment**: Do not modify any schema files (`broker/src/main/resources/schema-*.graphqls`) or resolvers until the human has explicitly reviewed and committed to the change.
+
 ## Git and Commit Guidelines
 
 **CRITICAL: NEVER AUTO-COMMIT UNDER ANY CIRCUMSTANCES**
@@ -256,7 +268,7 @@ The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard
 - The MCP Server integration uses the official MCP SDK (io.modelcontextprotocol.sdk)
 - Device integrations follow the Extension + Connector pattern (see `dev/plans/DEVICE_INTEGRATION.md`)
 - The iX dashboard uses vanilla JS with `GraphQLDashboardClient` and Vite for bundling
-- GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files
+- GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files. Changes to the GraphQL interface must be avoided and require explicit human commitment (see GraphQL Interface Policy above).
 - Developer and AI coding documentation is in `dev/` — see `dev/INDEX.md` for a full index. Implementation plans are in `dev/plans/`
 - MQTT publish topics are validated to reject wildcard characters (`+`, `#`) per MQTT spec §3.3.2.1 — enforced in `MqttClient.publishHandler()` and GraphQL `MutationResolver.publish()`/`publishBatch()`
 - GraphQL resolvers for device types have paired Query and Mutation files (e.g. `Plc4xClientConfigQueries.kt` + `Plc4xClientConfigMutations.kt`) — when adding new fields to a device config, both the `deviceToMap()` methods must be updated to include the new field
