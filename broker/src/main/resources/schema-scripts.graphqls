@@ -1,0 +1,102 @@
+# Python / Starlark Scripting Subsystem Schema
+
+enum ScriptTriggerType {
+    TOPIC
+    TIMER
+    BOTH
+    CALLABLE
+}
+
+enum ScriptInstanceMode {
+    SINGLETON
+    MULTI_INSTANCE
+}
+
+type ScriptConfig {
+    language: String!
+    script: String!
+    triggerType: ScriptTriggerType!
+    topicFilters: [String!]!
+    triggerOnChangeOnly: Boolean
+    timerIntervalMs: Int
+    instanceMode: ScriptInstanceMode!
+    timeoutMs: Int
+    description: String
+}
+
+input ScriptConfigInput {
+    language: String! = "starlark"
+    script: String!
+    triggerType: ScriptTriggerType! = TOPIC
+    topicFilters: [String!]! = []
+    triggerOnChangeOnly: Boolean = false
+    timerIntervalMs: Int = 0
+    instanceMode: ScriptInstanceMode! = SINGLETON
+    timeoutMs: Int = 200
+    description: String
+}
+
+input ScriptInput {
+    name: String!
+    namespace: String! = "script"
+    nodeId: String! = "local"
+    enabled: Boolean = true
+    config: ScriptConfigInput!
+}
+
+type Script {
+    name: String!
+    namespace: String!
+    nodeId: String!
+    enabled: Boolean!
+    config: ScriptConfig!
+    createdAt: String!
+    updatedAt: String!
+    isOnCurrentNode: Boolean!
+    executionCount: Long
+    errorCount: Long
+    lastExecutionTime: String
+    lastExecutionStatus: String
+    recentLogs: [String!]!
+}
+
+type ScriptResult {
+    script: Script
+    success: Boolean!
+    errors: [String!]!
+}
+
+type ScriptPublishedMessage {
+    topic: String!
+    payload: String!
+    qos: Int!
+    retain: Boolean!
+}
+
+type ScriptTestResult {
+    success: Boolean!
+    returnValue: String
+    outputMessages: [ScriptPublishedMessage!]!
+    logs: [String!]!
+    errors: [String!]!
+    executionTimeMs: Float!
+}
+
+type ScriptMutations {
+    create(input: ScriptInput!): ScriptResult!
+    update(name: String!, input: ScriptInput!): ScriptResult!
+    delete(name: String!): Boolean!
+    toggle(name: String!, enabled: Boolean!): ScriptResult!
+    start(name: String!): ScriptResult!
+    stop(name: String!): ScriptResult!
+    test(input: ScriptInput!, testTopic: String, testPayload: String, testArgs: String): ScriptTestResult!
+}
+
+extend type Query {
+    scripts(name: String, nodeId: String): [Script!]!
+    script(name: String!): Script
+}
+
+extend type Mutation {
+    script: ScriptMutations!
+}

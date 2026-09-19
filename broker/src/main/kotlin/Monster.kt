@@ -93,6 +93,7 @@ class Monster(args: Array<String>) {
     private var messageBus: IMessageBus? = null
     private var retainedStore: IMessageStore? = null
     private var flowEngineExtension: FlowEngineExtension? = null
+    private var scriptExtension: at.rocworks.devices.script.ScriptExtension? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -295,6 +296,10 @@ class Monster(args: Array<String>) {
             return singleton?.flowEngineExtension
         }
 
+        fun getScriptExtension(): at.rocworks.devices.script.ScriptExtension? {
+            return singleton?.scriptExtension
+        }
+
         fun getArchiveHandler(): ArchiveHandler? {
             return singleton?.archiveHandler
         }
@@ -305,6 +310,10 @@ class Monster(args: Array<String>) {
 
         fun getVertx(): Vertx? {
             return singleton?.vertx
+        }
+
+        fun getConfig(): JsonObject {
+            return singleton?.configJson ?: JsonObject()
         }
 
         @Volatile
@@ -1701,6 +1710,22 @@ MORE INFO:
                                 }
                         } else {
                             logger.fine("Agents extension disabled by Features config")
+                            Future.succeededFuture()
+                        }
+                    }
+                    .compose {
+                        // Standalone Python/Starlark Script Extension
+                        if (Monster.isFeatureEnabled(Features.PythonScripts)) {
+                            val scriptExt = at.rocworks.devices.script.ScriptExtension(deviceConfigStore)
+                            singleton?.scriptExtension = scriptExt
+                            val scriptDeploymentOptions = DeploymentOptions().setConfig(configJson)
+                            vertx.deployVerticle(scriptExt, scriptDeploymentOptions)
+                                .recover { error ->
+                                    logger.warning("ScriptExtension not started: ${error.message}")
+                                    Future.succeededFuture<String>()
+                                }
+                        } else {
+                            logger.fine("Script extension disabled by Features config")
                             Future.succeededFuture()
                         }
                     }
