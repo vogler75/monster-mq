@@ -16,10 +16,11 @@ object AuthContextService {
     }
     
     /**
-     * Get the auth context for the current thread (request)
+     * Get the auth context for the current thread or GraphQL context
      */
-    fun getAuthContext(): AuthContext? {
-        return contextHolder.get()
+    fun getAuthContext(env: graphql.schema.DataFetchingEnvironment? = null): AuthContext? {
+        val fromEnv = env?.graphQlContext?.get<AuthContext>("authContext")
+        return fromEnv ?: contextHolder.get()
     }
     
     /**

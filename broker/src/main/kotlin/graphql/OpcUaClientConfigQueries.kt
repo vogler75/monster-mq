@@ -114,7 +114,7 @@ class OpcUaClientConfigQueries(
                 "updateEndpointUrl" to config.updateEndpointUrl,
                 "securityPolicy" to config.securityPolicy,
                 "username" to (config.username ?: ""),
-                "password" to (config.password ?: ""),
+                "password" to "",
                 "subscriptionSamplingInterval" to config.subscriptionSamplingInterval,
                 "keepAliveFailuresAllowed" to config.keepAliveFailuresAllowed,
                 "reconnectDelay" to config.reconnectDelay,

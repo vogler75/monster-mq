@@ -19,6 +19,7 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
+import io.vertx.ext.web.handler.BodyHandler
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
@@ -60,6 +61,9 @@ class RestApiServer(
      */
     fun registerRoutes(router: Router) {
         logger.info("Registering REST API routes under $API_PREFIX")
+
+        // Install BodyHandler for all REST API endpoints so ctx.body() is available
+        router.route("$API_PREFIX/*").handler(BodyHandler.create())
 
         // Auth middleware for all API routes (skip login endpoint)
         router.route("$API_PREFIX/*").handler { ctx ->

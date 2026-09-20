@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
 class SubscriptionResolver(
-    private val vertx: Vertx
+    private val vertx: Vertx,
+    private val authContext: GraphQLAuthContext? = null
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(SubscriptionResolver::class.java)
@@ -25,6 +26,8 @@ class SubscriptionResolver(
 
     fun topicUpdates(): DataFetcher<Publisher<TopicUpdate>> {
         return DataFetcher { env ->
+            val userAuthCtx: AuthContext? = env.graphQlContext.get("authContext") ?: AuthContextService.getAuthContext(env)
+
             // Support both old single topicFilter (backward compatibility) and new topicFilters array
             val topicFilters = when {
                 env.containsArgument("topicFilters") -> {
@@ -36,15 +39,35 @@ class SubscriptionResolver(
                 }
                 else -> listOf("#")
             }
+
+            if (authContext != null) {
+                for (filter in topicFilters) {
+                    if (!authContext.canSubscribeToTopic(userAuthCtx, filter)) {
+                        throw graphql.GraphQLException("Access denied: Not authorized to subscribe to topic filter '$filter'")
+                    }
+                }
+            }
+
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
 
-            TopicUpdatePublisher(vertx, topicFilters, format)
+            TopicUpdatePublisher(vertx, topicFilters, format, authContext, userAuthCtx)
         }
     }
 
     fun topicUpdatesBulk(): DataFetcher<Publisher<TopicUpdateBulk>> {
         return DataFetcher { env ->
+            val userAuthCtx: AuthContext? = env.graphQlContext.get("authContext") ?: AuthContextService.getAuthContext(env)
+
             val topicFilters = env.getArgument<List<String>>("topicFilters") ?: emptyList()
+
+            if (authContext != null) {
+                for (filter in topicFilters) {
+                    if (!authContext.canSubscribeToTopic(userAuthCtx, filter)) {
+                        throw graphql.GraphQLException("Access denied: Not authorized to subscribe to topic filter '$filter'")
+                    }
+                }
+            }
+
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val timeoutMs = env.getArgument<Int>("timeoutMs") ?: 1000
             val maxSize = env.getArgument<Int>("maxSize") ?: 100
@@ -52,7 +75,7 @@ class SubscriptionResolver(
             if (timeoutMs <= 0) throw IllegalArgumentException("timeoutMs must be > 0")
             if (maxSize <= 0) throw IllegalArgumentException("maxSize must be > 0")
 
-            BulkTopicUpdatePublisher(vertx, topicFilters, format, timeoutMs.toLong(), maxSize)
+            BulkTopicUpdatePublisher(vertx, topicFilters, format, timeoutMs.toLong(), maxSize, authContext, userAuthCtx)
         }
     }
 
@@ -81,13 +104,15 @@ class SubscriptionResolver(
     private class TopicUpdatePublisher(
         private val vertx: Vertx,
         private val topicFilters: List<String>,
-        private val format: DataFormat
+        private val format: DataFormat,
+        private val authContext: GraphQLAuthContext? = null,
+        private val userAuthContext: AuthContext? = null
     ) : Publisher<TopicUpdate> {
 
         private val subscribers = ConcurrentHashMap<Subscriber<in TopicUpdate>, SubscriptionHandler>()
 
         override fun subscribe(subscriber: Subscriber<in TopicUpdate>) {
-            val handler = SubscriptionHandler(vertx, topicFilters, format, subscriber)
+            val handler = SubscriptionHandler(vertx, topicFilters, format, subscriber, authContext, userAuthContext)
             subscribers[subscriber] = handler
             subscriber.onSubscribe(handler)
         }
@@ -97,7 +122,9 @@ class SubscriptionResolver(
         private val vertx: Vertx,
         private val topicFilters: List<String>,
         private val format: DataFormat,
-        private val subscriber: Subscriber<in TopicUpdate>
+        private val subscriber: Subscriber<in TopicUpdate>,
+        private val authContext: GraphQLAuthContext? = null,
+        private val userAuthContext: AuthContext? = null
     ) : Subscription {
 
         private val cancelled = AtomicBoolean(false)
@@ -124,6 +151,9 @@ class SubscriptionResolver(
         private fun handleMessage(message: BrokerMessage) {
             vertx.runOnContext {
                 if (cancelled.get()) return@runOnContext
+                if (authContext != null && !authContext.canSubscribeToTopic(userAuthContext, message.topicName)) {
+                    return@runOnContext
+                }
 
                 val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
                     message.payload,
@@ -187,13 +217,15 @@ class SubscriptionResolver(
         private val topicFilters: List<String>,
         private val format: DataFormat,
         private val timeoutMs: Long,
-        private val maxSize: Int
+        private val maxSize: Int,
+        private val authContext: GraphQLAuthContext? = null,
+        private val userAuthContext: AuthContext? = null
     ) : Publisher<TopicUpdateBulk> {
 
         private val subscribers = ConcurrentHashMap<Subscriber<in TopicUpdateBulk>, BulkSubscriptionHandler>()
 
         override fun subscribe(subscriber: Subscriber<in TopicUpdateBulk>) {
-            val handler = BulkSubscriptionHandler(vertx, topicFilters, format, timeoutMs, maxSize, subscriber)
+            val handler = BulkSubscriptionHandler(vertx, topicFilters, format, timeoutMs, maxSize, subscriber, authContext, userAuthContext)
             subscribers[subscriber] = handler
             subscriber.onSubscribe(handler)
         }
@@ -205,7 +237,9 @@ class SubscriptionResolver(
         private val format: DataFormat,
         private val timeoutMs: Long,
         private val maxSize: Int,
-        private val subscriber: Subscriber<in TopicUpdateBulk>
+        private val subscriber: Subscriber<in TopicUpdateBulk>,
+        private val authContext: GraphQLAuthContext? = null,
+        private val userAuthContext: AuthContext? = null
     ) : Subscription {
 
         private val cancelled = AtomicBoolean(false)
@@ -235,6 +269,9 @@ class SubscriptionResolver(
         private fun handleMessage(message: BrokerMessage) {
             vertx.runOnContext {
                 if (cancelled.get()) return@runOnContext
+                if (authContext != null && !authContext.canSubscribeToTopic(userAuthContext, message.topicName)) {
+                    return@runOnContext
+                }
 
                 val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
                     message.payload,

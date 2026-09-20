@@ -48,7 +48,14 @@ class GraphQLAuthContext(
             "topicNamespace",
             "agent",
             "mcpServer",
-            "genAiProvider"
+            "genAiProvider",
+            "hmi",
+            "kafkaServer",
+            "i3xClient",
+            "dataCatalog",
+            "saveRedfishMapping",
+            "deleteRedfishMapping",
+            "toggleRedfishMapping"
         )
     }
 
@@ -128,7 +135,10 @@ class GraphQLAuthContext(
             "jdbcLogger", "influxdbLogger", "timebaseLogger",
             "sparkplugBDecoder", "flow",
             "topicSchemaPolicy", "topicNamespace",
-            "agent", "mcpServer", "genAiProvider" -> true
+            "agent", "mcpServer", "genAiProvider",
+            "hmi", "kafkaServer", "i3xClient", "dataCatalog",
+            "saveRedfishMapping", "deleteRedfishMapping", "toggleRedfishMapping",
+            "opcUaDevices" -> true
             else -> false
         }
     }
@@ -214,12 +224,15 @@ class GraphQLAuthContext(
      * Validate authorization for a GraphQL field
      */
     fun validateFieldAccess(env: DataFetchingEnvironment): AuthorizationResult {
-        return validateFieldAccess(env.field.name)
+        val authContext: AuthContext? = env.graphQlContext.get("authContext") ?: AuthContextService.getAuthContext()
+        return validateFieldAccess(env.field.name, authContext)
     }
 
     fun validateFieldAccess(fieldName: String): AuthorizationResult {
-        // Get auth context from thread-local service
-        val authContext: AuthContext? = AuthContextService.getAuthContext()
+        return validateFieldAccess(fieldName, AuthContextService.getAuthContext())
+    }
+
+    fun validateFieldAccess(fieldName: String, authContext: AuthContext?): AuthorizationResult {
         
         // Check if user management is enabled
         if (!userManager.isUserManagementEnabled()) {

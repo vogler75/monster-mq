@@ -61,7 +61,12 @@ class QueueStorePostgres(
                             creation_time BIGINT NOT NULL,
                             message_expiry_interval BIGINT,
                             vt TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-                            read_ct INT NOT NULL DEFAULT 0
+                            read_ct INT NOT NULL DEFAULT 0,
+                            response_topic TEXT,
+                            correlation_data BYTEA,
+                            content_type TEXT,
+                            payload_format_indicator INT,
+                            user_properties TEXT
                         )
                     """.trimIndent())
 
@@ -71,6 +76,12 @@ class QueueStorePostgres(
                     statement.executeUpdate(
                         "CREATE INDEX IF NOT EXISTS ${tableName}_client_uuid_idx ON $tableName (client_id, message_uuid)"
                     )
+
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS response_topic TEXT")
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS correlation_data BYTEA")
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS content_type TEXT")
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS payload_format_indicator INT")
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS user_properties TEXT")
                 }
 
                 connection.commit()
@@ -96,8 +107,9 @@ class QueueStorePostgres(
         val sql = """
             INSERT INTO $tableName
                 (message_uuid, client_id, topic, payload, qos, retained, publisher_id,
-                 creation_time, message_expiry_interval)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 creation_time, message_expiry_interval, response_topic, correlation_data,
+                 content_type, payload_format_indicator, user_properties)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimIndent()
         try {
             db.connection?.let { connection ->
@@ -117,6 +129,20 @@ class QueueStorePostgres(
                             } else {
                                 ps.setNull(9, Types.BIGINT)
                             }
+                            ps.setString(10, message.responseTopic)
+                            ps.setBytes(11, message.correlationData)
+                            ps.setString(12, message.contentType)
+                            if (message.payloadFormatIndicator != null) {
+                                ps.setInt(13, message.payloadFormatIndicator)
+                            } else {
+                                ps.setNull(13, Types.INTEGER)
+                            }
+                            if (message.userProperties != null) {
+                                val json = io.vertx.core.json.JsonObject(message.userProperties as Map<String, Any>)
+                                ps.setString(14, json.encode())
+                            } else {
+                                ps.setNull(14, Types.VARCHAR)
+                            }
                             ps.addBatch()
                         }
                     }
@@ -127,6 +153,7 @@ class QueueStorePostgres(
         } catch (e: SQLException) {
             try { db.connection?.rollback() } catch (_: SQLException) {}
             logger.warning("Error enqueuing messages [${e.message}] [${Utils.getCurrentFunctionName()}]")
+            throw RuntimeException(e)
         }
     }
 
@@ -137,7 +164,8 @@ class QueueStorePostgres(
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
         val sql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                   creation_time, message_expiry_interval
+                   creation_time, message_expiry_interval, response_topic, correlation_data,
+                   content_type, payload_format_indicator, user_properties
             FROM $tableName
             WHERE client_id = ? AND vt <= now()
               AND (message_expiry_interval IS NULL
@@ -197,7 +225,8 @@ class QueueStorePostgres(
     override fun fetchPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
         val sql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                   creation_time, message_expiry_interval
+                   creation_time, message_expiry_interval, response_topic, correlation_data,
+                   content_type, payload_format_indicator, user_properties
             FROM $tableName
             WHERE client_id = ? AND vt <= now()
               AND (message_expiry_interval IS NULL
@@ -234,7 +263,8 @@ class QueueStorePostgres(
     override fun fetchAndLockPendingMessages(clientId: String, limit: Int): List<BrokerMessage> {
         val fetchSql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                   creation_time, message_expiry_interval
+                   creation_time, message_expiry_interval, response_topic, correlation_data,
+                   content_type, payload_format_indicator, user_properties
             FROM $tableName
             WHERE client_id = ? AND vt <= clock_timestamp()
               AND (message_expiry_interval IS NULL
@@ -459,18 +489,36 @@ class QueueStorePostgres(
     private fun resultSetToBrokerMessage(rs: ResultSet): BrokerMessage {
         val messageExpiryIntervalRaw = rs.getLong("message_expiry_interval")
         val messageExpiryInterval = if (rs.wasNull()) null else messageExpiryIntervalRaw
+        val payloadFormatIndicatorRaw = rs.getInt("payload_format_indicator")
+        val payloadFormatIndicator = if (rs.wasNull()) null else payloadFormatIndicatorRaw
+
+        val userPropsJson = rs.getString("user_properties")
+        val userProperties = if (!userPropsJson.isNullOrBlank()) {
+            try {
+                val json = io.vertx.core.json.JsonObject(userPropsJson)
+                json.map.mapNotNull { (k, v) -> if (v != null) k to v.toString() else null }.toMap()
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+
         return BrokerMessage(
             messageUuid = rs.getString("message_uuid"),
             messageId = 0,
             topicName = rs.getString("topic"),
-            payload = rs.getBytes("payload"),
+            payload = rs.getBytes("payload") ?: ByteArray(0),
             qosLevel = rs.getInt("qos"),
             isRetain = rs.getBoolean("retained"),
             isDup = false,
             isQueued = true,
-            clientId = rs.getString("publisher_id"),
+            clientId = rs.getString("publisher_id") ?: "",
             time = java.time.Instant.ofEpochMilli(rs.getLong("creation_time")),
-            messageExpiryInterval = messageExpiryInterval
+            messageExpiryInterval = messageExpiryInterval,
+            responseTopic = rs.getString("response_topic"),
+            correlationData = rs.getBytes("correlation_data"),
+            contentType = rs.getString("content_type"),
+            payloadFormatIndicator = payloadFormatIndicator,
+            userProperties = userProperties
         )
     }
 }

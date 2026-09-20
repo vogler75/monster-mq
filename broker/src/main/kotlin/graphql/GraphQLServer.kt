@@ -171,14 +171,68 @@ class GraphQLServer(
         }
 
         // Create GraphQL handler
-        val graphQLHandler = GraphQLHandler.create(
-            graphQL,
-            GraphQLHandlerOptions()
-                .setRequestBatchingEnabled(true)
-        )
+        val graphQLHandler = GraphQLHandler.builder(graphQL)
+            .with(
+                GraphQLHandlerOptions()
+                    .setRequestBatchingEnabled(true)
+            )
+            .beforeExecute { builderWithContext ->
+                val rc = builderWithContext.context()
+                val authCtx = try {
+                    authContext.extractAuthContext(rc)
+                } catch (_: Exception) {
+                    null
+                }
+                if (authCtx != null) {
+                    builderWithContext.builder().graphQLContext(mapOf("authContext" to authCtx))
+                }
+            }
+            .build()
 
         // Create WebSocket handler for subscriptions
-        val wsHandler = GraphQLWSHandler.create(graphQL)
+        val wsHandler = GraphQLWSHandler.builder(graphQL)
+            .beforeExecute { builderWithContext ->
+                val msg = builderWithContext.context()
+                val socket = msg.socket()
+                var authCtx: AuthContext? = null
+
+                val params = msg.connectionParams()
+                if (params is Map<*, *>) {
+                    val tokenHeader = params["Authorization"] as? String
+                        ?: params["authToken"] as? String
+                        ?: params["token"] as? String
+                    if (tokenHeader != null) {
+                        try {
+                            authCtx = authContext.extractAuthContextFromHeader(tokenHeader)
+                                ?: authContext.extractAuthContextFromToken(tokenHeader)
+                        } catch (_: Exception) {}
+                    }
+                } else if (params is JsonObject) {
+                    val tokenHeader = params.getString("Authorization")
+                        ?: params.getString("authToken")
+                        ?: params.getString("token")
+                    if (tokenHeader != null) {
+                        try {
+                            authCtx = authContext.extractAuthContextFromHeader(tokenHeader)
+                                ?: authContext.extractAuthContextFromToken(tokenHeader)
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                if (authCtx == null) {
+                    val authHeader = socket.headers().get("Authorization")
+                    if (authHeader != null) {
+                        try {
+                            authCtx = authContext.extractAuthContextFromHeader(authHeader)
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                if (authCtx != null) {
+                    builderWithContext.builder().graphQLContext(mapOf("authContext" to authCtx))
+                }
+            }
+            .build()
 
         // Both HTTP and WebSocket served from the same path. Vert.x rejects mixing
         // BODY-priority (BodyHandler) and USER-priority (wsHandler/graphQLHandler)
@@ -211,6 +265,10 @@ class GraphQLServer(
                         }
                     }
 
+                    ctx.addEndHandler {
+                        AuthContextService.clearAuthContext()
+                    }
+
                     // Extract auth context and set it in thread-local for resolvers
                     val authCtx = try {
                         authContext.extractAuthContext(ctx)
@@ -230,14 +288,6 @@ class GraphQLServer(
                 }
             }
             .handler(graphQLHandler)
-            .handler { _ ->
-                // Clear auth context after GraphQL execution to prevent memory leaks
-                try {
-                    AuthContextService.clearAuthContext()
-                } catch (e: Exception) {
-                    logger.warning("Error clearing auth context: ${e.message}")
-                }
-            }
 
         // Health check endpoint
         router.get("/health").handler { ctx ->
@@ -383,7 +433,7 @@ class GraphQLServer(
         val queryResolver = QueryResolver(vertx, retainedStore, archiveHandler, authContext, deviceStore)
         val metricsResolver = MetricsResolver(vertx, sessionStore, queueStore, sessionHandler, metricsStore, config, userManager)
         val mutationResolver = MutationResolver(vertx, messageBus, messageHandler, sessionStore, queueStore, sessionHandler, authContext, deviceStore)
-        val subscriptionResolver = SubscriptionResolver(vertx)
+        val subscriptionResolver = SubscriptionResolver(vertx, authContext)
         val userManagementResolver = UserManagementResolver(vertx, userManager, authContext)
         val authenticationResolver = AuthenticationResolver(vertx, userManager)
         val archiveGroupResolver = archiveHandler?.let { ArchiveGroupResolver(vertx, it, authContext) }
@@ -569,7 +619,11 @@ class GraphQLServer(
                     // OPC UA Client queries
                     .apply {
                         opcUaQueries?.let { resolver ->
-                            dataFetcher("opcUaDevices", resolver.opcUaDevices())
+                            dataFetcher("opcUaDevices") { env ->
+                                val result = authContext.validateFieldAccess(env)
+                                if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
+                                resolver.opcUaDevices().get(env)
+                            }
                         }
                     }
                     // OPC UA Client browser queries
@@ -1146,6 +1200,8 @@ class GraphQLServer(
                     }
                     // Redfish Gateway mutations
                     .dataFetcher("saveRedfishMapping") { env ->
+                        val result = authContext.validateFieldAccess(env)
+                        if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                         val name: String = env.getArgument<String>("name") ?: ""
                         val input: Map<String, Any?> = env.getArgument<Map<String, Any?>>("config") ?: emptyMap()
                         val enabled: Boolean = env.getArgument<Boolean>("enabled") ?: true
@@ -1186,6 +1242,8 @@ class GraphQLServer(
                         future
                     }
                     .dataFetcher("deleteRedfishMapping") { env ->
+                        val result = authContext.validateFieldAccess(env)
+                        if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                         val name: String = env.getArgument<String>("name") ?: ""
                         val future = java.util.concurrent.CompletableFuture<Boolean>()
                         val store = getEffectiveDeviceStore()
@@ -1202,6 +1260,8 @@ class GraphQLServer(
                         future
                     }
                     .dataFetcher("toggleRedfishMapping") { env ->
+                        val result = authContext.validateFieldAccess(env)
+                        if (!result.allowed) throw GraphQLException(result.errorMessage ?: "Unauthorized")
                         val name: String = env.getArgument<String>("name") ?: ""
                         val enabled: Boolean = env.getArgument<Boolean>("enabled") ?: false
                         val future = java.util.concurrent.CompletableFuture<Map<String, Any?>>()

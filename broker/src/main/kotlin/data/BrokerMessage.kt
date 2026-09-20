@@ -247,9 +247,19 @@ class BrokerMessage(
 
     fun getPayloadAsBase64(): String = Base64.getEncoder().encodeToString(payload)
 
+    fun isExpired(): Boolean {
+        val interval = messageExpiryInterval ?: return false
+        val ageSeconds = (System.currentTimeMillis() - time.toEpochMilli()) / 1000
+        return ageSeconds >= interval
+    }
+
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
     fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS()): Future<Int> {
+        if (isExpired()) {
+            return Future.succeededFuture(0)
+        }
+
         // For MQTT v5.0 clients, include properties
         if (endpoint.protocolVersion() == 5) {
             val properties = io.netty.handler.codec.mqtt.MqttProperties()
@@ -265,7 +275,6 @@ class BrokerMessage(
                         remainingSeconds.toInt()
                     ))
                 }
-                // If remainingSeconds is 0 or negative, don't include property (message expired)
             }
             
             // Add Payload Format Indicator if present

@@ -73,8 +73,14 @@ class MessageQueueDisk(
 
             // Check if we need to wrap around
             if (writePosition + dataSize > fileSize) {
-                buffer.position(writePosition)
-                buffer.putInt(0) // EOF marker
+                // Check if wrapping around to startPosition would overwrite unread data
+                if (readPosition == startPosition || (readPosition > startPosition && startPosition + dataSize >= readPosition)) {
+                    return false // Queue full
+                }
+                if (writePosition + Int.SIZE_BYTES <= fileSize) {
+                    buffer.position(writePosition)
+                    buffer.putInt(0) // EOF marker
+                }
                 writePosition = startPosition
             }
 
@@ -105,13 +111,20 @@ class MessageQueueDisk(
 
             logger.finest { "Dequeue: ReadPos $readPosition WritePos $writePosition" }
 
+            if (readPosition + Int.SIZE_BYTES > fileSize) {
+                readPosition = startPosition
+                if (readPosition == writePosition) {
+                    return null // Empty after wrap
+                }
+            }
+
             buffer.position(readPosition)
             var dataSize = buffer.int
 
             // Check for EOF marker
             if (dataSize == 0) {
                 readPosition = startPosition
-                if (writePosition == startPosition) {
+                if (readPosition == writePosition) {
                     return null // Empty after wrap
                 }
                 buffer.position(startPosition)

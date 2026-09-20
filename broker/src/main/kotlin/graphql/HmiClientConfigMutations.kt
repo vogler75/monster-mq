@@ -132,19 +132,40 @@ class HmiClientConfigMutations(
                 val name = env.getArgument<String>("name")
                     ?: return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Name is required")) }
 
-                deviceStore.deleteDevice(name).onComplete { result ->
-                    if (result.succeeded()) {
-                        val basePath = hmiPath
-                        if (basePath != null) {
-                            val targetDir = java.io.File(basePath, name)
-                            if (targetDir.exists()) {
-                                targetDir.deleteRecursively()
+                if (name.contains("..") || name.contains('/') || name.contains('\\')) {
+                    return@DataFetcher future.apply { complete(mapOf("success" to false, "message" to "Invalid HMI name")) }
+                }
+
+                deviceStore.getDevice(name).onComplete { deviceResult ->
+                    if (deviceResult.failed() || deviceResult.result() == null) {
+                        future.complete(mapOf("success" to false, "message" to "HMI device not found"))
+                        return@onComplete
+                    }
+                    val device = deviceResult.result()
+                    if (device == null || device.type != DeviceConfig.DEVICE_TYPE_HMI) {
+                        future.complete(mapOf("success" to false, "message" to "Device is not an HMI"))
+                        return@onComplete
+                    }
+
+                    deviceStore.deleteDevice(name).onComplete { result ->
+                        if (result.succeeded()) {
+                            val basePath = hmiPath
+                            if (basePath != null) {
+                                val baseFile = java.io.File(basePath).canonicalFile
+                                val targetDir = java.io.File(baseFile, name).canonicalFile
+                                if (targetDir.toPath().startsWith(baseFile.toPath()) && targetDir != baseFile) {
+                                    if (targetDir.exists()) {
+                                        targetDir.deleteRecursively()
+                                    }
+                                } else {
+                                    logger.warning("Attempted path traversal in HMI delete: $name")
+                                }
                             }
+                            future.complete(mapOf("success" to true))
+                        } else {
+                            logger.severe("Error deleting HMI $name: ${result.cause()?.message}")
+                            future.complete(mapOf("success" to false, "message" to (result.cause()?.message ?: "Failed to delete HMI")))
                         }
-                        future.complete(mapOf("success" to true))
-                    } else {
-                        logger.severe("Error deleting HMI $name: ${result.cause()?.message}")
-                        future.complete(mapOf("success" to false, "message" to (result.cause()?.message ?: "Failed to delete HMI")))
                     }
                 }
             } catch (e: Exception) {

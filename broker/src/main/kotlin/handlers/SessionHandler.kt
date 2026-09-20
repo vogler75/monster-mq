@@ -134,6 +134,16 @@ open class SessionHandler(
     // Track subscription cleanup for GraphQL listeners (listenerId -> topic filters)
     private val graphqlListenerTopics = ConcurrentHashMap<String, List<String>>()
 
+    // Session expiry timers for MQTT v5 clients
+    private val sessionExpiryTimers = ConcurrentHashMap<String, Long>()
+
+    // Active client instances for duplicate client ID coordination
+    private val activeClientInstances = ConcurrentHashMap<String, String>()
+
+    // Incoming QoS 2 message tracking across reconnects
+    private val incomingQos2InFlight = ConcurrentHashMap<String, ConcurrentHashMap<Int, BrokerMessage>>()
+    private val incomingQos2Completed = ConcurrentHashMap<String, ConcurrentHashMap.KeySetView<Int, Boolean>>()
+
     private fun commandAddress() = EventBusAddresses.Node.commands(deploymentID())
     private fun metricsAddress() = EventBusAddresses.Node.metrics(Monster.getClusterNodeId(vertx))
     // REMOVED: messageAddress() - no longer using broadcast message bus
@@ -667,9 +677,20 @@ open class SessionHandler(
                 if (block.isNotEmpty()) {
                     val blockCopy = ArrayList(block)
                     block.clear()
-                    execute(blockCopy).onComplete {
-                        vertx.runOnContext { loop() }
+                    fun tryExecute(attempt: Int = 1) {
+                        execute(blockCopy).onComplete { ar ->
+                            if (ar.succeeded()) {
+                                vertx.runOnContext { loop() }
+                            } else {
+                                logger.severe("Worker [$name] failed to persist batch of ${blockCopy.size} items (attempt $attempt): ${ar.cause()?.message}")
+                                val backoff = (100L * attempt).coerceAtMost(2000L)
+                                vertx.setTimer(backoff) {
+                                    tryExecute(attempt + 1)
+                                }
+                            }
+                        }
                     }
+                    tryExecute()
                 } else {
                     vertx.runOnContext { loop() }
                 }
@@ -685,6 +706,7 @@ open class SessionHandler(
     }
 
     fun getClientStatus(clientId: String): ClientStatus = clientStatus[clientId] ?: ClientStatus.UNKNOWN
+    fun isConnected(clientId: String): Boolean = getClientStatus(clientId) == ClientStatus.ONLINE
 
     // Forcefully disconnect a client via command dispatch
     fun disconnectClient(clientId: String, reason: String? = null) {
@@ -708,6 +730,63 @@ open class SessionHandler(
             metrics.inFlightMessagesSnd.set(sndSize.toLong())
             metrics.inFlightMessagesRcv.set(rcvSize.toLong())
         }
+    }
+
+    fun scheduleSessionExpiry(clientId: String, expirySeconds: Long) {
+        cancelSessionExpiry(clientId)
+        val timerId = vertx.setTimer(expirySeconds * 1000) {
+            logger.info("Session expired for client [$clientId] after ${expirySeconds}s")
+            sessionExpiryTimers.remove(clientId)
+            delClient(clientId)
+        }
+        sessionExpiryTimers[clientId] = timerId
+    }
+
+    fun cancelSessionExpiry(clientId: String) {
+        sessionExpiryTimers.remove(clientId)?.let { timerId ->
+            vertx.cancelTimer(timerId)
+            logger.fine { "Cancelled session expiry timer for client [$clientId]" }
+        }
+    }
+
+    fun setActiveClientInstance(clientId: String, instanceId: String) {
+        activeClientInstances[clientId] = instanceId
+    }
+
+    fun isActiveClientInstance(clientId: String, instanceId: String): Boolean {
+        val current = activeClientInstances[clientId]
+        return current == null || current == instanceId
+    }
+
+    fun clearActiveClientInstance(clientId: String, instanceId: String) {
+        activeClientInstances.remove(clientId, instanceId)
+    }
+
+    fun addIncomingQos2Message(clientId: String, messageId: Int, message: BrokerMessage) {
+        incomingQos2InFlight.computeIfAbsent(clientId) { ConcurrentHashMap() }[messageId] = message
+    }
+
+    fun getIncomingQos2Message(clientId: String, messageId: Int): BrokerMessage? {
+        return incomingQos2InFlight[clientId]?.get(messageId)
+    }
+
+    fun completeIncomingQos2Message(clientId: String, messageId: Int): BrokerMessage? {
+        val msg = incomingQos2InFlight[clientId]?.remove(messageId)
+        val completed = incomingQos2Completed.computeIfAbsent(clientId) { ConcurrentHashMap.newKeySet() }
+        completed.add(messageId)
+        if (completed.size > 1000) {
+            completed.clear()
+        }
+        return msg
+    }
+
+    fun isIncomingQos2Completed(clientId: String, messageId: Int): Boolean {
+        return incomingQos2Completed[clientId]?.contains(messageId) == true
+    }
+
+    fun clearIncomingQos2State(clientId: String) {
+        incomingQos2InFlight.remove(clientId)
+        incomingQos2Completed.remove(clientId)
     }
 
     fun getClientMetrics(clientId: String): SessionMetrics? = clientMetrics[clientId]
@@ -995,6 +1074,11 @@ open class SessionHandler(
     }
 
     fun delClient(clientId: String): Future<Void> {
+        // Clean up session expiry timers, QoS 2 state, and active client instances
+        cancelSessionExpiry(clientId)
+        clearIncomingQos2State(clientId)
+        activeClientInstances.remove(clientId)
+
         // Clean up metrics and client details
         clientMetrics.remove(clientId)
         val clientDetail = clientDetails.remove(clientId)

@@ -21,8 +21,10 @@ import io.vertx.mqtt.messages.MqttPublishMessage
 import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
 import io.vertx.mqtt.messages.codes.MqttPubAckReasonCode
+import io.vertx.mqtt.messages.codes.MqttPubCompReasonCode
 import io.vertx.mqtt.messages.codes.MqttSubAckReasonCode
 import io.vertx.mqtt.messages.codes.MqttUnsubAckReasonCode
+import io.vertx.mqtt.messages.MqttDisconnectMessage
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -100,10 +102,15 @@ class MqttClient(
     private var willDelayInterval: Long = 0L  // Default: no delay
     private var willDelayTimerId: Long? = null  // Timer ID for cancellation
     
-    // Effective clean session flag (considers MQTT v5 session expiry interval)
-    // For MQTT v5: sessionExpiry == 0 means clean, > 0 means persistent
-    // For MQTT v3.1.1: uses endpoint.isCleanSession
-    private var effectiveCleanSession: Boolean = true
+    private val instanceId: String = java.util.UUID.randomUUID().toString()
+    private val isMqtt5: Boolean get() = endpoint.protocolVersion() == 5
+
+    private var cleanStartRequested: Boolean = true
+    private var sessionExpiryInterval: Long = 0L
+
+    // Effective clean session flag for backward compatibility
+    private val effectiveCleanSession: Boolean
+        get() = if (isMqtt5) sessionExpiryInterval == 0L else endpoint.isCleanSession
 
     private var connectionAccepted: Boolean = false
 
@@ -139,10 +146,24 @@ class MqttClient(
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false, autoCreateUser: Boolean = false) {
             val clientId = endpoint.clientIdentifier()
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
-            // TODO: check if the client is already connected (cluster wide)
-            val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
-            vertx.deployVerticle(client).onComplete {
-                client.startEndpoint()
+
+            fun doDeploy() {
+                val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
+                vertx.deployVerticle(client).onComplete {
+                    client.startEndpoint()
+                }
+            }
+
+            if (clientId.isNotEmpty() && sessionHandler.isConnected(clientId)) {
+                logger.info("Client [$clientId] Already connected - disconnecting existing session before deploying new connection")
+                val payload = JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DISCONNECT).put("Reason", "Duplicate client ID connected")
+                vertx.eventBus().request<JsonObject>(getCommandAddress(clientId), payload).onComplete { _ ->
+                    vertx.setTimer(50) {
+                        doDeploy()
+                    }
+                }
+            } else {
+                doDeploy()
             }
         }
 
@@ -299,17 +320,17 @@ class MqttClient(
 
     fun startEndpoint() {
         logger.info("Client [$clientId] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}] [${Utils.getCurrentFunctionName()}]")
-        // protocolVersion: 3=MQTTv31, 4=MQTTv311, 5=MQTTv5
-        val isMqtt5 = endpoint.protocolVersion() == 5
-        
+        cleanStartRequested = endpoint.isCleanSession
+
         // Parse MQTT5 properties from CONNECT packet
-        var mqtt5SessionExpiryInterval = 0L
         var mqtt5ReceiveMaximum = 65535
         var mqtt5MaximumPacketSize = 268435456L
         var mqtt5TopicAliasMaximum = 0
         var mqtt5AuthMethod: String? = null
         var mqtt5AuthData: ByteArray? = null
-        
+
+        sessionExpiryInterval = if (isMqtt5) 0L else if (cleanStartRequested) 0L else Long.MAX_VALUE
+
         if (isMqtt5) {
             logger.info("Client [$clientId] MQTT 5.0 connection accepted")
             // Parse MQTT5 CONNECT properties
@@ -338,7 +359,7 @@ class MqttClient(
                 }
                 logger.fine("Client [$clientId] CONNECT $name: $valueStr")
                 when (p.propertyId()) {
-                    17 -> mqtt5SessionExpiryInterval = (value as? Number)?.toLong() ?: 0L
+                    17 -> sessionExpiryInterval = (value as? Number)?.toLong() ?: 0L
                     21 -> mqtt5AuthMethod = value as? String
                     22 -> mqtt5AuthData = value as? ByteArray
                     24 -> willDelayInterval = (value as? Number)?.toLong() ?: 0L
@@ -347,23 +368,19 @@ class MqttClient(
                     34 -> mqtt5TopicAliasMaximum = (value as? Number)?.toInt() ?: 0
                 }
             }
-            logger.info("Client [$clientId] MQTT5 properties: sessionExpiry=$mqtt5SessionExpiryInterval, receiveMax=$mqtt5ReceiveMaximum, maxPacketSize=$mqtt5MaximumPacketSize, willDelay=$willDelayInterval")
-            
+            logger.info("Client [$clientId] MQTT5 properties: sessionExpiry=$sessionExpiryInterval, receiveMax=$mqtt5ReceiveMaximum, maxPacketSize=$mqtt5MaximumPacketSize, willDelay=$willDelayInterval")
+
             if (mqtt5AuthMethod != null) {
                 logger.info("Client [$clientId] MQTT5 enhanced authentication requested: method=$mqtt5AuthMethod, dataLength=${mqtt5AuthData?.size ?: 0}")
             }
-            
+
             // Store client's Receive Maximum for flow control (Phase 8)
             clientReceiveMaximum = mqtt5ReceiveMaximum
         }
-        
-        // For MQTT v5, clean session is determined by session expiry interval (0 = clean, > 0 = persistent)
-        effectiveCleanSession = if (isMqtt5) {
-            mqtt5SessionExpiryInterval == 0L
-        } else {
-            endpoint.isCleanSession
-        }
-        
+
+        sessionHandler.cancelSessionExpiry(clientId)
+        sessionHandler.setActiveClientInstance(clientId, instanceId)
+
         run {
             endpoint.exceptionHandler(::exceptionHandler)
             endpoint.pingHandler { pingHandler() }
@@ -376,6 +393,18 @@ class MqttClient(
             endpoint.publishReceivedHandler(::publishedReceivedHandler)
             endpoint.publishCompletionHandler(::publishCompletionHandler)
 
+            endpoint.disconnectMessageHandler { disconnectMsg ->
+                if (isMqtt5) {
+                    val props = disconnectMsg.properties()
+                    val prop = props.getProperty(17)
+                    if (prop != null) {
+                        val newInterval = (prop.value() as? Number)?.toLong() ?: 0L
+                        sessionExpiryInterval = newInterval
+                        logger.info("Client [$clientId] Updated sessionExpiryInterval from DISCONNECT packet: $sessionExpiryInterval")
+                    }
+                }
+                disconnectHandler()
+            }
             endpoint.disconnectHandler { disconnectHandler() }
             endpoint.closeHandler { closeHandler() }
 
@@ -397,101 +426,6 @@ class MqttClient(
 
             // Set last will
             sessionHandler.setLastWill(clientId, endpoint.will())
-
-            fun finishClientStartup(present: Boolean) {
-                // Cancel any pending Will Delay timer (client reconnected before will was published)
-                willDelayTimerId?.let { timerId ->
-                    vertx.cancelTimer(timerId)
-                    willDelayTimerId = null
-                    logger.info("Client [$clientId] Reconnected - canceling pending Will Delay timer")
-                }
-                
-                // Accept connection
-                if (isMqtt5) {
-                    // MQTT v5.0: Send CONNACK with properties (Phase 7)
-                    val connackProps = MqttProperties()
-                    
-                    // Session Expiry Interval (17) - Echo back or override if needed
-                    connackProps.add(MqttProperties.IntegerProperty(17, mqtt5SessionExpiryInterval.toInt()))
-                    
-                    // Assigned Client Identifier (18) - Only if client provided empty ID
-                    // Note: Vert.x automatically assigns an ID, so we check if it was auto-generated
-                    if (clientId.startsWith("auto-")) {
-                        connackProps.add(MqttProperties.StringProperty(18, clientId))
-                    }
-                    
-                    // Server Keep Alive (19) - Override client's keep-alive if needed
-                    // Use the endpoint's negotiated keep-alive value
-                    val serverKeepAlive = endpoint.keepAliveTimeSeconds()
-                    if (serverKeepAlive > 0) {
-                        connackProps.add(MqttProperties.IntegerProperty(19, serverKeepAlive))
-                    }
-                    
-                    // Receive Maximum (33) - Server's limit for outstanding QoS 1/2 messages
-                    connackProps.add(MqttProperties.IntegerProperty(33, Monster.getServerReceiveMaximum()))
-                    
-                    // Maximum QoS (36) - Omitted: per MQTT 5.0 §3.2.2.3.4, valid values are 0 or 1 only.
-                    // When absent, the client may use QoS 2. Including value 2 is a protocol error.
-                    
-                    // Retain Available (37) - Server supports retained messages
-                    connackProps.add(MqttProperties.IntegerProperty(37, 1))  // 1 = available
-                    
-                    // Maximum Packet Size (39) - Server's maximum packet size
-                    connackProps.add(MqttProperties.IntegerProperty(39, 268435455))  // Max allowed by MQTT v5
-                    
-                    // Topic Alias Maximum (34) - Server's limit for topic aliases (Phase 4)
-                    connackProps.add(MqttProperties.IntegerProperty(34, 10))
-                    
-                    // Wildcard Subscription Available (40)
-                    connackProps.add(MqttProperties.IntegerProperty(40, 1))  // 1 = available
-                    
-                    // Subscription Identifier Available (41)
-                    connackProps.add(MqttProperties.IntegerProperty(41, 0))  // 0 = not supported yet
-                    
-                    // Shared Subscription Available (42)
-                    connackProps.add(MqttProperties.IntegerProperty(42, 0))  // 0 = not supported yet
-                    
-                    endpoint.accept(present, connackProps)
-                    logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties")
-                } else {
-                    // MQTT v3.1.1: Simple accept
-                    endpoint.accept(present)
-                }
-
-                // Set client to connected
-                val information = JsonObject()
-                information.put("RemoteAddress", endpoint.remoteAddress().toString())
-                information.put("LocalAddress", endpoint.localAddress().toString())
-                information.put("ProtocolVersion", endpoint.protocolVersion())
-                information.put("SSL", endpoint.isSsl)
-                information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
-                information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-                information.put("clientAddress", endpoint.remoteAddress().toString())
-                information.put("sessionExpiryInterval", if (isMqtt5) mqtt5SessionExpiryInterval else endpoint.keepAliveTimeSeconds().toLong())
-                // Store MQTT v5 connection properties
-                if (isMqtt5) {
-                    information.put("ReceiveMaximum", mqtt5ReceiveMaximum)
-                    information.put("MaximumPacketSize", mqtt5MaximumPacketSize)
-                    information.put("TopicAliasMaximum", mqtt5TopicAliasMaximum)
-                }
-                sessionHandler.setClient(clientId, effectiveCleanSession, information).onComplete {
-                    if (endpoint.isConnected) {
-                        // Now safe to mark as ready for new messages
-                        ready = true
-                        sessionHandler.onlineClient(clientId)
-                        drainPendingEvents()
-
-                        // For persistent sessions, reset any stale in-flight messages and send trigger
-                        // This handles the case where previous connection died with messages in-flight
-                        if (!effectiveCleanSession) {
-                            sessionHandler.resetInFlightMessages(clientId).onComplete {
-                                logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
-                                sessionHandler.sendMessageAvailableTrigger(clientId)
-                            }
-                        }
-                    }
-                }
-            }
 
             // Authentication check
             if (userManager.isUserManagementEnabled()) {
@@ -633,27 +567,24 @@ class MqttClient(
     }
 
     private fun proceedWithConnection() {
-        val isMqtt5 = endpoint.protocolVersion() == 5
-        
-        // Parse MQTT5 properties for CONNACK (if not already parsed)
-        var mqtt5SessionExpiryInterval = 0L
-        if (isMqtt5) {
-            val props = endpoint.connectProperties()
-            props.listAll().forEach { p ->
-                if (p.propertyId() == 17) {
-                    mqtt5SessionExpiryInterval = (p.value() as? Number)?.toLong() ?: 0L
-                }
-            }
-        }
-        
+        val isPersistent = if (isMqtt5) sessionExpiryInterval > 0L else !cleanStartRequested
+        val cleanSession = !isPersistent
+
         fun finishClientStartup(present: Boolean) {
+            // Cancel any pending Will Delay timer (client reconnected before will was published)
+            willDelayTimerId?.let { timerId ->
+                vertx.cancelTimer(timerId)
+                willDelayTimerId = null
+                logger.info("Client [$clientId] Reconnected - canceling pending Will Delay timer")
+            }
+
             // Accept connection
             if (isMqtt5) {
                 // MQTT v5.0: Send CONNACK with properties (Phase 7)
                 val connackProps = MqttProperties()
                 
                 // Session Expiry Interval (17) - Echo back or override if needed
-                connackProps.add(MqttProperties.IntegerProperty(17, mqtt5SessionExpiryInterval.toInt()))
+                connackProps.add(MqttProperties.IntegerProperty(17, sessionExpiryInterval.toInt()))
                 
                 // Assigned Client Identifier (18) - Only if client provided empty ID
                 // Note: Vert.x automatically assigns an ID, so we check if it was auto-generated
@@ -694,7 +625,7 @@ class MqttClient(
                 
                 connectionAccepted = true
                 endpoint.accept(present, connackProps)
-                logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties")
+                logger.info("Client [$clientId] MQTT5 CONNACK sent with server properties (sessionPresent=$present, expiry=$sessionExpiryInterval)")
             } else {
                 // MQTT v3.1.1: Simple accept
                 connectionAccepted = true
@@ -709,7 +640,9 @@ class MqttClient(
             information.put("SSL", endpoint.isSsl)
             information.put("AutoKeepAlive", endpoint.isAutoKeepAlive)
             information.put("KeepAliveTimeSeconds", endpoint.keepAliveTimeSeconds())
-            sessionHandler.setClient(clientId, effectiveCleanSession, information).onComplete {
+            information.put("clientAddress", endpoint.remoteAddress().toString())
+            information.put("sessionExpiryInterval", if (isMqtt5) sessionExpiryInterval else endpoint.keepAliveTimeSeconds().toLong())
+            sessionHandler.setClient(clientId, cleanSession, information).onComplete {
                 if (endpoint.isConnected) {
                     // Now safe to mark as ready for new messages
                     ready = true
@@ -718,7 +651,7 @@ class MqttClient(
 
                     // For persistent sessions, reset any stale in-flight messages and send trigger
                     // This handles the case where previous connection died with messages in-flight
-                    if (!effectiveCleanSession) {
+                    if (isPersistent) {
                         sessionHandler.resetInFlightMessages(clientId).onComplete {
                             logger.fine { "Client [$clientId] Reset in-flight messages and sending initial queue trigger [${Utils.getCurrentFunctionName()}]" }
                             sessionHandler.sendMessageAvailableTrigger(clientId)
@@ -729,9 +662,9 @@ class MqttClient(
         }
 
         // Accept connection
-        if (effectiveCleanSession) {
+        if (cleanStartRequested) {
             sessionHandler.delClient(clientId).onComplete { // Clean and remove any existing session state
-                finishClientStartup(false) // false... session not present because of clean session requested
+                finishClientStartup(false) // false... session not present because of clean start requested
             }.onFailure {
                 logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
                 rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
@@ -739,7 +672,7 @@ class MqttClient(
         } else {
             // Check if session was already present or if it was the first connect
             sessionHandler.isPresent(clientId).onComplete { present ->
-                finishClientStartup(present.result())
+                finishClientStartup(present.result() ?: false)
             }.onFailure {
                 logger.severe("Client [$clientId] Error: ${it.message} [${Utils.getCurrentFunctionName()}]")
                 rejectAndCloseEndpoint(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE)
@@ -779,13 +712,22 @@ class MqttClient(
             topicAliases.clear()
         }
 
-        if (effectiveCleanSession) {
-            logger.fine { "Client [$clientId] Remove client, it is a clean session [${Utils.getCurrentFunctionName()}]" }
-            sessionHandler.delClient(clientId)
+        val isCurrent = sessionHandler.isActiveClientInstance(clientId, instanceId)
+        if (isCurrent) {
+            sessionHandler.clearActiveClientInstance(clientId, instanceId)
+            val isPersistent = if (isMqtt5) sessionExpiryInterval > 0L else !cleanStartRequested
+            if (!isPersistent || sessionExpiryInterval == 0L) {
+                logger.fine { "Client [$clientId] Remove client, non-persistent session or session expiry 0 [${Utils.getCurrentFunctionName()}]" }
+                sessionHandler.delClient(clientId)
+            } else {
+                logger.fine { "Client [$clientId] Pause client, persistent session [${Utils.getCurrentFunctionName()}]" }
+                sessionHandler.pauseClient(clientId)
+                if (isMqtt5 && sessionExpiryInterval > 0L && sessionExpiryInterval < 0xFFFFFFFFL) {
+                    sessionHandler.scheduleSessionExpiry(clientId, sessionExpiryInterval)
+                }
+            }
         } else {
-            logger.fine { "Client [$clientId] Pause client, it is not a clean session [${Utils.getCurrentFunctionName()}]" }
-            // Note: in-flight messages will be reset when client reconnects
-            sessionHandler.pauseClient(clientId)
+            logger.info("Client [$clientId] Superseded by newer connection instance - skipping session cleanup")
         }
         undeployEndpoint(vertx, this.deploymentID())
     }
@@ -1209,6 +1151,7 @@ class MqttClient(
                 logger.finest { "Client [$clientId] Publish: sending received for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
                 endpoint.publishReceived(msg.messageId)
                 inFlightMessagesRcv[msg.messageId] = InFlightMessage(msg)
+                sessionHandler.addIncomingQos2Message(clientId, msg.messageId, msg)
                 updateSessionHandlerInFlight()
             }
             else -> {
@@ -1223,14 +1166,25 @@ class MqttClient(
             pendingEvents.add { publishReleaseHandler(id) }
             return
         }
-        inFlightMessagesRcv[id]?.let { inFlightMessage ->
+        val inFlightMessage = inFlightMessagesRcv.remove(id)
+        val msg = inFlightMessage?.message ?: sessionHandler.getIncomingQos2Message(clientId, id)
+        if (msg != null) {
             logger.finest { "Client [$clientId] Publish: got publish release id [$id], now sending complete to client [${Utils.getCurrentFunctionName()}]"}
+            sessionHandler.completeIncomingQos2Message(clientId, id)
             endpoint.publishComplete(id)
-            sessionHandler.publishMessage(inFlightMessage.message)
-            inFlightMessagesRcv.remove(id)
+            sessionHandler.publishMessage(msg)
             updateSessionHandlerInFlight()
-        } ?: run {
+        } else if (sessionHandler.isIncomingQos2Completed(clientId, id)) {
+            // Already processed and completed, send duplicate PUBCOMP
+            logger.fine { "Client [$clientId] Duplicate PUBREL received for already completed id [$id] - sending PUBCOMP" }
+            endpoint.publishComplete(id)
+        } else {
             logger.warning { "Client [$clientId] Publish: got publish release for unknown id [$id] [${Utils.getCurrentFunctionName()}]"}
+            if (endpoint.protocolVersion() == 5) {
+                endpoint.publishComplete(id, MqttPubCompReasonCode.PACKET_IDENTIFIER_NOT_FOUND, MqttProperties.NO_PROPERTIES)
+            } else {
+                endpoint.publishComplete(id)
+            }
         }
     }
 
@@ -1683,20 +1637,64 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun sendLastWill() {
+        if (!connectionAccepted) {
+            logger.fine { "Client [$clientId] Connection was not accepted - skipping Last Will" }
+            return
+        }
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
+                val msg = BrokerMessage(clientId, will)
+                val topicName = msg.topicName
+
+                // System topic restriction
+                if (topicName.startsWith(Const.SYS_TOPIC_NAME)) {
+                    logger.warning("Client [$clientId] Last Will for system topic [$topicName] not allowed!")
+                    return
+                }
+
+                // MQTT spec §3.3.2.1: MUST NOT contain wildcards
+                if (topicName.contains('+') || topicName.contains('#')) {
+                    logger.warning("Client [$clientId] Last Will topic [$topicName] contains wildcards!")
+                    return
+                }
+
+                // ACL check
+                val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
+                val canPublish = if (userManager.isUserManagementEnabled()) {
+                    userManager.canPublish(username, topicName, clientId)
+                } else {
+                    true
+                }
+                if (!canPublish) {
+                    logger.warning("Client [$clientId] Last Will publish DENIED for [$topicName] - user [$username] lacks permission")
+                    return
+                }
+
+                // Topic schema policy validation
+                val schemaPolicyCache = TopicSchemaPolicyCache.getInstance()
+                if (schemaPolicyCache != null) {
+                    val nsEntry = schemaPolicyCache.matchNamespace(topicName)
+                    if (nsEntry != null) {
+                        val result = nsEntry.validator.validate(msg.getPayloadAsString())
+                        if (!result.valid) {
+                            logger.warning("Client [$clientId] Last Will publish REJECTED by schema for [$topicName]: ${result.errorDetail}")
+                            return
+                        }
+                    }
+                }
+
                 // MQTT v5: Honor Will Delay Interval (Property 24)
                 if (willDelayInterval > 0 && endpoint.protocolVersion() == 5) {
                     logger.info("Client [$clientId] Will Delay Interval: ${willDelayInterval}s - scheduling Last Will")
                     willDelayTimerId = vertx.setTimer(willDelayInterval * 1000) {
                         logger.fine { "Client [$clientId] Will Delay expired - publishing Last Will [${Utils.getCurrentFunctionName()}]" }
-                        sessionHandler.publishMessage(BrokerMessage(clientId, will))
+                        sessionHandler.publishMessage(msg)
                         willDelayTimerId = null
                     }
                 } else {
                     // No delay - publish immediately
                     logger.fine { "Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]" }
-                    sessionHandler.publishMessage(BrokerMessage(clientId, will))
+                    sessionHandler.publishMessage(msg)
                 }
             }
         }
