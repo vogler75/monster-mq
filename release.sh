@@ -151,6 +151,11 @@ git commit -m "$COMMIT_MSG" || {
 # 4. Create or Force-Move Tag
 TAG_NAME="v${NEW_VERSION}"
 if [ "$MODE" = "retag" ]; then
+    if git ls-remote --tags origin "${TAG_NAME}" 2>/dev/null | grep -q "${TAG_NAME}"; then
+        echo -e "${YELLOW}Deleting remote tag ${TAG_NAME} on origin...${NC}"
+        git push origin --delete "${TAG_NAME}" 2>/dev/null || git push origin ":refs/tags/${TAG_NAME}"
+        echo -e "${GREEN}✓ Deleted remote tag ${TAG_NAME} on origin${NC}"
+    fi
     echo -e "${YELLOW}Re-adjusting git tag ${TAG_NAME} to HEAD (force)...${NC}"
     git tag -f -a "${TAG_NAME}" -m "Release version ${NEW_VERSION}"
     echo -e "${GREEN}✓ Updated git tag ${TAG_NAME} to HEAD${NC}"
@@ -160,6 +165,11 @@ else
     echo -e "${GREEN}✓ Created git tag ${TAG_NAME}${NC}"
 fi
 
+echo -e "${YELLOW}Pushing commits and tags...${NC}"
+git push origin HEAD
+git push origin --tags
+echo -e "${GREEN}✓ Pushed commits and tags${NC}"
+
 echo ""
 echo -e "${GREEN}=== Release Tag Complete ===${NC}"
 echo -e "${GREEN}Version ${NEW_VERSION} tagged successfully on $(git rev-parse --short HEAD).${NC}"
@@ -168,8 +178,3 @@ echo -e "${YELLOW}Next steps:${NC}"
 echo "  1. Build artifacts locally : ./build.sh"
 echo "  2. Publish release assets  : ./publish.sh"
 echo "  3. Or build & publish      : ./build.sh --publish"
-if [ "$MODE" = "retag" ]; then
-    echo "  4. Push commits & tag      : git push origin HEAD && git push origin -f ${TAG_NAME}"
-else
-    echo "  4. Push commits & tag      : git push origin HEAD && git push origin ${TAG_NAME}"
-fi
