@@ -1,0 +1,26 @@
+Release v1.8.33
+Built from commit: edb119c5
+Date: 2026-09-20 08:48:49
+
+Changes since v1.8.32:
+---
+edb119c5 feat(scripting): embed documentation and AI skills for Python and JavaScript and expose via GraphQL
+00c0cd88 Merge branch 'develop' into main
+fca72543 feat(graphql): add scriptLanguages query for supported script runtimes
+564dd5ef Add standalone Python script engine with GraalVM polyglot runtime
+64ea6872 Create PLAN-script-engine-python.md
+5e977d21 docs: add policy to avoid GraphQL interface changes without human commitment
+c6974a1d docs(plans): add design plan for MQTT-based HMI file synchronization
+c586af5f Add raw binary REST topic reads
+773dd006 Default REST archive reads to Default group
+1811c0d8 fix(graphql): explicitly reject disabled/deleted user tokens with 401 (#187)
+fd02a607 fix(auth): revoke admin privileges and validate account status on role changes (#187)
+5246039c fix(stores): keep memory topic index consistent with LRU eviction
+fdffe38a fix(publish): update docker/build reference to docker/build.sh
+c9614f43 chore(docker): remove legacy compatibility symlinks build, build-testing, build-version
+47e08a4b refactor(docker): rename build-testing and build-version to .sh
+6209506b refactor(docker): rename docker/build to docker/build.sh and update dependencies
+b401fc7b build: add --testing and -c options to build.sh
+1247ae12 fix(publish): do not rebuild during publish and use prebuilt artifacts for docker
+82f7199a feat(setup): copy setup executable to target directory and support re-configuration
+293f15b4 fix: prevent root-owned build mountpoint directories during docker builds
