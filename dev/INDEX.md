@@ -20,6 +20,7 @@ Keep this index as the curated entry point for active and completed developer pl
 - [plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md](plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md) — Amazon Kinesis client integration
 - [plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md](plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md) — Implementing topic schema governance in the Go edge broker
 - [plans/REDIS_PROTOCOL_SERVER.md](plans/REDIS_PROTOCOL_SERVER.md) — Redis-compatible protocol server for topic access through archive group last-value stores
+- [plans/TOPIC_BASED_DECISION_MAKING.md](plans/TOPIC_BASED_DECISION_MAKING.md) — Topic-based decision making with OpenRouter / Jev (#196)
 
 **Architecture analysis:**
 - [plans/GRAALVM-CAPABILITIES-ANALYSIS.md](plans/GRAALVM-CAPABILITIES-ANALYSIS.md) — GraalVM capabilities analysis
