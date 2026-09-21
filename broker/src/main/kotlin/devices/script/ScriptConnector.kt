@@ -105,6 +105,9 @@ class ScriptConnector(
             }
         }
 
+        // Close engine context
+        engine.close()
+
         logger.info("ScriptConnector stopped for '${deviceConfig.name}'")
         stopPromise.complete()
     }
@@ -118,6 +121,7 @@ class ScriptConnector(
 
         // Setup timer
         if (hasTimer && scriptConfig.timerIntervalMs > 0) {
+            logger.fine { "Setting up timer for '${deviceConfig.name}' every ${scriptConfig.timerIntervalMs}ms" }
             timerId = vertx.setPeriodic(scriptConfig.timerIntervalMs.toLong()) {
                 dispatchExecution(null, null, "TIMER")
             }
@@ -132,6 +136,9 @@ class ScriptConnector(
                 internalClientId = "script-${deviceConfig.name}"
                 vertx.eventBus().consumer<Any>(EventBusAddresses.Client.messages(internalClientId!!)) { busMessage: Message<Any> ->
                     try {
+                        if (busMessage.replyAddress() != null) {
+                            busMessage.reply(true)
+                        }
                         val messages = when (val body = busMessage.body()) {
                             is BrokerMessage -> listOf(body)
                             is BulkClientMessage -> body.messages
@@ -178,28 +185,43 @@ class ScriptConnector(
         val promise = Promise.promise<ScriptExecutionResult>()
 
         val task: () -> ScriptExecutionResult = {
-            val res = engine.execute(msg, args, dryRun = false)
-            executionCount.incrementAndGet()
-            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
-            if (res.success) {
-                lastExecutionStatus = "SUCCESS"
-            } else {
+            try {
+                val res = engine.execute(msg, args, dryRun = false)
+                executionCount.incrementAndGet()
+                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+                if (res.success) {
+                    lastExecutionStatus = "SUCCESS"
+                } else {
+                    errorCount.incrementAndGet()
+                    lastExecutionStatus = "ERROR"
+                }
+                res
+            } catch (t: Throwable) {
+                executionCount.incrementAndGet()
                 errorCount.incrementAndGet()
+                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
                 lastExecutionStatus = "ERROR"
+                recentLogs.add("[ERROR] Unhandled script execution error: ${t.message}")
+                logger.severe("Script '${deviceConfig.name}' unhandled execution error: ${t.message}")
+                ScriptExecutionResult(
+                    success = false,
+                    errors = listOf(t.message ?: "Unknown fatal error")
+                )
             }
-            res
         }
 
         if (scriptConfig.instanceMode == ScriptConfig.MODE_SINGLETON) {
             synchronized(this) {
-                currentExecution = currentExecution.compose {
-                    vertx.executeBlocking(java.util.concurrent.Callable {
-                        task()
-                    }).onComplete { res ->
-                        if (res.succeeded()) promise.complete(res.result())
-                        else promise.fail(res.cause())
-                    }.mapEmpty()
-                }
+                currentExecution = currentExecution
+                    .recover { Future.succeededFuture() }
+                    .compose {
+                        vertx.executeBlocking(java.util.concurrent.Callable {
+                            task()
+                        }).onComplete { res ->
+                            if (res.succeeded()) promise.complete(res.result())
+                            else promise.fail(res.cause())
+                        }.mapEmpty()
+                    }
             }
         } else {
             vertx.executeBlocking(java.util.concurrent.Callable {
@@ -217,16 +239,26 @@ class ScriptConnector(
      * Synchronous callable execution for scripts.call().
      */
     fun executeCallable(args: Map<String, Any?>): Any? {
-        val res = engine.execute(null, args, dryRun = false)
-        executionCount.incrementAndGet()
-        lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
-        if (res.success) {
-            lastExecutionStatus = "SUCCESS"
-        } else {
+        return try {
+            val res = engine.execute(null, args, dryRun = false)
+            executionCount.incrementAndGet()
+            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            if (res.success) {
+                lastExecutionStatus = "SUCCESS"
+            } else {
+                errorCount.incrementAndGet()
+                lastExecutionStatus = "ERROR"
+            }
+            res.returnValue
+        } catch (t: Throwable) {
+            executionCount.incrementAndGet()
             errorCount.incrementAndGet()
+            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
             lastExecutionStatus = "ERROR"
+            recentLogs.add("[ERROR] Unhandled script execution error: ${t.message}")
+            logger.severe("Script '${deviceConfig.name}' unhandled execution error: ${t.message}")
+            null
         }
-        return res.returnValue
     }
 
     private fun publishToBroker(topic: String, payload: ByteArray, qos: Int, retain: Boolean): Boolean {

@@ -36,7 +36,7 @@ class ScriptEngine(
     private val scriptInvoker: ((scriptName: String, args: Map<String, Any?>) -> Any?)? = null,
     private val archiveProxy: ScriptArchiveProxy? = null,
     private val databaseProxy: ScriptDatabaseProxy = ScriptDatabaseProxy()
-) {
+) : AutoCloseable {
     companion object {
         private val logger: Logger = Utils.getLogger(ScriptEngine::class.java)
 
@@ -47,93 +47,8 @@ class ScriptEngine(
                 else -> "python"
             }
         }
-    }
 
-    private val targetLanguage: String = normalizeLanguage(config.language)
-    private val state = mutableMapOf<String, Any>()
-    private val compiledSource: Source
-
-    init {
-        // Pre-compile script on creation to catch syntax errors early
-        compiledSource = Source.newBuilder(targetLanguage, config.script, scriptName).build()
-        // Validate syntax by parsing with an engine context
-        Context.newBuilder(targetLanguage).build().use { ctx ->
-            ctx.parse(compiledSource)
-        }
-    }
-
-    private fun unwrapPolyglotValue(v: org.graalvm.polyglot.Value?): Any? {
-        if (v == null || v.isNull) return null
-        if (v.isHostObject) return v.asHostObject()
-        if (v.isBoolean) return v.asBoolean()
-        if (v.isString) return v.asString()
-        if (v.fitsInInt()) return v.asInt()
-        if (v.fitsInLong()) return v.asLong()
-        if (v.fitsInDouble()) return v.asDouble()
-        if (v.hasArrayElements()) {
-            val list = mutableListOf<Any?>()
-            for (i in 0 until v.arraySize) {
-                list.add(unwrapPolyglotValue(v.getArrayElement(i)))
-            }
-            return list
-        }
-        if (v.hasMembers()) {
-            val map = mutableMapOf<String, Any?>()
-            for (key in v.memberKeys) {
-                map[key] = unwrapPolyglotValue(v.getMember(key))
-            }
-            return map
-        }
-        return v.toString()
-    }
-
-    /**
-     * Execute script in a sandboxed Context.
-     */
-    fun execute(
-        msg: BrokerMessage?,
-        args: Map<String, Any?>? = null,
-        dryRun: Boolean = false,
-        timeoutMsOverride: Int? = null
-    ): ScriptExecutionResult {
-        val startNano = System.nanoTime()
-        val timeout = (timeoutMsOverride ?: config.timeoutMs).let { if (it <= 0) 200 else it }
-
-        val logProxy = ScriptLogProxy(scriptName, recentLogs)
-        val mqttProxy = ScriptMqttProxy(scriptName, dryRun, mqttPublisher)
-        val scriptsProxy = ScriptScriptsProxy(scriptInvoker)
-        val msgProxy = msg?.let { ScriptMsgProxy.fromBrokerMessage(it) }
-
-        var polyglotContext: Context? = null
-        try {
-            polyglotContext = Context.newBuilder(targetLanguage)
-                .allowAllAccess(true)
-                .allowHostAccess(HostAccess.ALL)
-                .build()
-
-            val bindings = polyglotContext.getBindings(targetLanguage)
-
-            // Inject proxies and globals
-            bindings.putMember("args", args ?: emptyMap<String, Any?>())
-            bindings.putMember("state", state)
-            bindings.putMember("global", globalStore ?: ScriptGlobalStore())
-            bindings.putMember("globals", globalStore ?: ScriptGlobalStore())
-            bindings.putMember("shared", globalStore ?: ScriptGlobalStore())
-            bindings.putMember("storage", scriptStorage ?: ScriptStorage(scriptName, null, "local"))
-            bindings.putMember("scripts", scriptsProxy)
-            bindings.putMember("db", databaseProxy)
-            bindings.putMember("archive", archiveProxy ?: ScriptArchiveProxy())
-            bindings.putMember("log", logProxy)
-            bindings.putMember("console", logProxy)
-
-            val jsonProxy = ScriptJsonProxy()
-            bindings.putMember("json", jsonProxy)
-
-            if (targetLanguage == "python") {
-                bindings.putMember("_raw_msg", msgProxy?.toMap())
-                bindings.putMember("_raw_mqtt", mqttProxy)
-                bindings.putMember("_raw_json", jsonProxy)
-                polyglotContext.eval("python", """
+        private const val PYTHON_PRELUDE = """
 class _MsgWrapper:
     def __init__(self, d):
         self._d = d
@@ -154,8 +69,6 @@ class _MsgWrapper:
     def __repr__(self):
         return repr(self._d)
 
-msg = _MsgWrapper(_raw_msg) if _raw_msg is not None else None
-
 class _MqttWrapper:
     def __init__(self, target):
         self._target = target
@@ -163,8 +76,6 @@ class _MqttWrapper:
         return self._target.publish(topic, payload, int(qos), bool(retain))
     def subscribe(self, filter, callback):
         return self._target.subscribe(filter, callback)
-
-mqtt = _MqttWrapper(_raw_mqtt)
 
 class _JsonWrapper:
     def __init__(self, target):
@@ -178,8 +89,150 @@ class _JsonWrapper:
     def loads(self, s, *args, **kwargs):
         return self._target.decode(s)
 
-json = _JsonWrapper(_raw_json)
-""".trimIndent())
+_raw_msg = None
+_raw_mqtt = None
+_raw_json = None
+msg = None
+mqtt = None
+json = None
+"""
+    }
+
+    private val targetLanguage: String = normalizeLanguage(config.language)
+    private val state = mutableMapOf<String, Any>()
+    private val compiledSource: Source
+    private var persistentContext: Context? = null
+
+    init {
+        // Pre-compile script on creation to catch syntax errors early
+        compiledSource = Source.newBuilder(targetLanguage, config.script, scriptName).build()
+        // Validate syntax by parsing with an engine context
+        Context.newBuilder(targetLanguage).build().use { ctx ->
+            ctx.parse(compiledSource)
+        }
+    }
+
+    private fun initContext(ctx: Context) {
+        val bindings = ctx.getBindings(targetLanguage)
+        bindings.putMember("state", state)
+        bindings.putMember("global", globalStore ?: ScriptGlobalStore())
+        bindings.putMember("globals", globalStore ?: ScriptGlobalStore())
+        bindings.putMember("shared", globalStore ?: ScriptGlobalStore())
+        bindings.putMember("storage", scriptStorage ?: ScriptStorage(scriptName, null, "local"))
+        bindings.putMember("scripts", ScriptScriptsProxy(scriptInvoker))
+        bindings.putMember("db", databaseProxy)
+        bindings.putMember("archive", archiveProxy ?: ScriptArchiveProxy())
+        bindings.putMember("json", ScriptJsonProxy())
+
+        if (targetLanguage == "python") {
+            ctx.eval("python", PYTHON_PRELUDE)
+        }
+    }
+
+    @Synchronized
+    private fun getOrCreateContext(): Context {
+        val existing = persistentContext
+        if (existing != null) {
+            return existing
+        }
+        val ctx = Context.newBuilder(targetLanguage)
+            .allowAllAccess(true)
+            .allowHostAccess(HostAccess.ALL)
+            .build()
+        initContext(ctx)
+        persistentContext = ctx
+        return ctx
+    }
+
+    override fun close() {
+        synchronized(this) {
+            try {
+                persistentContext?.close(true)
+            } catch (ignored: Exception) {}
+            persistentContext = null
+        }
+    }
+
+    private fun unwrapPolyglotValue(v: org.graalvm.polyglot.Value?, visited: MutableSet<Any> = mutableSetOf()): Any? {
+        if (v == null || v.isNull) return null
+        if (v.isHostObject) return v.asHostObject()
+        if (v.isBoolean) return v.asBoolean()
+        if (v.isString) return v.asString()
+        if (v.fitsInInt()) return v.asInt()
+        if (v.fitsInLong()) return v.asLong()
+        if (v.fitsInDouble()) return v.asDouble()
+        if (v.hasArrayElements()) {
+            val list = mutableListOf<Any?>()
+            for (i in 0 until v.arraySize) {
+                list.add(unwrapPolyglotValue(v.getArrayElement(i), visited))
+            }
+            return list
+        }
+        if (v.hasMembers() && !v.canExecute()) {
+            if (!visited.add(v)) return v.toString()
+            val map = mutableMapOf<String, Any?>()
+            for (key in v.memberKeys) {
+                if (key.startsWith("__") && key.endsWith("__")) continue
+                try {
+                    map[key] = unwrapPolyglotValue(v.getMember(key), visited)
+                } catch (e: Exception) {
+                    map[key] = null
+                }
+            }
+            return map
+        }
+        return v.toString()
+    }
+
+    /**
+     * Execute script in a sandboxed Context.
+     */
+    @Synchronized
+    fun execute(
+        msg: BrokerMessage?,
+        args: Map<String, Any?>? = null,
+        dryRun: Boolean = false,
+        timeoutMsOverride: Int? = null
+    ): ScriptExecutionResult {
+        val startNano = System.nanoTime()
+        val timeout = (timeoutMsOverride ?: config.timeoutMs).let { if (it <= 0) 200 else it }
+
+        val logProxy = ScriptLogProxy(scriptName, recentLogs)
+        val mqttProxy = ScriptMqttProxy(scriptName, dryRun, mqttPublisher)
+        val scriptsProxy = ScriptScriptsProxy(scriptInvoker)
+        val msgProxy = msg?.let { ScriptMsgProxy.fromBrokerMessage(it) }
+        val jsonProxy = ScriptJsonProxy()
+
+        val polyglotContext = if (dryRun) {
+            val ctx = Context.newBuilder(targetLanguage)
+                .allowAllAccess(true)
+                .allowHostAccess(HostAccess.ALL)
+                .build()
+            initContext(ctx)
+            ctx
+        } else {
+            getOrCreateContext()
+        }
+
+        try {
+            val bindings = polyglotContext.getBindings(targetLanguage)
+
+            // Inject per-execution proxies and globals
+            bindings.putMember("args", args ?: emptyMap<String, Any?>())
+            bindings.putMember("scripts", scriptsProxy)
+            bindings.putMember("log", logProxy)
+            bindings.putMember("console", logProxy)
+            bindings.putMember("json", jsonProxy)
+
+            if (targetLanguage == "python") {
+                bindings.putMember("_raw_msg", msgProxy?.toMap())
+                bindings.putMember("_raw_mqtt", mqttProxy)
+                bindings.putMember("_raw_json", jsonProxy)
+                polyglotContext.eval("python", """
+                    msg = _MsgWrapper(_raw_msg) if _raw_msg is not None else None
+                    mqtt = _MqttWrapper(_raw_mqtt)
+                    json = _JsonWrapper(_raw_json)
+                """.trimIndent())
             } else {
                 bindings.putMember("msg", msgProxy?.toMap())
                 bindings.putMember("mqtt", mqttProxy)
@@ -192,7 +245,7 @@ json = _JsonWrapper(_raw_json)
             val retVal = when {
                 bindings.hasMember("return_value") -> unwrapPolyglotValue(bindings.getMember("return_value"))
                 bindings.hasMember("result") -> unwrapPolyglotValue(bindings.getMember("result"))
-                evalResult != null && !evalResult.isNull && !evalResult.canExecute() -> unwrapPolyglotValue(evalResult)
+                targetLanguage != "python" && evalResult != null && !evalResult.isNull && !evalResult.canExecute() && !evalResult.hasMembers() -> unwrapPolyglotValue(evalResult)
                 else -> null
             }
 
@@ -207,19 +260,27 @@ json = _JsonWrapper(_raw_json)
                 executionTimeMs = elapsedMs
             )
 
-        } catch (e: Exception) {
+        } catch (t: Throwable) {
             val elapsedMs = (System.nanoTime() - startNano) / 1_000_000.0f
             val errList = mutableListOf<String>()
 
-            val errMsg = if (e is PolyglotException) {
-                val loc = e.sourceLocation
+            if (t is PolyglotException && t.isCancelled) {
+                // If context was cancelled, reset persistentContext so next execution rebuilds it
+                try {
+                    polyglotContext.close(true)
+                } catch (ignored: Exception) {}
+                persistentContext = null
+            }
+
+            val errMsg = if (t is PolyglotException) {
+                val loc = t.sourceLocation
                 if (loc != null) {
-                    "${e.message} (line ${loc.startLine}, col ${loc.startColumn})"
+                    "${t.message} (line ${loc.startLine}, col ${loc.startColumn})"
                 } else {
-                    e.message ?: "Execution error"
+                    t.message ?: "Execution error"
                 }
             } else {
-                e.message ?: "Unknown error"
+                t.message ?: t.javaClass.simpleName
             }
 
             errList.add(errMsg)
@@ -234,9 +295,11 @@ json = _JsonWrapper(_raw_json)
                 executionTimeMs = elapsedMs
             )
         } finally {
-            try {
-                polyglotContext?.close(true)
-            } catch (ignored: Exception) {}
+            if (dryRun) {
+                try {
+                    polyglotContext.close(true)
+                } catch (ignored: Exception) {}
+            }
         }
     }
 }

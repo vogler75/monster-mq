@@ -77,7 +77,7 @@ data class DeviceConfig(
     }
 
     fun isAssignedToNode(currentNodeId: String): Boolean {
-        return nodeId == "*" || nodeId == currentNodeId
+        return nodeId == "*" || nodeId == "local" || nodeId == currentNodeId
     }
 
     fun validateNamespace(): Boolean {

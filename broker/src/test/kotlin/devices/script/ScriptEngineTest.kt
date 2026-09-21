@@ -99,6 +99,51 @@ result = count
     }
 
     @Test
+    fun testStateWithDictAndListAcrossInvocations() {
+        val config = ScriptConfig(
+            language = "python",
+            script = """
+if "buffer" not in state:
+    state["buffer"] = {"items": []}
+
+if msg is not None:
+    state["buffer"]["items"].append(msg["payload"])
+    result = len(state["buffer"]["items"])
+else:
+    result = len(state["buffer"]["items"])
+"""
+        )
+
+        val engine = ScriptEngine("BufferTest", config)
+
+        val msg1 = BrokerMessage(
+            messageId = 1,
+            topicName = "test",
+            payload = "val1".toByteArray(),
+            qosLevel = 0,
+            isRetain = false,
+            isDup = false,
+            isQueued = false,
+            clientId = "c1"
+        )
+        val res1 = engine.execute(msg1)
+        assertTrue(res1.errors.joinToString("\n"), res1.success)
+
+        val msg2 = BrokerMessage(
+            messageId = 2,
+            topicName = "test",
+            payload = "val2".toByteArray(),
+            qosLevel = 0,
+            isRetain = false,
+            isDup = false,
+            isQueued = false,
+            clientId = "c1"
+        )
+        val res2 = engine.execute(msg2)
+        assertTrue(res2.errors.joinToString("\n"), res2.success)
+    }
+
+    @Test
     fun testGlobalStoreSharing() {
         val globalStore = ScriptGlobalStore()
 
@@ -247,5 +292,125 @@ result = decoded["status"]
         assertNotNull("broker-script-javascript-skill.md should exist in resources", jsSkillStream)
         val jsSkill = jsSkillStream!!.bufferedReader().use { it.readText() }
         assertTrue(jsSkill.contains("MonsterMQ Main JavaScript Script Skill"))
+    }
+
+    @Test
+    fun testAverageCalculationTopicAndTimerPattern() {
+        val config = ScriptConfig(
+            language = "python",
+            script = """
+import json
+
+TARGET_TOPICS = ["sensor/power"]
+
+if "buffer" not in state:
+    state["buffer"] = {topic: [] for topic in TARGET_TOPICS}
+
+if msg is not None:
+    topic = msg["topic"]
+    if topic in state["buffer"]:
+        payload = msg["payload"]
+        val = payload.get("Value") if isinstance(payload, dict) else None
+        if val is not None:
+            state["buffer"][topic].append(float(val))
+            log.debug(f"Stored value {val} for {topic}")
+else:
+    for topic in TARGET_TOPICS:
+        values = state["buffer"].get(topic, [])
+        if values:
+            avg = sum(values) / len(values)
+            mqtt.publish(f"{topic}/1MinAvg", json.dumps({"Value": avg, "count": len(values)}))
+            state["buffer"][topic] = []
+            result = avg
+"""
+        )
+
+        val engine = ScriptEngine("AveragePatternTest", config)
+
+        // Topic Message 1: 100.0
+        val msg1 = BrokerMessage(
+            messageId = 1,
+            topicName = "sensor/power",
+            payload = """{"Value": 100.0}""".toByteArray(),
+            qosLevel = 0,
+            isRetain = false,
+            isDup = false,
+            isQueued = false,
+            clientId = "c1"
+        )
+        val res1 = engine.execute(msg1)
+        assertTrue(res1.errors.joinToString("\n"), res1.success)
+
+        // Topic Message 2: 200.0
+        val msg2 = BrokerMessage(
+            messageId = 2,
+            topicName = "sensor/power",
+            payload = """{"Value": 200.0}""".toByteArray(),
+            qosLevel = 0,
+            isRetain = false,
+            isDup = false,
+            isQueued = false,
+            clientId = "c1"
+        )
+        val res2 = engine.execute(msg2)
+        assertTrue(res2.errors.joinToString("\n"), res2.success)
+
+        // Timer Execution (msg = null)
+        val resTimer = engine.execute(null)
+        assertTrue(resTimer.errors.joinToString("\n"), resTimer.success)
+        assertEquals("150", resTimer.returnValue?.toString())
+        assertEquals(1, resTimer.outputMessages.size)
+        assertEquals("sensor/power/1MinAvg", resTimer.outputMessages[0].topic)
+        assertTrue(resTimer.outputMessages[0].payload.contains("150.0"))
+    }
+
+    @Test
+    fun testScriptConnectorSingletonErrorRecovery() {
+        val vertx = io.vertx.core.Vertx.vertx()
+        try {
+            val deviceConfig = at.rocworks.stores.DeviceConfig(
+                name = "ConnectorRecoveryTest",
+                namespace = "test",
+                nodeId = "local",
+                type = at.rocworks.stores.DeviceConfig.DEVICE_TYPE_SCRIPT,
+                config = io.vertx.core.json.JsonObject()
+                    .put("language", "python")
+                    .put("instanceMode", "SINGLETON")
+                    .put("script", """
+count = state.get("count", 0) + 1
+state["count"] = count
+if count == 2:
+    raise ValueError("Intentional error on 2nd run")
+result = count
+""")
+            )
+
+            val latch = java.util.concurrent.CountDownLatch(1)
+            val connector = ScriptConnector(deviceConfig, null, ScriptGlobalStore())
+            vertx.deployVerticle(connector).onComplete { latch.countDown() }
+            assertTrue(latch.await(5, java.util.concurrent.TimeUnit.SECONDS))
+
+            // 1st run: count = 1 (SUCCESS)
+            val res1 = connector.dispatchExecution(null, null, "TEST").toCompletionStage().toCompletableFuture().get()
+            assertTrue(res1.success)
+            assertEquals("1", res1.returnValue?.toString())
+            assertEquals(1L, connector.executionCount.get())
+            assertEquals(0L, connector.errorCount.get())
+
+            // 2nd run: raises error (ERROR)
+            val res2 = connector.dispatchExecution(null, null, "TEST").toCompletionStage().toCompletableFuture().get()
+            assertFalse(res2.success)
+            assertEquals(2L, connector.executionCount.get())
+            assertEquals(1L, connector.errorCount.get())
+
+            // 3rd run: count = 3 (SUCCESS - verifies queue was NOT poisoned by run 2 error!)
+            val res3 = connector.dispatchExecution(null, null, "TEST").toCompletionStage().toCompletableFuture().get()
+            assertTrue(res3.success)
+            assertEquals("3", res3.returnValue?.toString())
+            assertEquals(3L, connector.executionCount.get())
+            assertEquals(1L, connector.errorCount.get())
+        } finally {
+            vertx.close()
+        }
     }
 }

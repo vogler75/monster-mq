@@ -285,11 +285,12 @@ class ScriptExtension(
         testPayload: String?,
         testArgs: Map<String, Any?>?
     ): ScriptExecutionResult {
+        val targetNodeId = if (::currentNodeId.isInitialized) currentNodeId else "local"
         val engine = ScriptEngine(
             scriptName = name,
             config = config,
             globalStore = globalStore,
-            scriptStorage = ScriptStorage(name, null, currentNodeId),
+            scriptStorage = ScriptStorage(name, null, targetNodeId),
             recentLogs = null,
             mqttPublisher = null,
             scriptInvoker = { n, a -> executeScript(n, a) }
