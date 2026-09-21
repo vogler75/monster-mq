@@ -124,7 +124,8 @@ class AgentQueries(
                 "Claude"      to "claude",
                 "OpenAI"      to "openai",
                 "Ollama"      to "ollama",
-                "LlamaCpp"    to "llamacpp"
+                "LlamaCpp"    to "llamacpp",
+                "OpenRouter"  to "openrouter"
             )
             providers.fieldNames().mapNotNull { keyToProvider[it] }
         }

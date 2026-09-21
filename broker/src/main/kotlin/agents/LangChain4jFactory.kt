@@ -39,6 +39,7 @@ object LangChain4jFactory {
             "ollama" -> "Ollama"
             "azure-openai" -> "AzureOpenAI"
             "llamacpp" -> "LlamaCpp"
+            "openrouter" -> "OpenRouter"
             else -> config.provider
         }
         val model = (config.model ?: resolveDefaultModel(config.provider, globalConfig))?.takeIf { it.isNotBlank() }
@@ -122,7 +123,20 @@ object LangChain4jFactory {
                     .build()
             }
 
-            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai, llamacpp")
+            "openrouter" -> {
+                val effectiveEndpoint = config.endpoint?.takeIf { it.isNotBlank() } ?: "https://openrouter.ai/api/v1"
+                OpenAiChatModel.builder()
+                    .apiKey(apiKey)
+                    .modelName(model)
+                    .baseUrl(effectiveEndpoint)
+                    .apply { if (shouldSetTemperature) temperature(config.temperature) }
+                    .apply { config.maxTokens?.let { maxTokens(it) } }
+                    .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
+                    .listeners(listeners)
+                    .build()
+            }
+
+            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai, llamacpp, openrouter")
         }
     }
 
@@ -172,7 +186,7 @@ object LangChain4jFactory {
         )
     }
 
-    private fun resolveApiKey(agentApiKey: String?, provider: String, globalConfig: JsonObject): String {
+    fun resolveApiKey(agentApiKey: String?, provider: String, globalConfig: JsonObject): String {
         // 1. Agent-specific API key
         if (!agentApiKey.isNullOrBlank()) {
             val resolved = resolveEnvVar(agentApiKey)
@@ -190,6 +204,7 @@ object LangChain4jFactory {
             "ollama" -> providers.getJsonObject("Ollama", JsonObject())
             "azure-openai" -> providers.getJsonObject("AzureOpenAI", JsonObject())
             "llamacpp" -> providers.getJsonObject("LlamaCpp", JsonObject())
+            "openrouter" -> providers.getJsonObject("OpenRouter", JsonObject())
             else -> JsonObject()
         }
         val providerKey = if (provider.lowercase() == "ollama") {
@@ -212,6 +227,7 @@ object LangChain4jFactory {
             "ollama" -> "OLLAMA_BASE_URL"
             "azure-openai" -> "AZURE_OPENAI_API_KEY"
             "llamacpp" -> "LLAMACPP_API_KEY"
+            "openrouter" -> "OPENROUTER_API_KEY"
             else -> null
         }
         if (envVarName != null) {
@@ -233,6 +249,7 @@ object LangChain4jFactory {
             "openai" -> "OpenAI"
             "azure-openai" -> "AzureOpenAI"
             "llamacpp" -> "LlamaCpp"
+            "openrouter" -> "OpenRouter"
             else -> provider
         }
         throw IllegalArgumentException("No API key found for provider '$provider'. " +
@@ -260,7 +277,7 @@ object LangChain4jFactory {
     /**
      * Resolves the default model from GenAI.Providers.<Provider>.Model in config.yaml.
      */
-    private fun resolveDefaultModel(provider: String, globalConfig: JsonObject): String? {
+    fun resolveDefaultModel(provider: String, globalConfig: JsonObject): String? {
         val providerSection = globalConfig.getJsonObject("GenAI", JsonObject())
             .getJsonObject("Providers", JsonObject())
         val section = when (provider.lowercase()) {
@@ -270,12 +287,13 @@ object LangChain4jFactory {
             "ollama" -> providerSection.getJsonObject("Ollama", null)
             "azure-openai" -> providerSection.getJsonObject("AzureOpenAI", null)
             "llamacpp" -> providerSection.getJsonObject("LlamaCpp", null)
+            "openrouter" -> providerSection.getJsonObject("OpenRouter", null)
             else -> null
         }
         return section?.getString("Model") ?: section?.getString("Deployment")
     }
 
-    private fun resolveEndpoint(agentEndpoint: String?, globalConfig: JsonObject): String {
+    fun resolveEndpoint(agentEndpoint: String?, globalConfig: JsonObject): String {
         if (!agentEndpoint.isNullOrBlank()) {
             val resolved = resolveEnvVar(agentEndpoint)
             if (resolved != null) return resolved

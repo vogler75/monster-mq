@@ -82,4 +82,32 @@ class LangChain4jFactoryTest {
         val chatModel = LangChain4jFactory.createChatModel(config, globalConfig)
         assertNotNull(chatModel)
     }
+
+    @Test
+    fun testCreateOpenRouterChatModel() {
+        val config = ChatModelConfig(
+            provider = "openrouter",
+            model = "anthropic/claude-3.5-sonnet",
+            apiKey = "dummy-key",
+            temperature = 0.7
+        )
+        val chatModel = LangChain4jFactory.createChatModel(config, JsonObject())
+        assertNotNull(chatModel)
+    }
+
+    @Test
+    fun testOpenRouterGlobalConfigDefaultModelUsed() {
+        val config = ChatModelConfig(
+            provider = "openrouter",
+            model = null,
+            apiKey = "dummy-key"
+        )
+        val globalConfig = JsonObject()
+            .put("GenAI", JsonObject()
+                .put("Providers", JsonObject()
+                    .put("OpenRouter", JsonObject()
+                        .put("Model", "anthropic/claude-3.5-sonnet"))))
+        val chatModel = LangChain4jFactory.createChatModel(config, globalConfig)
+        assertNotNull(chatModel)
+    }
 }

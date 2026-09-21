@@ -913,7 +913,7 @@
             "Provider": {
               "type": "string",
               "title": "AI Provider",
-              "enum": ["gemini", "claude", "openai", "ollama", "llamacpp"],
+              "enum": ["gemini", "claude", "openai", "ollama", "llamacpp", "openrouter"],
               "default": "gemini",
               "description": "AI provider used by the assistant"
             },
@@ -983,6 +983,17 @@
                 "Model": { "type": "string", "title": "Model Name", "description": "Default model name" },
                 "ApiKey": { "type": "string", "title": "API Key", "description": "Optional API Key" },
                 "TimeoutSeconds": { "type": "integer", "title": "Timeout (s)", "description": "HTTP timeout in seconds" }
+              }
+            },
+            "OpenRouter": {
+              "type": "object",
+              "title": "OpenRouter",
+              "description": "OpenRouter AI gateway (supports chat models like Claude/GPT and decision models like Jev)",
+              "properties": {
+                "ApiKey": { "type": "string", "title": "API Key", "description": "OpenRouter API key (e.g. '${OPENROUTER_API_KEY}')" },
+                "Model": { "type": "string", "title": "Model Name", "description": "Default model name (e.g. 'anthropic/claude-3.5-sonnet' or 'typesafe/jev-1.13')" },
+                "Endpoint": { "type": "string", "title": "Custom Endpoint", "description": "OpenRouter endpoint URL (default: https://openrouter.ai/api/v1)" },
+                "TimeoutSeconds": { "type": "integer", "title": "Timeout (s)", "description": "HTTP request timeout in seconds" }
               }
             }
           }

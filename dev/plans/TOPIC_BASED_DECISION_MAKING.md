@@ -333,18 +333,20 @@ The provider-neutral design could later support:
 - Scheduled decision triggers
 - Decision chaining through MQTT topics
 
-## Acceptance Criteria
+## Implementation Status & Architecture
 
-- A Decision can be created/configured independently of Agents.
-- A Decision is triggered by a configured MQTT topic.
-- Trigger payload can be included in the decision input.
-- Current Context topics can be configured and resolved through LastVal.
-- Historical Context queries can be configured separately.
-- Historical queries support a configurable time range.
-- Existing MonsterMQ aggregation functionality can be selected for historical context.
-- Dashboard presents **Current Context** and **Historical Context** as separate configuration areas.
-- OpenRouter is available as the initial Decision Provider.
-- Jev can be selected/configured as the initial model.
-- Decision results are published to a configurable MQTT topic.
-- Provider integration is abstracted behind a reusable `DecisionProvider` interface.
-- The implementation does not depend on deprecated MonsterMQ Flows.
+This plan was implemented by unifying Topic-Based Decision Making with MonsterMQ's existing high-performance Agent pipeline:
+
+### Unified Pipeline & Zero-GraphQL Changes
+To adhere strictly to MonsterMQ's cross-ecosystem parity rule (avoiding changes to `.graphqls` schemas shared with `monster-mq-edge` and third parties), Decision Making is integrated into the Agent runtime as a fast "System 1" decision execution path:
+- **Detection**: An agent is recognized as a Decision Agent if its model is `typesafe/jev-*`, its provider is `openrouter-decision`, or its tags include `decision`.
+- **`IDecisionProvider` Abstraction**: `at.rocworks.genai.decision.IDecisionProvider` defines `decide(model, questions, state, timeoutSeconds)`.
+- **OpenRouter Jev Support**: `OpenRouterDecisionProvider` integrates with OpenRouter's structured endpoint `POST /api/alpha/decisions` using Vert.x WebClient.
+- **Context Snapshot**: `AgentExecutor.buildContextSnapshot()` gathers:
+  - `trigger`: topic, payload, timestamp.
+  - `current`: values from `contextLastvalTopics`.
+  - `retained`: retained messages from `contextRetainedTopics`.
+  - `history`: raw or aggregated time-series buckets from `contextHistoryQueries`.
+- **Questions & Output**: The agent's `systemPrompt` (or `skills`) provides the decision questions schema (JSON array or lines). The structured decision response from Jev is published directly to `outputTopics`.
+- **OpenRouter General Agent Support**: OpenRouter is also supported for standard conversational/tool-calling agents via `LangChain4jFactory` using OpenAI-compatible chat completions (`https://openrouter.ai/api/v1`).
+- **Dashboard**: `genai-provider-detail`, `agent-detail`, and `agents` pages support OpenRouter configuration, Jev placeholder models, decision badge indicators, and prompt guidance.

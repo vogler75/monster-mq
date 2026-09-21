@@ -69,7 +69,8 @@ class GenAiProviderQueries(
             "Claude"      to "claude",
             "OpenAI"      to "openai",
             "Ollama"      to "ollama",
-            "LlamaCpp"    to "llamacpp"
+            "LlamaCpp"    to "llamacpp",
+            "OpenRouter"  to "openrouter"
         )
         return providers.fieldNames().mapNotNull { key ->
             val type = keyToType[key] ?: return@mapNotNull null

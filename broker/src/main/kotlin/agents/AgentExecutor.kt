@@ -13,6 +13,8 @@ import dev.langchain4j.mcp.client.DefaultMcpClient
 import dev.langchain4j.mcp.client.McpClient
 import dev.langchain4j.mcp.client.transport.http.StreamableHttpMcpTransport
 import dev.langchain4j.mcp.McpToolProvider
+import at.rocworks.genai.decision.IDecisionProvider
+import at.rocworks.genai.decision.OpenRouterDecisionProvider
 import dev.langchain4j.data.message.AiMessage
 import dev.langchain4j.memory.chat.MessageWindowChatMemory
 import dev.langchain4j.model.chat.ChatModel
@@ -53,9 +55,10 @@ class AgentExecutor(
 
     private val logger: Logger = Utils.getLogger(this::class.java)
 
-    private lateinit var agentConfig: AgentConfig
-    private lateinit var chatModel: ChatModel
-    private lateinit var agentTools: AgentTools
+    var agentConfig: AgentConfig = AgentConfig.fromJsonObject(deviceConfig.config)
+    private var chatModel: ChatModel? = null
+    private var decisionProvider: IDecisionProvider? = null
+    private var agentTools: AgentTools? = null
     private var aiService: AgentAiService? = null
     private var chatMemory: MessageWindowChatMemory? = null
     private var globalConfig: JsonObject? = null
@@ -149,18 +152,22 @@ class AgentExecutor(
                     store.getDevice(agentConfig.providerName!!)
                         .onComplete { result ->
                             try {
-                                chatModel = if (result.succeeded() && result.result() != null) {
-                                    val providerConfig = GenAiProviderConfig.fromJsonObject(result.result()!!.config)
-                                    LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
+                                val providerConfig = if (result.succeeded() && result.result() != null) {
+                                    GenAiProviderConfig.fromJsonObject(result.result()!!.config)
                                 } else {
                                     // Try config.yaml providers before falling back to direct config
-                                    val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
-                                    if (configProvider != null) {
-                                        logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
-                                        LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                                    resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
+                                }
+                                if (isDecisionAgent(providerConfig)) {
+                                    initDecisionProvider(providerConfig)
+                                } else if (providerConfig != null) {
+                                    chatModel = LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
+                                } else {
+                                    logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
+                                    if (isDecisionAgent()) {
+                                        initDecisionProvider()
                                     } else {
-                                        logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
-                                        LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                        chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
                                     }
                                 }
                                 doStart(startPromise)
@@ -172,17 +179,27 @@ class AgentExecutor(
                 } else {
                     // No device store — try config.yaml providers
                     val configProvider = resolveConfigYamlProvider(agentConfig.providerName!!, globalConfig!!)
-                    if (configProvider != null) {
+                    if (isDecisionAgent(configProvider)) {
+                        initDecisionProvider(configProvider)
+                    } else if (configProvider != null) {
                         logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
                         chatModel = LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
                     } else {
                         logger.warning("Device store not available, falling back to direct config for provider '${agentConfig.providerName}'")
-                        chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                        if (isDecisionAgent()) {
+                            initDecisionProvider()
+                        } else {
+                            chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                        }
                     }
                     doStart(startPromise)
                 }
             } else {
-                chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                if (isDecisionAgent()) {
+                    initDecisionProvider()
+                } else {
+                    chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                }
                 doStart(startPromise)
             }
 
@@ -191,6 +208,24 @@ class AgentExecutor(
             e.printStackTrace()
             startPromise.fail(e)
         }
+    }
+
+    private fun isDecisionAgent(providerConfig: GenAiProviderConfig? = null): Boolean {
+        val model = (agentConfig.model ?: providerConfig?.model ?: "").lowercase()
+        val providerType = (providerConfig?.type ?: agentConfig.provider).lowercase()
+        return model.startsWith("typesafe/jev") ||
+               model.contains("jev") ||
+               providerType == "openrouter-decision" ||
+               agentConfig.tags.any { it.equals("decision", ignoreCase = true) }
+    }
+
+    private fun initDecisionProvider(providerConfig: GenAiProviderConfig? = null) {
+        val effectiveProvider = providerConfig?.type ?: agentConfig.provider
+        val effectiveApiKey = agentConfig.apiKey ?: providerConfig?.apiKey ?: providerConfig?.baseUrl
+        val apiKey = LangChain4jFactory.resolveApiKey(effectiveApiKey, effectiveProvider, globalConfig!!)
+        val endpoint = agentConfig.endpoint ?: providerConfig?.endpoint
+        decisionProvider = OpenRouterDecisionProvider(vertx, apiKey, endpoint)
+        logger.info("Agent ${deviceConfig.name} initialized OpenRouterDecisionProvider (model: ${agentConfig.model ?: providerConfig?.model ?: "typesafe/jev-1.13"})")
     }
 
     /**
@@ -206,7 +241,8 @@ class AgentExecutor(
             "Claude"      to "claude",
             "OpenAI"      to "openai",
             "Ollama"      to "ollama",
-            "LlamaCpp"    to "llamacpp"
+            "LlamaCpp"    to "llamacpp",
+            "OpenRouter"  to "openrouter"
         )
         val type = keyToType[name] ?: name.lowercase()
         return GenAiProviderConfig(
@@ -223,31 +259,35 @@ class AgentExecutor(
 
     private fun doStart(startPromise: Promise<Void>) {
         try {
-            // Create tools
-            val archiveHandler = Monster.getArchiveHandler()
             val sessionHandler = Monster.getSessionHandler()
-            agentTools = AgentTools(
-                archiveHandler = archiveHandler,
-                retainedStore = null,
-                agentClientId = clientId,
-                agentName = deviceConfig.name,
-                a2aOrg = agentConfig.org,
-                a2aSite = agentConfig.site,
-                defaultArchiveGroup = agentConfig.defaultArchiveGroup,
-                toolLogger = { name, args, result -> publishToolLog(name, args, result) },
-                vertx = vertx,
-                taskTimeoutSeconds = agentConfig.taskTimeoutSeconds,
-                getCurrentTaskId = { currentTaskId },
-                registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
-                subAgentsAllowAll = agentConfig.subAgentsAllowAll,
-                subAgents = agentConfig.subAgents,
-                visibleAgentTags = agentConfig.visibleAgentTags,
-                isolatedAgent = agentConfig.isolatedAgent,
-                allowedPublishTopics = agentConfig.allowedPublishTopics
-            )
+            if (decisionProvider != null) {
+                logger.info("Agent ${deviceConfig.name} running in DECISION mode (provider: ${decisionProvider?.providerName})")
+            } else {
+                // Create tools
+                val archiveHandler = Monster.getArchiveHandler()
+                agentTools = AgentTools(
+                    archiveHandler = archiveHandler,
+                    retainedStore = null,
+                    agentClientId = clientId,
+                    agentName = deviceConfig.name,
+                    a2aOrg = agentConfig.org,
+                    a2aSite = agentConfig.site,
+                    defaultArchiveGroup = agentConfig.defaultArchiveGroup,
+                    toolLogger = { name, args, result -> publishToolLog(name, args, result) },
+                    vertx = vertx,
+                    taskTimeoutSeconds = agentConfig.taskTimeoutSeconds,
+                    getCurrentTaskId = { currentTaskId },
+                    registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
+                    subAgentsAllowAll = agentConfig.subAgentsAllowAll,
+                    subAgents = agentConfig.subAgents,
+                    visibleAgentTags = agentConfig.visibleAgentTags,
+                    isolatedAgent = agentConfig.isolatedAgent,
+                    allowedPublishTopics = agentConfig.allowedPublishTopics
+                )
 
-            // Build AI Service with ReAct loop
-            buildAiService()
+                // Build AI Service with ReAct loop
+                buildAiService()
+            }
 
             // Register EventBus consumer to receive MQTT messages
             if (sessionHandler != null) {
@@ -328,7 +368,13 @@ class AgentExecutor(
             try { llmWorkerExecutor?.close() } catch (e: Exception) {
                 logger.warning("Error closing LLM worker executor for agent ${deviceConfig.name}: ${e.message}")
             }
-            llmWorkerExecutor = null
+            // Close decision provider
+            try {
+                (decisionProvider as? OpenRouterDecisionProvider)?.close()
+            } catch (e: Exception) {
+                logger.warning("Error closing decision provider: ${e.message}")
+            }
+            decisionProvider = null
 
             // Publish offline status
             publishHealthStatus("stopped")
@@ -726,6 +772,214 @@ class AgentExecutor(
         }
     }
 
+    /**
+     * Builds an immutable structured context snapshot as a JsonObject.
+     * Used by Jev and structured decision models as the 'state' input.
+     */
+    fun buildContextSnapshot(triggerContext: TriggerContext? = null, input: String? = null): JsonObject {
+        val state = JsonObject()
+
+        // 1. Trigger context
+        val triggerObj = JsonObject()
+        if (triggerContext?.topicName != null) {
+            triggerObj.put("topic", triggerContext.topicName)
+            val raw = triggerContext.value ?: input
+            if (raw != null) {
+                triggerObj.put("payload", parseJsonOrString(raw))
+            }
+        } else if (input != null) {
+            triggerObj.put("payload", parseJsonOrString(input))
+        }
+        if (!triggerObj.isEmpty) {
+            state.put("trigger", triggerObj)
+        }
+
+        // 2. Current context (LastVal)
+        if (agentConfig.contextLastvalTopics.isNotEmpty()) {
+            val currentObj = JsonObject()
+            val archiveGroups = Monster.getArchiveHandler()?.getDeployedArchiveGroups() ?: emptyMap()
+            for ((groupName, topicFilters) in agentConfig.contextLastvalTopics) {
+                val store = archiveGroups[groupName]?.lastValStore ?: continue
+                for (filter in topicFilters) {
+                    store.findMatchingMessages(filter) { msg ->
+                        currentObj.put(msg.topicName, parseJsonOrString(msg.getPayloadAsString()))
+                        currentObj.size() < 500
+                    }
+                }
+            }
+            state.put("current", currentObj)
+        }
+
+        // 3. Retained messages
+        if (agentConfig.contextRetainedTopics.isNotEmpty()) {
+            val retainedObj = JsonObject()
+            val retainedStore = Monster.getRetainedStore()
+            if (retainedStore != null) {
+                for (filter in agentConfig.contextRetainedTopics) {
+                    retainedStore.findMatchingMessages(filter) { msg ->
+                        retainedObj.put(msg.topicName, parseJsonOrString(msg.getPayloadAsString()))
+                        retainedObj.size() < 500
+                    }
+                }
+            }
+            state.put("retained", retainedObj)
+        }
+
+        // 4. Historical context
+        if (agentConfig.contextHistoryQueries.isNotEmpty()) {
+            val historyObj = JsonObject()
+            val archiveGroups = Monster.getArchiveHandler()?.getDeployedArchiveGroups() ?: emptyMap()
+            for (query in agentConfig.contextHistoryQueries) {
+                if (query.topics.isEmpty()) continue
+                val archiveGroup = archiveGroups[query.archiveGroup] ?: continue
+                val archiveStore = archiveGroup.archiveStore
+                if (archiveStore !is at.rocworks.stores.IMessageArchiveExtended) continue
+
+                val endTime = Instant.now()
+                val startTime = endTime.minusSeconds(query.lastSeconds.toLong())
+
+                if (query.isRaw()) {
+                    val rawObj = JsonObject()
+                    for (topic in query.topics) {
+                        try {
+                            val history = archiveStore.getHistory(topic, startTime, endTime, 500)
+                            rawObj.put(topic, history)
+                        } catch (e: Exception) {
+                            logger.warning("Failed to fetch raw history for $topic: ${e.message}")
+                        }
+                    }
+                    historyObj.put("${query.archiveGroup}:RAW", rawObj)
+                } else {
+                    try {
+                        val result = archiveStore.getAggregatedHistory(
+                            topics = query.topics,
+                            startTime = startTime,
+                            endTime = endTime,
+                            intervalMinutes = query.intervalMinutes(),
+                            functions = listOf(query.function.uppercase()),
+                            fields = query.fields
+                        )
+                        historyObj.put("${query.archiveGroup}:${query.interval}:${query.function}", result)
+                    } catch (e: Exception) {
+                        logger.warning("Failed to fetch aggregated history for ${query.topics}: ${e.message}")
+                    }
+                }
+            }
+            state.put("history", historyObj)
+        }
+
+        return state
+    }
+
+    private fun parseJsonOrString(raw: String): Any {
+        val trimmed = raw.trim()
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try { return JsonObject(trimmed) } catch (_: Exception) {}
+        } else if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try { return JsonArray(trimmed) } catch (_: Exception) {}
+        }
+        return trimmed.toDoubleOrNull() ?: trimmed.toLongOrNull() ?: trimmed.toBooleanStrictOrNull() ?: raw
+    }
+
+    fun extractDecisionQuestions(): JsonObject {
+        val prompt = agentConfig.systemPrompt.trim()
+        if (prompt.isNotBlank()) {
+            try {
+                if (prompt.startsWith("[") && prompt.endsWith("]")) {
+                    val array = JsonArray(prompt)
+                    val questionsObj = JsonObject()
+                    for (i in 0 until array.size()) {
+                        val item = array.getValue(i)
+                        if (item is JsonObject) {
+                            val id = item.getString("id")
+                                ?: item.getString("name")
+                                ?: item.getString("key")
+                                ?: "q${i + 1}"
+                            val qObj = JsonObject()
+                            val rawType = item.getString("type", "noul").lowercase()
+                            val type = when (rawType) {
+                                "boolean", "bool", "noul" -> "noul"
+                                "categorical", "choice", "select" -> "choice"
+                                "scale", "score", "rating" -> "score"
+                                else -> rawType
+                            }
+                            qObj.put("type", type)
+                            val instructions = item.getString("instructions")
+                                ?: item.getString("question")
+                                ?: item.getString("desc")
+                                ?: id
+                            qObj.put("instructions", instructions)
+                            if (item.containsKey("criteria")) {
+                                qObj.put("criteria", item.getValue("criteria"))
+                            } else if (item.containsKey("options")) {
+                                val opts = item.getValue("options")
+                                if (opts is JsonArray) {
+                                    if (type == "score") {
+                                        qObj.put("criteria", opts)
+                                    } else {
+                                        val optObj = JsonObject()
+                                        opts.forEach { o -> optObj.put(o.toString(), o.toString()) }
+                                        qObj.put("criteria", optObj)
+                                    }
+                                } else {
+                                    qObj.put("criteria", opts)
+                                }
+                            } else {
+                                if (type == "noul") {
+                                    qObj.put("criteria", JsonObject().put("true", "True").put("false", "False"))
+                                }
+                            }
+                            questionsObj.put(id, qObj)
+                        }
+                    }
+                    if (!questionsObj.isEmpty) return questionsObj
+                } else {
+                    val jsonPrompt = JsonObject(prompt)
+                    if (jsonPrompt.containsKey("questions") && jsonPrompt.getValue("questions") is JsonObject) {
+                        return jsonPrompt.getJsonObject("questions")
+                    } else if (!jsonPrompt.isEmpty && jsonPrompt.fieldNames().any { key ->
+                        val v = jsonPrompt.getValue(key)
+                        v is JsonObject && (v.containsKey("type") || v.containsKey("instructions") || v.containsKey("question"))
+                    }) {
+                        return jsonPrompt
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (agentConfig.skills.isNotEmpty()) {
+            val questionsObj = JsonObject()
+            for (skill in agentConfig.skills) {
+                val qObj = JsonObject()
+                val schema = skill.inputSchema ?: JsonObject()
+                val qType = schema.getString("type", "choice")
+                qObj.put("type", qType)
+                qObj.put("instructions", skill.description.ifBlank { skill.name })
+                if (schema.containsKey("criteria")) {
+                    qObj.put("criteria", schema.getValue("criteria"))
+                } else {
+                    if (qType == "noul") {
+                        qObj.put("criteria", JsonObject().put("true", "Yes / True").put("false", "No / False"))
+                    } else if (qType == "choice") {
+                        qObj.put("criteria", JsonObject().put("option_a", "Option A").put("option_b", "Option B"))
+                    }
+                }
+                questionsObj.put(skill.name, qObj)
+            }
+            if (!questionsObj.isEmpty) return questionsObj
+        }
+
+        val instructions = if (prompt.isNotBlank()) prompt else "Evaluate telemetry context and classify operating status."
+        return JsonObject().put("decision", JsonObject()
+            .put("type", "noul")
+            .put("instructions", instructions)
+            .put("criteria", JsonObject()
+                .put("true", "Normal / affirmative")
+                .put("false", "Anomaly / negative")
+            )
+        )
+    }
+
     private val localZone: ZoneId by lazy {
         agentConfig.timezone?.let {
             try { ZoneId.of(it) } catch (_: Exception) { ZoneId.systemDefault() }
@@ -1062,7 +1316,126 @@ class AgentExecutor(
         return llmWorkerExecutor?.executeBlocking(callable) ?: vertx.executeBlocking(callable)
     }
 
+    private fun executeDecisionBlocking(block: () -> String): Future<String> {
+        val callable = Callable { block() }
+        return llmWorkerExecutor?.executeBlocking(callable) ?: vertx.executeBlocking(callable)
+    }
+
+    private fun executeDecisionAgentWithCallback(
+        userMessage: String,
+        source: String,
+        triggerContext: TriggerContext? = null,
+        callback: (String?, String?) -> Unit
+    ) {
+        val provider = decisionProvider ?: run {
+            callback(null, "Decision provider not available")
+            return
+        }
+
+        val txId = Utils.getUuid()
+        currentTransactionId = txId
+        writeToConversationLog { sb ->
+            sb.append("================================================================================\n")
+            sb.append("TRANSACTION START (DECISION) | ID: $txId | Time: ${Instant.now()} | Source: $source")
+            val taskId = currentTaskId
+            if (taskId != null) {
+                sb.append(" | Task ID: $taskId")
+            }
+            sb.append("\n--------------------------------------------------------------------------------\n\n")
+        }
+
+        messagesProcessed.incrementAndGet()
+        publishHealthStatus("running")
+        logger.fine("Agent ${deviceConfig.name} processing decision task from $source")
+
+        executeDecisionBlocking {
+            llmCalls.incrementAndGet()
+            val state = buildContextSnapshot(triggerContext, userMessage)
+            val questions = extractDecisionQuestions()
+            val model = agentConfig.model?.takeIf { it.isNotBlank() } ?: "typesafe/jev-1.13"
+
+            writeToConversationLog { sb ->
+                sb.append("  DECISION_REQUEST:\n")
+                sb.append("    model: \"$model\"\n")
+                sb.append("    timestamp: \"${Instant.now()}\"\n")
+                sb.append("    questions:\n")
+                sb.append(formatJsonAsYaml(questions.encode(), 6))
+                sb.append("\n    state:\n")
+                sb.append(formatJsonAsYaml(state.encode(), 6))
+                sb.append("\n\n")
+            }
+
+            val startTime = System.currentTimeMillis()
+            val debugInput = JsonObject()
+                .put("model", model)
+                .put("timestamp", Instant.now().toString())
+                .put("questions", questions)
+                .put("state", state)
+            publishDebug("input", debugInput)
+
+            try {
+                val future = provider.decide(model, questions, state, agentConfig.taskTimeoutSeconds)
+                val responseJson = future.get(agentConfig.taskTimeoutSeconds + 5, TimeUnit.SECONDS)
+                val durationMs = System.currentTimeMillis() - startTime
+
+                publishDebug("output", responseJson)
+
+                writeToConversationLog { sb ->
+                    sb.append("  DECISION_RESPONSE:\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    durationMs: $durationMs\n")
+                    sb.append("    response:\n")
+                    sb.append(formatJsonAsYaml(responseJson.encode(), 6))
+                    sb.append("\n\n")
+                }
+
+                responseJson.encode()
+            } catch (e: Exception) {
+                val durationMs = System.currentTimeMillis() - startTime
+                val cause = e.cause ?: e
+                val debugError = JsonObject()
+                    .put("timestamp", Instant.now().toString())
+                    .put("durationMs", durationMs)
+                    .put("error", cause.message)
+                publishDebug("error", debugError)
+
+                writeToConversationLog { sb ->
+                    sb.append("  DECISION_ERROR:\n")
+                    sb.append("    timestamp: \"${Instant.now()}\"\n")
+                    sb.append("    durationMs: $durationMs\n")
+                    sb.append("    error: \"${cause.message}\"\n\n")
+                }
+                throw cause
+            }
+        }.onComplete { result ->
+            writeToConversationLog { sb ->
+                sb.append("--------------------------------------------------------------------------------\n")
+                sb.append("TRANSACTION END (DECISION) | ID: $txId | Status: ${if (result.succeeded()) "SUCCESS" else "FAILED"}\n")
+                sb.append("================================================================================\n\n")
+            }
+            if (txId == currentTransactionId) {
+                currentTransactionId = null
+            }
+            if (result.succeeded()) {
+                val response = result.result()
+                callback(response, null)
+            } else {
+                errors.incrementAndGet()
+                val cause = result.cause()
+                logger.warning("Decision Agent ${deviceConfig.name} failed: ${cause?.message}")
+                publishError(cause?.message ?: "Unknown error")
+                callback(null, cause?.message ?: "Unknown error")
+            }
+            publishHealthStatus("ready")
+        }
+    }
+
     private fun executeAgentWithCallback(userMessage: String, source: String, triggerContext: TriggerContext? = null, callback: (String?, String?) -> Unit) {
+        if (decisionProvider != null) {
+            executeDecisionAgentWithCallback(userMessage, source, triggerContext, callback)
+            return
+        }
+
         val service = aiService ?: run {
             callback(null, "Agent service not available")
             return
@@ -1119,7 +1492,7 @@ class AgentExecutor(
                 val chatResult = result.result()
                 chatResult?.toolExecutions()?.forEach { toolExecution ->
                     val req = toolExecution.request()
-                    if (agentTools.isNativeTool(req.name())) return@forEach
+                    if (agentTools?.isNativeTool(req.name()) == true) return@forEach
                     val log = JsonObject()
                         .put("type", "mcp-tool-call")
                         .put("timestamp", Instant.now().toString())
@@ -1145,6 +1518,13 @@ class AgentExecutor(
     }
 
     private fun executeAgent(userMessage: String, source: String, triggerContext: TriggerContext? = null) {
+        if (decisionProvider != null) {
+            executeDecisionAgentWithCallback(userMessage, source, triggerContext) { response, _ ->
+                if (response != null) publishResponse(response)
+            }
+            return
+        }
+
         val service = aiService ?: return
 
         val txId = Utils.getUuid()
@@ -1203,7 +1583,7 @@ class AgentExecutor(
                 chatResult?.toolExecutions()?.forEach { toolExecution ->
                     val req = toolExecution.request()
                     // Skip native @Tool calls — those are already logged via publishToolLog
-                    if (agentTools.isNativeTool(req.name())) return@forEach
+                    if (agentTools?.isNativeTool(req.name()) == true) return@forEach
                     val log = JsonObject()
                         .put("type", "mcp-tool-call")
                         .put("timestamp", Instant.now().toString())
@@ -1221,7 +1601,7 @@ class AgentExecutor(
             } else {
                 errors.incrementAndGet()
                 val cause = result.cause()
-                logger.warning("Agent ${deviceConfig.name} executeBlocking failed: ${cause?.message}")
+                logger.warning("Agent ${deviceConfig.name} LLM call failed: ${cause?.message}")
                 if (cause != null) logger.fine { cause.stackTraceToString() }
                 publishError(cause?.message ?: "Unknown error")
             }
@@ -1262,6 +1642,18 @@ class AgentExecutor(
         sessionHandler.publishMessage(msg)
     }
 
+    private fun publishDebug(type: String, payload: String) {
+        val sessionHandler = Monster.getSessionHandler() ?: return
+        // 1. Direct agent debug topic e.g. agents/Agent0/debug/input
+        sessionHandler.publishMessage(BrokerMessage(clientId, "agents/$agentName/debug/$type", payload))
+        // 2. A2A hierarchical debug topic e.g. a2a/v1/default/default/agents/Agent0/debug/input
+        sessionHandler.publishMessage(BrokerMessage(clientId, a2aAgentTopic("debug/$type"), payload))
+    }
+
+    private fun publishDebug(type: String, payload: JsonObject) {
+        publishDebug(type, payload.encode())
+    }
+
     private fun chatRequestMessagesToJson(request: ChatRequest, onlyLast: Boolean = false): JsonArray {
         val messages = request.messages()
         val list = if (onlyLast && messages.isNotEmpty()) listOf(messages.last()) else messages
@@ -1295,6 +1687,16 @@ class AgentExecutor(
                     .put("messages", chatRequestMessagesToJson(request, onlyLast))
                     .put("toolCount", request.parameters()?.toolSpecifications()?.size ?: 0)
                 publishToAgentTopic("logs/llm", log)
+
+                // Publish to debug topic: agents/<agentName>/debug/input
+                val debugInput = JsonObject()
+                    .put("timestamp", Instant.now().toString())
+                    .put("model", request.parameters()?.modelName())
+                    .put("messages", chatRequestMessagesToJson(request, false))
+                if (request.parameters()?.toolSpecifications()?.isNotEmpty() == true) {
+                    debugInput.put("tools", JsonArray(request.parameters()!!.toolSpecifications().map { it.name() }))
+                }
+                publishDebug("input", debugInput)
 
                 // Write to conversation log file
                 writeToConversationLog { sb ->
@@ -1350,6 +1752,24 @@ class AgentExecutor(
                     .put("text", aiMessage.text())
                 publishToAgentTopic("logs/llm", log)
 
+                // Publish to debug topic: agents/<agentName>/debug/output
+                val debugOutput = JsonObject()
+                    .put("timestamp", Instant.now().toString())
+                    .put("model", metadata?.modelName())
+                    .put("text", aiMessage.text())
+                if (aiMessage.hasToolExecutionRequests()) {
+                    debugOutput.put("toolCalls", JsonArray(aiMessage.toolExecutionRequests().map { tc ->
+                        JsonObject().put("name", tc.name()).put("arguments", tc.arguments())
+                    }))
+                }
+                if (tokenUsage != null) {
+                    debugOutput.put("tokens", JsonObject()
+                        .put("input", tokenUsage.inputTokenCount())
+                        .put("output", tokenUsage.outputTokenCount())
+                        .put("total", tokenUsage.totalTokenCount()))
+                }
+                publishDebug("output", debugOutput)
+
                 // Write full response to log file
                 writeToConversationLog { sb ->
                     sb.append("  RESPONSE:\n")
@@ -1386,6 +1806,12 @@ class AgentExecutor(
                     .put("timestamp", Instant.now().toString())
                     .put("error", errorContext.error().message)
                 publishToAgentTopic("logs/llm", log)
+
+                // Publish to debug topic: agents/<agentName>/debug/error
+                val debugError = JsonObject()
+                    .put("timestamp", Instant.now().toString())
+                    .put("error", errorContext.error().message)
+                publishDebug("error", debugError)
 
                 // Write error to log file
                 writeToConversationLog { sb ->
