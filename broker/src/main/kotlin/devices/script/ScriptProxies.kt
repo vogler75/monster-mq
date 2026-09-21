@@ -446,3 +446,59 @@ class ScriptScriptsProxy(
         return ScriptValueHelper.toJavaObject(result)
     }
 }
+
+/**
+ * Trigger context representing the origin and scheduled wall-clock time of an execution.
+ */
+data class ScriptTriggerContext(
+    val type: String, // "TIMER", "TOPIC", "CALLABLE", "TEST"
+    val time: Instant = Instant.now()
+)
+
+/**
+ * Proxy representing the trigger timestamp with formatted fields and dict/property access.
+ */
+class ScriptTriggerTimeProxy(
+    val instant: Instant = Instant.now()
+) : Map<String, Any?> {
+    private val zdt = instant.atZone(java.time.ZoneOffset.UTC)
+    val iso: String = java.time.format.DateTimeFormatter.ISO_INSTANT.format(instant)
+    val time_ms: Long = instant.toEpochMilli()
+    val timestamp: Long = instant.epochSecond
+    val year: Int = zdt.year
+    val month: Int = zdt.monthValue
+    val day: Int = zdt.dayOfMonth
+    val hour: Int = zdt.hour
+    val minute: Int = zdt.minute
+    val second: Int = zdt.second
+
+    private val map: Map<String, Any?> = mapOf(
+        "iso" to iso,
+        "time" to iso,
+        "Time" to iso,
+        "time_ms" to time_ms,
+        "timeMs" to time_ms,
+        "TimeMS" to time_ms,
+        "ms" to time_ms,
+        "timestamp" to timestamp,
+        "year" to year,
+        "month" to month,
+        "day" to day,
+        "hour" to hour,
+        "minute" to minute,
+        "second" to second
+    )
+
+    override val entries: Set<Map.Entry<String, Any?>> get() = map.entries
+    override val keys: Set<String> get() = map.keys
+    override val size: Int get() = map.size
+    override val values: Collection<Any?> get() = map.values
+    override fun isEmpty(): Boolean = map.isEmpty()
+    override fun get(key: String): Any? = map[key]
+    override fun containsKey(key: String): Boolean = map.containsKey(key)
+    override fun containsValue(value: Any?): Boolean = map.containsValue(value)
+
+    fun toMap(): Map<String, Any?> = map
+    override fun toString(): String = iso
+}
+

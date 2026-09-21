@@ -89,12 +89,100 @@ class _JsonWrapper:
     def loads(self, s, *args, **kwargs):
         return self._target.decode(s)
 
+class _TriggerTimeWrapper:
+    def __init__(self, d):
+        self._d = d
+    def __getattr__(self, name):
+        if self._d is not None:
+            try:
+                val = self._d.get(name) if hasattr(self._d, "get") else None
+                if val is not None:
+                    return val
+            except Exception:
+                pass
+        raise AttributeError(f"'trigger_time' object has no attribute '{name}'")
+    def __getitem__(self, key):
+        if self._d is not None:
+            try:
+                val = self._d.get(key) if hasattr(self._d, "get") else None
+                if val is not None:
+                    return val
+            except Exception:
+                pass
+        raise KeyError(key)
+    def __contains__(self, key):
+        if self._d is not None:
+            try:
+                return self._d.containsKey(key) if hasattr(self._d, "containsKey") else (key in self._d)
+            except Exception:
+                return False
+        return False
+    def get(self, key, default=None):
+        if self._d is not None:
+            try:
+                val = self._d.get(key) if hasattr(self._d, "get") else None
+                if val is not None:
+                    return val
+            except Exception:
+                pass
+        return default
+    def __str__(self):
+        if self._d is not None:
+            try:
+                val = self._d.get("iso") if hasattr(self._d, "get") else None
+                return str(val) if val is not None else ""
+            except Exception:
+                return ""
+        return ""
+    def __repr__(self):
+        return f"<TriggerTime {self.__str__()}>" if self._d is not None else "None"
+    def __int__(self):
+        if self._d is not None:
+            try:
+                val = self._d.get("timestamp") if hasattr(self._d, "get") else None
+                return int(val) if val is not None else 0
+            except Exception:
+                return 0
+        return 0
+    def __float__(self):
+        if self._d is not None:
+            try:
+                val = self._d.get("timestamp") if hasattr(self._d, "get") else None
+                return float(val) if val is not None else 0.0
+            except Exception:
+                return 0.0
+        return 0.0
+
+class _TriggerContextWrapper:
+    def __init__(self, t_type, t_time):
+        self.type = t_type
+        self.time = t_time
+    def __getattr__(self, name):
+        if name == "type":
+            return self.type
+        elif name == "time":
+            return self.time
+        raise AttributeError(f"'trigger' object has no attribute '{name}'")
+    def __getitem__(self, key):
+        if key == "type":
+            return self.type
+        elif key == "time":
+            return self.time
+        raise KeyError(key)
+    def __repr__(self):
+        return f"<Trigger type={self.type} time={self.time}>"
+
 _raw_msg = None
 _raw_mqtt = None
 _raw_json = None
+_raw_trigger_time = None
+_raw_trigger_type = None
 msg = None
 mqtt = None
 json = None
+trigger_time = None
+triggerTime = None
+trigger = None
 """
     }
 
@@ -168,6 +256,17 @@ json = None
             }
             return list
         }
+        if (v.hasHashEntries()) {
+            if (!visited.add(v)) return v.toString()
+            val map = mutableMapOf<String, Any?>()
+            val iterator = v.hashKeysIterator
+            while (iterator != null && iterator.hasIteratorNextElement()) {
+                val keyVal = iterator.iteratorNextElement
+                val key = unwrapPolyglotValue(keyVal, visited)?.toString() ?: continue
+                map[key] = unwrapPolyglotValue(v.getHashValue(keyVal), visited)
+            }
+            return map
+        }
         if (v.hasMembers() && !v.canExecute()) {
             if (!visited.add(v)) return v.toString()
             val map = mutableMapOf<String, Any?>()
@@ -192,10 +291,17 @@ json = None
         msg: BrokerMessage?,
         args: Map<String, Any?>? = null,
         dryRun: Boolean = false,
-        timeoutMsOverride: Int? = null
+        timeoutMsOverride: Int? = null,
+        triggerContext: ScriptTriggerContext? = null
     ): ScriptExecutionResult {
         val startNano = System.nanoTime()
         val timeout = (timeoutMsOverride ?: config.timeoutMs).let { if (it <= 0) 200 else it }
+
+        val resolvedTrigger = triggerContext ?: ScriptTriggerContext(
+            type = if (msg != null) "TOPIC" else if (args != null && args.isNotEmpty()) "CALLABLE" else "TIMER",
+            time = if (msg != null) java.time.Instant.now() else java.time.Instant.now()
+        )
+        val triggerTimeProxy = ScriptTriggerTimeProxy(resolvedTrigger.time)
 
         val logProxy = ScriptLogProxy(scriptName, recentLogs)
         val mqttProxy = ScriptMqttProxy(scriptName, dryRun, mqttPublisher)
@@ -223,15 +329,23 @@ json = None
             bindings.putMember("log", logProxy)
             bindings.putMember("console", logProxy)
             bindings.putMember("json", jsonProxy)
+            bindings.putMember("trigger_time", triggerTimeProxy.toMap())
+            bindings.putMember("triggerTime", triggerTimeProxy.toMap())
+            bindings.putMember("trigger", mapOf("type" to resolvedTrigger.type, "time" to triggerTimeProxy.toMap()))
 
             if (targetLanguage == "python") {
                 bindings.putMember("_raw_msg", msgProxy?.toMap())
                 bindings.putMember("_raw_mqtt", mqttProxy)
                 bindings.putMember("_raw_json", jsonProxy)
+                bindings.putMember("_raw_trigger_time", triggerTimeProxy.toMap())
+                bindings.putMember("_raw_trigger_type", resolvedTrigger.type)
                 polyglotContext.eval("python", """
                     msg = _MsgWrapper(_raw_msg) if _raw_msg is not None else None
                     mqtt = _MqttWrapper(_raw_mqtt)
                     json = _JsonWrapper(_raw_json)
+                    trigger_time = _TriggerTimeWrapper(_raw_trigger_time) if _raw_trigger_time is not None else None
+                    triggerTime = trigger_time
+                    trigger = _TriggerContextWrapper(_raw_trigger_type, trigger_time)
                 """.trimIndent())
             } else {
                 bindings.putMember("msg", msgProxy?.toMap())

@@ -48,12 +48,14 @@ class ScriptConnector(
     private var internalClientId: String? = null
     private var timerId: Long? = null
     private var lastPayloadHash: Int? = null
+    @Volatile private var isStopped = false
 
     // For SINGLETON mode sequential execution
     private var currentExecution: Future<Void> = Future.succeededFuture()
 
     override fun start(startPromise: Promise<Void>) {
         try {
+            isStopped = false
             scriptConfig = ScriptConfig.fromJsonObject(deviceConfig.config)
             scriptStorage = ScriptStorage(deviceConfig.name, deviceStore, deviceConfig.nodeId)
 
@@ -90,6 +92,7 @@ class ScriptConnector(
     }
 
     override fun stop(stopPromise: Promise<Void>) {
+        isStopped = true
         // Cancel timer
         timerId?.let { vertx.cancelTimer(it) }
         timerId = null
@@ -121,10 +124,9 @@ class ScriptConnector(
 
         // Setup timer
         if (hasTimer && scriptConfig.timerIntervalMs > 0) {
-            logger.fine { "Setting up timer for '${deviceConfig.name}' every ${scriptConfig.timerIntervalMs}ms" }
-            timerId = vertx.setPeriodic(scriptConfig.timerIntervalMs.toLong()) {
-                dispatchExecution(null, null, "TIMER")
-            }
+            val intervalMs = scriptConfig.timerIntervalMs.toLong()
+            logger.fine { "Setting up timer for '${deviceConfig.name}' every ${intervalMs}ms (aligned to wall-clock)" }
+            scheduleNextTimer(intervalMs)
         }
 
         // Setup MQTT subscriptions
@@ -162,6 +164,32 @@ class ScriptConnector(
         return promise.future()
     }
 
+    private fun scheduleNextTimer(intervalMs: Long) {
+        if (isStopped) return
+
+        val now = System.currentTimeMillis()
+        val (nextBoundaryMs, delayMs) = if (intervalMs >= 1000L) {
+            // Align to round wall-clock boundary: e.g. :00s for 60s, :00/:05/:10 for 5m
+            val next = ((now / intervalMs) + 1) * intervalMs
+            val delay = (next - now).coerceAtLeast(1L)
+            Pair(next, delay)
+        } else {
+            // Sub-second interval: simple periodic delay
+            Pair(now + intervalMs, intervalMs)
+        }
+
+        timerId = vertx.setTimer(delayMs) {
+            if (isStopped) return@setTimer
+            val triggerTime = Instant.ofEpochMilli(nextBoundaryMs)
+            val triggerContext = ScriptTriggerContext(
+                type = "TIMER",
+                time = triggerTime
+            )
+            dispatchExecution(null, null, triggerContext)
+            scheduleNextTimer(intervalMs)
+        }
+    }
+
     private fun handleIncomingTopicMessage(msg: BrokerMessage) {
         if (scriptConfig.triggerOnChangeOnly) {
             val hash = msg.payload.contentHashCode()
@@ -171,7 +199,7 @@ class ScriptConnector(
             lastPayloadHash = hash
         }
 
-        dispatchExecution(msg, null, "TOPIC")
+        dispatchExecution(msg, null, ScriptTriggerContext("TOPIC", Instant.now()))
     }
 
     /**
@@ -182,13 +210,28 @@ class ScriptConnector(
         args: Map<String, Any?>?,
         origin: String
     ): Future<ScriptExecutionResult> {
+        val triggerTime = if (origin == "TIMER" && scriptConfig.timerIntervalMs >= 1000) {
+            val interval = scriptConfig.timerIntervalMs.toLong()
+            val now = System.currentTimeMillis()
+            Instant.ofEpochMilli((now / interval) * interval)
+        } else {
+            Instant.now()
+        }
+        return dispatchExecution(msg, args, ScriptTriggerContext(origin, triggerTime))
+    }
+
+    fun dispatchExecution(
+        msg: BrokerMessage?,
+        args: Map<String, Any?>?,
+        triggerContext: ScriptTriggerContext
+    ): Future<ScriptExecutionResult> {
         val promise = Promise.promise<ScriptExecutionResult>()
 
         val task: () -> ScriptExecutionResult = {
             try {
-                val res = engine.execute(msg, args, dryRun = false)
+                val res = engine.execute(msg, args, dryRun = false, triggerContext = triggerContext)
                 executionCount.incrementAndGet()
-                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(triggerContext.time)
                 if (res.success) {
                     lastExecutionStatus = "SUCCESS"
                 } else {
@@ -199,7 +242,7 @@ class ScriptConnector(
             } catch (t: Throwable) {
                 executionCount.incrementAndGet()
                 errorCount.incrementAndGet()
-                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+                lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(triggerContext.time)
                 lastExecutionStatus = "ERROR"
                 recentLogs.add("[ERROR] Unhandled script execution error: ${t.message}")
                 logger.severe("Script '${deviceConfig.name}' unhandled execution error: ${t.message}")
@@ -239,10 +282,11 @@ class ScriptConnector(
      * Synchronous callable execution for scripts.call().
      */
     fun executeCallable(args: Map<String, Any?>): Any? {
+        val triggerContext = ScriptTriggerContext("CALLABLE", Instant.now())
         return try {
-            val res = engine.execute(null, args, dryRun = false)
+            val res = engine.execute(null, args, dryRun = false, triggerContext = triggerContext)
             executionCount.incrementAndGet()
-            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(triggerContext.time)
             if (res.success) {
                 lastExecutionStatus = "SUCCESS"
             } else {
@@ -253,7 +297,7 @@ class ScriptConnector(
         } catch (t: Throwable) {
             executionCount.incrementAndGet()
             errorCount.incrementAndGet()
-            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(Instant.now())
+            lastExecutionTime = DateTimeFormatter.ISO_INSTANT.format(triggerContext.time)
             lastExecutionStatus = "ERROR"
             recentLogs.add("[ERROR] Unhandled script execution error: ${t.message}")
             logger.severe("Script '${deviceConfig.name}' unhandled execution error: ${t.message}")

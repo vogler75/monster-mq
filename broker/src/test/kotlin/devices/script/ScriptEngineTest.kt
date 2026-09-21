@@ -413,4 +413,74 @@ result = count
             vertx.close()
         }
     }
+
+    @Test
+    fun testTriggerTimePython() {
+        val config = ScriptConfig(
+            language = "python",
+            script = """
+iso = trigger_time.iso
+time_ms = trigger_time.time_ms
+ts = trigger_time.timestamp
+dict_time = trigger_time["Time"]
+dict_timems = trigger_time["TimeMS"]
+str_time = str(trigger_time)
+trig_type = trigger.type
+
+result = {
+    "iso": iso,
+    "time_ms": time_ms,
+    "timestamp": ts,
+    "dict_time": dict_time,
+    "dict_timems": dict_timems,
+    "str_time": str_time,
+    "type": trig_type
 }
+"""
+        )
+
+        val engine = ScriptEngine("TriggerTimeTest", config)
+        val fixedInstant = java.time.Instant.parse("2026-09-21T14:15:00.000Z")
+        val ctx = ScriptTriggerContext("TIMER", fixedInstant)
+        val res = engine.execute(null, dryRun = false, triggerContext = ctx)
+
+        assertTrue(res.errors.joinToString("\n"), res.success)
+        assertNotNull(res.returnValue)
+        val ret = res.returnValue as Map<*, *>
+        assertEquals("2026-09-21T14:15:00Z", ret["iso"])
+        assertEquals("2026-09-21T14:15:00Z", ret["dict_time"])
+        assertEquals("2026-09-21T14:15:00Z", ret["str_time"])
+        assertEquals(fixedInstant.toEpochMilli(), (ret["time_ms"] as Number).toLong())
+        assertEquals(fixedInstant.toEpochMilli(), (ret["dict_timems"] as Number).toLong())
+        assertEquals(fixedInstant.epochSecond, (ret["timestamp"] as Number).toLong())
+        assertEquals("TIMER", ret["type"])
+    }
+
+    @Test
+    fun testTriggerTimeJavaScript() {
+        val config = ScriptConfig(
+            language = "javascript",
+            script = """
+result = {
+    iso: trigger_time.iso,
+    time_ms: trigger_time.time_ms,
+    timestamp: trigger_time.timestamp,
+    type: trigger.type
+};
+"""
+        )
+
+        val engine = ScriptEngine("TriggerTimeJsTest", config)
+        val fixedInstant = java.time.Instant.parse("2026-09-21T12:00:00.000Z")
+        val ctx = ScriptTriggerContext("TIMER", fixedInstant)
+        val res = engine.execute(null, dryRun = false, triggerContext = ctx)
+
+        assertTrue(res.errors.joinToString("\n"), res.success)
+        assertNotNull(res.returnValue)
+        val ret = res.returnValue as Map<*, *>
+        assertEquals("2026-09-21T12:00:00Z", ret["iso"])
+        assertEquals(fixedInstant.toEpochMilli(), (ret["time_ms"] as Number).toLong())
+        assertEquals("TIMER", ret["type"])
+    }
+}
+
