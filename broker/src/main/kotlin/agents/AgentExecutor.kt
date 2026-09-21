@@ -210,13 +210,15 @@ class AgentExecutor(
         }
     }
 
-    private fun isDecisionAgent(providerConfig: GenAiProviderConfig? = null): Boolean {
-        val model = (agentConfig.model ?: providerConfig?.model ?: "").lowercase()
+    internal fun isDecisionAgent(providerConfig: GenAiProviderConfig? = null): Boolean {
         val providerType = (providerConfig?.type ?: agentConfig.provider).lowercase()
-        return model.startsWith("typesafe/jev") ||
-               model.contains("jev") ||
-               providerType == "openrouter-decision" ||
-               agentConfig.tags.any { it.equals("decision", ignoreCase = true) }
+        return isDecisionProviderType(providerType)
+    }
+
+    internal fun isDecisionProviderType(providerType: String): Boolean {
+        return providerType == "openrouter-decision" ||
+               providerType == "decision" ||
+               providerType.endsWith("-decision")
     }
 
     private fun initDecisionProvider(providerConfig: GenAiProviderConfig? = null) {

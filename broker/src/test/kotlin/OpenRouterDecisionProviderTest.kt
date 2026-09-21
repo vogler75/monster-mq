@@ -167,5 +167,39 @@ class OpenRouterDecisionProviderTest {
         assertEquals("choice", questions.getJsonObject("action")?.getString("type"))
         assertNotNull(questions.getJsonObject("action")?.getJsonObject("criteria"))
     }
+
+    @Test
+    fun testIsDecisionAgentOnlyChecksProviderType() {
+        // Agent with openrouter-decision provider -> decision agent
+        val decisionAgentConfig = at.rocworks.stores.DeviceConfig(
+            name = "decision-agent",
+            namespace = "default",
+            nodeId = "*",
+            config = JsonObject().put("provider", "openrouter-decision").put("model", "typesafe/jev-1.13")
+        )
+        val decisionExecutor = at.rocworks.agents.AgentExecutor(decisionAgentConfig)
+        assertTrue(decisionExecutor.isDecisionAgent())
+
+        // Agent with chat openrouter provider, even with jev model or decision tags -> NOT a decision agent!
+        val chatAgentConfig = at.rocworks.stores.DeviceConfig(
+            name = "chat-agent",
+            namespace = "default",
+            nodeId = "*",
+            config = JsonObject()
+                .put("provider", "openrouter")
+                .put("model", "typesafe/jev-1.13")
+                .put("tags", JsonArray().add("decision"))
+        )
+        val chatExecutor = at.rocworks.agents.AgentExecutor(chatAgentConfig)
+        org.junit.Assert.assertFalse(chatExecutor.isDecisionAgent())
+
+        // ProviderConfig with type "openrouter-decision"
+        val provConfig = at.rocworks.agents.GenAiProviderConfig(type = "openrouter-decision")
+        assertTrue(chatExecutor.isDecisionAgent(provConfig))
+
+        // ProviderConfig with type "openrouter"
+        val chatProvConfig = at.rocworks.agents.GenAiProviderConfig(type = "openrouter")
+        org.junit.Assert.assertFalse(chatExecutor.isDecisionAgent(chatProvConfig))
+    }
 }
 

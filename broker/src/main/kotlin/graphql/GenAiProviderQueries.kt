@@ -73,11 +73,19 @@ class GenAiProviderQueries(
             "OpenRouter"  to "openrouter"
         )
         return providers.fieldNames().mapNotNull { key ->
-            val type = keyToType[key] ?: return@mapNotNull null
+            val defaultType = keyToType[key] ?: return@mapNotNull null
             val section = providers.getJsonObject(key, JsonObject())
+            val customType = section.getString("Type")?.lowercase()
+            val effectiveType = if (customType == "decision") {
+                if (defaultType.endsWith("-decision")) defaultType else "$defaultType-decision"
+            } else if (!customType.isNullOrBlank()) {
+                customType
+            } else {
+                defaultType
+            }
             mapOf(
                 "name"           to key,
-                "type"           to type,
+                "type"           to effectiveType,
                 "model"          to section.getString("Model"),
                 "apiKey"         to if (!section.getString("ApiKey").isNullOrBlank()) "***" else null,
                 "endpoint"       to section.getString("Endpoint"),
