@@ -23,7 +23,7 @@ public class Plc4xTest {
         while (true) {
             System.out.println("Connecting to " + connectionString + " (attempt " + attempt + ") ...");
             try {
-                tempConnection = PlcDriverManager.getDefault().getConnectionManager().getConnection(connectionString);
+                tempConnection = PlcDriverManager.getDefault().getConnectionFactory().getConnection(connectionString);
                 if (tempConnection != null && tempConnection.isConnected()) {
                     System.out.println("Connected successfully!");
                     break;

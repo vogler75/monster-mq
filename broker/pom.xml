@@ -128,7 +128,7 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/dependencies</outputDirectory>
-                            <!-- PLC4X 0.13.1, Eclipse Milo 1.1.1, and Azure SDK still pull
+                            <!-- Eclipse Milo 1.1.1 and Azure SDK still pull
                                  netty-codec 4.1.x. That artifact ships the same
                                  io.netty.handler.codec.* classes as netty-codec-base 4.2.x
                                  (which Vert.x 5 uses), and the duplicate-class shadowing
@@ -447,54 +447,49 @@
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-api</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
 
         <!-- PLC4X Protocol Drivers - Stable -->
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-s7</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-modbus</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-ads</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-ab-eth</artifactId>
-            <version>0.13.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.plc4x</groupId>
-            <artifactId>plc4j-driver-bacnet</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-knxnetip</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-eip</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-canopen</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.plc4x</groupId>
             <artifactId>plc4j-driver-firmata</artifactId>
-            <version>0.13.1</version>
+            <version>1.0.0</version>
         </dependency>
 
         <!-- Neo4j Java Driver for graph database integration -->

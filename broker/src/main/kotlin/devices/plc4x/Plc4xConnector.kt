@@ -215,7 +215,7 @@ class Plc4xConnector : AbstractVerticle() {
 
                 // PLC4X automatically selects the driver based on connection string prefix
                 // Examples: "s7://192.168.1.10", "modbus-tcp://192.168.1.20:502", "ads://192.168.1.30"
-                val conn = driverManager!!.getConnectionManager().getConnection(plc4xConfig.connectionString)
+                val conn = driverManager!!.getConnectionFactory().getConnection(plc4xConfig.connectionString)
 
                 if (isStopped) {
                     isReconnecting = false
