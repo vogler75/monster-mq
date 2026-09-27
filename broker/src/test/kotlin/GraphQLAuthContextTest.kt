@@ -99,6 +99,26 @@ class GraphQLAuthContextTest {
     }
 
     @Test
+    fun testDeviceExportRequiresAdminWhenUserManagementIsEnabled() {
+        val userManager = createUserManager(enabled = true)
+        val authContext = GraphQLAuthContext(userManager)
+        val created = CompletableFuture<Boolean>()
+        userManager.createUser("export_viewer", "pass123", enabled = true, canSubscribe = true, canPublish = true, isAdmin = false)
+            .onComplete { created.complete(it.result() ?: false) }
+        assertTrue(created.get(10, TimeUnit.SECONDS))
+
+        assertFalse(authContext.validateFieldAccess("getDevices", null).allowed)
+        val viewer = authContext.extractAuthContextFromToken(JwtService.generateToken("export_viewer", false))
+        assertFalse(authContext.validateFieldAccess("getDevices", viewer).allowed)
+
+        val promoted = userManager.getUser("export_viewer")!!.copy(isAdmin = true)
+        val updated = CompletableFuture<Boolean>()
+        userManager.updateUser(promoted).onComplete { updated.complete(it.result() ?: false) }
+        assertTrue(updated.get(10, TimeUnit.SECONDS))
+        assertTrue(authContext.validateFieldAccess("getDevices", viewer).allowed)
+    }
+
+    @Test
     fun testDemotedAdminLosesAdminPrivilegesImmediately() {
         val userManager = createUserManager(enabled = true)
         val authContext = GraphQLAuthContext(userManager)

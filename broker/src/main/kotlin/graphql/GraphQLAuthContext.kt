@@ -122,8 +122,8 @@ class GraphQLAuthContext(
             // ACL Management operations require admin
             "createAclRule", "updateAclRule", "deleteAclRule",
             "getAllAclRules", "getUserAclRules",
-            // Destructive / device-import operations require admin
-            "purgeQueuedMessages", "importDevices",
+            // Destructive / device import-export operations require admin
+            "purgeQueuedMessages", "importDevices", "getDevices",
             // Configuration-changing mutation groups require admin.
             // Checked at the parent mutation field (e.g. `mutation { agent { create(...) } }`)
             // before any child resolver runs.

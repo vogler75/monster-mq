@@ -161,6 +161,10 @@ The certificate only replaces the password. The user account still decides what 
 
 With `AutoCreateUser: true`, a certificate Common Name that has no account yet gets one created on first connect, with default non-admin permissions. This suits device fleets where every device already carries a certificate from your own CA and you do not want to create accounts by hand. The account is created with a random password that is never used, so the connecting device does not know a password for that account. An administrator can later set a password through the user API. Set it to `false` when you would rather create every account up front and reject anything unknown.
 
+### Outbound Bridges
+
+The TLS settings above apply to clients connecting *to* MonsterMQ. For MQTT client bridges that connect to *other* brokers with a client certificate, including AWS IoT Core, see [MQTT client bridge: TLS and mutual TLS](mqtt-client.md#tls-and-mutual-tls).
+
 ## Authentication and Authorization
 
 ```yaml

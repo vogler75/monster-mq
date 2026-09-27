@@ -112,7 +112,6 @@ class MqttClientConfigQueries(
             "config" to mapOf(
                 "brokerUrl" to config.brokerUrl,
                 "username" to (config.username ?: ""),
-                "password" to (config.password ?: ""),
                 "clientId" to config.clientId,
                 "cleanSession" to config.cleanSession,
                 "keepAlive" to config.keepAlive,
@@ -133,6 +132,13 @@ class MqttClientConfigQueries(
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,
                 "sslVerifyCertificate" to config.sslVerifyCertificate,
+                "tlsCaCertPath" to config.tlsCaCertPath,
+                "tlsClientCertPath" to config.tlsClientCertPath,
+                "tlsClientKeyPath" to config.tlsClientKeyPath,
+                "tlsClientKeyPasswordSet" to (config.tlsClientKeyPassword != null),
+                "tlsClientKeyFormat" to config.tlsClientKeyFormat,
+                "tlsAlpnProtocols" to config.tlsAlpnProtocols,
+                "tlsServerName" to config.tlsServerName,
                 // MQTT v5 connection properties
                 "protocolVersion" to config.protocolVersion,
                 "sessionExpiryInterval" to config.sessionExpiryInterval,

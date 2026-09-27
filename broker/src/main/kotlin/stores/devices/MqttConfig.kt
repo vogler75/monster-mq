@@ -157,6 +157,13 @@ data class MqttClientConnectionConfig(
     val loopPrevention: Boolean = true,
     // SSL/TLS configuration
     val sslVerifyCertificate: Boolean = true,  // Verify SSL certificates (disable for self-signed certificates)
+    val tlsCaCertPath: String? = null,  // PEM file with trusted CA certificates, replaces the default trust store
+    val tlsClientCertPath: String? = null,  // Client certificate (PEM) or PKCS12 bundle for mutual TLS
+    val tlsClientKeyPath: String? = null,  // PEM private key (not used for PKCS12)
+    val tlsClientKeyPassword: String? = null,
+    val tlsClientKeyFormat: String = TLS_KEY_FORMAT_PEM,  // PEM or PKCS12
+    val tlsAlpnProtocols: List<String>? = null,  // e.g. x-amzn-mqtt-ca for AWS IoT Core on port 443
+    val tlsServerName: String? = null,  // SNI and certificate hostname, defaults to the broker URL host
     // MQTT v5 properties
     val protocolVersion: Int = 4,  // 4 for MQTT v3.1.1, 5 for MQTT v5.0
     val sessionExpiryInterval: Long? = null,  // Session expiry interval in seconds (MQTT v5 only, 0-4294967295)
@@ -171,6 +178,8 @@ data class MqttClientConnectionConfig(
         const val PROTOCOL_WSS = "wss"
         const val BUFFER_IMPLEMENTATION_MONSTER = "MONSTER"
         const val BUFFER_IMPLEMENTATION_PAHO = "PAHO"
+        const val TLS_KEY_FORMAT_PEM = "PEM"
+        const val TLS_KEY_FORMAT_PKCS12 = "PKCS12"
 
         fun fromJsonObject(json: JsonObject): MqttClientConnectionConfig {
             try {
@@ -204,6 +213,13 @@ data class MqttClientConnectionConfig(
                         is Boolean -> value
                         else -> true
                     },
+                    tlsCaCertPath = json.getString("tlsCaCertPath")?.ifBlank { null },
+                    tlsClientCertPath = json.getString("tlsClientCertPath")?.ifBlank { null },
+                    tlsClientKeyPath = json.getString("tlsClientKeyPath")?.ifBlank { null },
+                    tlsClientKeyPassword = json.getString("tlsClientKeyPassword")?.ifEmpty { null },
+                    tlsClientKeyFormat = json.getString("tlsClientKeyFormat")?.ifBlank { null }?.uppercase() ?: TLS_KEY_FORMAT_PEM,
+                    tlsAlpnProtocols = json.getJsonArray("tlsAlpnProtocols")?.map { it.toString() }?.ifEmpty { null },
+                    tlsServerName = json.getString("tlsServerName")?.ifBlank { null },
                     // MQTT v5 properties
                     protocolVersion = json.getInteger("protocolVersion", 4),
                     sessionExpiryInterval = json.getLong("sessionExpiryInterval"),
@@ -243,6 +259,14 @@ data class MqttClientConnectionConfig(
         maximumPacketSize?.let { result.put("maximumPacketSize", it) }
         topicAliasMaximum?.let { result.put("topicAliasMaximum", it) }
 
+        tlsCaCertPath?.let { result.put("tlsCaCertPath", it) }
+        tlsClientCertPath?.let { result.put("tlsClientCertPath", it) }
+        tlsClientKeyPath?.let { result.put("tlsClientKeyPath", it) }
+        tlsClientKeyPassword?.let { result.put("tlsClientKeyPassword", it) }
+        if (hasTlsOptions()) result.put("tlsClientKeyFormat", tlsClientKeyFormat)
+        tlsAlpnProtocols?.let { result.put("tlsAlpnProtocols", JsonArray(it)) }
+        tlsServerName?.let { result.put("tlsServerName", it) }
+
         // Add addresses array if we have addresses
         if (addresses.isNotEmpty()) {
             val addressArray = JsonArray()
@@ -266,6 +290,15 @@ data class MqttClientConnectionConfig(
             null
         }
     }
+
+    /**
+     * True if any option beyond the default JVM TLS setup is configured
+     */
+    fun hasTlsOptions(): Boolean =
+        // The key password is left out on purpose: it only matters together with a client
+        // certificate and must not block switching an existing bridge to tcp:// or ws://
+        tlsCaCertPath != null || tlsClientCertPath != null || tlsClientKeyPath != null ||
+            !tlsAlpnProtocols.isNullOrEmpty() || tlsServerName != null
 
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
@@ -319,6 +352,8 @@ data class MqttClientConnectionConfig(
             errors.add("bufferImplementation must be '$BUFFER_IMPLEMENTATION_MONSTER' or '$BUFFER_IMPLEMENTATION_PAHO'")
         }
 
+        errors.addAll(validateTls())
+
         // Validate addresses
         addresses.forEachIndexed { index, address ->
             val addressErrors = address.validate()
@@ -327,6 +362,39 @@ data class MqttClientConnectionConfig(
             }
         }
 
+        return errors
+    }
+
+    private fun validateTls(): List<String> {
+        val errors = mutableListOf<String>()
+        val protocol = getProtocol()
+        if (hasTlsOptions() && protocol != PROTOCOL_SSL && protocol != PROTOCOL_WSS) {
+            errors.add("TLS options (tls*) require an ssl:// or wss:// brokerUrl")
+        }
+        when (tlsClientKeyFormat) {
+            TLS_KEY_FORMAT_PEM -> {
+                if (tlsClientCertPath != null && tlsClientKeyPath == null) {
+                    errors.add("tlsClientKeyPath is required when tlsClientCertPath is set")
+                }
+                if (tlsClientKeyPath != null && tlsClientCertPath == null) {
+                    errors.add("tlsClientCertPath is required when tlsClientKeyPath is set")
+                }
+            }
+            TLS_KEY_FORMAT_PKCS12 -> {
+                if (tlsClientCertPath == null) {
+                    errors.add("tlsClientCertPath (PKCS12 bundle) is required when tlsClientKeyFormat is PKCS12")
+                }
+                if (tlsClientKeyPath != null) {
+                    errors.add("tlsClientKeyPath is not used with tlsClientKeyFormat PKCS12, the key is part of the bundle")
+                }
+            }
+            else -> errors.add("tlsClientKeyFormat must be '$TLS_KEY_FORMAT_PEM' or '$TLS_KEY_FORMAT_PKCS12'")
+        }
+        tlsAlpnProtocols?.forEach { alpn ->
+            if (alpn.isBlank() || alpn.toByteArray(Charsets.UTF_8).size > 255 || alpn.any { it < ' ' || it > '~' }) {
+                errors.add("invalid tlsAlpnProtocols entry '$alpn': must be 1-255 printable ASCII characters")
+            }
+        }
         return errors
     }
 }

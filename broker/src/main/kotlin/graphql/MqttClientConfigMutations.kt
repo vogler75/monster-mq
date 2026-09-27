@@ -40,7 +40,7 @@ class MqttClientConfigMutations(
                 val request = parseDeviceConfigRequest(input)
                 if (!Monster.getEnabledFeaturesForNode(request.nodeId).contains("MqttClient"))
                     return@DataFetcher future.apply { complete(mapOf("success" to false, "errors" to listOf("MqttClient feature is not enabled on node ${request.nodeId}"))) }
-                val validationErrors = request.validate()
+                val validationErrors = request.validate() + MqttClientConnectionConfig.fromJsonObject(request.config).validate()
 
                 if (validationErrors.isNotEmpty()) {
                     future.complete(
@@ -160,28 +160,23 @@ class MqttClientConfigMutations(
 
                     // Parse input
                     val request = parseDeviceConfigRequest(input)
-                    val validationErrors = request.validate()
-
-                    if (validationErrors.isNotEmpty()) {
-                        future.complete(
-                            mapOf(
-                                "success" to false,
-                                "errors" to validationErrors
-                            )
-                        )
-                        return@onComplete
-                    }
-
                     // Parse existing config from JsonObject
                     val existingConfig = MqttClientConnectionConfig.fromJsonObject(existingDevice.config)
                     val requestConfig = MqttClientConnectionConfig.fromJsonObject(request.config)
+                    @Suppress("UNCHECKED_CAST")
+                    val suppliedConfig = input["config"] as Map<String, Any?>
 
                     // Update device (preserve creation time, existing addresses, and passwords if not provided)
-                    val newConfig = requestConfig.copy(
+                    val newConfig = mergeMqttClientTlsForUpdate(existingConfig, requestConfig, suppliedConfig).copy(
                         addresses = existingConfig.addresses,
                         // Preserve existing password if not provided in update
                         password = requestConfig.password ?: existingConfig.password
                     )
+                    val validationErrors = request.validate() + newConfig.validate()
+                    if (validationErrors.isNotEmpty()) {
+                        future.complete(mapOf("success" to false, "errors" to validationErrors))
+                        return@onComplete
+                    }
                     val updatedDevice = request.toDeviceConfig().copy(
                         createdAt = existingDevice.createdAt,
                         config = newConfig.toJsonObject()
@@ -927,6 +922,14 @@ class MqttClientConfigMutations(
             deleteOldestMessages = configMap["deleteOldestMessages"] as? Boolean ?: false,
             loopPrevention = configMap["loopPrevention"] as? Boolean ?: true,
             sslVerifyCertificate = configMap["sslVerifyCertificate"] as? Boolean ?: true,
+            tlsCaCertPath = (configMap["tlsCaCertPath"] as? String)?.trim()?.ifEmpty { null },
+            tlsClientCertPath = (configMap["tlsClientCertPath"] as? String)?.trim()?.ifEmpty { null },
+            tlsClientKeyPath = (configMap["tlsClientKeyPath"] as? String)?.trim()?.ifEmpty { null },
+            tlsClientKeyPassword = configMap["tlsClientKeyPassword"] as? String,
+            tlsClientKeyFormat = (configMap["tlsClientKeyFormat"] as? String)?.trim()?.uppercase()?.ifEmpty { null }
+                ?: MqttClientConnectionConfig.TLS_KEY_FORMAT_PEM,
+            tlsAlpnProtocols = (configMap["tlsAlpnProtocols"] as? List<*>)?.map { it.toString().trim() }?.ifEmpty { null },
+            tlsServerName = (configMap["tlsServerName"] as? String)?.trim()?.ifEmpty { null },
             // MQTT v5 properties
             protocolVersion = (configMap["protocolVersion"] as? Number)?.toInt() ?: 4,
             sessionExpiryInterval = (configMap["sessionExpiryInterval"] as? Number)?.toLong(),
@@ -981,6 +984,13 @@ class MqttClientConfigMutations(
                 "persistBuffer" to config.persistBuffer,
                 "deleteOldestMessages" to config.deleteOldestMessages,
                 "sslVerifyCertificate" to config.sslVerifyCertificate,
+                "tlsCaCertPath" to config.tlsCaCertPath,
+                "tlsClientCertPath" to config.tlsClientCertPath,
+                "tlsClientKeyPath" to config.tlsClientKeyPath,
+                "tlsClientKeyPasswordSet" to (config.tlsClientKeyPassword != null),
+                "tlsClientKeyFormat" to config.tlsClientKeyFormat,
+                "tlsAlpnProtocols" to config.tlsAlpnProtocols,
+                "tlsServerName" to config.tlsServerName,
                 "protocolVersion" to config.protocolVersion,
                 "sessionExpiryInterval" to config.sessionExpiryInterval,
                 "receiveMaximum" to config.receiveMaximum,
@@ -1002,4 +1012,38 @@ class MqttClientConfigMutations(
             "isOnCurrentNode" to device.isAssignedToNode(currentNodeId)
         )
     }
+}
+
+/** Merge write-only TLS options before validating an update. GraphQL input defaults are
+ * injected into the argument map, so a legacy update can contain the default PEM format
+ * even though the client did not send any TLS fields. Preserve PKCS12 in that case.
+ */
+internal fun mergeMqttClientTlsForUpdate(
+    existing: MqttClientConnectionConfig,
+    incoming: MqttClientConnectionConfig,
+    supplied: Map<String, Any?>
+): MqttClientConnectionConfig {
+    fun path(name: String, value: String?, previous: String?): String? =
+        if (supplied[name] is String) value else previous
+
+    val clientCertPath = path("tlsClientCertPath", incoming.tlsClientCertPath, existing.tlsClientCertPath)
+    val keyFormat = if (
+        existing.tlsClientKeyFormat == MqttClientConnectionConfig.TLS_KEY_FORMAT_PKCS12 &&
+        incoming.tlsClientKeyFormat == MqttClientConnectionConfig.TLS_KEY_FORMAT_PEM &&
+        supplied["tlsClientKeyPath"] !is String &&
+        supplied["tlsClientCertPath"] !is String
+    ) existing.tlsClientKeyFormat else incoming.tlsClientKeyFormat
+
+    return incoming.copy(
+        tlsCaCertPath = path("tlsCaCertPath", incoming.tlsCaCertPath, existing.tlsCaCertPath),
+        tlsClientCertPath = clientCertPath,
+        tlsClientKeyPath = path("tlsClientKeyPath", incoming.tlsClientKeyPath, existing.tlsClientKeyPath),
+        tlsClientKeyFormat = keyFormat,
+        tlsAlpnProtocols = if (supplied["tlsAlpnProtocols"] is List<*>) incoming.tlsAlpnProtocols else existing.tlsAlpnProtocols,
+        tlsServerName = path("tlsServerName", incoming.tlsServerName, existing.tlsServerName),
+        tlsClientKeyPassword = if (clientCertPath == null) null else when (val password = supplied["tlsClientKeyPassword"] as? String) {
+            null -> existing.tlsClientKeyPassword
+            else -> password.ifEmpty { null }
+        }
+    )
 }

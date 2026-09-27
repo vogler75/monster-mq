@@ -923,6 +923,52 @@
     "updatedAt": "2026-04-04 11:43:27"
   },
   {
+    "name": "aws-iot1",
+    "namespace": "aws",
+    "nodeId": "local",
+    "config": {
+      "brokerUrl": "ssl://a1b2c3d4e5f6g7-ats.iot.eu-central-1.amazonaws.com:443",
+      "username": null,
+      "password": null,
+      "clientId": "monstermq-gateway-1",
+      "cleanSession": true,
+      "keepAlive": 60,
+      "reconnectDelay": 5000,
+      "connectionTimeout": 30000,
+      "bufferEnabled": false,
+      "bufferSize": 5000,
+      "persistBuffer": false,
+      "deleteOldestMessages": true,
+      "loopPrevention": true,
+      "sslVerifyCertificate": true,
+      "protocolVersion": 4,
+      "tlsCaCertPath": "/etc/monstermq/aws/AmazonRootCA1.pem",
+      "tlsClientCertPath": "/etc/monstermq/aws/device.pem.crt",
+      "tlsClientKeyPath": "/etc/monstermq/aws/private.pem.key",
+      "tlsClientKeyFormat": "PEM",
+      "tlsAlpnProtocols": [
+        "x-amzn-mqtt-ca"
+      ],
+      "addresses": [
+        {
+          "mode": "PUBLISH",
+          "remoteTopic": "factory/line1",
+          "localTopic": "line1/#",
+          "removePath": true,
+          "qos": 1,
+          "noLocal": false,
+          "retainHandling": 0,
+          "retainAsPublished": false,
+          "payloadFormatIndicator": false
+        }
+      ]
+    },
+    "enabled": false,
+    "type": "MQTT-Client",
+    "createdAt": "2026-09-27 12:00:00",
+    "updatedAt": "2026-09-27 12:00:00"
+  },
+  {
     "name": "telegram1",
     "namespace": "telegram",
     "nodeId": "local",

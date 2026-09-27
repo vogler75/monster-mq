@@ -36,6 +36,7 @@ schema and enabled features before using a full-broker example on an edge node.
 
 | Guide | Purpose |
 |---|---|
+| [MQTT client bridge](mqtt-client.md) | Remote MQTT broker bridge, TLS, mutual TLS and AWS IoT Core. |
 | [Kafka](kafka.md) | Kafka message bus, bidirectional bridges, and compatible server. |
 | [NATS](nats.md) | Native NATS listener, client bridge, topic mapping, and TLS limits. |
 | [Zenoh](zenoh.md) | Live broker federation and current-value query behavior. |

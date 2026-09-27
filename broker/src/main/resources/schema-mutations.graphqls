@@ -858,6 +858,20 @@ input MqttClientConnectionConfigInput {
     maximumPacketSize: Long
     # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
     topicAliasMaximum: Int
+    # Path (on the broker host) to a PEM file with trusted CA certificates. Replaces the default trust store when set.
+    tlsCaCertPath: String
+    # Path to the client certificate for mutual TLS: PEM certificate (chain) or PKCS12 bundle, see tlsClientKeyFormat
+    tlsClientCertPath: String
+    # Path to the PEM private key for the client certificate (not used for PKCS12)
+    tlsClientKeyPath: String
+    # Password of the private key or PKCS12 bundle. Null keeps the stored value, empty string clears it.
+    tlsClientKeyPassword: String
+    # Client key format: PEM or PKCS12 (default: PEM)
+    tlsClientKeyFormat: String = "PEM"
+    # TLS ALPN protocols, e.g. ["x-amzn-mqtt-ca"] for AWS IoT Core on port 443
+    tlsAlpnProtocols: [String!]
+    # TLS server name (SNI) and hostname used for certificate verification, defaults to the broker URL host
+    tlsServerName: String
 }
 
 # Input for MQTT client address mapping

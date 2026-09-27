@@ -857,6 +857,20 @@ type MqttClientConnectionConfig {
     maximumPacketSize: Long
     # Maximum number of topic aliases the client is willing to accept (MQTT v5 only, 0-65535, default: 0)
     topicAliasMaximum: Int
+    # Path (on the broker host) to a PEM file with trusted CA certificates
+    tlsCaCertPath: String
+    # Path to the client certificate for mutual TLS: PEM certificate (chain) or PKCS12 bundle
+    tlsClientCertPath: String
+    # Path to the PEM private key for the client certificate (not used for PKCS12)
+    tlsClientKeyPath: String
+    # Whether a private key password is stored (the password itself is never returned)
+    tlsClientKeyPasswordSet: Boolean!
+    # Client key format: PEM or PKCS12
+    tlsClientKeyFormat: String!
+    # TLS ALPN protocols
+    tlsAlpnProtocols: [String!]
+    # TLS server name (SNI) and hostname used for certificate verification
+    tlsServerName: String
 }
 
 # MQTT Client configuration

@@ -967,6 +967,11 @@ class QueryResolver(
             if (!Monster.isFeatureEnabled(Features.DeviceImportExport))
                 return@DataFetcher future.apply { complete(emptyList()) }
 
+            val authResult = authContext.validateFieldAccess(env)
+            if (!authResult.allowed) {
+                throw GraphQLException(authResult.errorMessage ?: "Unauthorized")
+            }
+
             if (deviceStore == null) {
                 future.completeExceptionally(GraphQLException("Device store is not available"))
                 return@DataFetcher future
@@ -976,7 +981,7 @@ class QueryResolver(
 
             deviceStore.exportConfigs(names).onComplete { result ->
                 if (result.succeeded()) {
-                    future.complete(result.result())
+                    future.complete(result.result().map(::redactTlsClientKeyPassword))
                 } else {
                     logger.severe("Failed to get devices: ${result.cause()?.message}")
                     future.completeExceptionally(GraphQLException("Failed to get devices: ${result.cause()?.message}"))
@@ -987,4 +992,22 @@ class QueryResolver(
         }
     }
 
+}
+
+/** Exported configurations can be imported later, but the TLS key passphrase is write-only. */
+internal fun redactTlsClientKeyPassword(device: Map<String, Any?>): Map<String, Any?> {
+    val config = when (val raw = device["config"]) {
+        is Map<*, *> -> raw.filterKeys { it != "tlsClientKeyPassword" }
+        is JsonObject -> raw.copy().also { it.remove("tlsClientKeyPassword") }.map
+        is String -> if (raw.contains("tlsClientKeyPassword")) {
+            try {
+                JsonObject(raw).also { it.remove("tlsClientKeyPassword") }.map
+            } catch (_: Exception) {
+                // Never return an unparseable config string that might contain the secret.
+                null
+            }
+        } else raw
+        else -> raw
+    }
+    return device + ("config" to config)
 }
