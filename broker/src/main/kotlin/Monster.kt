@@ -94,6 +94,7 @@ class Monster(args: Array<String>) {
     private var retainedStore: IMessageStore? = null
     private var flowEngineExtension: FlowEngineExtension? = null
     private var scriptExtension: at.rocworks.devices.script.ScriptExtension? = null
+    private var hmiSyncService: at.rocworks.handlers.HmiSyncService? = null
 
     private val postgresConfig = object {
         var url: String = ""
@@ -306,6 +307,10 @@ class Monster(args: Array<String>) {
 
         fun getRetainedStore(): IMessageStore? {
             return singleton?.retainedStore
+        }
+
+        fun getHmiSyncService(): at.rocworks.handlers.HmiSyncService? {
+            return singleton?.hmiSyncService
         }
 
         fun getVertx(): Vertx? {
@@ -1395,6 +1400,24 @@ MORE INFO:
                     null
                 }
 
+                // HMI Sync Service
+                val hmiConfig = configJson.getJsonObject("HMI", JsonObject())
+                val hmiEnabled = Monster.isFeatureEnabled(Features.Hmi) || hmiConfig.getBoolean("Enabled", false)
+                val hmiPath = Monster.getHmiPath(configJson)
+                val hmiSyncEnabled = hmiConfig.getBoolean("SyncEnabled", true)
+                val hmiSyncBaseTopic = hmiConfig.getString("SyncBaseTopic", "monstermq/hmi/sync")
+                val hmiSyncService = if (hmiEnabled && !hmiPath.isNullOrBlank() && hmiSyncEnabled) {
+                    at.rocworks.handlers.HmiSyncService(
+                        vertx = vertx,
+                        config = configJson,
+                        sessionHandler = sessionHandler,
+                        deviceStore = deviceConfigStore,
+                        nodeId = this.nodeName.ifBlank { "local" },
+                        baseTopic = hmiSyncBaseTopic
+                    )
+                } else null
+                this.hmiSyncService = hmiSyncService
+
 
                 // MQTT Servers
                 val servers = listOfNotNull(
@@ -1742,6 +1765,7 @@ MORE INFO:
                                 }
                             }
                         }
+                        hmiSyncService?.start()
                         Future.succeededFuture<Unit>()
                     }
                     .onFailure {
