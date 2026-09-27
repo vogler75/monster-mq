@@ -111,15 +111,76 @@ Every agent automatically gets these MQTT tools:
 
 | Tool | Description |
 |------|-------------|
-| `publish_message` | Publish a message to any MQTT topic |
+| `publish_message` | Publish a message to any MQTT topic (sensitive topics need approval, see below) |
 | `save_note` | Save a persistent note as a retained MQTT message |
+
+### Custom LangGraph Graphs
+
+By default the agent runs LangGraph's prebuilt ReAct agent. Override `build_graph()` to use your own
+`StateGraph`. Compile it with the given checkpointer so memory and human-in-the-loop interrupts work;
+the graph is invoked with `{"messages": [HumanMessage]}` and the last AI message is the answer:
+
+```python
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
+
+class MyAgent(MonsterAgent):
+    def get_tools(self):
+        return [my_custom_tool]
+
+    def build_graph(self, llm, tools, checkpointer):
+        model = llm.bind_tools(tools)
+
+        def call_model(state: MessagesState):
+            return {"messages": [model.invoke([("system", self.system_prompt)] + state["messages"])]}
+
+        graph = StateGraph(MessagesState)
+        graph.add_node("model", call_model)
+        graph.add_node("tools", ToolNode(tools))
+        graph.add_edge(START, "model")
+        graph.add_conditional_edges("model", tools_condition, {"tools": "tools", END: END})
+        graph.add_edge("tools", "model")
+        return graph.compile(checkpointer=checkpointer)
+```
+
+### Human-in-the-Loop Approval
+
+Publishes to topics matching `hitl.sensitive_topics` pause the graph with LangGraph's `interrupt()`.
+The agent publishes a retained approval request and continues when an operator answers:
+
+| Topic | Payload |
+|-------|---------|
+| `a2a/v1/{org}/{site}/agents/{name}/approval/request/{id}` | `{"approvalId", "agent", "taskId", "request": {"action": "publish", "topic", "payload"}, "responseTopic", ...}` (retained until decided) |
+| `a2a/v1/{org}/{site}/agents/{name}/approval/response/{id}` | `{"approved": true, "reason": "optional", "by": "operator"}` or plain `approve` / `reject` |
+
+Answer from any MQTT client or from the MonsterMQ dashboard: the Agent Monitor page shows pending
+requests of an agent with Approve / Reject buttons. Without an answer the request is rejected after
+`hitl.approval_timeout_seconds`, and the LLM is told that the publish was rejected. Your own tools and
+graph nodes can call `interrupt({...})` too; every interrupt is sent as an approval request, and the
+decision `{"approved", "reason", "by"}` is the return value of `interrupt()`.
+
+While a task waits for approval its status is `input-required`. Runs are executed one at a time on a
+worker thread, so the agent keeps receiving MQTT messages while it works or waits.
+
+### Conversation State
+
+| `memory.checkpointer` | Storage | Extra packages |
+|-----------------------|---------|----------------|
+| `memory` (default) | In-process, lost on restart | – |
+| `sqlite` | `memory.sqlite_path` | `langgraph-checkpoint-sqlite` |
+| `postgres` | `memory.postgres_url` or env `AGENT_POSTGRES_URL` | `langgraph-checkpoint-postgres`, `psycopg[binary]` |
+
+Messages on input topics share one conversation (unless `agent.state_enabled: false`). A2A tasks share
+a conversation only when they carry the same `sessionId`; other tasks start with an empty history.
+`ai.max_tool_iterations` limits the tool round trips per run.
 
 ### A2A Protocol
 
 External agents participate in the same A2A protocol as internal agents:
 
 - **Discovery**: Agent card published to `a2a/v1/{org}/{site}/discovery/{name}` (retained)
-- **Inbox**: Task requests received on `a2a/v1/{org}/{site}/agents/{name}/inbox`
+- **Inbox**: Task requests received on `a2a/v1/{org}/{site}/agents/{name}/inbox` and `.../inbox/{taskId}`
+- **Status**: Task status (`working`, `input-required`, `completed`, `failed`) on `a2a/v1/{org}/{site}/agents/{name}/status/{taskId}`
 - **Health**: Status published to `a2a/v1/{org}/{site}/agents/{name}/health` (retained)
 - **Notes**: Persistent memory at `a2a/v1/{org}/{site}/agents/{name}/memory/{key}` (retained)
 
@@ -130,7 +191,8 @@ Internal agents can invoke external agents (and vice versa) using the standard A
   "input": "What is the CPU usage?",
   "replyTo": "a2a/v1/default/default/agents/caller/inbox/unique-id",
   "callerAgent": "orchestrator",
-  "skill": "check-system-health"
+  "skill": "check-system-health",
+  "sessionId": "optional-conversation-id"
 }
 ```
 
@@ -143,7 +205,9 @@ MonsterMQ Broker
     │               ├── MonsterAgent base class
     │               │     ├── MQTT client (paho-mqtt)
     │               │     ├── A2A protocol (discovery, inbox, health)
-    │               │     └── LLM ReAct loop (LangChain)
+    │               │     ├── LangGraph graph (ReAct or custom build_graph())
+    │               │     ├── HITL approvals (interrupt / resume over MQTT)
+    │               │     └── Checkpointer (memory, SQLite, Postgres)
     │               └── Your tools (get_tools())
     │
     └── Internal ── Built-in Agent (Kotlin)

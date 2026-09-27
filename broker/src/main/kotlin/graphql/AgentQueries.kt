@@ -187,6 +187,18 @@ class AgentQueries(
                         "decimals" to q.decimals
                     )
                 },
+                "persistMemory" to agentConfig.persistMemory,
+                "maxCallDepth" to agentConfig.maxCallDepth,
+                "streamingEnabled" to agentConfig.streamingEnabled,
+                "contextMaxTokens" to agentConfig.contextMaxTokens,
+                "ragEnabled" to agentConfig.ragEnabled,
+                "ragArchiveGroup" to agentConfig.ragArchiveGroup,
+                "ragTopics" to agentConfig.ragTopics,
+                "ragLookbackSeconds" to agentConfig.ragLookbackSeconds,
+                "ragRefreshSeconds" to agentConfig.ragRefreshSeconds,
+                "ragMaxResults" to agentConfig.ragMaxResults,
+                "embeddingProvider" to agentConfig.embeddingProvider,
+                "embeddingModel" to agentConfig.embeddingModel,
                 "timezone" to agentConfig.timezone,
                 "taskTimeoutSeconds" to agentConfig.taskTimeoutSeconds,
                 "subAgentsAllowAll" to agentConfig.subAgentsAllowAll,

@@ -16,13 +16,20 @@ import dev.langchain4j.mcp.McpToolProvider
 import at.rocworks.genai.decision.IDecisionProvider
 import at.rocworks.genai.decision.OpenRouterDecisionProvider
 import dev.langchain4j.data.message.AiMessage
-import dev.langchain4j.memory.chat.MessageWindowChatMemory
+import dev.langchain4j.data.message.TextContent
 import dev.langchain4j.model.chat.ChatModel
+import dev.langchain4j.model.chat.StreamingChatModel
+import dev.langchain4j.model.chat.response.ChatResponse
+import dev.langchain4j.service.MemoryId
+import dev.langchain4j.service.TokenStream
+import dev.langchain4j.service.tool.ToolExecution
 import dev.langchain4j.model.chat.listener.*
 import dev.langchain4j.model.chat.request.ChatRequest
 import dev.langchain4j.data.message.ToolExecutionResultMessage
 import dev.langchain4j.service.AiServices
 import dev.langchain4j.service.Result
+import dev.langchain4j.data.message.UserMessage as ChatUserMessage
+import dev.langchain4j.service.UserMessage as UserText
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
@@ -39,9 +46,11 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
@@ -57,10 +66,30 @@ class AgentExecutor(
 
     var agentConfig: AgentConfig = AgentConfig.fromJsonObject(deviceConfig.config)
     private var chatModel: ChatModel? = null
+    private var streamingChatModel: StreamingChatModel? = null
+    private var modelConfig: ChatModelConfig? = null
     private var decisionProvider: IDecisionProvider? = null
     private var agentTools: AgentTools? = null
     private var aiService: AgentAiService? = null
-    private var chatMemory: MessageWindowChatMemory? = null
+    private var streamingAiService: AgentStreamingAiService? = null
+    private var chatMemoryStore: MonsterChatMemoryStore? = null
+    private var ragIndex: AgentRagIndex? = null
+    private var ragTimerId: Long? = null
+
+    // Chat memories per session (memoryId = session id, "default" when the caller sends none).
+    // Bounded LRU: evicted sessions only lose the in-memory copy, persisted history is reloaded on demand.
+    private val memories = object : LinkedHashMap<String, TurnAwareChatMemory>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TurnAwareChatMemory>?): Boolean {
+            val evict = size > MAX_SESSIONS
+            if (evict && eldest != null) chatMemoryStore?.evictFromCache(eldest.value.id())
+            return evict
+        }
+    }
+
+    // Context data for the running LLM call. It is injected into the outgoing request only
+    // (see buildAiService) so that the large context block is never stored in chat memory.
+    @Volatile
+    private var currentContextData: String? = null
     private var globalConfig: JsonObject? = null
     private var mcpToolProvider: dev.langchain4j.mcp.McpToolProvider? = null
     private var conversationLog: Logger? = null
@@ -89,10 +118,21 @@ class AgentExecutor(
     data class CollectedResult(val targetAgent: String, val taskId: String, val parentTaskId: String?, val input: String, val status: String, val result: String)
     private val pendingTasks = ConcurrentHashMap<String, PendingTask>()
     private val collectedResults = java.util.concurrent.ConcurrentLinkedQueue<CollectedResult>()
+    private val awaitingFutures = ConcurrentHashMap<String, CompletableFuture<CollectedResult>>()
+    // Sub-agent tasks that timed out or were cancelled; late replies to them must not be handled as new tasks
+    private val expiredTaskIds: MutableSet<String> = java.util.Collections.newSetFromMap(
+        java.util.Collections.synchronizedMap(object : LinkedHashMap<String, Boolean>() {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) = size > 1000
+        })
+    )
 
-    // The task ID currently being processed by this agent (set on event loop, read from worker thread)
+    // The task ID currently being processed by this agent. Set and reset on the LLM worker thread
+    // (pool size 1, so executions never overlap) and read by tools, possibly from tool executor threads.
     @Volatile
     private var currentTaskId: String? = null
+
+    @Volatile
+    private var currentCallStack: List<String> = emptyList()
 
     @Volatile
     private var currentTransactionId: String? = null
@@ -110,7 +150,31 @@ class AgentExecutor(
      * AiServices generates a proxy that handles the ReAct loop automatically.
      */
     interface AgentAiService {
-        fun chat(userMessage: String): Result<String>
+        fun chat(@MemoryId sessionId: String, @UserText userMessage: String): Result<String>
+    }
+
+    interface AgentStreamingAiService {
+        fun chat(@MemoryId sessionId: String, @UserText userMessage: String): TokenStream
+    }
+
+    /** A single agent invocation, carried from the event loop into the LLM worker thread. */
+    private data class AgentRequest(
+        val userMessage: String,
+        val source: String,
+        val triggerContext: TriggerContext? = null,
+        val taskId: String? = null,
+        val callStack: List<String> = emptyList(),
+        val sessionId: String? = null,
+        // Start with an empty conversation (new task on a stateless agent)
+        val freshMemory: Boolean = false
+    )
+
+    /** Outcome of an LLM invocation (blocking or streaming). */
+    private data class LlmOutcome(val text: String?, val toolExecutions: List<ToolExecution>)
+
+    companion object {
+        private const val DEFAULT_SESSION = "default"
+        private const val MAX_SESSIONS = 100
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -161,13 +225,13 @@ class AgentExecutor(
                                 if (isDecisionAgent(providerConfig)) {
                                     initDecisionProvider(providerConfig)
                                 } else if (providerConfig != null) {
-                                    chatModel = LangChain4jFactory.createChatModel(providerConfig, agentConfig, globalConfig!!, listOf(llmListener))
+                                    initChatModels(providerConfig, llmListener)
                                 } else {
                                     logger.warning("Provider '${agentConfig.providerName}' not found, falling back to direct config")
                                     if (isDecisionAgent()) {
                                         initDecisionProvider()
                                     } else {
-                                        chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                                        initChatModels(null, llmListener)
                                     }
                                 }
                                 doStart(startPromise)
@@ -183,13 +247,13 @@ class AgentExecutor(
                         initDecisionProvider(configProvider)
                     } else if (configProvider != null) {
                         logger.fine("Using config.yaml provider '${agentConfig.providerName}'")
-                        chatModel = LangChain4jFactory.createChatModel(configProvider, agentConfig, globalConfig!!, listOf(llmListener))
+                        initChatModels(configProvider, llmListener)
                     } else {
                         logger.warning("Device store not available, falling back to direct config for provider '${agentConfig.providerName}'")
                         if (isDecisionAgent()) {
                             initDecisionProvider()
                         } else {
-                            chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                            initChatModels(null, llmListener)
                         }
                     }
                     doStart(startPromise)
@@ -198,7 +262,7 @@ class AgentExecutor(
                 if (isDecisionAgent()) {
                     initDecisionProvider()
                 } else {
-                    chatModel = LangChain4jFactory.createChatModel(agentConfig, globalConfig!!, listOf(llmListener))
+                    initChatModels(null, llmListener)
                 }
                 doStart(startPromise)
             }
@@ -207,6 +271,16 @@ class AgentExecutor(
             logger.severe("Failed to start agent ${deviceConfig.name}: ${e.message}")
             e.printStackTrace()
             startPromise.fail(e)
+        }
+    }
+
+    private fun initChatModels(providerConfig: GenAiProviderConfig?, llmListener: ChatModelListener) {
+        val config = LangChain4jFactory.toChatModelConfig(agentConfig, providerConfig)
+        modelConfig = config
+        chatModel = LangChain4jFactory.createChatModel(config, globalConfig!!, listOf(llmListener))
+        if (agentConfig.streamingEnabled) {
+            streamingChatModel = LangChain4jFactory.createStreamingChatModel(config, globalConfig!!, listOf(llmListener))
+            logger.info("Agent ${deviceConfig.name} token streaming enabled (${config.provider})")
         }
     }
 
@@ -279,12 +353,21 @@ class AgentExecutor(
                     vertx = vertx,
                     taskTimeoutSeconds = agentConfig.taskTimeoutSeconds,
                     getCurrentTaskId = { currentTaskId },
-                    registerPendingTask = { taskId, targetAgent, input -> pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId) },
+                    // Called on the worker thread before the task is published, so the wait handle
+                    // exists before any reply can arrive on the event loop.
+                    registerPendingTask = { taskId, targetAgent, input ->
+                        awaitingFutures[taskId] = CompletableFuture()
+                        pendingTasks[taskId] = PendingTask(targetAgent, input, parentTaskId = currentTaskId)
+                    },
+                    cancelPendingTask = { taskId -> discardPendingTask(taskId) },
                     subAgentsAllowAll = agentConfig.subAgentsAllowAll,
                     subAgents = agentConfig.subAgents,
                     visibleAgentTags = agentConfig.visibleAgentTags,
                     isolatedAgent = agentConfig.isolatedAgent,
-                    allowedPublishTopics = agentConfig.allowedPublishTopics
+                    allowedPublishTopics = agentConfig.allowedPublishTopics,
+                    awaitSubAgentResult = { taskId, targetAgent, timeoutSec -> awaitSubAgentResult(taskId, targetAgent, timeoutSec) },
+                    getCurrentCallStack = { currentCallStack },
+                    maxCallDepth = agentConfig.maxCallDepth
                 )
 
                 // Build AI Service with ReAct loop
@@ -337,6 +420,11 @@ class AgentExecutor(
             taskTimeoutTimerId?.let { vertx.cancelTimer(it) }
             pendingTasks.clear()
             collectedResults.clear()
+            awaitingFutures.forEach { (_, future) -> future.cancel(true) }
+            awaitingFutures.clear()
+            ragTimerId?.let { vertx.cancelTimer(it) }
+            ragTimerId = null
+            ragIndex = null
 
             // Unsubscribe MQTT topics
             val sessionHandler = Monster.getSessionHandler()
@@ -360,6 +448,14 @@ class AgentExecutor(
                 }
             }
             mcpClients.clear()
+
+            // Release chat memory (the persistent store is shared by all agents and ref-counted)
+            synchronized(memories) { memories.clear() }
+            chatMemoryStore?.let {
+                it.evictAgentFromCache(agentName)
+                MonsterChatMemoryStore.release(it)
+            }
+            chatMemoryStore = null
 
             // Close conversation log
             try { conversationLogHandler?.close() } catch (_: Exception) {}
@@ -413,50 +509,42 @@ class AgentExecutor(
     }
 
     private fun buildAiService() {
-        val memorySize = agentConfig.memoryWindowSize
-        chatMemory = MessageWindowChatMemory.withMaxMessages(memorySize)
-        val builder = AiServices.builder(AgentAiService::class.java)
+        if (agentConfig.persistMemory && chatMemoryStore == null) {
+            val storeType = Monster.getConfigStoreType(globalConfig ?: JsonObject())
+            chatMemoryStore = MonsterChatMemoryStore.acquire(storeType, globalConfig ?: JsonObject(), vertx)
+        }
+        synchronized(memories) { memories.clear() }
+
+        if (agentConfig.ragEnabled && ragIndex == null) {
+            setupRagIndex()
+        }
+
+        aiService = configureAiService(AiServices.builder(AgentAiService::class.java))
             .chatModel(chatModel)
-            .chatMemory(chatMemory)
-            .tools(agentTools)
+            // Streaming invocations report tool calls through the TokenStream callbacks instead
+            .beforeToolExecution { logToolRequest(it.request()) }
+            .afterToolExecution { logToolResult(it) }
+            .build()
+
+        streamingAiService = streamingChatModel?.let { model ->
+            configureAiService(AiServices.builder(AgentStreamingAiService::class.java))
+                .streamingChatModel(model)
+                .build()
+        }
+    }
+
+    /** Applies the configuration shared by the blocking and the streaming AI service. */
+    private fun <T> configureAiService(builder: AiServices<T>): AiServices<T> {
+        val tools = mutableListOf<Any>(agentTools!!)
+        ragIndex?.let { tools.add(AgentRagTools(it, agentConfig.ragMaxResults, ::publishToolLog)) }
+
+        builder
+            .chatMemoryProvider { memoryId -> memoryFor(memoryId.toString()) }
+            .tools(tools)
             .maxSequentialToolsInvocations(agentConfig.maxToolIterations)
-            .beforeToolExecution { execution ->
-                val request = execution.request()
-                val log = JsonObject()
-                    .put("type", "llm-tool-request")
-                    .put("timestamp", Instant.now().toString())
-                    .put("tool", request.name())
-                    .put("arguments", request.arguments())
-                publishToAgentTopic("logs/llm", log)
-                writeToConversationLog { sb ->
-                    sb.append("  TOOL_REQUEST:\n")
-                    sb.append("    tool: \"${request.name()}\"\n")
-                    sb.append("    timestamp: \"${Instant.now()}\"\n")
-                    sb.append("    arguments:\n")
-                    sb.append(formatJsonAsYaml(request.arguments() ?: "", 6))
-                    sb.append("\n\n")
-                }
-            }
-            .afterToolExecution { execution ->
-                val request = execution.request()
-                val log = JsonObject()
-                    .put("type", "llm-tool-result")
-                    .put("timestamp", Instant.now().toString())
-                    .put("tool", request.name())
-                    .put("failed", execution.hasFailed())
-                    .put("result", execution.result())
-                publishToAgentTopic("logs/llm", log)
-                writeToConversationLog { sb ->
-                    sb.append("  TOOL_RESULT:\n")
-                    sb.append("    tool: \"${request.name()}\"\n")
-                    sb.append("    timestamp: \"${Instant.now()}\"\n")
-                    sb.append("    failed: ${execution.hasFailed()}\n")
-                    val resultText = execution.result() ?: ""
-                    sb.append("    result: |\n")
-                    sb.append(indent(resultText, 6))
-                    sb.append("\n\n")
-                }
-            }
+            // Lets independent tool calls of one LLM response (e.g. several invokeAgent calls) run in parallel
+            .executeToolsConcurrently()
+            .chatRequestTransformer { request -> injectContextData(request) }
 
         // Add MCP tool providers if configured
         if (agentConfig.mcpServers.isNotEmpty() || agentConfig.useMonsterMqMcp) {
@@ -477,17 +565,108 @@ class AgentExecutor(
         if (agentConfig.systemPrompt.isNotBlank()) {
             builder.systemMessageProvider { agentConfig.systemPrompt }
         }
+        return builder
+    }
 
-        aiService = builder.build()
+    private fun memoryFor(sessionId: String): TurnAwareChatMemory {
+        synchronized(memories) {
+            return memories.getOrPut(sessionId) {
+                TurnAwareChatMemory(
+                    id = "$agentName:$sessionId",
+                    maxMessages = agentConfig.memoryWindowSize,
+                    chatMemoryStore = chatMemoryStore
+                )
+            }
+        }
     }
 
     /**
-     * Rebuild the AI service with a fresh chat memory. Used to recover from
-     * invalid message ordering errors (e.g. Gemini rejecting orphaned tool results).
+     * Prepends the current context data to the last user message of an outgoing LLM request.
+     * Done at request level (not in the user message itself) so that context snapshots are
+     * sent on every ReAct step but never accumulate in the chat memory.
      */
-    private fun rebuildAiService() {
-        logger.warning("Agent ${deviceConfig.name} rebuilding AI service to recover from chat history error")
-        buildAiService()
+    private fun injectContextData(request: ChatRequest): ChatRequest {
+        val context = currentContextData
+        if (context.isNullOrBlank()) return request
+        val messages = request.messages()
+        val index = messages.indexOfLast { it is ChatUserMessage }
+        if (index < 0) return request
+        val original = messages[index] as ChatUserMessage
+        val augmented = if (original.hasSingleText()) {
+            ChatUserMessage.from("$context\n\n${original.singleText()}")
+        } else {
+            ChatUserMessage.from(listOf(TextContent.from(context)) + original.contents())
+        }
+        val newMessages = messages.toMutableList().also { it[index] = augmented }
+        return request.toBuilder().messages(newMessages).build()
+    }
+
+    private fun logToolRequest(request: dev.langchain4j.agent.tool.ToolExecutionRequest) {
+        val log = JsonObject()
+            .put("type", "llm-tool-request")
+            .put("timestamp", Instant.now().toString())
+            .put("tool", request.name())
+            .put("arguments", request.arguments())
+        publishToAgentTopic("logs/llm", log)
+        writeToConversationLog { sb ->
+            sb.append("  TOOL_REQUEST:\n")
+            sb.append("    tool: \"${request.name()}\"\n")
+            sb.append("    timestamp: \"${Instant.now()}\"\n")
+            sb.append("    arguments:\n")
+            sb.append(formatJsonAsYaml(request.arguments() ?: "", 6))
+            sb.append("\n\n")
+        }
+    }
+
+    private fun logToolResult(execution: ToolExecution) {
+        val request = execution.request()
+        val log = JsonObject()
+            .put("type", "llm-tool-result")
+            .put("timestamp", Instant.now().toString())
+            .put("tool", request.name())
+            .put("failed", execution.hasFailed())
+            .put("result", execution.result())
+        publishToAgentTopic("logs/llm", log)
+        writeToConversationLog { sb ->
+            sb.append("  TOOL_RESULT:\n")
+            sb.append("    tool: \"${request.name()}\"\n")
+            sb.append("    timestamp: \"${Instant.now()}\"\n")
+            sb.append("    failed: ${execution.hasFailed()}\n")
+            val resultText = execution.result() ?: ""
+            sb.append("    result: |\n")
+            sb.append(indent(resultText, 6))
+            sb.append("\n\n")
+        }
+    }
+
+    private fun setupRagIndex() {
+        try {
+            val base = modelConfig
+            val provider = agentConfig.embeddingProvider?.takeIf { it.isNotBlank() } ?: base?.provider ?: agentConfig.provider
+            // Reuse credentials of the chat model only when the embedding uses the same provider
+            val sameBase = base?.takeIf { provider.equals(it.provider, ignoreCase = true) }
+            val embeddingModel = LangChain4jFactory.createEmbeddingModel(
+                provider = provider,
+                model = agentConfig.embeddingModel?.takeIf { it.isNotBlank() },
+                apiKey = sameBase?.apiKey,
+                endpoint = sameBase?.endpoint,
+                serviceVersion = sameBase?.serviceVersion,
+                globalConfig = globalConfig ?: JsonObject()
+            )
+            val index = AgentRagIndex(agentName, embeddingModel, agentConfig)
+            ragIndex = index
+            val refresh = {
+                vertx.executeBlocking(Callable { index.refresh() }, false).onFailure { e ->
+                    logger.warning("Agent $agentName RAG index refresh failed: ${e.message}")
+                }
+            }
+            refresh()
+            ragTimerId = vertx.setPeriodic(maxOf(agentConfig.ragRefreshSeconds, 10) * 1000) { refresh() }
+            logger.info("Agent $agentName semantic search enabled (embedding provider: $provider)")
+        } catch (e: Exception) {
+            logger.warning("Agent $agentName could not enable semantic search: ${e.message}")
+            ragIndex = null
+        }
     }
 
     private fun setupMqttSubscriptions(sessionHandler: at.rocworks.handlers.SessionHandler) {
@@ -527,7 +706,7 @@ class AgentExecutor(
             if (intervalMs != null && intervalMs > 0) {
                 logger.fine("Agent ${deviceConfig.name} setting up periodic trigger: ${intervalMs}ms")
                 cronTimerId = vertx.setPeriodic(intervalMs) {
-                    executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON))
+                    executeAgent(AgentRequest(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON)))
                 }
             } else {
                 logger.warning("Agent ${deviceConfig.name} has CRON trigger but no cronExpression or cronIntervalMs")
@@ -542,7 +721,7 @@ class AgentExecutor(
             val delayMs = java.time.Duration.between(now, nextExecution.get()).toMillis()
             logger.fine("Agent ${deviceConfig.name} next cron execution at ${nextExecution.get()} (in ${delayMs}ms)")
             cronTimerId = vertx.setTimer(delayMs) {
-                executeAgent(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON))
+                executeAgent(AgentRequest(agentConfig.cronPrompt?.takeIf { it.isNotBlank() } ?: "It is ${toLocalTime(Instant.now())}. Execute your scheduled task.", "cron", TriggerContext(TriggerType.CRON)))
                 scheduleNextCronExecution(executionTime)
             }
         } else {
@@ -654,8 +833,12 @@ class AgentExecutor(
 
     private fun buildContextData(triggerContext: TriggerContext? = null): String {
         val triggerBlock = buildTriggerContextBlock(triggerContext)
-        val lines = mutableListOf<String>()
+        val sections = mutableListOf<ContextBudget.Section>()
         val contextLogLines = mutableListOf<String>()  // Summary for conversation log
+        // Without a token budget a line limit protects the LLM from huge contexts;
+        // with a budget more data may be fetched because it is truncated afterwards.
+        val maxLines = if (agentConfig.contextMaxTokens > 0) 5000 else 500
+        var lineCount = 0
 
         // Fetch from archive last-value stores
         if (agentConfig.contextLastvalTopics.isNotEmpty()) {
@@ -663,14 +846,16 @@ class AgentExecutor(
             for ((groupName, topicFilters) in agentConfig.contextLastvalTopics) {
                 val store = archiveGroups[groupName]?.lastValStore ?: continue
                 for (filter in topicFilters) {
-                    var count = 0
+                    val lines = mutableListOf<String>()
                     store.findMatchingMessages(filter) { msg ->
                         val value = msg.getPayloadAsString()
                         lines.add("[Archive:$groupName] ${msg.topicName} = $value (${toLocalTime(msg.time)})")
-                        count++
-                        lines.size < 500 // safety limit
+                        lineCount++ < maxLines // safety limit
                     }
-                    if (count > 0) contextLogLines.add("  LastValue archive=$groupName filter=$filter -> $count values")
+                    if (lines.isNotEmpty()) {
+                        sections.add(ContextBudget.Section(null, lines))
+                        contextLogLines.add("  LastValue archive=$groupName filter=$filter -> ${lines.size} values")
+                    }
                 }
             }
         }
@@ -680,14 +865,16 @@ class AgentExecutor(
             val retainedStore = Monster.getRetainedStore()
             if (retainedStore != null) {
                 for (filter in agentConfig.contextRetainedTopics) {
-                    var count = 0
+                    val lines = mutableListOf<String>()
                     retainedStore.findMatchingMessages(filter) { msg ->
                         val value = msg.getPayloadAsString()
                         lines.add("[Retained] ${msg.topicName} = $value")
-                        count++
-                        lines.size < 500
+                        lineCount++ < maxLines
                     }
-                    if (count > 0) contextLogLines.add("  Retained filter=$filter -> $count values")
+                    if (lines.isNotEmpty()) {
+                        sections.add(ContextBudget.Section(null, lines))
+                        contextLogLines.add("  Retained filter=$filter -> ${lines.size} values")
+                    }
                 }
             }
         }
@@ -710,9 +897,11 @@ class AgentExecutor(
                         try {
                             val history = archiveStore.getHistory(topic, startTime, endTime, 500)
                             if (history.size() > 0) {
-                                lines.add("[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):")
+                                val title = "[History:${query.archiveGroup}:RAW] $topic (last ${query.lastSeconds}s, ${history.size()} records):"
                                 contextLogLines.add("  History archive=${query.archiveGroup} mode=RAW topic=$topic range=${startTime}..${endTime} -> ${history.size()} rows")
-                                lines.add(jsonArrayToCsv(history, query.decimals))
+                                val csv = jsonArrayToCsv(history, query.decimals).lines()
+                                sections.add(ContextBudget.Section(title, csv, headLines = 1, keepTail = true))
+                                lineCount += csv.size
                             }
                         } catch (e: Exception) {
                             logger.warning("Failed to fetch raw history for $topic in ${query.archiveGroup}: ${e.message}")
@@ -732,17 +921,35 @@ class AgentExecutor(
                         val rows = result.getJsonArray("rows")
                         val rowCount = rows?.size() ?: 0
                         if (rowCount > 0) {
-                            lines.add("[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, $rowCount rows):")
+                            val title = "[History:${query.archiveGroup}:${query.interval}:${query.function}] ${query.topics.joinToString(", ")} (last ${query.lastSeconds}s, $rowCount rows):"
                             contextLogLines.add("  History archive=${query.archiveGroup} mode=${query.interval}:${query.function} topics=${query.topics.joinToString(",")} range=${startTime}..${endTime} -> $rowCount rows")
-                            lines.add(columnarJsonToCsv(result, query.decimals))
+                            val csv = columnarJsonToCsv(result, query.decimals).lines()
+                            sections.add(ContextBudget.Section(title, csv, headLines = 1, keepTail = true))
+                            lineCount += csv.size
                         }
                     } catch (e: Exception) {
                         logger.warning("Failed to fetch aggregated history for ${query.topics} in ${query.archiveGroup}: ${e.message}")
                     }
                 }
-                if (lines.size >= 500) break
+                if (lineCount >= maxLines) break
             }
         }
+
+        val now = Instant.now().atZone(localZone)
+        val header = "--- Context Data (current time: ${now.format(localTimeFormatter)}, timezone: $localZone) ---"
+        val footer = "--- End Context Data ---"
+
+        // Apply the token budget; the trigger block, header and footer are never truncated
+        val fitted = if (agentConfig.contextMaxTokens > 0) {
+            val reserved = ContextBudget.estimateTokens(triggerBlock) + ContextBudget.estimateTokens(header) +
+                ContextBudget.estimateTokens(footer) + 2
+            val before = sections.sumOf { ContextBudget.sectionTokens(it) }
+            val result = ContextBudget.fit(sections, maxOf(0, agentConfig.contextMaxTokens - reserved))
+            val after = result.sumOf { ContextBudget.sectionTokens(it) }
+            if (after < before) contextLogLines.add("  Budget: ~$before tokens truncated to ~$after (contextMaxTokens=${agentConfig.contextMaxTokens})")
+            result
+        } else sections
+        val lines = ContextBudget.render(fitted)
 
         // Write context fetch summary to conversation log
         writeToConversationLog { sb ->
@@ -761,11 +968,9 @@ class AgentExecutor(
 
         if (lines.isEmpty()) return triggerBlock.trimEnd()
 
-        val now = Instant.now().atZone(localZone)
-        val header = "--- Context Data (current time: ${now.format(localTimeFormatter)}, timezone: $localZone) ---"
         val mainContext = "$header\n" +
             lines.joinToString("\n") +
-            "\n--- End Context Data ---"
+            "\n$footer"
 
         return if (triggerBlock.isNotBlank()) {
             triggerBlock + mainContext
@@ -1065,26 +1270,33 @@ class AgentExecutor(
         // 1. Messages on inbox sub-topics (inbox/{taskId}) — data-driven routing
         if (msg.topicName.startsWith("$inboxPrefix/")) {
             val taskId = msg.topicName.substringAfterLast("/")
-            if (pendingTasks.containsKey(taskId)) {
+            when {
                 // Reply to a sub-agent task we submitted
-                handleSubAgentReply(msg)
-            } else {
+                pendingTasks.containsKey(taskId) -> handleSubAgentReply(msg)
+                // Late reply to a task that already timed out or was cancelled. Handling it as a new
+                // task would make the agents answer each other forever.
+                taskId in expiredTaskIds || isReplyPayload(msg) ->
+                    logger.info("Agent $agentName ignoring late reply for task $taskId")
                 // New incoming task (from another agent or forwarded input)
-                chatMemory?.clear()
-                handleTaskMessage(msg)
+                else -> handleTaskMessage(msg)
             }
             return
         }
 
         // 2. Backward compat: base inbox topic (external agents may still use it)
         if (msg.topicName == inboxPrefix) {
-            chatMemory?.clear()
             handleTaskMessage(msg)
             return
         }
 
         // 3. Unexpected topic — input topics are handled by the forwarding client
         logger.warning("Agent $agentName received unexpected message on topic: ${msg.topicName}")
+    }
+
+    /** A task reply carries a status but no input; a task request always has an input. */
+    private fun isReplyPayload(msg: BrokerMessage): Boolean {
+        val json = try { JsonObject(String(msg.payload, Charsets.UTF_8)) } catch (_: Exception) { return false }
+        return json.containsKey("status") && !json.containsKey("input")
     }
 
     private fun forwardInputToInbox(msg: BrokerMessage) {
@@ -1137,13 +1349,21 @@ class AgentExecutor(
 
         // Remove from pending tasks and collect the result
         val pending = pendingTasks.remove(taskId) ?: return
-        collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, status, result))
+        val collected = CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, status, result)
 
-        logger.info("Agent $agentName collected reply for task $taskId from ${pending.targetAgent} (status=$status, remaining=${pendingTasks.size})")
+        // The waiting worker thread removes the future itself (the reply may arrive before it waits)
+        val future = awaitingFutures[taskId]
+        if (future != null) {
+            future.complete(collected)
+            logger.info("Agent $agentName completed synchronous wait for task $taskId from ${pending.targetAgent} (status=$status)")
+        } else {
+            collectedResults.add(collected)
+            logger.info("Agent $agentName collected reply for task $taskId from ${pending.targetAgent} (status=$status, remaining=${pendingTasks.size})")
 
-        // When all pending tasks are resolved, resume with compiled results
-        if (pendingTasks.isEmpty()) {
-            resumeWithCollectedResults()
+            // When all pending tasks are resolved, resume with compiled results
+            if (pendingTasks.isEmpty()) {
+                resumeWithCollectedResults()
+            }
         }
     }
 
@@ -1164,7 +1384,40 @@ class AgentExecutor(
         }
 
         val userMessage = "[Sub-agent results received]\n$resultText\n\n[All tasks complete. Summarize the results and respond to the user. Do NOT invoke more agents unless the user explicitly asks.]"
-        executeAgent(userMessage, "task-results", TriggerContext(TriggerType.MANUAL))
+        executeAgent(AgentRequest(userMessage, "task-results", TriggerContext(TriggerType.MANUAL)))
+    }
+
+    /**
+     * Blocks the calling LLM worker (or tool) thread until the sub-agent task registered with
+     * [registerPendingTask][AgentTools] completes, fails or times out.
+     */
+    private fun awaitSubAgentResult(taskId: String, targetAgent: String, timeoutSec: Long): String {
+        val future = awaitingFutures[taskId]
+            ?: return "Error: task $taskId to agent '$targetAgent' is not pending (cancelled or already expired)."
+        return try {
+            // The periodic timeout checker usually completes the future first; this is the hard limit
+            val collected = future.get(timeoutSec + 30, TimeUnit.SECONDS)
+            when (collected.status) {
+                "completed" -> collected.result
+                "timeout" -> "Agent '$targetAgent' did not respond within $timeoutSec seconds (taskId=$taskId)."
+                else -> "Agent '$targetAgent' task $taskId ended with status '${collected.status}': ${collected.result}"
+            }
+        } catch (e: java.util.concurrent.TimeoutException) {
+            discardPendingTask(taskId)
+            "Agent '$targetAgent' did not respond within $timeoutSec seconds (taskId=$taskId)."
+        } catch (e: Exception) {
+            discardPendingTask(taskId)
+            "Error waiting for agent '$targetAgent' (taskId=$taskId): ${e.message}"
+        } finally {
+            awaitingFutures.remove(taskId)
+        }
+    }
+
+    /** Forgets a sub-agent task; a reply arriving later is ignored instead of being handled as a new task. */
+    private fun discardPendingTask(taskId: String) {
+        expiredTaskIds.add(taskId)
+        pendingTasks.remove(taskId)
+        awaitingFutures.remove(taskId)?.cancel(true)
     }
 
     private fun setupTaskTimeoutChecker() {
@@ -1176,9 +1429,16 @@ class AgentExecutor(
             val timedOut = pendingTasks.entries.filter { now - it.value.submittedAt > timeoutMs }
             timedOut.forEach { (taskId, pending) ->
                 pendingTasks.remove(taskId)
+                expiredTaskIds.add(taskId)
                 logger.warning("Agent $agentName task $taskId to '${pending.targetAgent}' timed out after ${agentConfig.taskTimeoutSeconds}s")
-                collectedResults.add(CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, "timeout",
-                    "Agent '${pending.targetAgent}' did not respond within ${agentConfig.taskTimeoutSeconds} seconds"))
+                val timeoutResult = CollectedResult(pending.targetAgent, taskId, pending.parentTaskId, pending.input, "timeout",
+                    "Agent '${pending.targetAgent}' did not respond within ${agentConfig.taskTimeoutSeconds} seconds")
+                val future = awaitingFutures[taskId]
+                if (future != null) {
+                    future.complete(timeoutResult)
+                } else {
+                    collectedResults.add(timeoutResult)
+                }
             }
             // If timeouts cleared all pending tasks, resume with whatever we have
             if (pendingTasks.isEmpty() && collectedResults.isNotEmpty()) {
@@ -1211,7 +1471,9 @@ class AgentExecutor(
                 logger.info("Agent ${deviceConfig.name} received plain-text task $taskId")
                 publishTaskStatus(taskId, "working")
                 val taskMessage = "[Task from external, taskId=$taskId]\n$payload"
-                executeAgentWithCallback(taskMessage, "task:$taskId", TriggerContext(TriggerType.MANUAL)) { response, _ ->
+                val request = AgentRequest(taskMessage, "task:$taskId", TriggerContext(TriggerType.MANUAL),
+                    taskId = taskId, freshMemory = !agentConfig.stateEnabled)
+                executeAgentRequest(request) { response, _ ->
                     publishTaskStatus(taskId, if (response != null) "completed" else "failed")
                     if (response != null) publishResponse(response)
                 }
@@ -1236,8 +1498,9 @@ class AgentExecutor(
 
             logger.info("Agent ${deviceConfig.name} received task $taskId from $callerAgent (replyTo=$replyTo)")
 
-            // Track the current task ID so sub-agent calls can reference it as parentTaskId
-            currentTaskId = taskId
+            val callStack = taskJson.getJsonArray("callStack")?.mapNotNull { it?.toString() } ?: emptyList()
+            // Optional conversation id: tasks with the same sessionId share one chat memory
+            val sessionId = taskJson.getString("sessionId")?.takeIf { it.isNotBlank() }
 
             // Publish working status
             publishTaskStatus(taskId, "working", parentTaskId)
@@ -1257,10 +1520,19 @@ class AgentExecutor(
                 TriggerContext(TriggerType.MANUAL)
             }
 
-            // Execute the agent with a callback to publish the result
-            executeAgentWithCallback(taskMessage, "task:$taskId", triggerContext) { response, error ->
-                currentTaskId = null
-                val sessionHandler = Monster.getSessionHandler() ?: return@executeAgentWithCallback
+            // The task ID and call stack are set on the worker thread while this task runs, so
+            // sub-agent calls can reference it as parentTaskId and detect call cycles.
+            val request = AgentRequest(
+                userMessage = taskMessage,
+                source = "task:$taskId",
+                triggerContext = triggerContext,
+                taskId = taskId,
+                callStack = callStack,
+                sessionId = sessionId,
+                freshMemory = !agentConfig.stateEnabled && sessionId == null
+            )
+            executeAgentRequest(request) { response, error ->
+                val sessionHandler = Monster.getSessionHandler() ?: return@executeAgentRequest
                 if (error != null) {
                     // Publish error response
                     val errorJson = JsonObject()
@@ -1313,7 +1585,7 @@ class AgentExecutor(
         )
     }
 
-    private fun executeLlmBlocking(block: () -> Result<String>): Future<Result<String>> {
+    private fun executeLlmBlocking(block: () -> LlmOutcome): Future<LlmOutcome> {
         val callable = Callable { block() }
         return llmWorkerExecutor?.executeBlocking(callable) ?: vertx.executeBlocking(callable)
     }
@@ -1327,6 +1599,7 @@ class AgentExecutor(
         userMessage: String,
         source: String,
         triggerContext: TriggerContext? = null,
+        taskId: String? = null,
         callback: (String?, String?) -> Unit
     ) {
         val provider = decisionProvider ?: run {
@@ -1339,7 +1612,6 @@ class AgentExecutor(
         writeToConversationLog { sb ->
             sb.append("================================================================================\n")
             sb.append("TRANSACTION START (DECISION) | ID: $txId | Time: ${Instant.now()} | Source: $source")
-            val taskId = currentTaskId
             if (taskId != null) {
                 sb.append(" | Task ID: $taskId")
             }
@@ -1432,157 +1704,83 @@ class AgentExecutor(
         }
     }
 
-    private fun executeAgentWithCallback(userMessage: String, source: String, triggerContext: TriggerContext? = null, callback: (String?, String?) -> Unit) {
+    /** Runs a request and publishes the response (or error) to the configured output topics. */
+    private fun executeAgent(request: AgentRequest) {
+        executeAgentRequest(request) { response, error ->
+            if (response != null) publishResponse(response)
+            else if (decisionProvider == null) publishError(error ?: "Unknown error")
+        }
+    }
+
+    private fun executeAgentRequest(request: AgentRequest, callback: (String?, String?) -> Unit) {
         if (decisionProvider != null) {
-            executeDecisionAgentWithCallback(userMessage, source, triggerContext, callback)
+            executeDecisionAgentWithCallback(request.userMessage, request.source, request.triggerContext, request.taskId, callback)
             return
         }
 
-        val service = aiService ?: run {
+        if (aiService == null) {
             callback(null, "Agent service not available")
             return
         }
 
-        val txId = Utils.getUuid()
-        currentTransactionId = txId
-        writeToConversationLog { sb ->
-            sb.append("================================================================================\n")
-            sb.append("TRANSACTION START | ID: $txId | Time: ${Instant.now()} | Source: $source")
-            val taskId = currentTaskId
-            if (taskId != null) {
-                sb.append(" | Task ID: $taskId")
-            }
-            sb.append("\n--------------------------------------------------------------------------------\n\n")
-        }
-
         messagesProcessed.incrementAndGet()
         publishHealthStatus("running")
-        logger.fine("Agent ${deviceConfig.name} processing task from $source")
+        logger.fine("Agent ${deviceConfig.name} processing message from ${request.source}")
 
+        // Everything below runs on the agent's single LLM worker thread, so requests are processed
+        // one after another and the per-request state (task, call stack, context) never overlaps.
         executeLlmBlocking {
-            llmCalls.incrementAndGet()
-            val contextData = buildContextData(triggerContext)
-            val fullMessage = if (contextData.isNotBlank()) {
-                "$contextData\n\n$userMessage"
-            } else {
-                userMessage
-            }
-            try {
-                service.chat(fullMessage)
-            } catch (e: Exception) {
-                val fullErrorMessage = generateSequence(e as Throwable?) { it.cause }.joinToString(" | ") { it.message ?: "" }
-                if (fullErrorMessage.contains("function call turn") ||
-                    fullErrorMessage.contains("function response turn") ||
-                    fullErrorMessage.contains("INVALID_ARGUMENT")) {
-                    logger.warning("Agent ${deviceConfig.name} chat history invalid, rebuilding service and retrying: ${e.message?.take(200)}")
-                    rebuildAiService()
-                    aiService?.chat(fullMessage) ?: throw e
-                } else {
-                    throw e
-                }
-            }
-        }.onComplete { result ->
+            val txId = Utils.getUuid()
+            currentTransactionId = txId
+            currentTaskId = request.taskId
+            currentCallStack = request.callStack
             writeToConversationLog { sb ->
-                sb.append("--------------------------------------------------------------------------------\n")
-                sb.append("TRANSACTION END | ID: $txId | Status: ${if (result.succeeded()) "SUCCESS" else "FAILED"}\n")
-                sb.append("================================================================================\n\n")
+                sb.append("================================================================================\n")
+                sb.append("TRANSACTION START | ID: $txId | Time: ${Instant.now()} | Source: ${request.source}")
+                if (request.taskId != null) sb.append(" | Task ID: ${request.taskId}")
+                if (request.sessionId != null) sb.append(" | Session: ${request.sessionId}")
+                sb.append("\n--------------------------------------------------------------------------------\n\n")
             }
-            if (txId == currentTransactionId) {
+            var success = false
+            try {
+                llmCalls.incrementAndGet()
+                val sessionId = request.sessionId ?: DEFAULT_SESSION
+                if (request.freshMemory) memoryFor(sessionId).clear()
+                currentContextData = buildContextData(request.triggerContext).takeIf { it.isNotBlank() }
+                val outcome = try {
+                    invokeLlm(sessionId, request)
+                } catch (e: Exception) {
+                    // Providers such as Gemini reject invalid message ordering in the chat history.
+                    // Clear this session's memory (including the persisted copy) and retry once.
+                    val fullErrorMessage = generateSequence(e as Throwable?) { it.cause }.joinToString(" | ") { it.message ?: "" }
+                    if (fullErrorMessage.contains("function call turn") ||
+                        fullErrorMessage.contains("function response turn") ||
+                        fullErrorMessage.contains("INVALID_ARGUMENT")) {
+                        logger.warning("Agent ${deviceConfig.name} chat history invalid, clearing session '$sessionId' and retrying: ${e.message?.take(200)}")
+                        memoryFor(sessionId).clear()
+                        invokeLlm(sessionId, request)
+                    } else {
+                        throw e
+                    }
+                }
+                success = true
+                outcome
+            } finally {
+                writeToConversationLog { sb ->
+                    sb.append("--------------------------------------------------------------------------------\n")
+                    sb.append("TRANSACTION END | ID: $txId | Status: ${if (success) "SUCCESS" else "FAILED"}\n")
+                    sb.append("================================================================================\n\n")
+                }
+                currentContextData = null
+                currentTaskId = null
+                currentCallStack = emptyList()
                 currentTransactionId = null
             }
-            if (result.succeeded()) {
-                val chatResult = result.result()
-                chatResult?.toolExecutions()?.forEach { toolExecution ->
-                    val req = toolExecution.request()
-                    if (agentTools?.isNativeTool(req.name()) == true) return@forEach
-                    val log = JsonObject()
-                        .put("type", "mcp-tool-call")
-                        .put("timestamp", Instant.now().toString())
-                        .put("tool", req.name())
-                        .put("arguments", req.arguments()?.take(500))
-                        .put("result", toolExecution.result()?.take(1000))
-                    publishToAgentTopic("logs/mcp", log)
-                }
-                val response = chatResult?.content()
-                if (response != null) {
-                    callback(response, null)
-                } else {
-                    callback(null, "LLM returned null response")
-                }
-            } else {
-                errors.incrementAndGet()
-                val cause = result.cause()
-                logger.warning("Agent ${deviceConfig.name} task execution failed: ${cause?.message}")
-                callback(null, cause?.message ?: "Unknown error")
-            }
-            publishHealthStatus("ready")
-        }
-    }
-
-    private fun executeAgent(userMessage: String, source: String, triggerContext: TriggerContext? = null) {
-        if (decisionProvider != null) {
-            executeDecisionAgentWithCallback(userMessage, source, triggerContext) { response, _ ->
-                if (response != null) publishResponse(response)
-            }
-            return
-        }
-
-        val service = aiService ?: return
-
-        val txId = Utils.getUuid()
-        currentTransactionId = txId
-        writeToConversationLog { sb ->
-            sb.append("================================================================================\n")
-            sb.append("TRANSACTION START | ID: $txId | Time: ${Instant.now()} | Source: $source")
-            val taskId = currentTaskId
-            if (taskId != null) {
-                sb.append(" | Task ID: $taskId")
-            }
-            sb.append("\n--------------------------------------------------------------------------------\n\n")
-        }
-
-        messagesProcessed.incrementAndGet()
-        publishHealthStatus("running")
-        logger.fine("Agent ${deviceConfig.name} processing message from $source")
-
-        executeLlmBlocking {
-            llmCalls.incrementAndGet()
-            val contextData = buildContextData(triggerContext)
-            val fullMessage = if (contextData.isNotBlank()) {
-                "$contextData\n\n$userMessage"
-            } else {
-                userMessage
-            }
-
-            logger.fine { "Agent ${deviceConfig.name} LLM request [source=$source, length=${fullMessage.length}]" }
-
-            try {
-                service.chat(fullMessage)
-            } catch (e: Exception) {
-                // Gemini rejects invalid message ordering in chat history (e.g. orphaned tool results
-                // after memory window eviction). Clear memory and retry with just this message.
-                if (e.message?.contains("function call turn") == true ||
-                    e.message?.contains("function response turn") == true) {
-                    logger.warning("Agent ${deviceConfig.name} chat history invalid, clearing memory and retrying")
-                    chatMemory?.clear()
-                    service.chat(fullMessage)
-                } else {
-                    throw e
-                }
-            }
         }.onComplete { result ->
-            writeToConversationLog { sb ->
-                sb.append("--------------------------------------------------------------------------------\n")
-                sb.append("TRANSACTION END | ID: $txId | Status: ${if (result.succeeded()) "SUCCESS" else "FAILED"}\n")
-                sb.append("================================================================================\n\n")
-            }
-            if (txId == currentTransactionId) {
-                currentTransactionId = null
-            }
             if (result.succeeded()) {
-                val chatResult = result.result()
+                val outcome = result.result()
                 // Log MCP/tool executions that went through LangChain4j's tool provider
-                chatResult?.toolExecutions()?.forEach { toolExecution ->
+                outcome.toolExecutions.forEach { toolExecution ->
                     val req = toolExecution.request()
                     // Skip native @Tool calls — those are already logged via publishToolLog
                     if (agentTools?.isNativeTool(req.name()) == true) return@forEach
@@ -1594,21 +1792,76 @@ class AgentExecutor(
                         .put("result", toolExecution.result()?.take(1000))
                     publishToAgentTopic("logs/mcp", log)
                 }
-                val response = chatResult?.content()
-                if (response != null) {
-                    publishResponse(response)
+                if (outcome.text != null) {
+                    callback(outcome.text, null)
                 } else {
-                    publishError("LLM returned null response")
+                    callback(null, "LLM returned null response")
                 }
             } else {
                 errors.incrementAndGet()
                 val cause = result.cause()
                 logger.warning("Agent ${deviceConfig.name} LLM call failed: ${cause?.message}")
                 if (cause != null) logger.fine { cause.stackTraceToString() }
-                publishError(cause?.message ?: "Unknown error")
+                callback(null, cause?.message ?: "Unknown error")
             }
             publishHealthStatus("ready")
         }
+    }
+
+    private fun invokeLlm(sessionId: String, request: AgentRequest): LlmOutcome {
+        streamingAiService?.let { return invokeStreaming(it, sessionId, request) }
+        val service = aiService ?: throw IllegalStateException("Agent service not available")
+        val result = service.chat(sessionId, request.userMessage)
+        return LlmOutcome(result.content(), result.toolExecutions() ?: emptyList())
+    }
+
+    /**
+     * Streams the answer token by token to a2a/v1/{org}/{site}/agents/{name}/stream/{taskId}
+     * (the transaction ID is used for requests without a task) and blocks until it is complete.
+     * The final chunk has done=true.
+     */
+    private fun invokeStreaming(service: AgentStreamingAiService, sessionId: String, request: AgentRequest): LlmOutcome {
+        val streamId = request.taskId ?: currentTransactionId ?: Utils.getUuid()
+        val topic = a2aAgentTopic("stream/$streamId")
+        val seq = AtomicLong(0)
+        val executions = java.util.Collections.synchronizedList(mutableListOf<ToolExecution>())
+        val completion = CompletableFuture<ChatResponse>()
+        var error: String? = null
+        try {
+            service.chat(sessionId, request.userMessage)
+                .onPartialResponse { token -> publishStreamChunk(topic, streamId, seq.getAndIncrement(), token, false) }
+                .beforeToolExecution { logToolRequest(it.request()) }
+                .onToolExecuted { execution ->
+                    executions.add(execution)
+                    logToolResult(execution)
+                }
+                .onCompleteResponse { completion.complete(it) }
+                .onError { completion.completeExceptionally(it) }
+                .start()
+            val response = completion.get(maxOf(agentConfig.taskTimeoutSeconds + 60, 60 * 60), TimeUnit.SECONDS)
+            return LlmOutcome(response.aiMessage()?.text(), executions.toList())
+        } catch (e: java.util.concurrent.ExecutionException) {
+            val cause = e.cause ?: e
+            error = cause.message
+            throw (cause as? Exception) ?: e
+        } catch (e: Exception) {
+            error = e.message
+            throw e
+        } finally {
+            publishStreamChunk(topic, streamId, seq.getAndIncrement(), "", true, error)
+        }
+    }
+
+    private fun publishStreamChunk(topic: String, streamId: String, seq: Long, token: String, done: Boolean, error: String? = null) {
+        val sessionHandler = Monster.getSessionHandler() ?: return
+        val chunk = JsonObject()
+            .put("taskId", streamId)
+            .put("agent", agentName)
+            .put("seq", seq)
+            .put("token", token)
+            .put("done", done)
+        if (error != null) chunk.put("error", error)
+        sessionHandler.publishMessage(BrokerMessage(clientId, topic, chunk.encode()))
     }
 
     private fun publishResponse(response: String) {

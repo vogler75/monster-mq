@@ -17,6 +17,7 @@ Keep this index as the curated entry point for active and completed developer pl
 - [plans/DEVICE_INTEGRATION.md](plans/DEVICE_INTEGRATION.md) — Step-by-step guide for adding new device types (Backend Kotlin verticles, GraphQL schema/resolvers, Frontend dashboard pages)
 
 **Feature-specific plans:**
+- [plans/AGENT_IMPROVEMENTS_REVIEW.md](plans/AGENT_IMPROVEMENTS_REVIEW.md) — Code review findings and follow-ups for Agent Improvements (#189–#194)
 - [plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md](plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md) — Amazon Kinesis client integration
 - [plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md](plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md) — Implementing topic schema governance in the Go edge broker
 - [plans/KNOWLEDGE_GRAPH.md](plans/KNOWLEDGE_GRAPH.md) — Knowledge Graph & semantic topic subscriptions with Apache Jena (#167)

@@ -45,6 +45,18 @@ type Agent {
     subAgents: [String!]!
     visibleAgentTags: [String!]!
     isolatedAgent: Boolean!
+    persistMemory: Boolean!
+    maxCallDepth: Int
+    streamingEnabled: Boolean!
+    contextMaxTokens: Int
+    ragEnabled: Boolean!
+    ragArchiveGroup: String!
+    ragTopics: [String!]!
+    ragLookbackSeconds: Long
+    ragRefreshSeconds: Long
+    ragMaxResults: Int
+    embeddingProvider: String
+    embeddingModel: String
     createdAt: String!
     updatedAt: String!
 }
@@ -102,6 +114,18 @@ input AgentInput {
     subAgents: [String!]
     visibleAgentTags: [String!]
     isolatedAgent: Boolean
+    persistMemory: Boolean
+    maxCallDepth: Int
+    streamingEnabled: Boolean
+    contextMaxTokens: Int
+    ragEnabled: Boolean
+    ragArchiveGroup: String
+    ragTopics: [String!]
+    ragLookbackSeconds: Long
+    ragRefreshSeconds: Long
+    ragMaxResults: Int
+    embeddingProvider: String
+    embeddingModel: String
     enabled: Boolean
 }
 

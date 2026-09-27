@@ -52,6 +52,30 @@ type Subscription {
         # Message content filter (supports regex)
         message: String
     ): SystemLogEntry!
+
+    # Subscribe to the live token stream of an AI agent (agents with streamingEnabled=true)
+    # Streams chunks published to a2a/v1/{org}/{site}/agents/{agentName}/stream/{taskId}
+    # The last chunk of a task has done=true (and error set if the LLM call failed)
+    agentStream(
+        # Agent name
+        agentName: String!
+        # Task ID to follow (default "+" for all tasks of the agent)
+        taskId: String = "+"
+        # A2A organization and site of the agent
+        org: String = "default"
+        site: String = "default"
+    ): AgentStreamChunk!
+}
+
+type AgentStreamChunk {
+    agent: String!
+    taskId: String!
+    seq: Long!
+    token: String!
+    done: Boolean!
+    error: String
+    topic: String!
+    timestamp: Long!
 }
 
 type TopicUpdate {

@@ -37,8 +37,20 @@ class AgentTools(
     private val subAgents: List<String> = emptyList(),
     private val visibleAgentTags: List<String> = emptyList(),
     private val isolatedAgent: Boolean = false,
-    private val allowedPublishTopics: List<String> = emptyList()
+    private val allowedPublishTopics: List<String> = emptyList(),
+    // Blocks the calling (LLM worker) thread until the sub-agent reply arrives or the timeout elapses.
+    // The executor must create the wait handle in registerPendingTask so a fast reply cannot be missed.
+    private val awaitSubAgentResult: ((taskId: String, targetAgent: String, timeoutSec: Long) -> String)? = null,
+    private val cancelPendingTask: ((taskId: String) -> Unit)? = null,
+    private val getCurrentCallStack: (() -> List<String>)? = null,
+    private val maxCallDepth: Int = DEFAULT_MAX_CALL_DEPTH,
+    // Publishes a task to another agent; defaults to the broker session handler (overridable for tests)
+    private val taskPublisher: ((topic: String, payload: String) -> Boolean)? = null
 ) {
+    companion object {
+        const val DEFAULT_MAX_CALL_DEPTH = 5
+    }
+
     private val logger: Logger = Utils.getLogger(AgentTools::class.java)
 
     private val nativeToolNames: Set<String> by lazy {
@@ -87,6 +99,21 @@ class AgentTools(
             "Error publishing: ${e.message}"
         }
         return logTool("publishMessage", "topic=$topic", result)
+    }
+
+    @Tool("List the running flow engine instances with their input and output topics. " +
+        "To trigger a flow, publish a value to one of its input topics with publishMessage; " +
+        "its results are published to its output topics.")
+    fun listFlows(): String {
+        val result = try {
+            val engine = Monster.getFlowEngineExtension()
+            val flows = engine?.getActiveFlows()?.mapNotNull { engine.getExecutor(it)?.describe() } ?: emptyList()
+            if (flows.isEmpty()) "No flow instances are running on this broker node."
+            else JsonArray(flows).encodePrettily()
+        } catch (e: Exception) {
+            "Error listing flows: ${e.message}"
+        }
+        return logTool("listFlows", "", result)
     }
 
     @Tool("Get the current/last known value for one or more MQTT topics from the last-value store.")
@@ -371,7 +398,7 @@ class AgentTools(
         return logTool("getAgentCard", "agent=$targetAgent", result)
     }
 
-    @Tool("Send a task to another agent. The response will arrive asynchronously at your inbox. Use listAgents() first to discover available agents.")
+    @Tool("Send a task to another agent and wait for its answer, which is returned as the tool result. Independent tasks to different agents can be requested in parallel. Use listAgents() first to discover available agents.")
     fun invokeAgent(
         @P("The name of the target agent to invoke") targetAgent: String,
         @P("The task input/instruction to send to the agent") input: String,
@@ -386,6 +413,13 @@ class AgentTools(
             }
             if (!subAgentsAllowAll && subAgents.isNotEmpty() && targetAgent !in subAgents) {
                 return logTool("invokeAgent", "target=$targetAgent", "Agent '$targetAgent' is not in this agent's sub-agents list. Available: $subAgents")
+            }
+            val callStack = getCurrentCallStack?.invoke() ?: emptyList()
+            if (targetAgent in callStack) {
+                return logTool("invokeAgent", "target=$targetAgent", "Circular invocation detected: Agent '$targetAgent' is already in active call stack: $callStack.")
+            }
+            if (callStack.size >= maxCallDepth) {
+                return logTool("invokeAgent", "target=$targetAgent", "Maximum agent call depth ($maxCallDepth) exceeded. Call stack: $callStack.")
             }
             if (visibleAgentTags.isNotEmpty()) {
                 val store = Monster.getRetainedStore()
@@ -404,14 +438,8 @@ class AgentTools(
                 }
             }
 
-            val sessionHandler = Monster.getSessionHandler()
-                ?: return logTool("invokeAgent", "target=$targetAgent", "No session handler available")
-
             val taskId = Utils.getUuid()
             val replyTo = "a2a/v1/$a2aOrg/$a2aSite/agents/$agentName/inbox/$taskId"
-
-            // Register pending task for timeout monitoring and correlation
-            registerPendingTask?.invoke(taskId, targetAgent, input)
 
             // Publish task to target agent's inbox
             val taskJson = JsonObject()
@@ -419,21 +447,44 @@ class AgentTools(
                 .put("input", input)
                 .put("replyTo", replyTo)
                 .put("callerAgent", agentName)
+                .put("callStack", JsonArray(callStack + agentName))
             val parentTaskId = getCurrentTaskId?.invoke()
             if (parentTaskId != null) taskJson.put("parentTaskId", parentTaskId)
             if (skill != null) taskJson.put("skill", skill)
 
-            val msg = BrokerMessage(agentClientId, "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox/$taskId", taskJson.encode())
-            sessionHandler.publishMessage(msg)
+            // Register the pending task (and its wait handle) before publishing so a fast reply is never lost
+            registerPendingTask?.invoke(taskId, targetAgent, input)
 
+            val targetTopic = "a2a/v1/$a2aOrg/$a2aSite/agents/$targetAgent/inbox/$taskId"
+            val published = try {
+                publishTask(targetTopic, taskJson.encode())
+            } catch (e: Exception) {
+                cancelPendingTask?.invoke(taskId)
+                throw e
+            }
+            if (!published) {
+                cancelPendingTask?.invoke(taskId)
+                return logTool("invokeAgent", "target=$targetAgent", "Error: could not send task to agent '$targetAgent' (broker session handler not available).")
+            }
             logger.fine("Agent $agentName sent task $taskId to agent $targetAgent")
 
-            "Task submitted to agent '$targetAgent' (taskId=$taskId). Response will arrive asynchronously."
+            if (awaitSubAgentResult != null) {
+                awaitSubAgentResult.invoke(taskId, targetAgent, taskTimeoutSeconds)
+            } else {
+                "Task submitted to agent '$targetAgent' (taskId=$taskId). Response will arrive asynchronously."
+            }
         } catch (e: Exception) {
             logger.warning("invokeAgent error: ${e.message}")
             "Error invoking agent '$targetAgent': ${e.message}"
         }
         return logTool("invokeAgent", "target=$targetAgent, input=${input.take(200)}", result)
+    }
+
+    private fun publishTask(topic: String, payload: String): Boolean {
+        taskPublisher?.let { return it(topic, payload) }
+        val sessionHandler = Monster.getSessionHandler() ?: return false
+        sessionHandler.publishMessage(BrokerMessage(agentClientId, topic, payload))
+        return true
     }
 
     @Tool("Get the health status of a specific agent, including uptime metrics and error counts.")

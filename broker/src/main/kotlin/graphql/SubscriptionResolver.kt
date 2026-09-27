@@ -15,6 +15,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
 
+/** Adds Reactive Streams demand, capped at Long.MAX_VALUE (= unbounded) instead of overflowing. */
+private fun addDemand(requested: AtomicLong, n: Long) {
+    if (n <= 0) return
+    requested.getAndUpdate { current -> if (current > Long.MAX_VALUE - n) Long.MAX_VALUE else current + n }
+}
+
 class SubscriptionResolver(
     private val vertx: Vertx,
     private val authContext: GraphQLAuthContext? = null
@@ -22,6 +28,7 @@ class SubscriptionResolver(
     companion object {
         private val logger: Logger = Utils.getLogger(SubscriptionResolver::class.java)
         private const val GRAPHQL_CLIENT_ID = "graphql-subscription"
+        private const val MAX_PENDING_CHUNKS = 1000
     }
 
     fun topicUpdates(): DataFetcher<Publisher<TopicUpdate>> {
@@ -98,6 +105,99 @@ class SubscriptionResolver(
             
             SystemLogsPublisher(vertx, node, levels, loggerFilter, threadFilter, 
                                sourceClassFilter, sourceMethodFilter, messageFilter)
+        }
+    }
+
+    fun agentStream(): DataFetcher<Publisher<AgentStreamChunk>> {
+        return DataFetcher { env ->
+            val userAuthCtx: AuthContext? = env.graphQlContext.get("authContext") ?: AuthContextService.getAuthContext(env)
+            val agentName = env.getArgument<String>("agentName") ?: throw graphql.GraphQLException("agentName is required")
+            val taskId = env.getArgument<String>("taskId")?.takeIf { it.isNotBlank() } ?: "+"
+            val org = env.getArgument<String>("org")?.takeIf { it.isNotBlank() } ?: "default"
+            val site = env.getArgument<String>("site")?.takeIf { it.isNotBlank() } ?: "default"
+            val filter = "a2a/v1/$org/$site/agents/$agentName/stream/$taskId"
+
+            if (authContext != null && !authContext.canSubscribeToTopic(userAuthCtx, filter)) {
+                throw graphql.GraphQLException("Access denied: Not authorized to subscribe to topic filter '$filter'")
+            }
+            AgentStreamPublisher(vertx, filter)
+        }
+    }
+
+    /** Streams the token chunks an agent publishes to its stream/{taskId} topics. */
+    private class AgentStreamPublisher(
+        private val vertx: Vertx,
+        private val topicFilter: String
+    ) : Publisher<AgentStreamChunk> {
+        override fun subscribe(subscriber: Subscriber<in AgentStreamChunk>) {
+            subscriber.onSubscribe(AgentStreamSubscription(vertx, topicFilter, subscriber))
+        }
+    }
+
+    private class AgentStreamSubscription(
+        private val vertx: Vertx,
+        private val topicFilter: String,
+        private val subscriber: Subscriber<in AgentStreamChunk>
+    ) : Subscription {
+        private val cancelled = AtomicBoolean(false)
+        private val requested = AtomicLong(0L)
+        private val pending = ArrayDeque<AgentStreamChunk>()
+        private val subscriptionId = "$GRAPHQL_CLIENT_ID-stream-${Utils.getUuid()}"
+
+        init {
+            val sessionHandler = Monster.getSessionHandler()
+            if (sessionHandler != null) {
+                sessionHandler.registerMessageListener(subscriptionId, listOf(topicFilter)) { message ->
+                    if (!cancelled.get()) handleMessage(message)
+                }
+            } else {
+                subscriber.onError(RuntimeException("SessionHandler not available"))
+            }
+        }
+
+        private fun handleMessage(message: BrokerMessage) {
+            val json = try { JsonObject(String(message.payload, Charsets.UTF_8)) } catch (_: Exception) { return }
+            val chunk = AgentStreamChunk(
+                agent = json.getString("agent") ?: "",
+                taskId = json.getString("taskId") ?: message.topicName.substringAfterLast("/"),
+                seq = json.getLong("seq") ?: 0L,
+                token = json.getString("token") ?: "",
+                done = json.getBoolean("done") ?: false,
+                error = json.getString("error"),
+                topic = message.topicName,
+                timestamp = message.time.toEpochMilli()
+            )
+            vertx.runOnContext {
+                if (cancelled.get()) return@runOnContext
+                synchronized(this) {
+                    if (requested.get() > 0) {
+                        subscriber.onNext(chunk)
+                        requested.decrementAndGet()
+                    } else {
+                        // Client stopped requesting: keep only the newest chunks
+                        if (pending.size >= MAX_PENDING_CHUNKS) pending.removeFirst()
+                        pending.addLast(chunk)
+                    }
+                }
+            }
+        }
+
+        override fun request(n: Long) {
+            if (cancelled.get()) return
+            synchronized(this) {
+                addDemand(requested, n)
+                while (requested.get() > 0 && pending.isNotEmpty()) {
+                    subscriber.onNext(pending.removeFirst())
+                    requested.decrementAndGet()
+                }
+            }
+        }
+
+        override fun cancel() {
+            if (cancelled.compareAndSet(false, true)) {
+                Monster.getSessionHandler()?.unregisterMessageListener(subscriptionId)
+                synchronized(this) { pending.clear() }
+            }
         }
     }
 
@@ -191,7 +291,7 @@ class SubscriptionResolver(
             if (cancelled.get()) return
 
             synchronized(this) {
-                requested.addAndGet(n)
+                addDemand(requested, n)
 
                 // Send pending messages
                 while (requested.get() > 0 && pendingMessages.isNotEmpty()) {
@@ -351,7 +451,7 @@ class SubscriptionResolver(
             if (cancelled.get()) return
 
             synchronized(this) {
-                requested.addAndGet(n)
+                addDemand(requested, n)
 
                 // Send pending bulks
                 while (requested.get() > 0 && pendingBulks.isNotEmpty()) {
@@ -553,7 +653,7 @@ class SubscriptionResolver(
             if (cancelled.get()) return
             
             synchronized(this) {
-                requested.addAndGet(n)
+                addDemand(requested, n)
                 
                 // Send pending logs
                 while (requested.get() > 0 && pendingLogs.isNotEmpty()) {

@@ -207,6 +207,37 @@ class FlowQueries(
                             )
                         ),
                         "icon" to "clock"
+                    ),
+                    mapOf(
+                        "type" to "agent",
+                        "category" to "integration",
+                        "description" to "Send the input as a task to an AI agent and output its reply",
+                        "defaultInputs" to listOf("input"),
+                        "defaultOutputs" to listOf("result", "error"),
+                        "configSchema" to mapOf(
+                            "agentName" to mapOf(
+                                "type" to "string",
+                                "description" to "Name of the target agent",
+                                "required" to true
+                            ),
+                            "org" to mapOf(
+                                "type" to "string",
+                                "description" to "A2A organization of the agent (default: default)"
+                            ),
+                            "site" to mapOf(
+                                "type" to "string",
+                                "description" to "A2A site of the agent (default: default)"
+                            ),
+                            "sessionId" to mapOf(
+                                "type" to "string",
+                                "description" to "Optional conversation id; tasks with the same sessionId share the agent's chat memory"
+                            ),
+                            "timeoutSeconds" to mapOf(
+                                "type" to "number",
+                                "description" to "Seconds to wait for the agent reply before emitting an error (default: 300)"
+                            )
+                        ),
+                        "icon" to "robot"
                     )
                 )
 

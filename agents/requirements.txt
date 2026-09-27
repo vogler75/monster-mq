@@ -6,6 +6,11 @@ paho-mqtt>=2.1.0
 # LangChain core + agent framework
 langchain>=0.3.0
 langchain-core>=0.3.0
+langgraph>=0.4.0
+
+# Durable conversation state (optional, see memory.checkpointer in config.yaml)
+# langgraph-checkpoint-sqlite>=2.0.0              # SQLite
+# langgraph-checkpoint-postgres>=2.0.0 psycopg[binary]>=3.1  # Postgres
 
 # LLM providers (install the ones you need)
 langchain-google-genai>=2.0.0    # Gemini (default)

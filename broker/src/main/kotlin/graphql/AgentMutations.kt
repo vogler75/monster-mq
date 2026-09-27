@@ -6,6 +6,7 @@ import at.rocworks.Utils
 import at.rocworks.agents.AgentConfig
 import at.rocworks.agents.AgentExtension
 import at.rocworks.agents.AgentSkill
+import at.rocworks.agents.AgentTools
 import at.rocworks.agents.ContextHistoryQuery
 import at.rocworks.agents.TriggerType
 import at.rocworks.stores.DeviceConfig
@@ -217,7 +218,19 @@ class AgentMutations(
             subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: false,
             subAgents = parseStringList(input["subAgents"]),
             visibleAgentTags = parseStringList(input["visibleAgentTags"]),
-            isolatedAgent = input["isolatedAgent"] as? Boolean ?: false
+            isolatedAgent = input["isolatedAgent"] as? Boolean ?: false,
+            persistMemory = input["persistMemory"] as? Boolean ?: false,
+            maxCallDepth = (input["maxCallDepth"] as? Number)?.toInt() ?: AgentTools.DEFAULT_MAX_CALL_DEPTH,
+            streamingEnabled = input["streamingEnabled"] as? Boolean ?: false,
+            contextMaxTokens = (input["contextMaxTokens"] as? Number)?.toInt() ?: 0,
+            ragEnabled = input["ragEnabled"] as? Boolean ?: false,
+            ragArchiveGroup = input["ragArchiveGroup"] as? String ?: "Default",
+            ragTopics = parseStringList(input["ragTopics"]),
+            ragLookbackSeconds = (input["ragLookbackSeconds"] as? Number)?.toLong() ?: 86400,
+            ragRefreshSeconds = (input["ragRefreshSeconds"] as? Number)?.toLong() ?: 300,
+            ragMaxResults = (input["ragMaxResults"] as? Number)?.toInt() ?: 5,
+            embeddingProvider = (input["embeddingProvider"] as? String)?.takeIf { it.isNotBlank() },
+            embeddingModel = (input["embeddingModel"] as? String)?.takeIf { it.isNotBlank() }
         )
 
         return DeviceConfig(
@@ -274,7 +287,19 @@ class AgentMutations(
             subAgentsAllowAll = input["subAgentsAllowAll"] as? Boolean ?: existingConfig.subAgentsAllowAll,
             subAgents = if (input.containsKey("subAgents")) parseStringList(input["subAgents"]) else existingConfig.subAgents,
             visibleAgentTags = if (input.containsKey("visibleAgentTags")) parseStringList(input["visibleAgentTags"]) else existingConfig.visibleAgentTags,
-            isolatedAgent = input["isolatedAgent"] as? Boolean ?: existingConfig.isolatedAgent
+            isolatedAgent = input["isolatedAgent"] as? Boolean ?: existingConfig.isolatedAgent,
+            persistMemory = input["persistMemory"] as? Boolean ?: existingConfig.persistMemory,
+            maxCallDepth = (input["maxCallDepth"] as? Number)?.toInt() ?: existingConfig.maxCallDepth,
+            streamingEnabled = input["streamingEnabled"] as? Boolean ?: existingConfig.streamingEnabled,
+            contextMaxTokens = (input["contextMaxTokens"] as? Number)?.toInt() ?: existingConfig.contextMaxTokens,
+            ragEnabled = input["ragEnabled"] as? Boolean ?: existingConfig.ragEnabled,
+            ragArchiveGroup = input["ragArchiveGroup"] as? String ?: existingConfig.ragArchiveGroup,
+            ragTopics = if (input.containsKey("ragTopics")) parseStringList(input["ragTopics"]) else existingConfig.ragTopics,
+            ragLookbackSeconds = (input["ragLookbackSeconds"] as? Number)?.toLong() ?: existingConfig.ragLookbackSeconds,
+            ragRefreshSeconds = (input["ragRefreshSeconds"] as? Number)?.toLong() ?: existingConfig.ragRefreshSeconds,
+            ragMaxResults = (input["ragMaxResults"] as? Number)?.toInt() ?: existingConfig.ragMaxResults,
+            embeddingProvider = if (input.containsKey("embeddingProvider")) (input["embeddingProvider"] as? String)?.takeIf { it.isNotBlank() } else existingConfig.embeddingProvider,
+            embeddingModel = if (input.containsKey("embeddingModel")) (input["embeddingModel"] as? String)?.takeIf { it.isNotBlank() } else existingConfig.embeddingModel
         )
 
         return existing.copy(

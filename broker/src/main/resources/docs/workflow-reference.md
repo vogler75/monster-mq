@@ -558,6 +558,22 @@ Database nodes require the following configuration in the flow visual editor:
 
 The JDBC driver is automatically inferred from the URL.
 
+### Agent Nodes
+
+An agent node sends the value arriving on its `input` port as an A2A task to an AI agent and waits for
+the answer. It has no script.
+
+- **Outputs**: `result` receives the agent's answer (parsed as JSON when the answer is JSON), `error`
+  receives an error message string when the agent fails or does not answer in time.
+- **Configuration**: `agentName` (required), `org` and `site` of the agent (default `default`),
+  `sessionId` (optional; tasks with the same session share the agent's chat memory), `timeoutSeconds`
+  (default 300).
+- A value on an optional `sessionId` input overrides the configured session.
+
+Connect `result` to a function node or an output mapping to process or publish the answer. Agents can
+start flows in the other direction by publishing to a flow's input topic (the agent tool `listFlows`
+lists them).
+
 ---
 
 ## Code Examples

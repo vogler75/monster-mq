@@ -74,6 +74,18 @@ data class TopicUpdate(
     val userProperties: List<UserProperty>? = null
 )
 
+/** One chunk of an agent's token stream (see the agentStream subscription). */
+data class AgentStreamChunk(
+    val agent: String,
+    val taskId: String,
+    val seq: Long,
+    val token: String,
+    val done: Boolean,
+    val error: String?,
+    val topic: String,
+    val timestamp: Long
+)
+
 data class TopicUpdateBulk(
     val updates: List<TopicUpdate>,
     val count: Int,

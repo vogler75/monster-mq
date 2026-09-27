@@ -1,7 +1,18 @@
 package at.rocworks.agents
 
 import at.rocworks.Utils
+import dev.langchain4j.model.anthropic.AnthropicStreamingChatModel
 import dev.langchain4j.model.azure.AzureOpenAiChatModel
+import dev.langchain4j.model.azure.AzureOpenAiEmbeddingModel
+import dev.langchain4j.model.azure.AzureOpenAiStreamingChatModel
+import dev.langchain4j.model.chat.StreamingChatModel
+import dev.langchain4j.model.embedding.EmbeddingModel
+import dev.langchain4j.model.googleai.GoogleAiEmbeddingModel
+import dev.langchain4j.model.googleai.GoogleAiGeminiStreamingChatModel
+import dev.langchain4j.model.ollama.OllamaEmbeddingModel
+import dev.langchain4j.model.ollama.OllamaStreamingChatModel
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel
+import dev.langchain4j.model.openai.OpenAiStreamingChatModel
 import dev.langchain4j.model.chat.ChatModel
 import dev.langchain4j.model.chat.listener.ChatModelListener
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel
@@ -30,21 +41,29 @@ data class ChatModelConfig(
 object LangChain4jFactory {
     private val logger: Logger = Utils.getLogger(LangChain4jFactory::class.java)
 
-    fun createChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
+    private data class ResolvedSettings(
+        val apiKey: String,
+        val model: String,
+        val timeout: Duration?,
+        val setTemperature: Boolean
+    )
+
+    private fun configProviderKey(provider: String) = when (provider.lowercase()) {
+        "gemini" -> "Gemini"
+        "claude" -> "Claude"
+        "openai" -> "OpenAI"
+        "ollama" -> "Ollama"
+        "azure-openai" -> "AzureOpenAI"
+        "llamacpp" -> "LlamaCpp"
+        "openrouter" -> "OpenRouter"
+        else -> provider
+    }
+
+    private fun resolveSettings(config: ChatModelConfig, globalConfig: JsonObject): ResolvedSettings {
         val apiKey = resolveApiKey(config.apiKey, config.provider, globalConfig)
-        val configProviderKey = when (config.provider.lowercase()) {
-            "gemini" -> "Gemini"
-            "claude" -> "Claude"
-            "openai" -> "OpenAI"
-            "ollama" -> "Ollama"
-            "azure-openai" -> "AzureOpenAI"
-            "llamacpp" -> "LlamaCpp"
-            "openrouter" -> "OpenRouter"
-            else -> config.provider
-        }
+        val configProviderKey = configProviderKey(config.provider)
         val model = (config.model ?: resolveDefaultModel(config.provider, globalConfig))?.takeIf { it.isNotBlank() }
             ?: throw IllegalArgumentException("No model configured for AI provider '${config.provider}'. A model must be specified in the agent/provider configuration or in GenAI.Providers.$configProviderKey.Model")
-        logger.fine("Creating LangChain4j ${config.provider} model: $model")
 
         val globalProviderTimeout = globalConfig
             .getJsonObject("GenAI", JsonObject())
@@ -53,7 +72,21 @@ object LangChain4jFactory {
             .getInteger("TimeoutSeconds")?.toLong()
         val effectiveTimeout = listOfNotNull(config.timeoutSeconds, globalProviderTimeout).maxOrNull()
 
-        val shouldSetTemperature = config.temperature > 0.0 && !config.enableThinking
+        return ResolvedSettings(
+            apiKey = apiKey,
+            model = model,
+            timeout = effectiveTimeout?.let { Duration.ofSeconds(it) },
+            setTemperature = config.temperature > 0.0 && !config.enableThinking
+        )
+    }
+
+    fun createChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
+        val settings = resolveSettings(config, globalConfig)
+        val apiKey = settings.apiKey
+        val model = settings.model
+        val shouldSetTemperature = settings.setTemperature
+        val effectiveTimeout = settings.timeout?.seconds
+        logger.fine("Creating LangChain4j ${config.provider} model: $model")
 
         return when (config.provider.lowercase()) {
             "gemini" -> GoogleAiGeminiChatModel.builder()
@@ -141,21 +174,7 @@ object LangChain4jFactory {
     }
 
     fun createChatModel(config: AgentConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): ChatModel {
-        return createChatModel(
-            ChatModelConfig(
-                provider = config.provider,
-                model = config.model,
-                apiKey = config.apiKey,
-                endpoint = config.endpoint,
-                serviceVersion = config.serviceVersion,
-                maxTokens = config.maxTokens,
-                temperature = config.temperature,
-                enableThinking = config.enableThinking,
-                timeoutSeconds = config.taskTimeoutSeconds
-            ),
-            globalConfig,
-            listeners
-        )
+        return createChatModel(toChatModelConfig(config), globalConfig, listeners)
     }
 
     /**
@@ -169,21 +188,150 @@ object LangChain4jFactory {
         globalConfig: JsonObject,
         listeners: List<ChatModelListener> = emptyList()
     ): ChatModel {
-        return createChatModel(
-            ChatModelConfig(
-                provider = providerConfig.type,
-                model = agentConfig.model ?: providerConfig.model,
-                apiKey = if (!providerConfig.baseUrl.isNullOrBlank()) providerConfig.baseUrl else providerConfig.apiKey,
-                endpoint = providerConfig.endpoint,
-                serviceVersion = providerConfig.serviceVersion,
-                maxTokens = agentConfig.maxTokens ?: providerConfig.maxTokens,
+        return createChatModel(toChatModelConfig(agentConfig, providerConfig), globalConfig, listeners)
+    }
+
+    /**
+     * Builds the effective model configuration of an agent, optionally backed by a stored GenAI provider.
+     */
+    fun toChatModelConfig(agentConfig: AgentConfig, providerConfig: GenAiProviderConfig? = null): ChatModelConfig {
+        if (providerConfig == null) {
+            return ChatModelConfig(
+                provider = agentConfig.provider,
+                model = agentConfig.model,
+                apiKey = agentConfig.apiKey,
+                endpoint = agentConfig.endpoint,
+                serviceVersion = agentConfig.serviceVersion,
+                maxTokens = agentConfig.maxTokens,
                 temperature = agentConfig.temperature,
                 enableThinking = agentConfig.enableThinking,
                 timeoutSeconds = agentConfig.taskTimeoutSeconds
-            ),
-            globalConfig,
-            listeners
+            )
+        }
+        return ChatModelConfig(
+            provider = providerConfig.type,
+            model = agentConfig.model ?: providerConfig.model,
+            apiKey = if (!providerConfig.baseUrl.isNullOrBlank()) providerConfig.baseUrl else providerConfig.apiKey,
+            endpoint = providerConfig.endpoint,
+            serviceVersion = providerConfig.serviceVersion,
+            maxTokens = agentConfig.maxTokens ?: providerConfig.maxTokens,
+            temperature = agentConfig.temperature,
+            enableThinking = agentConfig.enableThinking,
+            timeoutSeconds = agentConfig.taskTimeoutSeconds
         )
+    }
+
+    /**
+     * Creates a token-streaming chat model. Supports the same providers as [createChatModel].
+     */
+    fun createStreamingChatModel(config: ChatModelConfig, globalConfig: JsonObject, listeners: List<ChatModelListener> = emptyList()): StreamingChatModel {
+        val settings = resolveSettings(config, globalConfig)
+        val apiKey = settings.apiKey
+        val model = settings.model
+        val timeout = settings.timeout
+        logger.fine("Creating LangChain4j ${config.provider} streaming model: $model")
+
+        return when (config.provider.lowercase()) {
+            "gemini" -> GoogleAiGeminiStreamingChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(model)
+                .apply { if (settings.setTemperature) temperature(config.temperature) }
+                .apply { config.maxTokens?.let { maxOutputTokens(it) } }
+                .sendThinking(config.enableThinking)
+                .returnThinking(config.enableThinking)
+                .apply { timeout?.let { timeout(it) } }
+                .listeners(listeners)
+                .build()
+
+            "claude" -> AnthropicStreamingChatModel.builder()
+                .apiKey(apiKey)
+                .modelName(model)
+                .maxTokens(config.maxTokens ?: 4096)
+                .apply { if (settings.setTemperature) temperature(config.temperature) }
+                .apply { timeout?.let { timeout(it) } }
+                .listeners(listeners)
+                .build()
+
+            "openai", "llamacpp", "openrouter" -> {
+                val baseUrl = when (config.provider.lowercase()) {
+                    "llamacpp" -> config.endpoint ?: "http://localhost:8080/v1"
+                    "openrouter" -> config.endpoint?.takeIf { it.isNotBlank() } ?: "https://openrouter.ai/api/v1"
+                    else -> config.endpoint
+                }
+                OpenAiStreamingChatModel.builder()
+                    .apiKey(apiKey.takeIf { it.isNotBlank() } ?: "dummy-key")
+                    .modelName(model)
+                    .apply { baseUrl?.let { baseUrl(it) } }
+                    .apply { if (settings.setTemperature) temperature(config.temperature) }
+                    .apply { config.maxTokens?.let { maxTokens(it) } }
+                    .apply { timeout?.let { timeout(it) } }
+                    .listeners(listeners)
+                    .build()
+            }
+
+            "ollama" -> OllamaStreamingChatModel.builder()
+                .baseUrl(apiKey)
+                .modelName(model)
+                .apply { if (settings.setTemperature) temperature(config.temperature) }
+                .apply { timeout?.let { timeout(it) } }
+                .listeners(listeners)
+                .build()
+
+            "azure-openai" -> AzureOpenAiStreamingChatModel.builder()
+                .endpoint(resolveEndpoint(config.endpoint, globalConfig))
+                .apiKey(apiKey)
+                .deploymentName(model)
+                .apply { resolveServiceVersion(config.serviceVersion, globalConfig)?.let { serviceVersion(it) } }
+                .apply { if (settings.setTemperature) temperature(config.temperature) }
+                .apply { config.maxTokens?.let { maxTokens(it) } }
+                .apply { timeout?.let { timeout(it) } }
+                .listeners(listeners)
+                .build()
+
+            else -> throw IllegalArgumentException("Unknown AI provider: ${config.provider}. Supported: gemini, claude, openai, ollama, azure-openai, llamacpp, openrouter")
+        }
+    }
+
+    /**
+     * Creates an embedding model for semantic search. Claude has no embedding API, so a
+     * separate embedding provider (gemini, openai, ollama, azure-openai) must be used with it.
+     */
+    fun createEmbeddingModel(
+        provider: String,
+        model: String?,
+        apiKey: String?,
+        endpoint: String?,
+        serviceVersion: String?,
+        globalConfig: JsonObject
+    ): EmbeddingModel {
+        val key = resolveApiKey(apiKey, provider, globalConfig)
+        val timeout = Duration.ofSeconds(60)
+        return when (provider.lowercase()) {
+            "gemini" -> GoogleAiEmbeddingModel.builder()
+                .apiKey(key)
+                .modelName(model ?: "gemini-embedding-001")
+                .timeout(timeout)
+                .build()
+            "openai", "llamacpp", "openrouter" -> OpenAiEmbeddingModel.builder()
+                .apiKey(key)
+                .modelName(model ?: "text-embedding-3-small")
+                .apply { endpoint?.let { baseUrl(it) } }
+                .timeout(timeout)
+                .build()
+            "ollama" -> OllamaEmbeddingModel.builder()
+                .baseUrl(key)
+                .modelName(model ?: "nomic-embed-text")
+                .timeout(timeout)
+                .build()
+            "azure-openai" -> AzureOpenAiEmbeddingModel.builder()
+                .endpoint(resolveEndpoint(endpoint, globalConfig))
+                .apiKey(key)
+                .deploymentName(model ?: "text-embedding-3-small")
+                .apply { resolveServiceVersion(serviceVersion, globalConfig)?.let { serviceVersion(it) } }
+                .timeout(timeout)
+                .build()
+            else -> throw IllegalArgumentException("Provider '$provider' does not support embeddings. Set embeddingProvider to gemini, openai, ollama or azure-openai")
+        }
     }
 
     fun resolveApiKey(agentApiKey: String?, provider: String, globalConfig: JsonObject): String {

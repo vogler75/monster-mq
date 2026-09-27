@@ -24,7 +24,7 @@ data class AgentConfig(
     val temperature: Double = 0.7,
     val maxToolIterations: Int = 10,
     val memoryWindowSize: Int = 40,
-    val stateEnabled: Boolean = true,
+    val stateEnabled: Boolean = true,            // keep conversation memory across tasks (false = fresh memory per task)
     val mcpServers: List<String> = emptyList(),
     val useMonsterMqMcp: Boolean = false,
     val defaultArchiveGroup: String = "Default",
@@ -42,7 +42,19 @@ data class AgentConfig(
     val serviceVersion: String? = null,  // For Azure OpenAI: API version (e.g. "2024-02-01")
     val providerName: String? = null,  // references a stored GenAiProvider by name
     val timezone: String? = null,      // null = system default, e.g. "UTC", "Europe/Vienna"
-    val allowedPublishTopics: List<String> = emptyList()
+    val allowedPublishTopics: List<String> = emptyList(),
+    val persistMemory: Boolean = false,          // persist chat memory in the configured database (survives restarts)
+    val maxCallDepth: Int = AgentTools.DEFAULT_MAX_CALL_DEPTH,  // max nesting depth of agent-to-agent invocations
+    val streamingEnabled: Boolean = false,       // stream tokens to a2a/.../agents/{name}/stream/{taskId}
+    val contextMaxTokens: Int = 0,               // token budget for injected context data (0 = unlimited)
+    val ragEnabled: Boolean = false,             // semantic search over archived topic history
+    val ragArchiveGroup: String = "Default",     // archive group whose history is indexed
+    val ragTopics: List<String> = emptyList(),   // topic filters to index (matched against the last-value store)
+    val ragLookbackSeconds: Long = 86400,        // how much archive history is indexed
+    val ragRefreshSeconds: Long = 300,           // re-index interval
+    val ragMaxResults: Int = 5,                  // default number of snippets returned by semanticSearch
+    val embeddingProvider: String? = null,       // gemini, openai, ollama, azure-openai (null = agent provider)
+    val embeddingModel: String? = null
 ) {
     companion object {
         fun fromJsonObject(json: JsonObject): AgentConfig {
@@ -90,7 +102,19 @@ data class AgentConfig(
                 serviceVersion = json.getString("serviceVersion"),
                 providerName = json.getString("providerName"),
                 timezone = json.getString("timezone"),
-                allowedPublishTopics = json.getJsonArray("allowedPublishTopics", JsonArray()).filterIsInstance<String>().toList()
+                allowedPublishTopics = json.getJsonArray("allowedPublishTopics", JsonArray()).filterIsInstance<String>().toList(),
+                persistMemory = json.getBoolean("persistMemory", false),
+                maxCallDepth = json.getInteger("maxCallDepth", AgentTools.DEFAULT_MAX_CALL_DEPTH),
+                streamingEnabled = json.getBoolean("streamingEnabled", false),
+                contextMaxTokens = json.getInteger("contextMaxTokens", 0),
+                ragEnabled = json.getBoolean("ragEnabled", false),
+                ragArchiveGroup = json.getString("ragArchiveGroup", "Default"),
+                ragTopics = json.getJsonArray("ragTopics", JsonArray()).filterIsInstance<String>().toList(),
+                ragLookbackSeconds = json.getLong("ragLookbackSeconds", 86400),
+                ragRefreshSeconds = json.getLong("ragRefreshSeconds", 300),
+                ragMaxResults = json.getInteger("ragMaxResults", 5),
+                embeddingProvider = json.getString("embeddingProvider"),
+                embeddingModel = json.getString("embeddingModel")
             )
         }
     }
@@ -138,6 +162,18 @@ data class AgentConfig(
             .put("providerName", providerName)
             .put("timezone", timezone)
             .put("allowedPublishTopics", JsonArray(allowedPublishTopics))
+            .put("persistMemory", persistMemory)
+            .put("maxCallDepth", maxCallDepth)
+            .put("streamingEnabled", streamingEnabled)
+            .put("contextMaxTokens", contextMaxTokens)
+            .put("ragEnabled", ragEnabled)
+            .put("ragArchiveGroup", ragArchiveGroup)
+            .put("ragTopics", JsonArray(ragTopics))
+            .put("ragLookbackSeconds", ragLookbackSeconds)
+            .put("ragRefreshSeconds", ragRefreshSeconds)
+            .put("ragMaxResults", ragMaxResults)
+            .put("embeddingProvider", embeddingProvider)
+            .put("embeddingModel", embeddingModel)
     }
 }
 

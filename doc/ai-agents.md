@@ -43,13 +43,26 @@ Agents are configured via the GraphQL API or dashboard. Key fields and runtime d
 | `inputTopics` | List | `[]` | MQTT topics that trigger the agent |
 | `cronPrompt` | String | null | Custom prompt for scheduled executions (CRON trigger) |
 | `outputTopics` | List | `[]` | Where responses are published (default: `a2a/v1/{org}/{site}/agents/{name}/response`) |
-| `stateEnabled` | Boolean | `true` | Enable persistent state |
+| `stateEnabled` | Boolean | `true` | Keep the conversation memory across triggers and tasks. `false` starts every task with an empty memory (tasks with a `sessionId` always keep theirs) |
+| `persistMemory` | Boolean | `false` | Store chat memory in the configured database (`DefaultStoreType`: SQLite, Postgres, MongoDB) so it survives restarts; otherwise it is kept in memory |
+| `streamingEnabled` | Boolean | `false` | Stream the answer token by token (see [Streaming](#streaming)) |
+| `maxCallDepth` | Int | `5` | Max nesting depth of agent-to-agent invocations; deeper calls and call cycles are rejected |
+| `allowedPublishTopics` | List | `[]` | Topic filters `publishMessage` may publish to (empty = all) |
 | `mcpServers` | List | `[]` | External MCP server names to connect |
 | `useMonsterMqMcp` | Boolean | `false` | Connect to MonsterMQ's built-in MCP server |
 | `defaultArchiveGroup` | String | `"Default"` | Archive group for built-in data tools |
 | `contextLastvalTopics` | Map | `{}` | Last-value topics injected as context (see [Context Data](#context-data)) |
 | `contextRetainedTopics` | List | `[]` | Retained topics injected as context |
 | `contextHistoryQueries` | List | `[]` | Historical data queries injected as context |
+| `contextMaxTokens` | Int | `0` | Token budget for the injected context (0 = unlimited, see [Context Budget](#context-budget)) |
+| `ragEnabled` | Boolean | `false` | Enable semantic search over archived topics (see [Semantic Search](#semantic-search-rag)) |
+| `ragArchiveGroup` | String | `"Default"` | Archive group whose topics are indexed |
+| `ragTopics` | List | `[]` | Topic filters to index (empty = `#`) |
+| `ragLookbackSeconds` | Long | `86400` | Archived history window that is indexed |
+| `ragRefreshSeconds` | Long | `300` | Re-index interval (min. 10 s) |
+| `ragMaxResults` | Int | `5` | Default number of results of `semanticSearch` |
+| `embeddingProvider` | String | agent provider | Embedding provider: `gemini`, `openai`, `ollama`, `azure-openai` |
+| `embeddingModel` | String | provider default | Embedding model ID |
 | `taskTimeoutSeconds` | Long | `60` | Timeout (seconds) for LLM calls and sub-agent invocations. Overrides `GenAI.Providers.Ollama.TimeoutSeconds` when larger. |
 | `subAgents` | List | `[]` | Restrict which agents this orchestrator can invoke (empty = all) |
 | `skills` | List | `[]` | Declared agent skills for A2A discovery |
@@ -144,6 +157,18 @@ Notes are stored as retained MQTT messages under `a2a/v1/{org}/{site}/agents/{na
 | `invokeAgent` | `targetAgent`, `input`, `skill?`, `timeoutSeconds?` | Invoke another agent and wait for its response |
 | `getAgentHealth` | `agentName` | Get health status, uptime metrics, and error counts |
 
+### Flows
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `listFlows` | - | List running flow instances on this node with their input and output topics. The agent triggers a flow by publishing to one of its input topics with `publishMessage` |
+
+### Semantic Search
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `semanticSearch` | `query`, `maxResults?` | Only with `ragEnabled`. Finds indexed topic values and history by meaning |
+
 ## Context Data
 
 Context data is fetched before every LLM invocation and prepended to the user message. This gives the agent situational awareness without needing tool calls.
@@ -200,7 +225,74 @@ The injected context looks like:
 --- End Context Data ---
 ```
 
-Context is capped at 500 lines.
+Without a budget, context is capped at 500 lines.
+
+### Context Budget
+
+`contextMaxTokens` limits the size of the injected context (tokens are estimated as characters / 4).
+When the context is larger, sections are truncated instead of being dropped: small sections are kept
+completely and the remaining budget is shared evenly between the larger ones. History sections keep
+their header and the newest rows, last-value sections keep their first lines, and every cut is marked
+with `[... N lines truncated to fit context budget ...]`. The context is added to the current request
+only and is never stored in the chat memory.
+
+## Semantic Search (RAG)
+
+With `ragEnabled`, the agent builds an embedding index of its archive group and gets the
+`semanticSearch` tool. The index contains the current value of every topic in the archive group's
+last-value store that matches `ragTopics`, and the archived history of these topics within
+`ragLookbackSeconds` in chunks of 20 rows (at most 2000 documents). The index is refreshed every
+`ragRefreshSeconds`; only new or changed documents are embedded again.
+
+The embedding model is created from `embeddingProvider`/`embeddingModel` (default: the agent's
+provider). API key, endpoint and API version of the agent's provider configuration are reused when the
+embedding provider is the same.
+
+The vector store is in-memory and rebuilt when the agent starts. Persistent vector stores (pgvector,
+SQLite) are not implemented yet.
+
+## Conversation Memory
+
+Each agent keeps chat memory per session with a window of `memoryWindowSize` messages; the window
+never cuts a tool call apart from its result. Messages on input topics, cron runs and the dashboard
+use the `default` session. A2A tasks with a `sessionId` use that session, so a caller can hold a
+multi-turn conversation; tasks without one share the `default` session when `stateEnabled` is true and
+start fresh otherwise. With `persistMemory` the sessions are stored in the broker database.
+
+## Streaming
+
+With `streamingEnabled` (and a provider that supports streaming: Gemini, OpenAI, Azure OpenAI, Claude,
+Ollama) the answer is published token by token while it is generated:
+
+```
+a2a/v1/{org}/{site}/agents/{name}/stream/{taskId}
+{"taskId": "...", "agent": "...", "seq": 12, "token": "Hel", "done": false}
+```
+
+The final chunk has `"done": true` (and `"error"` if the call failed). Runs without a task ID use the
+transaction ID. The final answer is still published to the reply and output topics as usual.
+
+The dashboard's Agent Monitor shows streamed answers live. GraphQL clients can subscribe with:
+
+```graphql
+subscription {
+  agentStream(agentName: "temp-monitor", taskId: "+") { taskId seq token done error timestamp }
+}
+```
+
+## Flow Engine Integration
+
+- **Flows invoke agents**: the flow node type `agent` sends its `input` as an A2A task to the configured
+  agent and emits the answer on its `result` output (JSON answers are parsed), failures and timeouts on
+  `error`. Config: `agentName`, `org`, `site`, `sessionId`, `timeoutSeconds` (default 300); a
+  `sessionId` input overrides the configured session.
+- **Agents trigger flows**: `listFlows` shows the input topics of running flows, and the agent triggers
+  a flow by publishing to one of them.
+
+LangGraph4j was evaluated for graph-based workflows inside the broker. Because the flow engine already
+provides graph orchestration and can now call agents as nodes, LangGraph4j is not used; custom graphs,
+human-in-the-loop approvals and durable checkpoints are available in the Python agent SDK
+(`agents/`, see its README).
 
 ## Agent-to-Agent Communication (A2A)
 
@@ -212,8 +304,9 @@ Agents communicate using the [HiveMQ A2A over MQTT](https://www.hivemq.com/a2a-m
 a2a/v1/{org}/{site}/
 ├── discovery/{agentId}                    # (retained) Agent Card
 └── agents/{agentId}/
-    ├── inbox                              # Incoming task requests
+    ├── inbox[/{taskId}]                   # Incoming task requests
     ├── status/{taskId}                    # Task state and results
+    ├── stream/{taskId}                    # Streamed answer tokens (streamingEnabled)
     └── cancel/{taskId}                    # Task cancellation (reserved)
 ```
 
@@ -255,6 +348,9 @@ a2a/v1/{org}/{site}/agents/{targetAgent}/inbox
 | `replyTo` | No | MQTT topic for the response (default: agent's status topic) |
 | `callerAgent` | No | Name of the calling agent (default: `"unknown"`) |
 | `skill` | No | Specific skill to invoke on the target agent |
+| `sessionId` | No | Conversation ID; tasks with the same `sessionId` share the agent's chat memory |
+| `callStack` | No | Agents already in the call chain (set by `invokeAgent`, used for cycle and depth checks) |
+| `parentTaskId` | No | Task ID of the calling task |
 
 **Plain-text payloads** are also accepted: if the message is not valid JSON, the entire payload is treated as the task input. The agent publishes its response to its configured output topics.
 
@@ -356,8 +452,9 @@ a2a/v1/{org}/{site}/
 ├── discovery/
 │   └── {agentId}                     # (retained) Agent Card with capabilities
 └── agents/{agentId}/
-    ├── inbox                         # Incoming task requests
+    ├── inbox[/{taskId}]              # Incoming task requests (replies to sub-agent calls arrive on inbox/{taskId})
     ├── status/{taskId}               # Task state/result updates
+    ├── stream/{taskId}               # Streamed answer tokens (streamingEnabled)
     ├── cancel/{taskId}               # Task cancellation (reserved)
     ├── health                        # (retained) Health status + metrics
     ├── response                      # Default output topic

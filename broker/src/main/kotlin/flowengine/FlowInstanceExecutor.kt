@@ -48,6 +48,11 @@ class FlowInstanceExecutor(
     private val topicToNodeInputs: Map<String, List<String>> // "mqtt/topic" -> ["nodeId.inputName", ...]
     private val textInputMappings: Map<String, String> // "nodeId.inputName" -> "text value"
 
+    // Agent node tasks waiting for a reply: taskId -> (nodeId, timeout timer id)
+    private data class PendingAgentTask(val nodeId: String, val agentName: String, val timerId: Long)
+    private val pendingAgentTasks = ConcurrentHashMap<String, PendingAgentTask>()
+    private val agentReplyPrefix = "flows/${instanceConfig.name}/agent-reply/"
+
     init {
         // Organize input mappings by topic and text
         val topicMap = mutableMapOf<String, String>()
@@ -104,6 +109,8 @@ class FlowInstanceExecutor(
                     vertx.cancelTimer(timerId)
                 }
             }
+            pendingAgentTasks.values.forEach { vertx.cancelTimer(it.timerId) }
+            pendingAgentTasks.clear()
 
             // Unsubscribe from MQTT topics
             unsubscribeFromTopics()
@@ -163,7 +170,7 @@ class FlowInstanceExecutor(
         }
 
         // Subscribe to all topics via SessionHandler
-        val topics = topicToNodeInputs.keys
+        val topics = subscriptionTopics()
         topics.forEach { topic ->
             logger.fine { "[${instanceConfig.name}]   Subscribing to MQTT topic: $topic" }
             sessionHandler.subscribeInternalClient(
@@ -186,7 +193,7 @@ class FlowInstanceExecutor(
         }
 
         val clientId = "flow-${instanceConfig.name}"
-        val topics = topicToNodeInputs.keys
+        val topics = subscriptionTopics()
         topics.forEach { topic ->
             logger.fine { "[${instanceConfig.name}]   Unsubscribing from MQTT topic: $topic" }
             sessionHandler.unsubscribeInternalClient(
@@ -198,6 +205,12 @@ class FlowInstanceExecutor(
         // Unregister the client when fully done
         sessionHandler.unregisterInternalClient(clientId)
     }
+
+    private fun hasAgentNodes() = flowClass.nodes.any { it.type == "agent" }
+
+    /** Input topics plus the reply topic of agent nodes */
+    private fun subscriptionTopics(): Set<String> =
+        if (hasAgentNodes()) topicToNodeInputs.keys + "$agentReplyPrefix+" else topicToNodeInputs.keys
 
     /**
      * Get list of topics this flow should subscribe to
@@ -212,6 +225,11 @@ class FlowInstanceExecutor(
     private fun handleMessage(message: BrokerMessage) {
         try {
             val topic = message.topicName
+
+            if (topic.startsWith(agentReplyPrefix)) {
+                handleAgentReply(topic.removePrefix(agentReplyPrefix), message)
+                return
+            }
 
             // Store the topic value
             val topicValue = TopicValue(
@@ -285,6 +303,10 @@ class FlowInstanceExecutor(
                 "timer" -> {
                     logger.fine { "[${instanceConfig.name}]   Setting up timer node..." }
                     setupTimerNode(node, nodeState)
+                }
+                "agent" -> {
+                    logger.fine { "[${instanceConfig.name}]   Executing agent node..." }
+                    executeAgentNode(node, inputs)
                 }
                 else -> {
                     logger.warning("[${instanceConfig.name}] Unsupported node type: ${node.type}")
@@ -661,6 +683,86 @@ class FlowInstanceExecutor(
     }
 
     /**
+     * Execute an agent node: sends the input as an A2A task to the agent's inbox. The reply arrives
+     * asynchronously on this instance's reply topic and is emitted on the "result" or "error" port.
+     */
+    private fun executeAgentNode(node: FlowNode, inputs: Map<String, FlowScriptEngine.InputValue>) {
+        val agentName = node.config.getString("agentName", "").trim()
+        if (agentName.isEmpty()) {
+            handleNodeOutput(node.id, "error", "No agentName configured")
+            return
+        }
+        val org = node.config.getString("org")?.takeIf { it.isNotBlank() } ?: "default"
+        val site = node.config.getString("site")?.takeIf { it.isNotBlank() } ?: "default"
+        val timeoutSeconds = (node.config.getValue("timeoutSeconds") as? Number)?.toLong()?.takeIf { it > 0 } ?: 300L
+
+        // Use the "input" input if present, otherwise the first available input
+        val inputValue = normalizeScriptValue((inputs["input"] ?: inputs.values.firstOrNull())?.value)
+        val input: Any = when (inputValue) {
+            null -> ""
+            is JsonObject, is JsonArray, is String -> inputValue
+            is Map<*, *> -> JsonObject(inputValue.entries.associate { it.key.toString() to it.value })
+            is List<*> -> JsonArray(inputValue)
+            else -> inputValue.toString()
+        }
+
+        val taskId = Utils.getUuid()
+        val task = JsonObject()
+            .put("taskId", taskId)
+            .put("input", input)
+            .put("replyTo", "$agentReplyPrefix$taskId")
+            .put("callerAgent", "flow:${instanceConfig.name}")
+        val sessionId = inputs["sessionId"]?.value?.toString() ?: node.config.getString("sessionId")
+        if (!sessionId.isNullOrBlank()) task.put("sessionId", sessionId)
+
+        val timerId = vertx.setTimer(timeoutSeconds * 1000) {
+            if (pendingAgentTasks.remove(taskId) != null) {
+                errorCount++
+                lastError = "Agent '$agentName' did not reply within $timeoutSeconds s"
+                handleNodeOutput(node.id, "error", lastError)
+            }
+        }
+        pendingAgentTasks[taskId] = PendingAgentTask(node.id, agentName, timerId)
+
+        val topic = "a2a/v1/$org/$site/agents/$agentName/inbox/$taskId"
+        if (!publishToMqtt(topic, task)) {
+            pendingAgentTasks.remove(taskId)
+            vertx.cancelTimer(timerId)
+            handleNodeOutput(node.id, "error", "Could not send task to agent '$agentName'")
+        } else {
+            logger.fine { "[${instanceConfig.name}] Sent task $taskId to agent $agentName" }
+        }
+    }
+
+    private fun handleAgentReply(taskId: String, message: BrokerMessage) {
+        val pending = pendingAgentTasks.remove(taskId) ?: return  // unknown or timed out
+        vertx.cancelTimer(pending.timerId)
+        val reply = try { JsonObject(String(message.payload, Charsets.UTF_8)) } catch (_: Exception) { null }
+        if (reply == null) {
+            handleNodeOutput(pending.nodeId, "result", String(message.payload, Charsets.UTF_8))
+            return
+        }
+        if (reply.getString("status") == "completed") {
+            val result = reply.getValue("result")
+            // Pass structured agent answers on as JSON when possible
+            val value = (result as? String)?.trim()?.let { text ->
+                try {
+                    when {
+                        text.startsWith("{") -> JsonObject(text)
+                        text.startsWith("[") -> JsonArray(text)
+                        else -> text
+                    }
+                } catch (_: Exception) { text }
+            } ?: result
+            handleNodeOutput(pending.nodeId, "result", value)
+        } else {
+            errorCount++
+            lastError = reply.getString("error") ?: "Agent '${pending.agentName}' task ${reply.getString("status")}"
+            handleNodeOutput(pending.nodeId, "error", lastError)
+        }
+    }
+
+    /**
      * Handle output from a node
      */
     private fun handleNodeOutput(nodeId: String, portName: String, value: Any?) {
@@ -752,6 +854,16 @@ class FlowInstanceExecutor(
             return false
         }
     }
+
+    /**
+     * Describes how this flow instance can be triggered and where it publishes results (used by agent tools)
+     */
+    fun describe(): JsonObject = JsonObject()
+        .put("name", instanceConfig.name)
+        .put("flowClass", flowClassConfig.name)
+        .put("description", flowClass.description ?: "")
+        .put("inputTopics", JsonObject(topicInputMappings.entries.associate { it.key to it.value }))
+        .put("outputTopics", JsonObject(flowInstance.outputMappings.associate { it.nodeOutput to it.topic }))
 
     /**
      * Get current status of this flow instance

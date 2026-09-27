@@ -22,9 +22,12 @@ MQTT input mappings subscribe to topic filters. An incoming message updates the
 input cache and triggers connected processing. Node outputs propagate to connected
 input ports; configured output mappings publish them to MQTT.
 
-The executor dispatches function scripts, timer nodes, and database nodes. Timer
-nodes initialize when the instance starts and cancel their timers when it stops.
-Database nodes use the shared JDBC manager. Query `flowNodeTypes` for the node
+The executor dispatches function scripts, timer nodes, database nodes, and agent
+nodes. Timer nodes initialize when the instance starts and cancel their timers when
+it stops. Database nodes use the shared JDBC manager. Agent nodes publish their
+input as an A2A task to `a2a/v1/{org}/{site}/agents/{agentName}/inbox/{taskId}` with
+`replyTo` set to `flows/{instance}/agent-reply/{taskId}`, and emit the answer on
+`result` or a failure/timeout on `error` (see [AI Agents](ai-agents.md#flow-engine-integration)). Query `flowNodeTypes` for the node
 metadata exposed by this broker; do not assume a generic Node-RED palette.
 
 Function scripts run through GraalVM's JavaScript context with `msg`, `inputs`,
