@@ -254,6 +254,7 @@ The current [GraphQL WebSocket route](graphql.md#subscriptions),
 [MCP tools](mcp.md#authentication-and-access-scope), and
 [Zenoh current-value queries](zenoh.md#current-value-queries) have the specific
 limits documented in those guides. The [OPC UA server](opcua-server.md#security-block-security)
-does not wire a MonsterMQ username identity validator. Restrict access to those
+authenticates username/password logins against MonsterMQ users but does not apply
+topic ACLs to OPC UA reads and writes. Restrict access to those
 interfaces according to their actual enforcement, rather than assuming the MQTT
 client authorization path applies to every protocol.

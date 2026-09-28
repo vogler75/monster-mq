@@ -597,11 +597,14 @@ type OpcUaServerInfo {
 
 # Simplified security information for OPC UA servers
 type OpcUaServerSecurityInfo {
-    keystorePath: String!
-    certificateAlias: String!
     securityPolicies: [String!]!
     allowAnonymous: Boolean!
-    requireAuthentication: Boolean!
+    allowUnencrypted: Boolean!
+    certificateDir: String!
+    createSelfSigned: Boolean!
+    keystorePath: String! @deprecated(reason: "Derived from certificateDir: {certificateDir}/monstermq-opcua-server-{name}.pfx")
+    certificateAlias: String! @deprecated(reason: "Always 'opcua-server'")
+    requireAuthentication: Boolean! @deprecated(reason: "Use allowAnonymous; username logins are enabled with user management")
 }
 
 # Result type for OPC UA Server operations
@@ -668,19 +671,23 @@ input OpcUaServerAddressInput {
 }
 
 # Input for OPC UA server security configuration
+# Fields that are not provided keep their current value (on create: the default in brackets)
 input OpcUaServerSecurityInput {
-    # Path to keystore file (default: reuse MQTT server keystore)
-    keystorePath: String = "server-keystore.jks"
-    # Keystore password
-    keystorePassword: String = "password"
-    # Certificate alias in keystore
-    certificateAlias: String = "server-cert"
-    # Supported security policies
-    securityPolicies: [String!] = ["None", "Basic256Sha256"]
-    # Allow anonymous access
-    allowAnonymous: Boolean = true
-    # Require user authentication
-    requireAuthentication: Boolean = false
+    # Password of the server certificate keystore; empty keeps the current password ["password"]
+    keystorePassword: String
+    # Supported security policies: None, Basic256Sha256, Basic128Rsa15 [["None", "Basic256Sha256"]]
+    securityPolicies: [String!]
+    # Allow anonymous logins; username/password logins use MonsterMQ user management when enabled [true]
+    allowAnonymous: Boolean
+    # Allow unencrypted connections on the "None" security policy [true]
+    allowUnencrypted: Boolean
+    # Directory for the server certificate (monstermq-opcua-server-{name}.pfx) and trusted client certificates ["./security"]
+    certificateDir: String
+    # Create a self-signed server certificate if none exists [true]
+    createSelfSigned: Boolean
+    keystorePath: String @deprecated(reason: "Ignored, the certificate is stored in certificateDir")
+    certificateAlias: String @deprecated(reason: "Ignored, the alias is always 'opcua-server'")
+    requireAuthentication: Boolean @deprecated(reason: "Use allowAnonymous: false")
 }
 
 # Simplified input for creating OPC UA servers (matches web form)
@@ -707,6 +714,8 @@ input OpcUaServerConfigInput {
     updateInterval: Long = 1000
     # Buffer size for value updates
     bufferSize: Int = 1000
+    # Security configuration (defaults are used for fields not provided)
+    security: OpcUaServerSecurityInput
 }
 
 # MQTT Client Mutations - Grouped operations for MQTT client management

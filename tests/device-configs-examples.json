@@ -571,15 +571,12 @@
         }
       ],
       "security": {
-        "keystorePath": "server-keystore.jks",
         "keystorePassword": "password",
-        "certificateAlias": "server-cert",
         "securityPolicies": [
           "None",
           "Basic256Sha256"
         ],
         "allowAnonymous": true,
-        "requireAuthentication": false,
         "allowUnencrypted": true,
         "certificateDir": "./security",
         "createSelfSigned": true

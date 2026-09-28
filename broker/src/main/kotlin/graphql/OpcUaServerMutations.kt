@@ -505,9 +505,12 @@ class OpcUaServerMutations(
      * Parse server configuration from GraphQL input
      */
     private fun parseServerConfig(config: Map<String, Any>): OpcUaServerConfig {
-        // Use default addresses and security for simplified configuration
+        // Addresses are added later; security falls back to defaults for fields not provided
         val addresses = emptyList<OpcUaServerAddress>()
-        val security = OpcUaServerSecurity()
+        @Suppress("UNCHECKED_CAST")
+        val security = (config["security"] as? Map<String, Any?>)
+            ?.let { OpcUaServerSecurity.fromInput(it) }
+            ?: OpcUaServerSecurity()
 
         return OpcUaServerConfig(
             name = config["name"] as? String ?: throw IllegalArgumentException("Name is required"),
@@ -541,20 +544,11 @@ class OpcUaServerMutations(
             parseOpcUaServerAddress(addrInput)
         } ?: existingConfig.addresses
 
-        // Parse security from input if provided, otherwise keep existing security
+        // Parse security from input if provided; fields not provided keep their existing values
         @Suppress("UNCHECKED_CAST")
-        val security = (input["security"] as? Map<String, Any>)?.let { secInput ->
-            @Suppress("UNCHECKED_CAST")
-            val securityPolicies = (secInput["securityPolicies"] as? List<String>) ?: listOf("None")
-            OpcUaServerSecurity(
-                keystorePath = secInput["keystorePath"] as? String ?: "server-keystore.jks",
-                keystorePassword = secInput["keystorePassword"] as? String ?: "password",
-                certificateAlias = secInput["certificateAlias"] as? String ?: "server-cert",
-                securityPolicies = securityPolicies,
-                allowAnonymous = secInput["allowAnonymous"] as? Boolean ?: true,
-                requireAuthentication = secInput["requireAuthentication"] as? Boolean ?: false
-            )
-        } ?: existingConfig.security
+        val security = (input["security"] as? Map<String, Any?>)
+            ?.let { OpcUaServerSecurity.fromInput(it, existingConfig.security) }
+            ?: existingConfig.security
 
         return OpcUaServerConfig(
             name = input["name"] as? String ?: existingConfig.name,
@@ -597,6 +591,11 @@ class OpcUaServerMutations(
             if (addr.mqttTopic.isBlank()) {
                 throw IllegalArgumentException("MQTT topic cannot be empty")
             }
+        }
+
+        val securityErrors = config.security.validate()
+        if (securityErrors.isNotEmpty()) {
+            throw IllegalArgumentException(securityErrors.joinToString("; "))
         }
     }
 
@@ -641,7 +640,7 @@ class OpcUaServerMutations(
             namespaceIndex = configJson.getInteger("namespaceIndex", 1),
             namespaceUri = configJson.getString("namespaceUri", "urn:monstermq:opcua:${deviceConfig.name}"),
             addresses = parseAddresses(configJson),
-            security = parseSecurity(configJson),
+            security = OpcUaServerSecurityInfo.fromConfig(deviceConfig.name, configJson),
             bufferSize = configJson.getInteger("bufferSize", 1000),
             updateInterval = configJson.getLong("updateInterval", 1000L),
             createdAt = configJson.getString("createdAt") ?: Instant.now().toString(),
@@ -698,22 +697,6 @@ class OpcUaServerMutations(
                     unit = addrJson.getString("unit")
                 )
             }
-    }
-
-    /**
-     * Parse OPC UA Server Security from stored config
-     */
-    private fun parseSecurity(serverConfigJson: JsonObject): OpcUaServerSecurityInfo {
-        val securityJson = serverConfigJson.getJsonObject("security", JsonObject())
-        return OpcUaServerSecurityInfo(
-            keystorePath = securityJson.getString("keystorePath", "server-keystore.jks"),
-            certificateAlias = securityJson.getString("certificateAlias", "server-cert"),
-            securityPolicies = securityJson.getJsonArray("securityPolicies", io.vertx.core.json.JsonArray())
-                .filterIsInstance<String>()
-                .ifEmpty { listOf("None") },
-            allowAnonymous = securityJson.getBoolean("allowAnonymous", true),
-            requireAuthentication = securityJson.getBoolean("requireAuthentication", false)
-        )
     }
 
     /**

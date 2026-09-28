@@ -151,44 +151,82 @@ enum class OpcUaAccessLevel {
 
 /**
  * Security configuration for OPC UA server
+ *
+ * The server certificate is kept per server in [certificateDir] as
+ * `monstermq-opcua-server-{name}.pfx` (alias `opcua-server`), see [OpcUaServerKeyStoreLoader].
+ * Username/password logins are validated against MonsterMQ user management when it is enabled.
  */
 data class OpcUaServerSecurity(
-    val keystorePath: String = "server-keystore.jks",  // Reuse MQTT server keystore
-    val keystorePassword: String = "password",
-    val certificateAlias: String = "server-cert",       // Certificate alias in keystore
+    val keystorePassword: String = "password",          // Password of the server certificate keystore
     val securityPolicies: List<String> = listOf("None", "Basic256Sha256"),
-    val allowAnonymous: Boolean = true,
-    val requireAuthentication: Boolean = false,         // Use MonsterMQ user management
+    val allowAnonymous: Boolean = true,                 // Allow anonymous logins (username logins use MonsterMQ users)
     val allowUnencrypted: Boolean = true,               // Allow unencrypted connections (set to false to require encryption)
     val certificateDir: String = "./security",          // Directory for certificates
     val createSelfSigned: Boolean = true                // Create self-signed certificate if not exists
 ) {
     companion object {
+        val SUPPORTED_POLICIES = listOf("None", "Basic256Sha256", "Basic128Rsa15")
+
         fun fromJsonObject(json: JsonObject): OpcUaServerSecurity {
             return OpcUaServerSecurity(
-                keystorePath = json.getString("keystorePath", "server-keystore.jks"),
                 keystorePassword = json.getString("keystorePassword", "password"),
-                certificateAlias = json.getString("certificateAlias", "server-cert"),
                 securityPolicies = json.getJsonArray("securityPolicies", JsonArray())
                     .filterIsInstance<String>()
                     .ifEmpty { listOf("None", "Basic256Sha256") },
-                allowAnonymous = json.getBoolean("allowAnonymous", true),
-                requireAuthentication = json.getBoolean("requireAuthentication", false),
+                // Legacy configs may carry requireAuthentication=true, which means "no anonymous logins"
+                allowAnonymous = json.getBoolean("allowAnonymous", true) && !json.getBoolean("requireAuthentication", false),
                 allowUnencrypted = json.getBoolean("allowUnencrypted", true),
                 certificateDir = json.getString("certificateDir", "./security"),
                 createSelfSigned = json.getBoolean("createSelfSigned", true)
             )
         }
+
+        /**
+         * Merge a GraphQL security input into [base]. Fields missing from the input keep the value
+         * of [base]; a blank keystorePassword keeps the existing password. The deprecated
+         * keystorePath/certificateAlias fields are ignored, requireAuthentication=true disables anonymous logins.
+         */
+        fun fromInput(input: Map<String, Any?>, base: OpcUaServerSecurity = OpcUaServerSecurity()): OpcUaServerSecurity {
+            @Suppress("UNCHECKED_CAST")
+            val policies = (input["securityPolicies"] as? List<String>)?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct()
+            val allowAnonymous = (input["allowAnonymous"] as? Boolean ?: base.allowAnonymous) &&
+                input["requireAuthentication"] as? Boolean != true
+            return OpcUaServerSecurity(
+                keystorePassword = (input["keystorePassword"] as? String)?.takeIf { it.isNotEmpty() } ?: base.keystorePassword,
+                securityPolicies = policies ?: base.securityPolicies,
+                allowAnonymous = allowAnonymous,
+                allowUnencrypted = input["allowUnencrypted"] as? Boolean ?: base.allowUnencrypted,
+                certificateDir = (input["certificateDir"] as? String)?.trim()?.takeIf { it.isNotEmpty() } ?: base.certificateDir,
+                createSelfSigned = input["createSelfSigned"] as? Boolean ?: base.createSelfSigned
+            )
+        }
+    }
+
+    /**
+     * Returns configuration errors, empty if the configuration is valid
+     */
+    fun validate(): List<String> {
+        val errors = mutableListOf<String>()
+        if (securityPolicies.isEmpty()) {
+            errors.add("At least one security policy is required")
+        }
+        securityPolicies.filter { it !in SUPPORTED_POLICIES }.forEach {
+            errors.add("Unsupported security policy '$it' (supported: ${SUPPORTED_POLICIES.joinToString()})")
+        }
+        if (securityPolicies.isNotEmpty() && securityPolicies.all { it == "None" } && !allowUnencrypted) {
+            errors.add("Security policy 'None' requires allowUnencrypted, otherwise the server has no endpoints")
+        }
+        if (keystorePassword.isEmpty()) {
+            errors.add("Keystore password cannot be empty")
+        }
+        return errors
     }
 
     fun toJsonObject(): JsonObject {
         return JsonObject()
-            .put("keystorePath", keystorePath)
             .put("keystorePassword", keystorePassword)
-            .put("certificateAlias", certificateAlias)
             .put("securityPolicies", JsonArray(securityPolicies))
             .put("allowAnonymous", allowAnonymous)
-            .put("requireAuthentication", requireAuthentication)
             .put("allowUnencrypted", allowUnencrypted)
             .put("certificateDir", certificateDir)
             .put("createSelfSigned", createSelfSigned)

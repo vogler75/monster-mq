@@ -247,7 +247,7 @@ class OpcUaServerQueries(
             namespaceIndex = configJson.getInteger("namespaceIndex", 1),
             namespaceUri = configJson.getString("namespaceUri", "urn:MonsterMQ:OpcUaServer"),
             addresses = parseAddresses(configJson),
-            security = parseSecurity(configJson),
+            security = OpcUaServerSecurityInfo.fromConfig(device.name, configJson),
             bufferSize = configJson.getInteger("bufferSize", 1000),
             updateInterval = configJson.getLong("updateInterval", 100L),
             createdAt = configJson.getString("createdAt") ?: "",
@@ -305,19 +305,6 @@ class OpcUaServerQueries(
             }
 
         return result
-    }
-
-    private fun parseSecurity(configJson: JsonObject): OpcUaServerSecurityInfo {
-        val securityJson = configJson.getJsonObject("security", JsonObject())
-        return OpcUaServerSecurityInfo(
-            keystorePath = securityJson.getString("keystorePath", "server-keystore.jks"),
-            certificateAlias = securityJson.getString("certificateAlias", "server-cert"),
-            securityPolicies = securityJson.getJsonArray("securityPolicies", io.vertx.core.json.JsonArray())
-                .filterIsInstance<String>()
-                .ifEmpty { listOf("None") },
-            allowAnonymous = securityJson.getBoolean("allowAnonymous", true),
-            requireAuthentication = securityJson.getBoolean("requireAuthentication", false)
-        )
     }
 
     /**
@@ -441,12 +428,35 @@ data class OpcUaServerAddressInfo(
 )
 
 data class OpcUaServerSecurityInfo(
-    val keystorePath: String,
-    val certificateAlias: String,
     val securityPolicies: List<String>,
     val allowAnonymous: Boolean,
+    val allowUnencrypted: Boolean,
+    val certificateDir: String,
+    val createSelfSigned: Boolean,
+    // Deprecated: derived values kept for API compatibility
+    val keystorePath: String,
+    val certificateAlias: String,
     val requireAuthentication: Boolean
-)
+) {
+    companion object {
+        /**
+         * Build from stored server config JSON (keystorePassword is never exposed)
+         */
+        fun fromConfig(serverName: String, configJson: JsonObject): OpcUaServerSecurityInfo {
+            val security = OpcUaServerSecurity.fromJsonObject(configJson.getJsonObject("security", JsonObject()))
+            return OpcUaServerSecurityInfo(
+                securityPolicies = security.securityPolicies,
+                allowAnonymous = security.allowAnonymous,
+                allowUnencrypted = security.allowUnencrypted,
+                certificateDir = security.certificateDir,
+                createSelfSigned = security.createSelfSigned,
+                keystorePath = OpcUaServerKeyStoreLoader.certificateFile(serverName, security.certificateDir).toString(),
+                certificateAlias = OpcUaServerKeyStoreLoader.SERVER_ALIAS,
+                requireAuthentication = !security.allowAnonymous
+            )
+        }
+    }
+}
 
 data class OpcUaServerStatusInfo(
     val serverName: String,

@@ -23,7 +23,13 @@ class OpcUaServerKeyStoreLoader(
         private val IP_ADDR_PATTERN = Pattern.compile(
             "^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$"
         )
-        private const val SERVER_ALIAS = "opcua-server"
+        const val SERVER_ALIAS = "opcua-server"
+
+        /**
+         * Server certificate keystore file of an OPC UA server
+         */
+        fun certificateFile(serverName: String, certificateDir: String): Path =
+            Paths.get(certificateDir).resolve("monstermq-opcua-server-${serverName.replace(Regex("[^a-zA-Z0-9-]"), "_")}.pfx")
     }
 
     var serverCertificate: X509Certificate? = null
@@ -52,8 +58,7 @@ class OpcUaServerKeyStoreLoader(
     private fun loadKeyStore(baseDir: Path): OpcUaServerKeyStoreLoader {
         val keyStore = KeyStore.getInstance("PKCS12")
         // Use server-specific certificate file name
-        val certificateFileName = "monstermq-opcua-server-${config.name.replace(Regex("[^a-zA-Z0-9-]"), "_")}.pfx"
-        val serverKeyStore = baseDir.resolve(certificateFileName)
+        val serverKeyStore = certificateFile(config.name, baseDir.toString())
         val password = config.security.keystorePassword.toCharArray()
 
         logger.info("Loading Server KeyStore at $serverKeyStore")

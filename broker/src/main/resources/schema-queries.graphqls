@@ -640,16 +640,19 @@ enum OpcUaServerAccessLevel {
 
 # Security configuration for OPC UA server
 type OpcUaServerSecurity {
-    # Path to keystore file (default: reuse MQTT server keystore)
-    keystorePath: String!
-    # Certificate alias in keystore
-    certificateAlias: String!
     # Supported security policies
     securityPolicies: [String!]!
-    # Allow anonymous access
+    # Allow anonymous logins (username/password logins use MonsterMQ user management when enabled)
     allowAnonymous: Boolean!
-    # Require user authentication
-    requireAuthentication: Boolean!
+    # Allow unencrypted connections on the "None" security policy
+    allowUnencrypted: Boolean!
+    # Directory for the server certificate and trusted client certificates
+    certificateDir: String!
+    # Create a self-signed server certificate if none exists
+    createSelfSigned: Boolean!
+    keystorePath: String! @deprecated(reason: "Derived from certificateDir: {certificateDir}/monstermq-opcua-server-{name}.pfx")
+    certificateAlias: String! @deprecated(reason: "Always 'opcua-server'")
+    requireAuthentication: Boolean! @deprecated(reason: "Use allowAnonymous; username logins are enabled with user management")
 }
 
 # Current status of an OPC UA Server instance

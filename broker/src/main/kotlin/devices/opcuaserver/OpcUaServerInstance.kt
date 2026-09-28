@@ -9,10 +9,16 @@ import io.vertx.core.Vertx
 import org.eclipse.milo.opcua.sdk.server.EndpointConfig
 import org.eclipse.milo.opcua.sdk.server.OpcUaServer
 import org.eclipse.milo.opcua.sdk.server.OpcUaServerConfigBuilder
+import org.eclipse.milo.opcua.sdk.server.identity.AnonymousIdentityValidator
+import org.eclipse.milo.opcua.sdk.server.identity.CompositeValidator
+import org.eclipse.milo.opcua.sdk.server.identity.IdentityValidator
+import org.eclipse.milo.opcua.sdk.server.identity.UsernameIdentityValidator
 import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy
 import org.eclipse.milo.opcua.stack.core.transport.TransportProfile
 import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode
+import org.eclipse.milo.opcua.stack.core.types.enumerated.UserTokenType
+import org.eclipse.milo.opcua.stack.core.types.structured.UserTokenPolicy
 import org.eclipse.milo.opcua.stack.transport.server.OpcServerTransportFactory
 import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransport
 import org.eclipse.milo.opcua.stack.transport.server.tcp.OpcTcpServerTransportConfig
@@ -22,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
+import org.eclipse.milo.opcua.sdk.server.OpcUaServerConfig as MiloServerConfig
 
 /**
  * OPC UA Server instance that exposes MQTT topics as OPC UA nodes
@@ -34,6 +41,11 @@ class OpcUaServerInstance(
 ) {
     companion object {
         private val logger: Logger = Utils.getLogger(OpcUaServerInstance::class.java)
+
+        // Username token for unencrypted endpoints: the password is encrypted with Basic256Sha256
+        private val USER_TOKEN_POLICY_USERNAME_ENCRYPTED = UserTokenPolicy(
+            "username_basic256sha256", UserTokenType.UserName, null, null, SecurityPolicy.Basic256Sha256.uri
+        )
     }
 
     private var server: OpcUaServer? = null
@@ -162,97 +174,60 @@ class OpcUaServerInstance(
 
         val (certificate, certificateChain, keyPair) = certificateInfo
 
+        // User token policies: anonymous if allowed, username/password if MonsterMQ user management is enabled
+        val userAuthEnabled = userManager?.isUserManagementEnabled() == true
+        if (!config.security.allowAnonymous && !userAuthEnabled) {
+            throw IllegalStateException("Anonymous access is disabled but user management is not enabled, no client could log in")
+        }
+        val anonymousTokenPolicies = if (config.security.allowAnonymous) listOf(MiloServerConfig.USER_TOKEN_POLICY_ANONYMOUS) else emptyList()
+        // On secured endpoints the password is protected by the channel
+        val securedTokenPolicies = anonymousTokenPolicies +
+            if (userAuthEnabled) listOf(MiloServerConfig.USER_TOKEN_POLICY_USERNAME) else emptyList()
+        // On unencrypted endpoints the password is encrypted with the server certificate, never sent in plain text
+        val unencryptedTokenPolicies = anonymousTokenPolicies +
+            if (userAuthEnabled && certificate != null) listOf(USER_TOKEN_POLICY_USERNAME_ENCRYPTED) else emptyList()
+
         // Build endpoints based on security configuration
         val endpoints = mutableSetOf<EndpointConfig>()
         val hostname = config.hostname ?: InetAddress.getLocalHost().hostName
         val bindAddress = config.bindAddress ?: "0.0.0.0"
         val path = "/${config.path}"
 
+        fun endpoint(policy: SecurityPolicy, mode: MessageSecurityMode, tokenPolicies: List<UserTokenPolicy>): EndpointConfig =
+            EndpointConfig.newBuilder()
+                .setBindAddress(bindAddress)
+                .setBindPort(config.port)
+                .setHostname(hostname)
+                .setPath(path)
+                .apply { if (policy != SecurityPolicy.None) setCertificate(certificate) }
+                .setSecurityPolicy(policy)
+                .setSecurityMode(mode)
+                .addTokenPolicies(*tokenPolicies.toTypedArray())
+                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
+                .build()
+
         // Parse security policies from configuration
         config.security.securityPolicies.forEach { policyName ->
             when (policyName) {
                 "None" -> {
-                    if (config.security.allowUnencrypted) {
-                        // Add unencrypted endpoint
-                        endpoints.add(
-                            EndpointConfig.newBuilder()
-                                .setBindAddress(bindAddress)
-                                .setBindPort(config.port)
-                                .setHostname(hostname)
-                                .setPath(path)
-                                .setSecurityPolicy(SecurityPolicy.None)
-                                .setSecurityMode(MessageSecurityMode.None)
-                                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
-                                .build()
-                        )
-                        logger.info("Added unencrypted endpoint on port ${config.port}")
-                    } else {
+                    if (!config.security.allowUnencrypted) {
                         logger.info("Unencrypted connections are disabled")
+                    } else if (unencryptedTokenPolicies.isEmpty()) {
+                        // Milo would fall back to anonymous access for an endpoint without token policies
+                        logger.warning("Skipping unencrypted endpoint: anonymous access is disabled and username logins need a server certificate")
+                    } else {
+                        endpoints.add(endpoint(SecurityPolicy.None, MessageSecurityMode.None, unencryptedTokenPolicies))
+                        logger.info("Added unencrypted endpoint on port ${config.port}")
                     }
                 }
-                "Basic256Sha256" -> {
+                "Basic256Sha256", "Basic128Rsa15" -> {
+                    val policy = SecurityPolicy.valueOf(policyName)
                     if (certificate != null && keyPair != null) {
-                        // Add encrypted endpoint with Sign mode
-                        endpoints.add(
-                            EndpointConfig.newBuilder()
-                                .setBindAddress(bindAddress)
-                                .setBindPort(config.port)
-                                .setHostname(hostname)
-                                .setPath(path)
-                                .setCertificate(certificate)
-                                .setSecurityPolicy(SecurityPolicy.Basic256Sha256)
-                                .setSecurityMode(MessageSecurityMode.Sign)
-                                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
-                                .build()
-                        )
-                        // Add encrypted endpoint with SignAndEncrypt mode
-                        endpoints.add(
-                            EndpointConfig.newBuilder()
-                                .setBindAddress(bindAddress)
-                                .setBindPort(config.port)
-                                .setHostname(hostname)
-                                .setPath(path)
-                                .setCertificate(certificate)
-                                .setSecurityPolicy(SecurityPolicy.Basic256Sha256)
-                                .setSecurityMode(MessageSecurityMode.SignAndEncrypt)
-                                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
-                                .build()
-                        )
-                        logger.info("Added Basic256Sha256 encrypted endpoints on port ${config.port}")
+                        endpoints.add(endpoint(policy, MessageSecurityMode.Sign, securedTokenPolicies))
+                        endpoints.add(endpoint(policy, MessageSecurityMode.SignAndEncrypt, securedTokenPolicies))
+                        logger.info("Added $policyName encrypted endpoints on port ${config.port}")
                     } else {
-                        logger.warning("Cannot add Basic256Sha256 encrypted endpoints: certificates not available")
-                    }
-                }
-                "Basic128Rsa15" -> {
-                    if (certificate != null && keyPair != null) {
-                        // Add Basic128Rsa15 endpoints
-                        endpoints.add(
-                            EndpointConfig.newBuilder()
-                                .setBindAddress(bindAddress)
-                                .setBindPort(config.port)
-                                .setHostname(hostname)
-                                .setPath(path)
-                                .setCertificate(certificate)
-                                .setSecurityPolicy(SecurityPolicy.Basic128Rsa15)
-                                .setSecurityMode(MessageSecurityMode.Sign)
-                                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
-                                .build()
-                        )
-                        endpoints.add(
-                            EndpointConfig.newBuilder()
-                                .setBindAddress(bindAddress)
-                                .setBindPort(config.port)
-                                .setHostname(hostname)
-                                .setPath(path)
-                                .setCertificate(certificate)
-                                .setSecurityPolicy(SecurityPolicy.Basic128Rsa15)
-                                .setSecurityMode(MessageSecurityMode.SignAndEncrypt)
-                                .setTransportProfile(TransportProfile.TCP_UASC_UABINARY)
-                                .build()
-                        )
-                        logger.info("Added Basic128Rsa15 encrypted endpoints on port ${config.port}")
-                    } else {
-                        logger.warning("Cannot add Basic128Rsa15 encrypted endpoints: certificates not available")
+                        logger.warning("Cannot add $policyName encrypted endpoints: certificates not available")
                     }
                 }
                 else -> logger.warning("Unknown security policy: $policyName")
@@ -268,6 +243,7 @@ class OpcUaServerInstance(
             .setApplicationUri("urn:MonsterMQ:OpcUaServer:${config.name}")
             .setProductUri("urn:MonsterMQ:OpcUaServer")
             .setEndpoints(endpoints)
+            .setIdentityValidator(createIdentityValidator(userAuthEnabled))
 
         // Configure certificate management for encrypted endpoints (Milo 1.x model:
         // CertificateManager wraps a CertificateGroup that exposes our keystore-backed
@@ -299,6 +275,38 @@ class OpcUaServerInstance(
         }
 
         return configBuilder.build()
+    }
+
+    /**
+     * Identity validator matching the configured user token policies
+     */
+    private fun createIdentityValidator(userAuthEnabled: Boolean): IdentityValidator {
+        val validators = mutableListOf<IdentityValidator>()
+        if (config.security.allowAnonymous) {
+            validators.add(AnonymousIdentityValidator.INSTANCE)
+        }
+        if (userAuthEnabled) {
+            validators.add(UsernameIdentityValidator { challenge -> authenticateUser(challenge.username, challenge.password) })
+        }
+        return CompositeValidator(validators)
+    }
+
+    /**
+     * Validate username/password against MonsterMQ user management.
+     * Called on a Milo thread, so blocking on the user store is fine here.
+     */
+    private fun authenticateUser(username: String?, password: String?): Boolean {
+        if (username.isNullOrEmpty() || password == null) return false
+        return try {
+            val user = userManager?.authenticate(username, password)
+                ?.toCompletionStage()?.toCompletableFuture()?.get(10, TimeUnit.SECONDS)
+            val authenticated = user?.enabled == true
+            if (!authenticated) logger.warning("OPC UA Server '${config.name}': authentication failed for user [$username]")
+            authenticated
+        } catch (e: Exception) {
+            logger.warning("OPC UA Server '${config.name}': authentication error for user [$username]: ${e.message}")
+            false
+        }
     }
 
     /**

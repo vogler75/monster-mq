@@ -310,9 +310,10 @@ Operations are grouped under `opcUaServer`:
 - `opcUaServer.removeAddress(serverName: String!, mqttTopic: String!)` – remove an address mapping and its node hierarchy.
 - Queries `opcUaServers(name:, node:)` return the persisted configuration plus cached runtime status when available.
 
-For advanced settings such as `namespaceIndex`, buffering, and security, use
-`opcUaServer.add(input: OpcUaServerInput!)` with an explicit `addresses` array.
-The simplified `create(config:)` has a smaller input contract. See
+The simplified `create(config:)` accepts an optional `security` block. For advanced
+settings such as `namespaceIndex`, use `opcUaServer.add(input: OpcUaServerInput!)`
+with an explicit `addresses` array. In `update`, security fields that are not
+provided keep their current values. See
 [schema-mutations.graphqls](../broker/src/main/resources/schema-mutations.graphqls)
 for the exact fields of both variants.
 
@@ -333,12 +334,22 @@ for the exact fields of both variants.
 
 ### Security block (`security`)
 
-`OpcUaServerSecurity` governs endpoint security:
-- `keystorePath` / `keystorePassword` / `certificateAlias` – keystore to read certificates from.
-- `securityPolicies` – list of strings (`"None"`, `"Basic256Sha256"`, …) that become endpoints.
-- `allowAnonymous` / `requireAuthentication` are stored settings, but the current server setup does not wire a MonsterMQ username identity validator. Do not treat these flags as enforced MQTT-user authentication.
-- `allowUnencrypted` – permit unsecured endpoints when policy `None` is present.
-- `certificateDir` – directory for keystores. The loader creates `monstermq-opcua-server-{name}.pfx` when `createSelfSigned` is `true`; otherwise the file must already exist.
+`OpcUaServerSecurity` governs endpoint security. All fields can be edited in the dashboard on the server detail page (section **Security**).
+
+| Field | Default | Description |
+| ----- | ------- | ----------- |
+| `securityPolicies` | `["None", "Basic256Sha256"]` | Policies that become endpoints: `None`, `Basic256Sha256`, `Basic128Rsa15` (deprecated). Encrypted policies add a `Sign` and a `SignAndEncrypt` endpoint. |
+| `allowUnencrypted` | `true` | Permit the unsecured endpoint when policy `None` is present. |
+| `allowAnonymous` | `true` | Offer anonymous logins. |
+| `certificateDir` | `"./security"` | Directory for the server certificate `monstermq-opcua-server-{name}.pfx` and the `trusted-{name}` client certificate folder. |
+| `keystorePassword` | `"password"` | Password of the server certificate keystore. Never returned by queries; an empty value in an update keeps the current password. |
+| `createSelfSigned` | `true` | Create the server certificate if it does not exist; otherwise the file must already exist. |
+
+**User authentication.** When [user management](security.md) is enabled, every endpoint also offers username/password logins, validated against MonsterMQ users (disabled users are rejected). On the unencrypted endpoint the password is encrypted with Basic256Sha256 using the server certificate, so username logins there require a certificate. Setting `allowAnonymous: false` requires user management; otherwise the server refuses to start. Topic ACLs are not yet applied to OPC UA reads and writes.
+
+**Bring your own certificate.** Place a PKCS#12 file with the key under alias `opcua-server` at `{certificateDir}/monstermq-opcua-server-{name}.pfx` (non-alphanumeric characters in the name become `_`), set `keystorePassword`, and disable `createSelfSigned`. The certificate must contain the application URI `urn:MonsterMQ:OpcUaServer:{name}`.
+
+**Removed fields.** `keystorePath` and `certificateAlias` are no longer used, and `requireAuthentication` is replaced by `allowAnonymous`. Stored configurations with `requireAuthentication: true` load with `allowAnonymous: false`. The GraphQL fields are deprecated: inputs are ignored and queries return the derived values.
 
 Certificate generation mirrors the client side: RSA-2048, alias `opcua-server`, and subject alternative names for discovered hostnames and IPv4 addresses.
 
