@@ -1,226 +1,547 @@
-# PeerLink Inter-Broker Replication
+# PeerLink
 
-PeerLink (`mmq-peer/1`) is a high-performance inter-broker replication protocol that connects independent MonsterMQ brokers—including the main Kotlin broker and the MonsterMQ Go Edge broker—without relying on external message brokers or distributed consensus clusters.
+PeerLink links MonsterMQ brokers so that a message published on one broker is
+also delivered by the others, with the same MQTT semantics. It is generic: any
+two or more brokers can be linked, and Kotlin MonsterMQ brokers can be linked
+with MonsterMQ Edge (Go) brokers (same protocol `mmq-peer/1`, same
+configuration keys).
 
-Replication operates on a peer-to-peer pull model with long-poll batch streaming, CRC-32C verification, retained snapshot synchronization, split-horizon loop protection, and end-to-end TLS 1.3 / mTLS / shared-secret authentication.
+Typical uses:
 
----
+- **Redundant pair**: two brokers on two hosts, clients may connect to either
+  (active-active). PeerLink replaces clustering for this case; it cannot be
+  combined with `-cluster`.
+- **Mesh**: three or more brokers that all see each other's messages.
+- **Edge to central**: an edge broker forwards to a central broker, in one or
+  both directions, optionally filtered.
 
-## 1. Topologies & Architecture
-
-PeerLink can connect brokers in various topologies:
-
-- **Edge-to-Central**: One or more lightweight Go Edge brokers replicate data to/from a central Kotlin broker.
-- **Edge-to-Edge**: Two edge brokers replicate locally for high-availability.
-- **Central Mesh**: Multiple central Kotlin brokers replicate select topics across sites.
-- **Hybrid with Zenoh Federation**: PeerLink and Zenoh can coexist simultaneously on the same broker (see [Zenoh Coexistence](#zenoh-coexistence)).
-
-```
-  edge-a  <=== mmq-peer/1 ===>  main (central)
-    |                              |
-    +--------< mmq-peer/1 >--------+
-```
-
-### Core Architecture
-
-- **Capture Tap**: Intercepts locally accepted MQTT publishes, wills, and internal publishes before queuing. Filtered by topic include/exclude rules.
-- **In-Memory Ring Log**: High-throughput circular log (default 1024 slots) storing compressed frame records with monotonic epochs and 64-bit offsets.
-- **Puller**: Client state machine running on JDK 21 virtual threads, connecting to remote peers, negotiating capabilities via `HELLO`, requesting retained snapshot synchronization (`FILL`), and streaming live records using pipelined long-poll batches.
-- **Injector**: Applies pulled replica records directly to the local broker engine with publisher fidelity (retaining original `clientId`, `username`, QoS, timestamp, and MQTT 5 properties). Replicas are gated to prevent echo loops and outbound bridge redispatch.
-- **Retained Queue Backpressure**: Retained replicas enqueue into the broker's existing asynchronous retained queue with blocking `put` semantics. If the queue is full, the injector pauses, propagating backpressure upstream to the puller.
+The protocol specification lives in the MonsterMQ Edge repository
+(`dev/plans/spec-peerlink-redundancy.md`); this document covers concepts,
+configuration and operation.
 
 ---
 
-## 2. Configuration Reference
+## 1. How it works
 
-The `PeerLink` configuration block in `config.yaml` is 100% compatible with the MonsterMQ Go Edge broker specification.
+```
+   clients ──► broker A                          broker B ◄── clients
+               │ capture                          ▲ inject
+               ▼                                  │
+           in-memory log  ◄──── FETCH (long poll) ─┤  puller of B
+           (offsets)      ────► BATCH ───────────►┘
+```
+
+- **Capture.** Every publish a broker accepts (network clients, wills,
+  broker-internal publishers) is appended to an in-memory log with a
+  monotonically increasing offset. Nothing is written to disk.
+- **Pull.** Each peer that consumes from this broker runs a *puller*: it opens
+  one TCP connection (port 1890 by default, optionally TLS), authenticates,
+  and fetches batches with long polls. The broker serving its log is the
+  *source*, the pulling broker the *consumer*.
+- **Inject.** The consumer applies the records to its local engine with the
+  original publisher's client id, username, QoS, retain flag, MQTT 5
+  properties and publish time, then commits the offset back to the source.
+- **Free.** A record is freed once every configured consumer has committed it.
+  When the log is full (`Log.MaxBytes` / `Log.MaxMessages`), the oldest
+  records are dropped anyway and counted.
+- **Resume.** After a reconnect the consumer resumes at its committed offset.
+  If the source restarted, its log has a new *epoch*; the consumer notices it
+  and counts what was lost.
+- **Snapshot.** On first contact (and after a source restart), the consumer can
+  fetch the source's retained messages and fill topics that are missing
+  locally (`Snapshot.Mode: FILL`).
+- **One hop (split horizon).** A broker never captures what it received from a
+  peer. PeerLink alone therefore cannot loop, but a chain or ring delivers one
+  hop only: **with more than two brokers configure a full mesh**, in which
+  every broker lists every other one.
+
+The two directions of a pair are separate, independent links: A pulls from B,
+and B pulls from A.
+
+---
+
+## 2. What is forwarded
+
+Every publish a broker accepts: from network clients, wills, and from
+broker-internal publishers (GraphQL publish API, bridges and device
+connectors, flows). Broker-internal publishes carry the client
+id `inline`. Not forwarded:
+
+- topics starting with `$`;
+- topics outside `Capture.Include` (default `["#"]`) or inside
+  `Capture.Exclude` (default: the HMI sync channel `<HMI.SyncBaseTopic>/#`,
+  i.e. `monstermq/hmi/sync/#`; `[]` forwards it too);
+- wills fired because the broker itself shuts down (`Capture.Wills: false`
+  skips all wills);
+- publishes larger than `Log.MaxRecordBytes` (counted as `captureDropped`).
+
+On the receiving side, `Peers[].Receive.Include` / `Exclude` filter what this
+broker accepts from that peer. Replicas always reach local subscribers and the
+retained store. The other subsystems are controlled by `PeerLink.Receive`:
+
+| Subsystem | Default | Key |
+|---|---|---|
+| Internal bus (GraphQL subscriptions, flows, Zenoh) | gets replicas | `Bus: true` |
+| Archive groups | get replicas | `Archive: true` (set `false` when both brokers archive into one shared database) |
+| Outbound bridges (MQTT client, Kafka, NATS, …) | do **not** forward replicas (loop guard) | `BridgeOutbound: false` |
+| Offline queues of persistent sessions | skip replicas | `Queue: false` |
+| Shared subscription groups | each message once, on the broker it was published on | `SharedSubscriptions: SKIP` (or `DELIVER`) |
+
+Network clients may not use the client ids `inline` or `peerlink:*`.
+
+---
+
+## 3. Getting started
+
+### 3.1 NodeId and peers
+
+Every broker needs a unique `NodeId` (top-level key in `config.yaml`). The
+default is the first label of the host name; when the host name is unknown,
+set it explicitly. NodeIds are
+compared in lower case and may contain `[a-z0-9._-]`, 1 to 64 characters.
+
+A link is configured on **both** sides:
+
+- a peer with an `Address` is a source: this broker pulls from it;
+- a peer with `Serve: true` (the default) may pull from this broker.
+
+The `Peers` entry whose `NodeId` equals this broker's own is ignored, so **one
+file can serve every host**; only `NodeId` differs.
+
+### 3.2 A pair with TLS and a shared secret
+
+The simplest secure setup. Self-signed certificates are generated on first
+start, and the shared secret, bound to the TLS 1.3 session, authenticates the
+peers, so the certificates need not be verified.
 
 ```yaml
-NodeId: central-broker              # Top-level identifier (lowercase [a-z0-9._-]{1,64})
-
+NodeId: broker-a                    # broker-b on the other host; the rest is identical
 PeerLink:
   Enabled: true
-  AllowUnauthenticatedPeers: false  # When true, plaintext loopback/private CIDR only
-
-  Listener:
-    Address: 0.0.0.0
-    Port: 1890
-    AllowedNetworks:                # CIDR allow-list for incoming connections
-      - "127.0.0.1/32"
-      - "10.0.0.0/8"
-      - "192.168.0.0/16"
-    MaxPreAuthPerIp: 4              # Concurrent unauthenticated handshake slots per IP
-    AllowPlaintext: false           # Require TLS on listener
-
   Tls:
     Enabled: true
-    AutoGenerate: true              # Automatically generates self-signed cert/key if missing
+    AutoGenerate: true              # certs/peer-{NodeId}.pem and .key on first start
+  SharedSecrets: ["<base64, at least 16 bytes: openssl rand -base64 32>"]   # same on both hosts
+  Peers:
+    - { NodeId: broker-a, Address: "broker-a.local:1890" }
+    - { NodeId: broker-b, Address: "broker-b.local:1890" }
+```
+
+### 3.3 mTLS with a peer CA (production, meshes)
+
+Each broker has a certificate with the URI SAN `urn:monstermq:node:<NodeId>`
+and the extended key usages serverAuth and clientAuth, issued by a dedicated
+peer CA (do not reuse the CA of MQTT client certificates; system roots are
+never used).
+
+```yaml
+NodeId: broker-a
+PeerLink:
+  Enabled: true
+  Tls:
+    Enabled: true
     CertPath: certs/peer-{NodeId}.pem
     KeyPath: certs/peer-{NodeId}.key
     TrustStorePath: certs/peer-ca.pem
-    TrustStoreType: PEM             # PEM or PKCS12
-    ClientAuth: REQUIRED            # NONE, REQUESTED, or REQUIRED (mTLS)
-    IdentityFallback: NONE          # NONE, DNS, or CN
-
-  SharedSecrets:                    # Group pre-shared secrets (Base64-encoded)
-    - "cGVlcmxpbmstdGVzdC1ncm91cC1zZWNyZXQtdjEtMDEyMw=="
-
-  KeepAliveSeconds: 15
-
-  Log:
-    MaxMessages: 1000000            # In-memory log record capacity
-    MaxBytes: 134217728             # Maximum log byte size (default: 128 MiB)
-    MaxRecordBytes: 524288          # Max individual record bytes (defaults to broker TCP max)
-    DrainOnShutdownMs: 5000         # Grace period for consumers to drain during shutdown
-    NeverConnectedWarnSec: 600      # Warn if a configured peer never connects
-
-  Capture:
-    Wills: true                     # Replicate LWT wills
-    Include: ["#"]                  # Captured topic filter patterns
-    Exclude:                        # Excluded topic filter patterns
-      - "monstermq/hmi/sync/#"
-    EchoSuppressMs: 2000            # Recaptured echo window suppression
-
-  Snapshot:
-    Mode: FILL                      # Retained sync mode: FILL, NONE, or NEWER
-    MaxTopics: 500000               # Retained snapshot topic limit
-
-  Fetch:
-    MaxRecords: 2048                # Max records requested per fetch batch
-    MaxBytes: 2097152               # Max batch byte size (2 MiB)
-    MaxWaitMs: 2000                 # Long-poll timeout
-    LingerMs: 5                     # Accumulation delay on source
-    Pipeline: 2                     # Max in-flight batch requests
-    CrcOnTls: false                 # Check CRC-32C even when TLS is active
-    ReconnectMaxMs: 10000           # Jittered backoff ceiling
-
-  Receive:
-    Bus: true                       # Deliver replicas to internal bus / GraphQL subscriptions
-    BridgeOutbound: false           # Redispatch replicas to MQTT bridges / Kafka / NATS
-    Archive: true                   # Store replicas in historical archive DBs
-    Queue: false                    # Deliver to offline persistent client queues
-    MarkReplicas: true              # Add 'mmq-peer-src' user property
-    CatchUpRateFactor: 2.5          # Pacing speedup during log replay
-    MaxApplyRate: 50000             # Max replica messages applied per second (0 = unlimited)
-    MaxRecordAgeMs: 60000           # Max age before treating message as RetainOnly
-    InjectWorkers: 4                # Number of parallel injector threads
-
+    ClientAuth: REQUIRED
   Peers:
-    - NodeId: edge-a
-      Address: "edge-a.plant.local:1890"
-      Serve: true                   # Accept incoming pulls from this peer
-      Receive:
-        Include: ["plant/edge-a/#"]
-      Tls:
-        Enabled: true
-        PinnedSha256:               # SPKI SHA-256 certificate pins
-          - "b6572a5c1146070ae6af4d3cf7a308a2bb0038b20f06081cf726a56c20434f2c"
+    - { NodeId: broker-a, Address: "broker-a.local:1890" }
+    - { NodeId: broker-b, Address: "broker-b.local:1890" }
+    - { NodeId: broker-c, Address: "broker-c.local:1890" }
 ```
 
----
-
-## 3. Security and Authentication
-
-PeerLink employs defense-in-depth:
-
-1. **CIDR Network Filtering**: Connections from unauthorized IP networks are dropped immediately before TLS negotiation.
-2. **Pre-Auth Slot Limiting**: Defends against handshake flooding by limiting concurrent unauthenticated TLS handshakes per IP (`MaxPreAuthPerIp`, default 4).
-3. **Mutual TLS (mTLS)**: Peer identities are authenticated using standard X.509 client certificates with URI SAN format `urn:monstermq:node:<NodeId>`.
-4. **SPKI Certificate Pinning**: Peers can be pinned by their public key SHA-256 hash (`PinnedSha256`), eliminating reliance on external Certificate Authorities.
-5. **Shared Secret Authentication (RFC 8446 TLS 1.3 Exporter)**:
-   - When `SharedSecrets` are configured, TLS 1.3 is strictly enforced.
-   - Keying material is exported from the TLS session (`label = "monstermq-peer/1"`, 32 bytes) using BCJSSE on JDK 21 or native JSSE on JDK 25+.
-   - A constant-time HMAC-SHA256 challenge-response handshake (`AUTH` frame) verifies the shared secret without ever transmitting it over the wire.
-6. **Fail-Closed Validation**:
-   - If `AllowUnauthenticatedPeers` is enabled, `AllowedNetworks` must be non-empty and restricted to private/loopback IP blocks.
-   - Unrecognized configuration keys under `PeerLink:` abort broker startup immediately.
-
----
-
-## 4. Retained Snapshot Synchronization
-
-When a puller connects to a source peer:
-
-1. **FILL Mode (Default)**: The puller requests a snapshot of the source's retained store. The source streams all retained messages matching the topic filter. The injector only applies messages for topics that do **not** already exist locally in the retained store or in the pending retained write queue.
-2. **NEWER Mode**: Used during manual or operator-triggered resync. Applies snapshot messages if their capture timestamp is newer than the local retained timestamp.
-3. **Queue Draining**: Before initiating the snapshot phase, the injector ensures the local asynchronous retained queue is drained to prevent stale overwrites.
-
----
-
-## 5. Zenoh Coexistence
-
-MonsterMQ supports running both PeerLink and Zenoh federation simultaneously on the same broker node without configuration switches:
-
-- **PeerLink -> Zenoh**: Replicas received from PeerLink are forwarded to the Zenoh bus subject to the existing `Zenoh.Allow` and `Zenoh.Deny` topic filters.
-- **Zenoh -> PeerLink**: Messages arriving via Zenoh are captured into the PeerLink log subject to `PeerLink.Capture.Include` and `Exclude`.
-- **One-Hop Loop Guard**: Each replica carries the origin source NodeId in `BrokerMessage.peerSource` and `ZenohMessageEnvelope.peerSource`. A message that has crossed a PeerLink hop is never captured into another PeerLink log, preventing multi-hop forwarding loops.
-- **UUID Deduplication**: Every replica generates a deterministic UUID from `(sourceNodeId, epoch, offset)`. If a broker receives the same message via both PeerLink and Zenoh, the Zenoh deduplication cache automatically drops the duplicate.
-
----
-
-## 6. HTTP Status & Management API
-
-PeerLink exposes diagnostic and management endpoints on the PeerLink listener port (default 1890):
-
-### `GET /peerlink/v1/status`
-Returns real-time replication health, consumer offsets, and throughput metrics formatted identically to the MonsterMQ Go Edge broker:
+A minimal peer CA with OpenSSL:
 
 ```bash
-curl http://127.0.0.1:1890/peerlink/v1/status
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 3650 \
+  -subj "/CN=peer-ca" -keyout peer-ca.key -out peer-ca.pem
+for n in broker-a broker-b broker-c; do
+  openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+    -subj "/CN=$n" -keyout peer-$n.key -out peer-$n.csr
+  openssl x509 -req -in peer-$n.csr -CA peer-ca.pem -CAkey peer-ca.key -CAcreateserial -days 825 \
+    -extfile <(printf "subjectAltName=URI:urn:monstermq:node:$n,DNS:$n.local\nextendedKeyUsage=serverAuth,clientAuth") \
+    -out peer-$n.pem
+done
 ```
 
-Response JSON example:
-```json
-{
-  "nodeId": "central-broker",
-  "version": 1,
-  "uptimeSeconds": 3600,
-  "log": {
-    "epoch": 1,
-    "leo": 142050,
-    "oldestOffset": 0,
-    "committedOffset": 142050,
-    "totalRecords": 142050,
-    "totalBytes": 18456000,
-    "capacityRecords": 1000000,
-    "capacityBytes": 134217728
-  },
-  "sources": [
-    {
-      "nodeId": "edge-a",
-      "state": "STREAMING",
-      "address": "edge-a.plant.local:1890",
-      "epoch": 1,
-      "lastOffset": 45120,
-      "committedOffset": 45120,
-      "injected": 45120,
-      "lagRecords": 0
-    }
-  ],
-  "consumers": [
-    {
-      "nodeId": "edge-a",
-      "connected": true,
-      "epoch": 1,
-      "ackedOffset": 142050,
-      "lagRecords": 0,
-      "servedRecords": 142050
-    }
-  ]
-}
+### 3.4 Pinned self-signed certificates (no CA)
+
+`AutoGenerate: true` and `ClientAuth: REQUIRED` on every broker, and per peer
+the SHA-256 of its public key, which each broker logs at startup
+(`spkiSha256`):
+
+```yaml
+  Tls: { Enabled: true, AutoGenerate: true, ClientAuth: REQUIRED }
+  Peers:
+    - NodeId: broker-b
+      Address: "broker-b.local:1890"
+      Tls: { PinnedSha256: ["<spkiSha256 of broker-b>"] }
 ```
 
-*Note: For security, plaintext HTTP status requests are accepted only from loopback (`127.0.0.1`). Over TLS, requests require authenticated peer certificates.*
+### 3.5 One direction only
 
-### `POST /peerlink/v1/resync?source=<nodeId>`
-Triggers an operator-initiated NEWER retained snapshot resync from the specified source peer.
+Edge forwards to central, central sends nothing back:
+
+```yaml
+# on edge broker-a
+  Peers:
+    - { NodeId: central, Serve: true }                  # central may pull from broker-a
+# on central
+  Peers:
+    - { NodeId: broker-a, Address: "broker-a:1890", Serve: false }   # central pulls, never serves
+```
+
+A broker that only pulls does not open the peer port on the network; it binds
+`127.0.0.1:<Listener.Port>` for the status endpoint only.
+
+### 3.6 Unauthenticated (trusted networks only)
+
+Plain TCP without authentication is accepted only with
+`AllowUnauthenticatedPeers: true` together with a non-empty
+`Listener.AllowedNetworks` and `UserManagement.Enabled: false` (replicas are
+injected without ACL checks). A WARN is logged on every start.
+
+### 3.7 Rotating secrets and pins
+
+`SharedSecrets` and `PinnedSha256` are lists. To rotate without losing the
+link: add the new value on both sides, move it to the first position on both
+(the first secret signs, all are accepted), then remove the old one.
 
 ---
 
-## 7. Operational Guidelines & JVM Tuning
+## 4. Configuration reference
 
-1. **JVM Memory (`-Xmx`)**: Ensure heap memory is sized adequately:
-   $$\text{MaxHeap} \ge 2.2 \times \text{Log.MaxBytes} + 150\,\text{MiB}$$
-   The default 128 MiB log requires at least 430 MiB of heap headroom.
-2. **Message Size Alignment**: The Kotlin broker defaults `TCP.MaxMessageSizeKb` to 512 KB, whereas the Go Edge broker defaults to 1024 KB. Ensure `MaxMessageSizeKb` is aligned across all linked brokers to prevent frame truncation and size drops.
-3. **Clustering & Kafka Incompatibility**: PeerLink cannot be used simultaneously with Hazelcast clustering (`-cluster`) or the Kafka message bus. The broker will refuse to start if either is configured.
+All keys live under `PeerLink`. **Unknown keys fail startup, even while
+`Enabled` is false.** Validation of values runs when `Enabled` is true.
+`config.yaml.example` lists every key with its default; `yaml-json-schema.json`
+gives editor completion.
+
+### 4.1 General
+
+| Key | Default | Description |
+|---|---|---|
+| `Enabled` | `false` | Turn PeerLink on. |
+| `AllowUnauthenticatedPeers` | `false` | Admit peers without TLS identity or secret. Needs `Listener.AllowedNetworks`; not allowed with `UserManagement.Enabled`. |
+| `SharedSecrets` | `[]` | Group secrets, base64, at least 16 decoded bytes. First = current (signs), others still accepted. Need `Tls.Enabled`. With more than two brokers prefer `Peers[].SharedSecrets`: a group secret lets any holder claim any NodeId of the group. |
+| `KeepAliveSeconds` | `10` | Link keepalive; a silent link is closed after about three intervals. ≥ 1. |
+
+Top level: `NodeId` (see 3.1).
+
+### 4.2 `Listener`
+
+The peer port. It is bound on `Address` when at least one peer has
+`Serve: true`.
+
+| Key | Default | Description |
+|---|---|---|
+| `Address` | `0.0.0.0` | Bind address. |
+| `Port` | `1890` | 1..65535. |
+| `AllowedNetworks` | `[]` (all) | CIDR allow-list, checked before TLS. Also applies to the status endpoint, so include `127.0.0.1/32`. |
+| `MaxPreAuthPerIp` | `2` | Concurrent connections per IP that are not yet authenticated. ≥ 1. |
+| `AllowPlaintext` | `false` | A TLS listener also accepts plaintext sessions (TLS migration only). Needs `AllowUnauthenticatedPeers`. |
+
+### 4.3 `Tls`
+
+This broker's identity and trust. Paths may contain `{NodeId}`.
+
+| Key | Default | Description |
+|---|---|---|
+| `Enabled` | `false` | TLS on the listener, and the default for outgoing connections (`Peers[].Tls.Enabled` overrides). Needs `CertPath` + `KeyPath`, or `AutoGenerate`. |
+| `CertPath` / `KeyPath` | with `AutoGenerate`: `certs/peer-{NodeId}.pem` / `.key` | PEM certificate and unencrypted PEM key. |
+| `AutoGenerate` | `false` | Create a self-signed certificate (URI SAN `urn:monstermq:node:<NodeId>`) when the files are missing. |
+| `TrustStorePath` | – | Peer CA (PEM, or PKCS12). Empty = verify by pins or secrets only. |
+| `TrustStoreType` | `PEM` | `PEM` or `PKCS12` (legacy ciphers only). |
+| `TrustStorePassword` | – | For PKCS12. |
+| `ClientAuth` | `NONE` | `NONE`, `REQUEST` or `REQUIRED`: whether consumers must present a certificate (mTLS). Needs `Enabled`, and `TrustStorePath` or pins for each serving peer. |
+| `IdentityFallback` | `NONE` | `NONE`, `DNS` or `CN`. Only for certificates that carry no `urn:monstermq:node:` URI at all: accept a DNS SAN or the CN equal to the NodeId. |
+
+### 4.4 `Log`
+
+The in-memory log of captured publishes.
+
+| Key | Default | Description |
+|---|---|---|
+| `MaxMessages` | `2000000` | Record limit. ≥ max(100, `Fetch.MaxRecords`). |
+| `MaxBytes` | `268435456` (256 MiB) | Byte limit. ≥ 1 MiB and ≥ 4 × `MaxRecordBytes`. |
+| `MaxRecordBytes` | `0` = `TCP.MaxMessageSizeKb` + 64 KiB | Larger publishes are not captured (`captureDropped{size}`). |
+| `DrainOnShutdownMs` | `2000` | On shutdown, wait up to this long for connected consumers to catch up. 0 = off. |
+| `NeverConnectedWarnSec` | `300` | WARN once per consumer that has not connected after this many seconds. 0 = off. |
+
+### 4.5 `Capture`
+
+What this broker offers to its peers.
+
+| Key | Default | Description |
+|---|---|---|
+| `Wills` | `true` | Capture wills (never the wills of this broker's own shutdown). |
+| `Include` | `["#"]` | Topic filters to capture. |
+| `Exclude` | unset = `["<HMI.SyncBaseTopic>/#"]` | Topic filters not to capture. `[]` captures the HMI sync channel too. |
+| `EchoSuppressMs` | `0` | Skip a publish that repeats a replica (same topic, payload and retain flag) within this window; guards against external clients that republish what they receive. 0 = off. |
+
+### 4.6 `Snapshot`
+
+| Key | Default | Description |
+|---|---|---|
+| `Mode` | `FILL` | `FILL`: on first contact and after a source restart, fetch the source's retained messages and set the topics that are absent locally. `OFF`: no snapshot. |
+| `MaxTopics` | `1000000` | Upper bound of topics in one snapshot. |
+
+### 4.7 `Fetch`
+
+How this broker pulls from its sources.
+
+| Key | Default | Description |
+|---|---|---|
+| `MaxRecords` | `4096` | Records per batch. |
+| `MaxBytes` | `1048576` (1 MiB) | Bytes per batch (at least one record is always returned). |
+| `MaxWaitMs` | `1000` | Long-poll timeout. 10 ≤ value < `KeepAliveSeconds` × 1000. |
+| `LingerMs` | `0` | The source waits up to this long to fill a batch (fewer, larger batches). |
+| `Pipeline` | `1` | `1` or `2` batches in flight. |
+| `CrcOnTls` | `false` | Also send and check batch CRC-32C on TLS links (TLS already protects integrity). |
+| `ReconnectMaxMs` | `30000` | Ceiling of the jittered reconnect backoff. |
+
+### 4.8 `Receive`
+
+How replicas are applied on this broker.
+
+| Key | Default | Description |
+|---|---|---|
+| `Bus` | `true` | Deliver replicas to the internal bus (GraphQL subscriptions, flows, Zenoh). |
+| `BridgeOutbound` | `false` | Let outbound bridges (MQTT client, Kafka, NATS, …) forward replicas. Loop risk, see [Loop guards](#8-loop-guards). |
+| `Archive` | `true` | Archive groups store replicas. |
+| `Queue` | `false` | Offline persistent sessions queue replicas. |
+| `SharedSubscriptions` | `SKIP` | `SKIP`: shared subscription groups get a message only on the broker it was published on. `DELIVER`: also replicas. |
+| `MarkReplicas` | `false` | Add the user property `mmq-peer-src=<NodeId>` to replicas. |
+| `CatchUpRateFactor` | `3` | While catching up (lag > `Fetch.MaxRecords`), apply at most this factor × the source's publish rate (at least 1000/s), so local subscribers are not flooded. 0 = no pacing, else ≥ 1.5. |
+| `MaxApplyRate` | `0` | Hard cap of replicas applied per second. 0 = off. |
+| `MaxRecordAgeMs` | `0` | Non-retained replicas older than this are dropped (`dropped{stale}`); retained ones only update the store. 0 = off. |
+| `MaxFrameBytes` | `16842752` (16 MiB + 64 KiB) | Largest frame accepted from a source. ≥ `Fetch.MaxBytes` + 64 KiB. |
+| `InjectWorkers` | `1` | 1..16. |
+
+### 4.9 `Peers[]`
+
+| Key | Default | Description |
+|---|---|---|
+| `NodeId` | required | The peer's NodeId. Unique (case-insensitive). |
+| `Address` | – | `host:port` of the peer's listener. Present = this broker pulls from the peer. |
+| `Serve` | `true` | The peer may pull from this broker. A peer needs `Address` or `Serve: true`. |
+| `SharedSecrets` | `[]` | Per-peer secrets; replace the group secrets for this peer. |
+| `Tls.Enabled` | `PeerLink.Tls.Enabled` | TLS for the outgoing connection to this peer. |
+| `Tls.PinnedSha256` | `[]` | SHA-256 of the peer's SubjectPublicKeyInfo or certificate (64 hex digits, colons/spaces allowed). A match replaces chain verification. Needs TLS. |
+| `Tls.CertificateIdentity` | `urn:monstermq:node:<NodeId>` | Accepted identity instead (exact URI SAN or DNS SAN). |
+| `Tls.ServerName` | – | TLS SNI only. |
+| `Tls.RequireClientCert` | `false` | Require a client certificate from this peer (needs `ClientAuth` `REQUEST` or `REQUIRED`). |
+| `Tls.InsecureSkipVerify` | `false` | Do not verify the peer's certificate; the pull direction then counts as unauthenticated unless a shared secret is used. |
+| `Receive.Include` / `Receive.Exclude` | `["#"]` / `[]` | Topic filters for records accepted from this peer. |
+
+### 4.10 Validation
+
+Startup fails (fail-closed) when, among others:
+
+- a peer has neither `Address` nor `Serve: true`, or two peers share a NodeId;
+- no peer other than this broker is configured;
+- a direction is not authenticated: a serving peer needs TLS with a client
+  certificate (`ClientAuth: REQUIRED`, or `REQUEST` with `RequireClientCert`)
+  or a shared secret; a pulled peer needs TLS with `TrustStorePath`, a pin or
+  a shared secret (or `InsecureSkipVerify` plus a secret), unless
+  `AllowUnauthenticatedPeers` is set;
+- secrets or pins are used without TLS in that direction;
+- a numeric value is out of range (`Fetch.MaxWaitMs` vs. `KeepAliveSeconds`,
+  `Log.MaxBytes` vs. `MaxRecordBytes`, `Receive.MaxFrameBytes` vs.
+  `Fetch.MaxBytes`, …).
+
+Startup warnings: `AllowUnauthenticatedPeers` set; group secrets with more than
+two brokers; `Tls.TrustStorePath` equal to the MQTT TCPS truststore; retained
+store `MEMORY` with `Snapshot.Mode: OFF`; no `Peers` entry matches this host.
+
+PeerLink cannot be enabled together with clustering (`-cluster`) or the Kafka
+message bus; startup aborts.
+
+---
+
+## 5. Retained messages
+
+- A forwarded retained message is written to the consumer's own retained
+  store (memory or database), whatever store the source uses. Retained
+  replicas go through the broker's asynchronous retained queue; when it is
+  full, the injector waits (backpressure up to the puller). An empty retained payload deletes the topic on the consumer too.
+- **Snapshot `FILL`** fills only topics that are absent locally, so it never
+  overwrites a newer local value. It runs on first contact and after the
+  source restarted.
+- **Resync**: `POST /peerlink/v1/resync?source=<NodeId>` (loopback only)
+  fetches the source's retained messages again and overwrites local values
+  that are more than 1 s older (NEWER).
+- Active-active conflicts resolve by arrival order: on each broker the
+  retained message applied last wins. Clients publishing the same retained
+  topic on both brokers at the same time can leave them with different values
+  until the topic is published again.
+
+---
+
+## 6. Delivery guarantees (RPO)
+
+PeerLink is not synchronous replication: a PUBACK means the local broker
+accepted the message, not that a peer has it. With the link up on a LAN, the
+data at risk is the replication lag.
+
+| Event | Result |
+|---|---|
+| Connection drop, both brokers running | No loss and no duplicates (resume by offset), while the backlog fits into the source's log |
+| Consumer graceful restart | No loss and no duplicates; missing retained values come back through the snapshot |
+| Consumer crash | Records applied after the last commit, at most one batch, are delivered again (at least once) |
+| Source graceful stop | The source waits up to `Log.DrainOnShutdownMs` for connected consumers. What it could not serve is logged (`shutdownUnserved`, `uncapturedAtShutdown`). |
+| Source crash | Records not yet pulled are lost; the consumer counts `sourceResets` and a lower bound in `resetLostLowerBound` |
+| Consumer down longer than the log holds | The oldest records are dropped and counted on both sides (`lostTotal`, `gapLostTotal`) |
+
+QoS 2 is not exactly-once across a consumer crash. No loss is silent: every
+drop is counted in the status.
+
+---
+
+## 7. Security
+
+1. **Network filter**: `Listener.AllowedNetworks` is checked before TLS.
+2. **Pre-auth limit**: `Listener.MaxPreAuthPerIp` limits handshakes per IP.
+3. **mTLS**: identity is the URI SAN `urn:monstermq:node:<NodeId>` (or
+   `Peers[].Tls.CertificateIdentity`); the trust anchor is a dedicated peer CA.
+4. **Pins**: `PinnedSha256` replaces chain verification for that peer.
+5. **Shared secrets**: an HMAC challenge-response bound to the TLS 1.3 session
+   (exporter), so a secret is never sent and cannot be replayed on another
+   connection.
+6. **Handshake checks**: a broker refuses itself (`self_connection`), a NodeId
+   it does not expect (`unknown_peer`, `wrong_node`), a peer with
+   `Serve: false` (`not_allowed`), and a second instance claiming the same
+   NodeId (`duplicate_node`).
+7. Refusals are logged as ERROR; with authentication configured, the reason is
+   not sent to the remote side.
+
+---
+
+## 8. Loop guards
+
+PeerLink never forwards a replica again, but other components can turn a
+replica into a new publish, which is then forwarded like any other:
+
+- Never point an MQTT bridge, inbound or outbound, at a peer broker.
+- Run every device connector that publishes into the broker (MQTT client
+  bridges with inbound subscriptions, OPC UA, WinCC OA/Unified, PLC4X, flows)
+  on one broker only, or its output arrives twice.
+- Outbound-only bridges may run on every broker with
+  `Receive.BridgeOutbound: false` (the default), so each forwards exactly its
+  own broker's publishes.
+- An archive group that writes into a database shared by several brokers
+  belongs to one broker, or set `Receive.Archive: false`.
+- External clients that republish what they receive: set
+  `Receive.MarkReplicas: true` so they can filter on `mmq-peer-src`, or
+  `Capture.EchoSuppressMs`.
+- Shared subscription groups need members on every broker.
+
+### Zenoh coexistence
+
+PeerLink and Zenoh federation can run on the same broker:
+
+- Replicas received through PeerLink reach Zenoh subject to `Zenoh.Allow` /
+  `Zenoh.Deny`.
+- Messages arriving through Zenoh are captured into the PeerLink log subject
+  to `Capture.Include` / `Exclude`.
+- A message that crossed a PeerLink hop carries its origin (`peerSource`) and
+  is never captured into another PeerLink log.
+- A message that arrives through both PeerLink and Zenoh is applied once
+  (`zenohDupSkipped` in the status).
+
+---
+
+## 9. Sizing
+
+`Log.MaxBytes` (default 256 MiB) bounds the log. A 200-byte record (topic,
+client id and payload) takes about 224 bytes, so the default holds about 1.2
+million records, about 60 s of outage at 20,000 msg/s. The status reports the
+remaining `capacitySeconds` at the current publish rate. Size the log for the
+longest consumer outage that must be bridged without loss.
+
+While the log is full the JVM needs heap for about twice `MaxBytes`: size
+`-Xmx` to at least 2.2 × `Log.MaxBytes` + 150 MiB (about 710 MiB with the
+default 256 MiB log), or lower `Log.MaxBytes`.
+
+Use the same maximum message size on all linked brokers (`TCP.MaxMessageSizeKb`,
+default 512 KB here, 1 MiB on Edge). A larger message than the
+receiver accepts is dropped there (`dropped{size}`).
+
+---
+
+## 10. Monitoring
+
+### 10.1 Status endpoint
+
+```bash
+curl -s http://127.0.0.1:1890/peerlink/v1/status
+```
+
+Served on the peer port to loopback clients, and over TLS to mTLS-authenticated
+peers. A broker that only pulls binds `127.0.0.1:<Listener.Port>` for it.
+Requests with an `Origin` header or a non-loopback `Host` are refused (browser
+guard), so use `curl` with `127.0.0.1` or `localhost`.
+
+| Section | Main fields |
+|---|---|
+| `log` | `epoch`, `lso`, `leo`, `lwm`, `records`, `bytes`, `maxBytes`, `capacitySeconds`, `appended{client,inline,will}`, `evictedUnread`, `evictedBy`, `captureDropped`, `echoSuppressed`, `uncapturedAtShutdown` |
+| `admission` | `accepted`, `refusedNetwork`, `refusedBusy`, `refusedPlaintext`, `tlsFailures`, `authFailures{code}` |
+| `consumers[]` (peers pulling from this broker) | `nodeId`, `state` (`NEVER_CONNECTED`, `CONNECTED`, `DISCONNECTED`), `remote`, `committed`, `lag`, `lostTotal`, `servedRecords`, `snapshotServed`, `shutdownUnserved`, `oaRetained`, `topicRootMismatch`, `retainedClassMismatch` |
+| `sources[]` (peers this broker pulls from) | `nodeId`, `address`, `state` (`STOPPED`, `BACKOFF`, `DIALING`, `HANDSHAKE`, `SNAPSHOT`, `STREAMING`), `lagRecords`, `injected`, `retainOnly`, `dupSkipped`, `dropped{malformed,size_source,namespace,filtered,size,expired,stale,will_superseded}`, `gapLostTotal`, `sourceResets`, `resetLostLowerBound`, `retainedDiverged`, `snapshotFilled`, `clockSkewMs`, `rttMs`, `applyDelayMs{p50,p99,p99_9}`, `lastError`, `oaRetained` |
+
+`retainedClassMismatch` is informational: replication works across different
+retained store types.
+
+`POST /peerlink/v1/resync?source=<NodeId>` (loopback only) starts a NEWER
+retained resync from that source (see [Retained messages](#5-retained-messages)).
+
+`oaRetained` and `topicRootMismatch` are always false on this broker (WinCC OA
+specific, Edge only).
+
+### 10.2 Log messages
+
+All PeerLink log lines start with `peerlink:`. Connects and decisions are INFO,
+data loss and configuration hints WARN, identity and protocol errors ERROR.
+Common messages:
+
+| Message | Meaning / action |
+|---|---|
+| `consumer connected` / `streaming from source` | Link is up (INFO). |
+| `configured consumer never connected; it pins the log` | A peer allowed to pull (`Serve`) has not connected within `Log.NeverConnectedWarnSec`. Until it does, records are kept for it until the log limits evict them. Harmless if the peer just starts later; otherwise check its config and network. Logged once. |
+| `records lost before resume (source log overflow)` / `consumer resumes after a gap` | The consumer was away longer than the log holds. Run a resync if retained values matter. |
+| `source restarted (new epoch)` | The source crashed or restarted; `resetLostLowerBound` estimates the loss. |
+| `handshake refused` | Identity, secret or configuration mismatch; `code` and `reason` name it (ERROR, rate-limited). |
+| `clock skew` | Clocks differ by more than 1 s; synchronise with NTP. |
+
+---
+
+## 11. Limitations
+
+- The `$SYS` counters `messages/received` and `packets/received` include the
+  replicas a broker applied.
+- A snapshot (`FILL`) after a consumer restart can bring back a retained value
+  that was deleted on that consumer while the source was unreachable.
+- In a mesh, a snapshot also carries retained values the source itself
+  received from other peers (harmless with `FILL`).
+- A resync snapshot has no tombstones: values the source deleted are not
+  removed on the consumer. After an outage longer than the log, run the
+  resync, then clear or republish the remaining topics by hand.
+- Retained values from snapshots and archive rows of replicas are dated with
+  the source's clock. Synchronise the brokers with NTP; a difference above
+  1 s is logged (`clockSkewMs`).
+- A network client whose CONNECT username is not valid UTF-8 is forwarded
+  without its username (`log.usernameStripped`).
+
+---
+
+## 12. Interoperability with MonsterMQ Edge
+
+MonsterMQ Edge (Go) implements the same protocol and the same `PeerLink`
+keys, so Kotlin and Go brokers can be linked in any combination. Differences:
+
+- Edge has an additional per-peer key `Peers[].RedundancyPartner` for WinCC OA
+  redundant pairs with a WinCC OA retained store. This broker does not know
+  it and fails startup on it, so a config file shared with Edge brokers must
+  not contain it.
+- Edge filters the WinCC OA namespace and announces a WinCC OA system name
+  when embedded in WinCC OA; this broker announces none.
+- Default maximum message size: 512 KB here, 1 MiB on Edge. Align them.
