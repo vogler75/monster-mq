@@ -49,3 +49,5 @@ hazelcast.xml
 ### Environment ###
 .env
 data
+# PeerLink TLS certificates and private keys
+/certs/
