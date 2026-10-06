@@ -224,7 +224,8 @@ data class WinCCUaConnectionConfig(
     val transformConfig: WinCCUaTransformConfig = WinCCUaTransformConfig(),
     val messageFormat: String = "JSON_ISO",
     val dataAccessMode: String = "GRAPHQL",                 // "GRAPHQL" or "OPENPIPE"
-    val pipePath: String? = null                            // Optional override for OpenPipe path; OS default if null
+    val pipePath: String? = null,                           // Optional override for OpenPipe path; OS default if null
+    val trustAllCertificates: Boolean = false               // Skip TLS certificate + hostname verification (self-signed test systems)
 ) {
     companion object {
         const val FORMAT_JSON_ISO = "JSON_ISO"
@@ -269,7 +270,8 @@ data class WinCCUaConnectionConfig(
                     transformConfig = transformConfig,
                     messageFormat = json.getString("messageFormat", FORMAT_JSON_ISO),
                     dataAccessMode = json.getString("dataAccessMode", MODE_GRAPHQL),
-                    pipePath = json.getString("pipePath")
+                    pipePath = json.getString("pipePath"),
+                    trustAllCertificates = json.getBoolean("trustAllCertificates", false)
                 )
             } catch (e: Exception) {
                 println("Overall error in WinCCUaConnectionConfig.fromJsonObject: ${e.message}")
@@ -289,6 +291,7 @@ data class WinCCUaConnectionConfig(
             .put("transformConfig", transformConfig.toJsonObject())
             .put("messageFormat", messageFormat)
             .put("dataAccessMode", dataAccessMode)
+            .put("trustAllCertificates", trustAllCertificates)
 
         if (pipePath != null) {
             result.put("pipePath", pipePath)

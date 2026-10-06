@@ -10,6 +10,7 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.http.WebSocket
 import io.vertx.core.http.WebSocketClient
+import io.vertx.core.http.WebSocketClientOptions
 import io.vertx.core.http.WebSocketConnectOptions
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -88,11 +89,20 @@ class WinCCUaConnector : AbstractVerticle() {
             // Initialize HTTP client for REST API calls
             val webClientOptions = WebClientOptions()
                 .setConnectTimeout(winCCUaConfig.connectionTimeout.toInt())
+            if (winCCUaConfig.trustAllCertificates) {
+                webClientOptions.setTrustAll(true).setVerifyHost(false)
+                logger.warning("TLS certificate verification disabled for WinCC Unified device ${deviceConfig.name} (trustAllCertificates=true)")
+            }
 
             webClient = WebClient.create(vertx, webClientOptions)
 
             // Initialize WebSocket client
-            wsClient = vertx.createWebSocketClient()
+            val wsClientOptions = WebSocketClientOptions()
+                .setConnectTimeout(winCCUaConfig.connectionTimeout.toInt())
+            if (winCCUaConfig.trustAllCertificates) {
+                wsClientOptions.setTrustAll(true).setVerifyHost(false)
+            }
+            wsClient = vertx.createWebSocketClient(wsClientOptions)
 
             // Register metrics endpoint
             setupMetricsEndpoint()

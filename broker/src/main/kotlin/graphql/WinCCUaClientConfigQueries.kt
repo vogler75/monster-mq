@@ -114,6 +114,7 @@ class WinCCUaClientConfigQueries(
                 "dataAccessMode" to config.dataAccessMode,
                 "graphqlEndpoint" to config.graphqlEndpoint,
                 "websocketEndpoint" to (config.websocketEndpoint ?: ""),
+                "trustAllCertificates" to config.trustAllCertificates,
                 "username" to config.username,
                 "password" to config.password,
                 "pipePath" to (config.pipePath ?: ""),

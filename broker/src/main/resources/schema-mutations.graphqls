@@ -1220,6 +1220,9 @@ input WinCCUaConnectionConfigInput {
     graphqlEndpoint: String
     # WebSocket endpoint URL (optional, defaults to graphqlEndpoint with ws:// protocol)
     websocketEndpoint: String
+    # Accept any TLS server certificate and skip hostname verification for https/wss
+    # endpoints (e.g. self-signed WinCC Unified certificates). Use for test systems only.
+    trustAllCertificates: Boolean = false
     # Username for authentication (required for GRAPHQL mode)
     username: String
     # Password for authentication (required for GRAPHQL mode)

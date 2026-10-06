@@ -910,7 +910,8 @@ class WinCCUaClientConfigMutations(
             transformConfig = transformConfig,
             messageFormat = configMap["messageFormat"] as? String ?: WinCCUaConnectionConfig.FORMAT_JSON_ISO,
             dataAccessMode = configMap["dataAccessMode"] as? String ?: WinCCUaConnectionConfig.MODE_GRAPHQL,
-            pipePath = configMap["pipePath"] as? String
+            pipePath = configMap["pipePath"] as? String,
+            trustAllCertificates = configMap["trustAllCertificates"] as? Boolean ?: false
         )
 
         return DeviceConfigRequest(
@@ -949,6 +950,7 @@ class WinCCUaClientConfigMutations(
                 "dataAccessMode" to config.dataAccessMode,
                 "graphqlEndpoint" to config.graphqlEndpoint,
                 "websocketEndpoint" to config.websocketEndpoint,
+                "trustAllCertificates" to config.trustAllCertificates,
                 "username" to config.username,
                 "pipePath" to config.pipePath,
                 "reconnectDelay" to config.reconnectDelay,
