@@ -323,6 +323,9 @@ class NatsClientConnector : AbstractVerticle() {
         // Loop prevention: skip messages we published ourselves
         if (msg.senderId == internalClientId || msg.clientId == internalClientId) return
 
+        // PeerLink gate: Skip replicas if bridgeOutbound is disabled (default)
+        if (msg.peer != null && !(at.rocworks.Monster.getPeerLinkManager()?.config?.receive?.bridgeOutbound ?: false)) return
+
         val conn = natsConnection
         if (conn == null || conn.status != Connection.Status.CONNECTED) {
             logger.fine { "NATS not connected, dropping outbound message on '${msg.topicName}'" }

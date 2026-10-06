@@ -12,15 +12,27 @@ import java.io.Serializable
 import java.time.Instant
 import java.util.*
 
+data class PeerForward(
+    val sourceNode: String,
+    val clientId: String,
+    val username: String? = null,
+    val timeNs: Long = 0L,
+    val epoch: Long = 0L,
+    val offset: Long = 0L,
+    val dup: Boolean = false,
+    val will: Boolean = false,
+    val snapshot: Boolean = false
+) : Serializable
+
 class BrokerMessage(
-    val messageUuid: String = Utils.getUuid(),
-    val messageId: Int,
+    var messageUuid: String = Utils.getUuid(),
+    val messageId: Int = 0,
     val topicName: String,
     val payload: ByteArray,
     val qosLevel: Int,
     val isRetain: Boolean,
-    val isDup: Boolean,
-    val isQueued: Boolean,
+    val isDup: Boolean = false,
+    val isQueued: Boolean = false,
     val clientId: String,
     val senderId: String? = null,  // Optional sender identification for loop prevention
     val time: Instant = Instant.now(),
@@ -31,7 +43,12 @@ class BrokerMessage(
     val responseTopic: String? = null,
     val correlationData: ByteArray? = null,
     val userProperties: Map<String, String>? = null,
-    val originNodeId: String? = null
+    val originNodeId: String? = null,
+    // PeerLink extensions
+    val peer: PeerForward? = null,
+    val peerSource: String? = null,
+    val isWill: Boolean = false,
+    val username: String? = null
 ): Serializable {
     
     init {
@@ -161,7 +178,8 @@ class BrokerMessage(
         message.isWillRetain,
         false,
         false,
-        clientId
+        clientId,
+        isWill = true
     )
 
     constructor(clientId: String, topic: String, payload: String) : this(
@@ -176,16 +194,39 @@ class BrokerMessage(
         clientId
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = BrokerMessage(
+    fun copy(
+        messageUuid: String = this.messageUuid,
+        messageId: Int = this.messageId,
+        topicName: String = this.topicName,
+        payload: ByteArray = this.payload,
+        qosLevel: Int = this.qosLevel,
+        isRetain: Boolean = this.isRetain,
+        isDup: Boolean = this.isDup,
+        isQueued: Boolean = this.isQueued,
+        clientId: String = this.clientId,
+        senderId: String? = this.senderId,
+        time: Instant = this.time,
+        messageExpiryInterval: Long? = this.messageExpiryInterval,
+        payloadFormatIndicator: Int? = this.payloadFormatIndicator,
+        contentType: String? = this.contentType,
+        responseTopic: String? = this.responseTopic,
+        correlationData: ByteArray? = this.correlationData,
+        userProperties: Map<String, String>? = this.userProperties,
+        originNodeId: String? = this.originNodeId,
+        peer: PeerForward? = this.peer,
+        peerSource: String? = this.peerSource,
+        isWill: Boolean = this.isWill,
+        username: String? = this.username
+    ): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
+        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId,
+        peer, peerSource, isWill, username
     )
-    
-    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = BrokerMessage(
-        messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
-    )
-    
+
+    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = copy(qosLevel = qosLevel)
+
+    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = copy(messageId = messageId)
+
     /**
      * Clone message with a different retain flag.
      * Used for MQTT v5 Retain As Published (RAP) subscription option.
@@ -193,15 +234,9 @@ class BrokerMessage(
      * @param retainFlag The new retain flag value
      * @return Cloned message with updated retain flag
      */
-    fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage = BrokerMessage(
-        messageUuid, messageId, topicName, payload, qosLevel, retainFlag, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
-    )
+    fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage = copy(isRetain = retainFlag)
 
-    fun cloneWithOriginNodeId(originNodeId: String?): BrokerMessage = BrokerMessage(
-        messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
-        messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId
-    )
+    fun cloneWithOriginNodeId(originNodeId: String?): BrokerMessage = copy(originNodeId = originNodeId)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 
@@ -260,6 +295,7 @@ class BrokerMessage(
 
     fun isExpired(): Boolean {
         val interval = messageExpiryInterval ?: return false
+        if (interval <= 0) return false
         val ageSeconds = (System.currentTimeMillis() - time.toEpochMilli()) / 1000
         return ageSeconds >= interval
     }

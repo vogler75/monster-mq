@@ -35,7 +35,7 @@ open class SessionHandler(
     private val sessionStore: ISessionStoreAsync,
     private val queueStore: IQueueStoreAsync,
     private val messageBus: IMessageBus,
-    private val messageHandler: MessageHandler,
+    val messageHandler: MessageHandler,
     private val enqueueMessages: Boolean
 ): AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
@@ -58,6 +58,10 @@ open class SessionHandler(
     // Message bus metrics (inter-node communication)
     private val messageBusOut = AtomicLong(0) // Messages sent to other nodes
     private val messageBusIn = AtomicLong(0)  // Messages received from other nodes
+
+    var peerLinkManager: at.rocworks.peerlink.PeerLinkManager? = null
+    var peerLinkReceiveBus: Boolean = true
+    var peerLinkReceiveQueue: Boolean = false
 
     // Timestamp tracking for rate calculations
     private var lastMetricsResetTime = System.currentTimeMillis()
@@ -1048,6 +1052,7 @@ open class SessionHandler(
     }
 
     fun onlineClient(clientId: String): Future<Void> {
+        peerLinkManager?.recordSessionEstablished(clientId)
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.ONLINE)
         return if (Monster.isClustered()) {
             val fx = Monster.getClusterNodeIds(vertx).map {
@@ -1536,7 +1541,18 @@ open class SessionHandler(
 
     fun publishMessage(message: BrokerMessage) = publishMessage(message, forwardToExternalBus = true)
 
+    fun applyRetainedOnly(message: BrokerMessage): Future<Void> {
+        return messageHandler.saveMessage(message)
+    }
+
     private fun publishMessage(message: BrokerMessage, forwardToExternalBus: Boolean) {
+        if (message.peer == null && message.peerSource == null) {
+            peerLinkManager?.capture(message)
+        }
+        if (message.peer != null) {
+            messageBusIn.incrementAndGet()
+        }
+
         // NEW: If publish bulk processing is enabled, buffer the message instead of processing immediately
         if (publishBulkProcessingEnabled) {
             try {
@@ -1870,13 +1886,16 @@ open class SessionHandler(
         clients: List<Pair<String, Int>>,
         qos: Int
     ) {
+        val eligibleMessages = if (peerLinkReceiveQueue) messages else messages.filter { it.peer == null }
+        if (eligibleMessages.isEmpty()) return
+
         val (createdClients, offlineClients) = clients.partition { (clientId, _) ->
             clientStatus[clientId] == ClientStatus.CREATED
         }
 
         // Created clients: queue in-flight (only if effective QoS > 0)
         createdClients.forEach { (clientId, subscriptionQos) ->
-            messages.forEach { msg ->
+            eligibleMessages.forEach { msg ->
                 val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
                 if (effectiveQos > 0) {
                     val messageToQueue = if (effectiveQos < msg.qosLevel) {
@@ -1896,7 +1915,7 @@ open class SessionHandler(
                 shouldPersistMessagesForClient(clientId)
             }
             persistentClients.forEach { (clientId, subscriptionQos) ->
-                messages.forEach { msg ->
+                eligibleMessages.forEach { msg ->
                     val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
                     if (effectiveQos > 0) {
                         val messageToQueue = if (effectiveQos < msg.qosLevel) {
@@ -2010,9 +2029,11 @@ open class SessionHandler(
      */
     private fun notifyMessageListeners(topicName: String, messages: List<BrokerMessage>) {
         if (messageListeners.isEmpty()) return
+        val eligible = if (peerLinkReceiveBus) messages else messages.filter { it.peer == null }
+        if (eligible.isEmpty()) return
         messageListeners.values.forEach { (topicFilters, callback) ->
             if (topicFilters.any { filter -> matchesTopicFilter(topicName, filter) }) {
-                messages.forEach { message ->
+                eligible.forEach { message ->
                     try {
                         callback(message)
                     } catch (e: Exception) {
@@ -2087,7 +2108,7 @@ open class SessionHandler(
                         sendMessageToClient(clientId, messageForClient(clientId, msg))
                     }
 
-                    if (others.isNotEmpty()) {
+                    if (others.isNotEmpty() && (m.peer == null || peerLinkReceiveQueue)) {
                         val (created, offline) = others.partition { (clientId, _) ->
                             clientStatus[clientId] == ClientStatus.CREATED
                         }

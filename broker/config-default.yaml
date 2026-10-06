@@ -67,3 +67,31 @@ Features:
   Hmi: true
   I3xClient: true
   Redfish: false
+
+# PeerLink: inter-broker replication with MonsterMQ Edge and other MonsterMQ nodes
+# PeerLink:
+#   Enabled: false
+#   AllowUnauthenticatedPeers: false
+#   Listener:
+#     Address: "0.0.0.0"
+#     Port: 1890
+#     AllowedNetworks: []
+#     MaxPreAuthPerIp: 4
+#     AllowPlaintext: false
+#   Tls:
+#     Enabled: true
+#     AutoGenerate: true # Creates certs/peer-{NodeId}.pem and .key if missing
+#     ClientAuth: REQUIRED
+#     TrustStorePath: certs/peer-ca.pem
+#   SharedSecrets: [] # Base64-encoded pre-shared keys (HMAC-SHA256 over TLS 1.3 exporter)
+#   Capture:
+#     Wills: true
+#     Include: ["#"]
+#     Exclude: ["monstermq/hmi/sync/#"]
+#   Snapshot:
+#     Mode: FILL
+#     MaxTopics: 500000
+#   Peers:
+#     - NodeId: edge-1
+#       Address: "edge-1.local:1890"
+#       Serve: true

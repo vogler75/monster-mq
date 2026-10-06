@@ -325,6 +325,9 @@ class KafkaClientConnector : AbstractVerticle() {
         // Loop prevention: skip messages we published ourselves
         if (msg.senderId == internalClientId || msg.clientId == internalClientId) return
 
+        // PeerLink gate: Skip replicas if bridgeOutbound is disabled (default)
+        if (msg.peer != null && !(at.rocworks.Monster.getPeerLinkManager()?.config?.receive?.bridgeOutbound ?: false)) return
+
         val producer = kafkaProducer ?: return
         val destTopic = cfg.outboundKafkaTopic?.takeIf { it.isNotBlank() } ?: device.namespace
         val recordKey = applyOutboundTopicKeyRegex(msg.topicName)

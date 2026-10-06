@@ -91,6 +91,7 @@ class Monster(args: Array<String>) {
     private var vertx: Vertx? = null
     private var sessionHandler: SessionHandler? = null
     private var messageBus: IMessageBus? = null
+    private var peerLinkManager: at.rocworks.peerlink.PeerLinkManager? = null
     private var retainedStore: IMessageStore? = null
     private var flowEngineExtension: FlowEngineExtension? = null
     private var scriptExtension: at.rocworks.devices.script.ScriptExtension? = null
@@ -291,6 +292,10 @@ class Monster(args: Array<String>) {
 
         fun getSessionHandler(): SessionHandler? {
             return singleton?.sessionHandler
+        }
+
+        fun getPeerLinkManager(): at.rocworks.peerlink.PeerLinkManager? {
+            return singleton?.peerLinkManager
         }
 
         fun getFlowEngineExtension(): FlowEngineExtension? {
@@ -1129,6 +1134,73 @@ MORE INFO:
                     archiveHandler.setMessageHandler(messageHandler)
                     instance.sessionHandler = sessionHandler
                     instance.messageBus = messageBus
+                }
+
+                // PeerLink
+                val peerLinkJson = configJson.getJsonObject("PeerLink")
+                if (peerLinkJson != null) {
+                    try {
+                        val peerLinkConfig = at.rocworks.peerlink.config.PeerLinkConfigParser.parse(peerLinkJson)
+                        if (peerLinkConfig.enabled) {
+                            if (isClustered()) {
+                                logger.severe("PeerLink cannot be enabled together with clustering (-cluster); startup aborted")
+                                kotlin.system.exitProcess(1)
+                            }
+                            val kafkaObj = configJson.getValue("Kafka") as? JsonObject
+                            val kafkaBus = kafkaObj?.getValue("MessageBus") as? JsonObject
+                            if (kafkaBus?.getBoolean("Enabled", false) == true) {
+                                logger.severe("PeerLink cannot be enabled together with the Kafka message bus; startup aborted")
+                                kotlin.system.exitProcess(1)
+                            }
+
+                            val topNodeId = configJson.getString("NodeId", "")
+                            val hostname = try { java.net.InetAddress.getLocalHost().hostName } catch (_: Exception) { "" }
+                            val (nodeId, origin) = when {
+                                topNodeId.isNotEmpty() -> Pair(topNodeId, at.rocworks.peerlink.config.NodeIdOrigin.CONFIG)
+                                hostname.isNotEmpty() -> Pair(hostname.split('.')[0], at.rocworks.peerlink.config.NodeIdOrigin.HOSTNAME)
+                                else -> Pair("node", at.rocworks.peerlink.config.NodeIdOrigin.FALLBACK)
+                            }
+                            val userMgmt = (configJson.getValue("UserManagement") as? JsonObject)?.getBoolean("Enabled", false) ?: false
+                            val tcpsObj = configJson.getValue("TCPS") as? JsonObject
+                            val tcpsTrust = tcpsObj?.getString("TrustStorePath", "") ?: ""
+                            val tcpServerConfig = configJson.getValue("MqttTcpServer") as? JsonObject
+                            val tcpConfig = configJson.getValue("TCP") as? JsonObject
+                            val maxMsgSize = (tcpServerConfig?.getInteger("MaxMessageSizeKb")
+                                ?: tcpConfig?.getInteger("MaxMessageSizeKb")
+                                ?: 512) * 1024
+                            val hmiObj = configJson.getValue("HMI") as? JsonObject
+                            val hmiBase = hmiObj?.getString("SyncBaseTopic", at.rocworks.peerlink.config.defaultHMISyncBaseTopic) ?: at.rocworks.peerlink.config.defaultHMISyncBaseTopic
+
+                            val env = at.rocworks.peerlink.config.PeerLinkEnv(
+                                nodeID = nodeId,
+                                nodeIDOrigin = origin,
+                                hostname = hostname,
+                                userMgmt = userMgmt,
+                                retainedStore = if (retainedStoreType == at.rocworks.stores.MessageStoreType.MEMORY) "MEMORY" else "DB",
+                                tcpsTrustStore = tcpsTrust,
+                                maxMessageSize = maxMsgSize,
+                                hmiBase = hmiBase
+                            )
+
+                            val setup = at.rocworks.peerlink.config.validatePeerLink(peerLinkConfig, env)
+                            val plManager = at.rocworks.peerlink.PeerLinkManager(
+                                config = peerLinkConfig,
+                                setup = setup,
+                                sessionHandler = sessionHandler,
+                                messageHandler = messageHandler,
+                                messageBus = messageBus
+                            )
+                            singleton?.peerLinkManager = plManager
+                            plManager.start()
+
+                            Runtime.getRuntime().addShutdownHook(Thread {
+                                plManager.stop()
+                            })
+                        }
+                    } catch (e: Exception) {
+                        logger.severe("PeerLink configuration error: ${e.message}")
+                        kotlin.system.exitProcess(1)
+                    }
                 }
 
                 // OPC UA Extension

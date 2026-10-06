@@ -27,6 +27,16 @@ class MessageHandler(
     private val logger = Utils.getLogger(this::class.java)
 
     private val retainedQueueStore: ArrayBlockingQueue<BrokerMessage> = ArrayBlockingQueue(100_000) // TODO: configurable
+    private val queuedRetainedTopics = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+    private val retainedQueueDropped = AtomicLong(0)
+    private var lastRetainedQueueDropWarn = 0L
+
+    var peerLinkReceiveArchive: Boolean = true
+
+    fun isRetainedTopicQueued(topic: String): Boolean = (queuedRetainedTopics[topic]?.get() ?: 0) > 0
+    fun isRetainedQueueEmpty(): Boolean = retainedQueueStore.isEmpty()
+    fun getRetainedQueueDropped(): Long = retainedQueueDropped.get()
+    fun getRetainedStore(): IMessageStore = retainedStore
 
     private val archiveQueues = mutableMapOf<String, IMessageQueue>()
     private val archiveWriterThreadsStop = mutableMapOf<String, AtomicBoolean>()
@@ -237,8 +247,17 @@ class MessageHandler(
                     add.add(it)
             }
         }
-        if (add.isNotEmpty()) retainedStore.addAll(add)
-        if (del.isNotEmpty()) retainedStore.delAll(del)
+        try {
+            if (add.isNotEmpty()) retainedStore.addAll(add)
+            if (del.isNotEmpty()) retainedStore.delAll(del)
+        } finally {
+            for (msg in list) {
+                val counter = queuedRetainedTopics[msg.topicName]
+                if (counter != null && counter.decrementAndGet() <= 0) {
+                    queuedRetainedTopics.remove(msg.topicName, counter)
+                }
+            }
+        }
     }
 
     private fun getLastMessages(list: List<BrokerMessage>): List<BrokerMessage> {
@@ -323,38 +342,55 @@ class MessageHandler(
 
     fun saveMessage(message: BrokerMessage): Future<Void> {
         if (message.isRetain) {
-            try {
-                retainedQueueStore.add(message)
-            } catch (e: IllegalStateException) {
-                // TODO: handle exception
+            queuedRetainedTopics.computeIfAbsent(message.topicName) { java.util.concurrent.atomic.AtomicInteger(0) }.incrementAndGet()
+            if (message.peer != null) {
+                // PeerLink replica: apply backpressure by blocking put
+                retainedQueueStore.put(message)
+            } else {
+                try {
+                    retainedQueueStore.add(message)
+                } catch (e: IllegalStateException) {
+                    val drops = retainedQueueDropped.incrementAndGet()
+                    val now = System.currentTimeMillis()
+                    if (now - lastRetainedQueueDropWarn >= 5000) {
+                        lastRetainedQueueDropWarn = now
+                        logger.warning("Retained queue full; dropped local retained message (total dropped: $drops)")
+                    }
+                    val counter = queuedRetainedTopics[message.topicName]
+                    if (counter != null && counter.decrementAndGet() <= 0) {
+                        queuedRetainedTopics.remove(message.topicName, counter)
+                    }
+                }
             }
         }
 
-        activeArchiveGroups.values.forEach { archiveGroup ->
-            if ((!archiveGroup.retainedOnly || message.isRetain) &&
-                (archiveGroup.topicFilter.isEmpty() || archiveGroup.filterTree.isTopicNameMatching(message.topicName))) {
-                
-                if (!archiveGroup.lastValReadOnly) {
-                    archiveGroup.lastValStore?.let { lastValStore ->
-                        try {
-                            if (message.payload.isEmpty()) {
-                                lastValStore.delAll(listOf(message.topicName))
-                            } else {
-                                lastValStore.addAll(listOf(message))
+        if (message.peer == null || peerLinkReceiveArchive) {
+            activeArchiveGroups.values.forEach { archiveGroup ->
+                if ((!archiveGroup.retainedOnly || message.isRetain) &&
+                    (archiveGroup.topicFilter.isEmpty() || archiveGroup.filterTree.isTopicNameMatching(message.topicName))) {
+                    
+                    if (!archiveGroup.lastValReadOnly) {
+                        archiveGroup.lastValStore?.let { lastValStore ->
+                            try {
+                                if (message.payload.isEmpty()) {
+                                    lastValStore.delAll(listOf(message.topicName))
+                                } else {
+                                    lastValStore.addAll(listOf(message))
+                                }
+                            } catch (e: Exception) {
+                                logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            logger.warning("Error updating last value store for group [${archiveGroup.name}]: ${e.message}")
                         }
                     }
-                }
 
-                if (!archiveGroup.archiveReadOnly && archiveGroup.archiveStore != null) {
-                    val queue = archiveQueues[archiveGroup.name]
-                    if (queue != null) {
-                        try {
-                            queue.add(message)
-                        } catch (e: IllegalStateException) {
-                            // TODO: handle exception
+                    if (!archiveGroup.archiveReadOnly && archiveGroup.archiveStore != null) {
+                        val queue = archiveQueues[archiveGroup.name]
+                        if (queue != null) {
+                            try {
+                                queue.add(message)
+                            } catch (e: IllegalStateException) {
+                                // TODO: handle exception
+                            }
                         }
                     }
                 }

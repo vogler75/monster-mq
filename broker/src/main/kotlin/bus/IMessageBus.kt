@@ -8,4 +8,5 @@ interface IMessageBus {
     fun publishMessageToBus(message: BrokerMessage)
     val isExternalTransport: Boolean
         get() = false
+    fun rememberMessageUuid(messageUuid: String): Boolean = true
 }

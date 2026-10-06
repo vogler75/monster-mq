@@ -1,0 +1,307 @@
+{
+  "preambleHex": "4d4d515001000000",
+  "frames": [
+    {
+      "name": "SERVER_HELLO",
+      "type": 1,
+      "hex": "2e00000001010003000f00000000010000030102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "payload": ""
+    },
+    {
+      "name": "HELLO",
+      "type": 2,
+      "hex": "8b0000000201000f00000000000000fecaefbeadde00004d00000000000000e803000000000000d007000000000000000011000202030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122046f612d62046f612d61070077696e63636f610753797374656d31",
+      "payload": ""
+    },
+    {
+      "name": "HELLO",
+      "type": 2,
+      "hex": "770000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001620161000000",
+      "payload": ""
+    },
+    {
+      "name": "HELLO_OK",
+      "type": 3,
+      "hex": "780000000305000a00000000000000efcdab907856341205000000000000000300000000000000090000000000000005000000000000000200000000000000ffffffffffffffff2a0000000000000000001000010405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223046f612d61000000",
+      "payload": ""
+    },
+    {
+      "name": "GOAWAY",
+      "type": 4,
+      "hex": "140000000409000f00736f757263652073746f7070696e67",
+      "payload": ""
+    },
+    {
+      "name": "GOAWAY",
+      "type": 4,
+      "hex": "050000000404000000",
+      "payload": ""
+    },
+    {
+      "name": "FETCH",
+      "type": 16,
+      "hex": "2900000010070000000100050064000000000000006300000000000000001000000000100001000000e8030000",
+      "payload": ""
+    },
+    {
+      "name": "BATCH",
+      "type": 17,
+      "hex": "4d000000110700000021000300690000000000000002000000080000006900000000000000c80000000000000005000000000000002823000000000000005b5faa9901000001efcdab6162636465666768",
+      "payload": ""
+    },
+    {
+      "name": "BATCH",
+      "type": 17,
+      "hex": "45000000110000000002000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "payload": ""
+    },
+    {
+      "name": "COMMIT",
+      "type": 18,
+      "hex": "090000001215cd5b0700000000",
+      "payload": ""
+    },
+    {
+      "name": "PING",
+      "type": 19,
+      "hex": "09000000130100000000000000",
+      "payload": ""
+    },
+    {
+      "name": "PONG",
+      "type": 20,
+      "hex": "0900000014ffffffffffffffff",
+      "payload": ""
+    }
+  ],
+  "records": [
+    {
+      "name": "full",
+      "hex": "a7000000012cad00158da889edff6a1840e20100000000003c00000001001000080005005b00000007000000706c616e742f6c696e65312f74656d70636c69656e742d31616c69636503100000006170706c69636174696f6e2f6a736f6e080a0000007265706c792f68657265090400000001020300260500000001006b7631260500000001006b763226030000000100612603000000000078260500000001006b76317b2276223a317d",
+      "flags": 173,
+      "publishWallNs": 1759500000123456789,
+      "captureMonoMs": 123456,
+      "expirySec": 60,
+      "payloadFormat": 1,
+      "topic": "plant/line1/temp",
+      "clientId": "client-1",
+      "username": "alice",
+      "contentType": "application/json",
+      "responseTopic": "reply/here",
+      "correlationDataHex": "01020300",
+      "userProperties": [
+        {
+          "k": "k",
+          "v": "v1"
+        },
+        {
+          "k": "k",
+          "v": "v2"
+        },
+        {
+          "k": "a",
+          "v": ""
+        },
+        {
+          "k": "",
+          "v": "x"
+        },
+        {
+          "k": "k",
+          "v": "v1"
+        }
+      ],
+      "payloadHex": "7b2276223a317d",
+      "payloadString": "{\"v\":1}"
+    },
+    {
+      "name": "full_tombstone",
+      "hex": "28000000012cad02158da889edff6a1840e20100000000003c00000001000000000000000000000000000000",
+      "flags": 685,
+      "publishWallNs": 1759500000123456789,
+      "captureMonoMs": 123456,
+      "expirySec": 60,
+      "payloadFormat": 1,
+      "topic": "",
+      "clientId": "",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "",
+      "payloadString": ""
+    },
+    {
+      "name": "minimal",
+      "hex": "34000000012c0000000000000000000000000000000000000000000000000c0000000000000000000000000073656e736f72732f74656d70",
+      "flags": 0,
+      "publishWallNs": 0,
+      "captureMonoMs": 0,
+      "expirySec": 0,
+      "payloadFormat": 0,
+      "topic": "sensors/temp",
+      "clientId": "",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "",
+      "payloadString": ""
+    },
+    {
+      "name": "minimal_tombstone",
+      "hex": "28000000012c0002000000000000000000000000000000000000000000000000000000000000000000000000",
+      "flags": 512,
+      "publishWallNs": 0,
+      "captureMonoMs": 0,
+      "expirySec": 0,
+      "payloadFormat": 0,
+      "topic": "",
+      "clientId": "",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "",
+      "payloadString": ""
+    },
+    {
+      "name": "qos2_will",
+      "hex": "41000000012c1200fbffffffffffffff00000000000000000000000000001000020000000000000007000000636c69656e74732f63312f737461746563316f66666c696e65",
+      "flags": 18,
+      "publishWallNs": -5,
+      "captureMonoMs": 0,
+      "expirySec": 0,
+      "payloadFormat": 0,
+      "topic": "clients/c1/state",
+      "clientId": "c1",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "6f66666c696e65",
+      "payloadString": "offline"
+    },
+    {
+      "name": "qos2_will_tombstone",
+      "hex": "28000000012c1202fbffffffffffffff00000000000000000000000000000000000000000000000000000000",
+      "flags": 530,
+      "publishWallNs": -5,
+      "captureMonoMs": 0,
+      "expirySec": 0,
+      "payloadFormat": 0,
+      "topic": "",
+      "clientId": "",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "",
+      "payloadString": ""
+    },
+    {
+      "name": "qos1_retain_dup",
+      "hex": "3f000000012c0d0000002a36fe9c9717f401000000000000100e000000000b000600000000000000060000007374617475732f6e6f64656e6f64652d61616374697665",
+      "flags": 13,
+      "publishWallNs": 1700000000000000000,
+      "captureMonoMs": 500,
+      "expirySec": 3600,
+      "payloadFormat": 0,
+      "topic": "status/node",
+      "clientId": "node-a",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "616374697665",
+      "payloadString": "active"
+    },
+    {
+      "name": "qos1_retain_dup_tombstone",
+      "hex": "28000000012c0d0200002a36fe9c9717f401000000000000100e000000000000000000000000000000000000",
+      "flags": 525,
+      "publishWallNs": 1700000000000000000,
+      "captureMonoMs": 500,
+      "expirySec": 3600,
+      "payloadFormat": 0,
+      "topic": "",
+      "clientId": "",
+      "username": "",
+      "contentType": "",
+      "responseTopic": "",
+      "correlationDataHex": "",
+      "userProperties": null,
+      "payloadHex": "",
+      "payloadString": ""
+    }
+  ],
+  "batches": [
+    {
+      "name": "two_records_crc",
+      "hex": "1c010000112a00000004000000640000000000000002000000d70000000a000000000000006600000000000000000000000000000040e2010000000000005b5faa990100009387564ea7000000012cad00158da889edff6a1840e20100000000003c00000001001000080005005b00000007000000706c616e742f6c696e65312f74656d70636c69656e742d31616c69636503100000006170706c69636174696f6e2f6a736f6e080a0000007265706c792f68657265090400000001020300260500000001006b7631260500000001006b763226030000000100612603000000000078260500000001006b76317b2276223a317d28000000012cad02158da889edff6a1840e20100000000003c00000001000000000000000000000000000000",
+      "fetchId": 42,
+      "flags": 4,
+      "baseOffset": 100,
+      "count": 2,
+      "recordsBytes": 215,
+      "logStart": 10,
+      "leo": 102,
+      "lost": 0,
+      "sourceMonoMs": 123456,
+      "sourceWallMs": 1759500000000,
+      "crc32c": 1314293651
+    }
+  ],
+  "macs": [
+    {
+      "name": "consumer_mac",
+      "isConsumer": true,
+      "secretHex": "3031323334353637383961626364656630313233343536373839616263646566",
+      "nonceSHex": "0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+      "nonceCHex": "1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+      "consumerId": "node-consumer",
+      "sourceId": "node-source",
+      "exporterHex": "746c7331332d6578706f727465722d33322d62797465732d7465737421212121",
+      "inputHex": "0c006d6d712d706565722f31204320000a0b0c0d0e0f101112131415161718191a1b1c1d1e1f2021222324252627282920001415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132330d006e6f64652d636f6e73756d65720b006e6f64652d736f757263652000746c7331332d6578706f727465722d33322d62797465732d7465737421212121",
+      "expectedMacHex": "87b8eaa15d8afcdc18231f8f75e64a42f8e806b581db5c054913116037212192"
+    },
+    {
+      "name": "source_mac",
+      "isConsumer": false,
+      "secretHex": "3031323334353637383961626364656630313233343536373839616263646566",
+      "nonceSHex": "0a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20212223242526272829",
+      "nonceCHex": "1415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30313233",
+      "consumerId": "node-consumer",
+      "sourceId": "node-source",
+      "exporterHex": "746c7331332d6578706f727465722d33322d62797465732d7465737421212121",
+      "inputHex": "0c006d6d712d706565722f31205320001415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f3031323320000a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728290b006e6f64652d736f757263650d006e6f64652d636f6e73756d65722000746c7331332d6578706f727465722d33322d62797465732d7465737421212121",
+      "expectedMacHex": "2909b00d3c688d0fdf83310bf1b9160a80b7757c1146894b1e7ebc0d8b83a2ef"
+    }
+  ],
+  "invalid": [
+    {
+      "category": "frame",
+      "name": "short_header",
+      "hex": "02000000",
+      "expected": "ErrShortFrame"
+    },
+    {
+      "category": "frame",
+      "name": "empty_frame",
+      "hex": "00000000",
+      "expected": "ErrFrameEmpty"
+    },
+    {
+      "category": "record",
+      "name": "short_record",
+      "hex": "0500000001",
+      "expected": "ErrRecordShort"
+    }
+  ]
+}

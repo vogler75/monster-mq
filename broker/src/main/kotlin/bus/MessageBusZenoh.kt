@@ -238,6 +238,8 @@ class MessageBusZenoh(
     private fun isAllowed(topic: String): Boolean =
         allow.any { TopicTree.matches(it, topic) } && deny.none { TopicTree.matches(it, topic) }
 
+    override fun rememberMessageUuid(messageUuid: String): Boolean = remember(messageUuid)
+
     private fun remember(messageUuid: String): Boolean = synchronized(seenMessages) {
         val now = System.currentTimeMillis()
         val iterator = seenMessages.entries.iterator()

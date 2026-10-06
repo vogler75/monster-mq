@@ -1229,9 +1229,159 @@
         "DefaultManagerId": { "type": "string", "title": "Default Manager ID", "default": "monstermq" },
         "AnonymousEnabled": { "type": "boolean", "title": "Allow Anonymous Read Access", "default": true }
       }
-    }
+    },
+    "NodeId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$",
+      "description": "Cluster and PeerLink node identifier (default: hostname first DNS label)."
+    },
+    "PeerLink": { "$ref": "#/$defs/PeerLink" }
   },
   "required": [
     "TCP"
-  ]
+  ],
+  "$defs": {
+    "PeerLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "title": "PeerLink",
+      "description": "Pull-based in-memory forwarding of publishes between MonsterMQ brokers, one hop, configured on both sides: the consumer lists the source with an Address, the source lists the consumer with Serve: true. Every topic is captured except $-topics, Capture.Exclude and, while WinCC OA native mode is active, the WinCC OA namespace (<TopicRoot>). Unknown keys in this section fail startup, also while it is disabled. Authentication fails closed: every peer must be authenticated by mTLS or a shared secret over TLS, unless AllowUnauthenticatedPeers is set.",
+      "properties": {
+        "Enabled": { "type": "boolean", "default": false },
+        "AllowUnauthenticatedPeers": { "type": "boolean", "default": false, "description": "Admit peers without certificate or secret. Accepted only with a non-empty Listener.AllowedNetworks and UserManagement disabled; logs a WARN on every start." },
+        "Listener": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Peer port, bound when any peer has Serve: true.",
+          "properties": {
+            "Address":         { "type": "string", "default": "0.0.0.0" },
+            "Port":            { "type": "integer", "minimum": 0, "maximum": 65535, "default": 1890, "description": "0 = 1890." },
+            "AllowedNetworks": { "type": "array", "items": { "type": "string" }, "default": [], "description": "CIDR allow-list checked before TLS, e.g. [\"10.10.0.0/24\"]. Empty = every address." },
+            "MaxPreAuthPerIp": { "type": "integer", "minimum": 1, "default": 2, "description": "Unauthenticated connections per remote IP." },
+            "AllowPlaintext":  { "type": "boolean", "default": false, "description": "A TLS listener also accepts plaintext sessions (TLS migration only); needs AllowUnauthenticatedPeers." }
+          }
+        },
+        "Tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "This node's peer identity and trust. Paths may contain {NodeId}. Never uses the system roots.",
+          "properties": {
+            "Enabled":            { "type": "boolean", "default": false, "description": "Listener TLS and the default for dialers. Needs CertPath and KeyPath, or AutoGenerate." },
+            "CertPath":           { "type": "string", "description": "PEM certificate (ServerAuth and ClientAuth). With AutoGenerate the default is certs/peer-{NodeId}.pem." },
+            "KeyPath":            { "type": "string", "description": "PEM private key. With AutoGenerate the default is certs/peer-{NodeId}.key." },
+            "TrustStorePath":     { "type": "string", "default": "", "description": "PEM CA file or legacy PKCS12 truststore that verifies peer certificates. Empty = no chain verification (pins or secrets only). Prefer a CA dedicated to peers." },
+            "TrustStoreType":     { "type": "string", "enum": ["PEM", "PKCS12"], "default": "PEM" },
+            "TrustStorePassword": { "type": "string", "default": "" },
+            "ClientAuth":         { "type": "string", "enum": ["NONE", "REQUEST", "REQUIRED"], "default": "NONE", "description": "Client certificates on the listener. REQUEST or REQUIRED need TrustStorePath, or pins on every Serve peer." },
+            "IdentityFallback":   { "type": "string", "enum": ["NONE", "DNS", "CN"], "default": "NONE", "description": "Peer identity is the URI SAN urn:monstermq:node:<NodeId>. For PKIs without URI SANs, a certificate without such a SAN may instead match by a DNS SAN (DNS) or the Common Name (CN) equal to the NodeId." },
+            "AutoGenerate":       { "type": "boolean", "default": false, "description": "Create a self-signed ECDSA certificate for this NodeId when the files are missing; its SPKI SHA-256 is logged." }
+          }
+        },
+        "SharedSecrets": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Group secrets (base64, at least 16 bytes), first = current, others still accepted. Require Tls.Enabled; bound to the TLS session." },
+        "KeepAliveSeconds": { "type": "integer", "minimum": 1, "default": 10 },
+        "Log": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "In-memory log of the publishes this node offers to its peers.",
+          "properties": {
+            "MaxMessages":           { "type": "integer", "minimum": 100, "default": 2000000 },
+            "MaxBytes":              { "type": "integer", "minimum": 1048576, "default": 268435456, "description": "At least 1 MiB and 4 x MaxRecordBytes. The oldest records are dropped (and counted) when full." },
+            "MaxRecordBytes":        { "type": "integer", "minimum": 0, "default": 0, "description": "0 = MaxMessageSize + 64 KiB (1 MiB + 64 KiB when MaxMessageSize is 0). Larger publishes are not captured." },
+            "DrainOnShutdownMs":     { "type": "integer", "minimum": 0, "default": 2000, "description": "On shutdown, wait for connected peers to pull what was captured; 0 = off. 5000 is recommended on WinCC OA hosts." },
+            "NeverConnectedWarnSec": { "type": "integer", "minimum": 0, "default": 300, "description": "WARN when a Serve peer has not connected after this many seconds; it pins the log meanwhile." }
+          }
+        },
+        "Capture": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Wills":          { "type": "boolean", "default": true, "description": "Forward wills, never those of this broker's own shutdown." },
+            "Include":        { "$ref": "#/$defs/TopicFilters", "default": ["#"], "description": "Empty = [\"#\"]. $-topics are never captured, nor the WinCC OA namespace while native mode is active." },
+            "Exclude":        { "type": ["array", "null"], "items": { "type": "string", "minLength": 1 }, "default": null, "description": "Wins over Include. null = [<HMI.SyncBaseTopic>/#]; [] also forwards the HMI sync channel." },
+            "EchoSuppressMs": { "type": "integer", "minimum": 0, "default": 0, "description": "Do not capture a publish that repeats a replica (same topic, payload and retain flag) applied within this window; 0 = off." }
+          }
+        },
+        "Snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Mode":      { "type": "string", "enum": ["FILL", "OFF"], "default": "FILL", "description": "FILL: on first contact and after a source restart, retained messages are copied where the receiver has none." },
+            "MaxTopics": { "type": "integer", "minimum": 1, "default": 1000000 }
+          }
+        },
+        "Fetch": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How this node pulls from its sources.",
+          "properties": {
+            "MaxRecords":     { "type": "integer", "minimum": 1, "default": 4096 },
+            "MaxBytes":       { "type": "integer", "minimum": 1, "default": 1048576 },
+            "MaxWaitMs":      { "type": "integer", "minimum": 10, "default": 1000, "description": "Long-poll wait, at least 10; must be below KeepAliveSeconds*1000." },
+            "LingerMs":       { "type": "integer", "minimum": 0, "default": 0 },
+            "Pipeline":       { "type": "integer", "minimum": 1, "maximum": 2, "default": 1 },
+            "CrcOnTls":       { "type": "boolean", "default": false, "description": "Batch CRC32C also on TLS links (always on plaintext links)." },
+            "ReconnectMaxMs": { "type": "integer", "minimum": 1, "default": 30000, "description": "Cap of the exponential reconnect backoff." }
+          }
+        },
+        "Receive": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How replicas from peers are applied on this node.",
+          "properties": {
+            "Bus":                 { "type": "boolean", "default": true, "description": "Deliver replicas to the internal bus (scripts, REST SSE, GraphQL subscriptions, Redfish)." },
+            "BridgeOutbound":      { "type": "boolean", "default": false, "description": "MQTT bridges forward replicas to their remote broker (loop risk)." },
+            "Archive":             { "type": "boolean", "default": true, "description": "Archive replicas; set false when both nodes archive into one shared database." },
+            "Queue":               { "type": "boolean", "default": false, "description": "Queue replicas for offline persistent sessions." },
+            "SharedSubscriptions": { "type": "string", "enum": ["SKIP", "DELIVER"], "default": "SKIP", "description": "SKIP: shared subscription groups get a message only on the node it was published on." },
+            "MarkReplicas":        { "type": "boolean", "default": false, "description": "Add the user property mmq-peer-src=<NodeId> to replicas." },
+            "CatchUpRateFactor":   { "type": "number", "minimum": 0, "default": 3, "description": "While behind, apply at most this factor x the source's publish rate; 0 = no pacing, otherwise at least 1.5." },
+            "MaxApplyRate":        { "type": "integer", "minimum": 0, "default": 0, "description": "Absolute cap in messages per second; 0 = off." },
+            "MaxRecordAgeMs":      { "type": "integer", "minimum": 0, "default": 0, "description": "Drop live replicas older than this (retained ones are applied silently); 0 = off." },
+            "MaxFrameBytes":       { "type": "integer", "minimum": 1, "default": 16842752, "description": "Largest frame accepted from a source; at least Fetch.MaxBytes + 64 KiB." },
+            "InjectWorkers":       { "type": "integer", "minimum": 1, "maximum": 16, "default": 1, "description": "Reserved: one injector per source applies records in order; values above 1 log a WARN." }
+          }
+        },
+        "Peers": {
+          "type": "array",
+          "description": "Other nodes. The entry whose NodeId equals this node's (case-insensitive; with NodeId from the hostname also its first label) is ignored, so one file can serve every host.",
+          "items": { "$ref": "#/$defs/PeerLinkPeer" }
+        }
+      }
+    },
+    "PeerLinkPeer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["NodeId"],
+      "properties": {
+        "NodeId":        { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+        "Address":       { "type": "string", "description": "host:port of the peer's PeerLink listener; present = this node pulls from it." },
+        "Serve":         { "type": "boolean", "default": true, "description": "The peer may pull from this node." },
+        "SharedSecrets": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Per-peer secrets (base64, at least 16 bytes); replace the group secrets for this peer. Recommended with more than two nodes." },
+        "Tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Enabled":             { "type": ["boolean", "null"], "default": null, "description": "Dialer TLS towards this peer; null = PeerLink.Tls.Enabled." },
+            "PinnedSha256":        { "type": "array", "items": { "type": "string", "pattern": "^[0-9A-Fa-f: ]+$" }, "default": [], "description": "SHA-256 of the peer's SubjectPublicKeyInfo or certificate (hex); a match replaces chain verification." },
+            "CertificateIdentity": { "type": "string", "default": "", "description": "Accepted certificate identity instead of urn:monstermq:node:<NodeId> (exact URI SAN or DNS SAN)." },
+            "ServerName":          { "type": "string", "default": "", "description": "TLS SNI only." },
+            "RequireClientCert":   { "type": "boolean", "default": false, "description": "Require a client certificate from this peer (needs Tls.ClientAuth REQUEST or REQUIRED)." },
+            "InsecureSkipVerify":  { "type": "boolean", "default": false, "description": "Do not verify the peer's certificate; the pull direction then counts as unauthenticated unless a shared secret is used." }
+          }
+        },
+        "Receive": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "Include": { "$ref": "#/$defs/TopicFilters", "default": ["#"], "description": "Empty = [\"#\"]." },
+            "Exclude": { "$ref": "#/$defs/TopicFilters", "default": [] }
+          }
+        }
+      }
+    },
+    "TopicFilters": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
 }

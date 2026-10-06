@@ -279,6 +279,29 @@ Typical use cases:
 
 A `WARNING` is logged at startup if the Hazelcast IMap shows that other cluster members have a different feature set. The mismatch is also highlighted in the dashboard cluster overview table.
 
+## PeerLink Inter-Broker Replication
+
+PeerLink replicates MQTT messages and retained states across independent MonsterMQ instances (both Kotlin brokers and MonsterMQ Go Edge brokers) over point-to-point connections with low overhead, split-horizon loop protection, and end-to-end TLS 1.3 / mTLS / shared-secret mutual authentication.
+
+```yaml
+NodeId: central-broker
+PeerLink:
+  Enabled: true
+  Listener:
+    Address: 0.0.0.0
+    Port: 1890
+  Tls:
+    Enabled: true
+    AutoGenerate: true
+  SharedSecrets: ["<32-byte-base64-secret>"]
+  Peers:
+    - NodeId: edge-a
+      Address: "edge-a.local:1890"
+      Serve: true
+```
+
+For complete details on configuration, security policies, TLS setup, retained resync, HTTP status endpoints, and Zenoh federation coexistence, see [PeerLink Guide](peerlink.md).
+
 ## Additional Settings and Reference
 
 The [YAML schema](../broker/yaml-json-schema.json) describes additional settings,

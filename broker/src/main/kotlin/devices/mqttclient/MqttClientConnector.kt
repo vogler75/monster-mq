@@ -578,6 +578,11 @@ class MqttClientConnector : AbstractVerticle() {
                 }
             }
 
+            // PeerLink gate: Skip replicas if bridgeOutbound is disabled (default)
+            if (localMessage.peer != null && !(at.rocworks.Monster.getPeerLinkManager()?.config?.receive?.bridgeOutbound ?: false)) {
+                return
+            }
+
             // Check each publish address to see if this message matches
             publishAddresses.values.forEach { address ->
                 if (MqttTopicTransformer.matchesLocalPattern(localMessage.topicName, address.localTopic)) {

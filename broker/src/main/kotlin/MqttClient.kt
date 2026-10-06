@@ -319,6 +319,12 @@ class MqttClient(
     }
 
     fun startEndpoint() {
+        val cid = clientId
+        if (cid == "inline" || cid.startsWith("peerlink:")) {
+            logger.warning("Client [$cid] Connection refused: reserved client identifier")
+            rejectAndCloseEndpoint(if (isMqtt5) MqttConnectReturnCode.CONNECTION_REFUSED_CLIENT_IDENTIFIER_NOT_VALID else MqttConnectReturnCode.CONNECTION_REFUSED_IDENTIFIER_REJECTED)
+            return
+        }
         logger.info("Client [$clientId] Request to connect. Clean session [${endpoint.isCleanSession}] protocol [${endpoint.protocolVersion()}] [${Utils.getCurrentFunctionName()}]")
         cleanStartRequested = endpoint.isCleanSession
 

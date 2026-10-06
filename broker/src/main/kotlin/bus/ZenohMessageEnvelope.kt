@@ -30,6 +30,12 @@ object ZenohMessageEnvelope {
         .put("responseTopic", message.responseTopic)
         .put("correlationData", message.correlationData?.let(Base64.getEncoder()::encodeToString))
         .put("userProperties", message.userProperties?.let(::JsonObject))
+        .apply {
+            val peerSrc = message.peerSource ?: message.peer?.sourceNode
+            if (peerSrc != null) {
+                put("peerSource", peerSrc)
+            }
+        }
         .encode()
         .toByteArray(Charsets.UTF_8)
 
@@ -61,7 +67,8 @@ object ZenohMessageEnvelope {
                     contentType = json.getString("contentType"),
                     responseTopic = json.getString("responseTopic"),
                     correlationData = json.getString("correlationData")?.let(Base64.getDecoder()::decode),
-                    userProperties = properties
+                    userProperties = properties,
+                    peerSource = json.getString("peerSource")
                 )
             )
         } catch (_: Exception) {
