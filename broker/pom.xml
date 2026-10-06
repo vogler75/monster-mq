@@ -206,16 +206,25 @@
             <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
             <version>1.2.5</version>
         </dependency>
-        <!-- PEM private key parsing for MQTT client mutual TLS (aligned with transitive bcprov 1.85) -->
+        <!-- BouncyCastle: pinned to 1.85 across prov, pkix, tls, and util to prevent signer mismatch -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.85</version>
+        </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
             <version>1.85</version>
         </dependency>
-        <!-- PeerLink: BouncyCastle JSSE provides the TLS 1.3 keying material exporter on JDK 21 -->
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bctls-jdk18on</artifactId>
+            <version>1.85</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcutil-jdk18on</artifactId>
             <version>1.85</version>
         </dependency>
         <dependency>
