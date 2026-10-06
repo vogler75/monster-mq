@@ -610,9 +610,9 @@ open class SessionHandler(
         }
 
         logger.fine("Loading all subscriptions [${Utils.getCurrentFunctionName()}]")
-        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos, noLocal, retainHandling, retainAsPublished ->
+        val f2 = sessionStore.iterateSubscriptions { topicName, clientId, qos, noLocal, retainHandling, retainAsPublished, subscriptionId ->
             // Add to subscription manager (routes to exact or wildcard index)
-            subscriptionManager.subscribe(clientId, topicName, qos, noLocal, retainAsPublished)
+            subscriptionManager.subscribe(clientId, topicName, qos, noLocal, retainAsPublished, subscriptionId)
 
             // Build topic-to-node mapping based on where client is located (cluster replication)
             val nodeId = clientNodeMapping.get(clientId) ?: Monster.getClusterNodeId(vertx)
@@ -1113,13 +1113,21 @@ open class SessionHandler(
 
     fun isPresent(clientId: String): Future<Boolean> = sessionStore.isPresent(clientId)
 
+    /**
+     * MQTT v5 Subscription Identifiers of the client's subscriptions matching the topic,
+     * added to every PUBLISH sent to the client (MQTT 5.0 §3.3.4).
+     */
+    fun getSubscriptionIdentifiers(clientId: String, topicName: String): List<Int> =
+        subscriptionManager.getSubscriptionIdentifiers(clientId, topicName)
+
     private fun applySubscriptionAdded(subscription: MqttSubscription, originNodeId: String? = null) {
         subscriptionManager.subscribe(
             subscription.clientId,
             subscription.topicName,
             subscription.qos.value(),
             subscription.noLocal,
-            subscription.retainAsPublished
+            subscription.retainAsPublished,
+            subscription.subscriptionId
         )
 
         val nodeId = clientNodeMapping.get(subscription.clientId)
@@ -1428,7 +1436,7 @@ open class SessionHandler(
 
     //----------------------------------------------------------------------------------------------------
 
-    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0, retainAsPublished: Boolean = false): Future<Boolean> {
+    fun subscribeRequest(client: MqttClient, topicName: String, qos: MqttQoS, noLocal: Boolean = false, retainHandling: Int = 0, retainAsPublished: Boolean = false, subscriptionId: Int = 0): Future<Boolean> {
         val request = JsonObject()
             .put(Const.COMMAND_KEY, COMMAND_SUBSCRIBE)
             .put(Const.TOPIC_KEY, topicName)
@@ -1437,6 +1445,7 @@ open class SessionHandler(
             .put("noLocal", noLocal)  // MQTT v5 No Local option
             .put("retainHandling", retainHandling)  // MQTT v5 Retain Handling option
             .put("retainAsPublished", retainAsPublished)  // MQTT v5 Retain As Published option
+            .put("subscriptionId", subscriptionId)  // MQTT v5 Subscription Identifier (0 = none)
         val result = Promise.promise<Boolean>()
 
         vertx.eventBus().request<Boolean>(commandAddress(), request).onComplete { ar ->
@@ -1477,6 +1486,7 @@ open class SessionHandler(
         val noLocal = command.body().getBoolean("noLocal", false)  // MQTT v5 No Local flag
         val retainHandling = command.body().getInteger("retainHandling", 0)  // MQTT v5 Retain Handling
         val retainAsPublished = command.body().getBoolean("retainAsPublished", false)  // MQTT v5 Retain As Published
+        val subscriptionId = command.body().getInteger("subscriptionId", 0)  // MQTT v5 Subscription Identifier
 
         // Defensive guard: prevent adding root wildcard subscription when disabled
         if (topicName == "#" && !Monster.allowRootWildcardSubscription()) {
@@ -1496,6 +1506,9 @@ open class SessionHandler(
         }
 
         if (shouldSendRetained) {
+            // Retained messages are sent before the subscription is added, but must already
+            // carry its Subscription Identifier (MQTT 5.0 §3.3.4), which MqttClient looks up
+            subscriptionManager.setSubscriptionIdentifier(clientId, topicName, subscriptionId)
             messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
                 logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
                 var effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
@@ -1507,12 +1520,12 @@ open class SessionHandler(
                 sendMessageToClient(clientId, effectiveMessage)
             }.onComplete {
                 logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished))
+                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
                 command.reply(true)
             }
         } else {
             // Skip retained messages, just add subscription
-            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished))
+            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
             command.reply(true)
         }
     }

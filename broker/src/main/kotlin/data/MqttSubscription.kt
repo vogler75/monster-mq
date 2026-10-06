@@ -9,5 +9,6 @@ data class MqttSubscription(
     val qos: MqttQoS,
     val noLocal: Boolean = false,       // MQTT v5: Don't send messages the client published itself
     val retainHandling: Int = 0,        // MQTT v5: 0=send retained, 1=send if new sub, 2=never send
-    val retainAsPublished: Boolean = false  // MQTT v5: Preserve original retain flag (true) or clear it (false)
+    val retainAsPublished: Boolean = false,  // MQTT v5: Preserve original retain flag (true) or clear it (false)
+    val subscriptionId: Int = 0         // MQTT v5: Subscription Identifier, 0 = none
 ): Serializable

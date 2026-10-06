@@ -40,6 +40,10 @@ class SubscriptionManager {
     // Key format: "$clientId|$topic"
     private val retainAsPublishedMap = ConcurrentHashMap<String, Boolean>()
 
+    // Track MQTT v5 Subscription Identifiers: clientId → (topicPattern → identifier)
+    // Only subscriptions with an identifier are stored, so clients without any cost one map miss
+    private val subscriptionIdentifiers = ConcurrentHashMap<String, ConcurrentHashMap<String, Int>>()
+
     /**
      * Add a subscription.
      * Routes to appropriate index (exact or wildcard) based on content.
@@ -49,9 +53,10 @@ class SubscriptionManager {
      * @param qos Quality of Service level (0, 1, or 2)
      * @param noLocal MQTT v5: Don't send messages back to the publishing client
      * @param retainAsPublished MQTT v5: Preserve retain flag when forwarding messages
+     * @param subscriptionId MQTT v5: Subscription Identifier, 0 = none
      * @return true if subscription was added, false if it already existed
      */
-    fun subscribe(clientId: String, topicOrPattern: String, qos: Int, noLocal: Boolean = false, retainAsPublished: Boolean = false) {
+    fun subscribe(clientId: String, topicOrPattern: String, qos: Int, noLocal: Boolean = false, retainAsPublished: Boolean = false, subscriptionId: Int = 0) {
         if (topicOrPattern.contains('+') || topicOrPattern.contains('#')) {
             // Wildcard subscription
             logger.finest { "SubscriptionManager.subscribe: wildcard pattern=[$topicOrPattern] clientId=[$clientId] qos=[$qos] noLocal=$noLocal retainAsPublished=$retainAsPublished" }
@@ -70,6 +75,51 @@ class SubscriptionManager {
         // Track retainAsPublished subscriptions
         val key = "$clientId|$topicOrPattern"
         retainAsPublishedMap[key] = retainAsPublished
+
+        setSubscriptionIdentifier(clientId, topicOrPattern, subscriptionId)
+    }
+
+    /**
+     * Set or clear the MQTT v5 Subscription Identifier of a client's subscription.
+     * A new SUBSCRIBE for an existing filter replaces the identifier (MQTT 5.0 §3.8.4),
+     * so 0 removes a previously stored one.
+     */
+    fun setSubscriptionIdentifier(clientId: String, topicOrPattern: String, subscriptionId: Int) {
+        if (subscriptionId > 0) {
+            subscriptionIdentifiers.getOrPut(clientId) { ConcurrentHashMap() }[topicOrPattern] = subscriptionId
+        } else {
+            removeSubscriptionIdentifier(clientId, topicOrPattern)
+        }
+    }
+
+    private fun removeSubscriptionIdentifier(clientId: String, topicOrPattern: String) {
+        subscriptionIdentifiers[clientId]?.let { ids ->
+            ids.remove(topicOrPattern)
+            if (ids.isEmpty()) subscriptionIdentifiers.remove(clientId, ids)
+        }
+    }
+
+    /**
+     * Get the Subscription Identifiers of all of a client's subscriptions matching a topic.
+     * MQTT 5.0 §3.3.4: a PUBLISH carries the identifiers of every matching subscription.
+     *
+     * @param clientId Client identifier
+     * @param publishedTopic The topic being published
+     * @return Sorted identifiers, empty if no matching subscription has one
+     */
+    fun getSubscriptionIdentifiers(clientId: String, publishedTopic: String): List<Int> {
+        val ids = subscriptionIdentifiers[clientId] ?: return emptyList()
+        val result = mutableListOf<Int>()
+        ids.forEach { (pattern, id) ->
+            val matches = if (pattern.contains('+') || pattern.contains('#')) {
+                wildcardIndex.matchesPattern(publishedTopic, pattern)
+            } else {
+                pattern == publishedTopic
+            }
+            if (matches) result.add(id)
+        }
+        result.sort()
+        return result
     }
 
     /**
@@ -100,7 +150,9 @@ class SubscriptionManager {
         // Remove from retainAsPublished tracking
         val key = "$clientId|$topicOrPattern"
         retainAsPublishedMap.remove(key)
-        
+
+        removeSubscriptionIdentifier(clientId, topicOrPattern)
+
         return removed
     }
 
@@ -262,6 +314,9 @@ class SubscriptionManager {
         
         // Remove from retainAsPublished tracking
         retainAsPublishedMap.keys.removeIf { it.startsWith("$clientId|") }
+
+        // Remove from Subscription Identifier tracking
+        subscriptionIdentifiers.remove(clientId)
 
         logger.fine { "SubscriptionManager.disconnectClient: removed subscriptions from ${affectedTopics.size} topics/patterns" }
 

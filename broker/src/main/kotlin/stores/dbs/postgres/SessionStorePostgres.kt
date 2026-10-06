@@ -65,6 +65,7 @@ class SessionStorePostgres(
                     no_local BOOLEAN DEFAULT false,
                     retain_handling INT DEFAULT 0,
                     retain_as_published BOOLEAN DEFAULT false,
+                    subscription_id INT DEFAULT 0,
                     PRIMARY KEY (client_id, topic)
                 );
                 """.trimIndent())
@@ -89,6 +90,8 @@ class SessionStorePostgres(
                     } catch (e: Exception) {
                         logger.fine("Subscription migration: Column may already exist: ${e.message}")
                     }
+                    // Migration: Add subscription_id column (MQTT v5 Subscription Identifier) if it doesn't exist
+                    statement.executeUpdate("ALTER TABLE $subscriptionsTableName ADD COLUMN IF NOT EXISTS subscription_id INT DEFAULT 0")
                 }
                 connection.commit()
                 logger.fine("Tables are ready [${Utils.getCurrentFunctionName()}]")
@@ -105,11 +108,11 @@ class SessionStorePostgres(
         db.start(vertx, startPromise)
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean)->Unit) {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean, subscriptionId: Int)->Unit) {
         try {
             db.connection?.let { connection ->
                 var rows = 0
-                val sql = "SELECT client_id, array_to_string(topic, '/'), qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName "
+                val sql = "SELECT client_id, array_to_string(topic, '/'), qos, no_local, retain_handling, retain_as_published, subscription_id FROM $subscriptionsTableName "
                 connection.prepareStatement(sql).use { preparedStatement ->
                     val resultSet = preparedStatement.executeQuery()
                     while (resultSet.next()) {
@@ -119,7 +122,8 @@ class SessionStorePostgres(
                         val noLocal = resultSet.getBoolean(4)
                         val retainHandling = resultSet.getInt(5)
                         val retainAsPublished = resultSet.getBoolean(6)
-                        callback(topic, clientId, qos.value(), noLocal, retainHandling, retainAsPublished)
+                        val subscriptionId = resultSet.getInt(7)
+                        callback(topic, clientId, qos.value(), noLocal, retainHandling, retainAsPublished, subscriptionId)
                         rows++
                     }
                 }
@@ -354,8 +358,8 @@ class SessionStorePostgres(
     }
 
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published) VALUES (?, ?, ?, ?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos, no_local = EXCLUDED.no_local, retain_handling = EXCLUDED.retain_handling, retain_as_published = EXCLUDED.retain_as_published"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published, subscription_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = EXCLUDED.qos, no_local = EXCLUDED.no_local, retain_handling = EXCLUDED.retain_handling, retain_as_published = EXCLUDED.retain_as_published, subscription_id = EXCLUDED.subscription_id"
         try {
             db.connection?.let { connection ->
                 connection.prepareStatement(sql).use { preparedStatement ->
@@ -368,6 +372,7 @@ class SessionStorePostgres(
                         preparedStatement.setBoolean(5, subscription.noLocal)
                         preparedStatement.setInt(6, subscription.retainHandling)
                         preparedStatement.setBoolean(7, subscription.retainAsPublished)
+                        preparedStatement.setInt(8, subscription.subscriptionId)
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()

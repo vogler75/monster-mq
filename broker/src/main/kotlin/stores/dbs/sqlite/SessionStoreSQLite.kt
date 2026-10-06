@@ -8,6 +8,7 @@ import at.rocworks.stores.ISessionStoreSync
 import at.rocworks.stores.SessionStoreType
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -67,56 +68,49 @@ class SessionStoreSQLite(
                 no_local INTEGER DEFAULT 0,
                 retain_handling INTEGER DEFAULT 0,
                 retain_as_published INTEGER DEFAULT 0,
+                subscription_id INTEGER DEFAULT 0,
                 PRIMARY KEY (client_id, topic)
             );
             """.trimIndent())
             .add("CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_topic_idx ON $subscriptionsTableName (topic);")
             .add("CREATE INDEX IF NOT EXISTS ${subscriptionsTableName}_wildcard_idx ON $subscriptionsTableName (wildcard) WHERE wildcard = 1;")
 
-        sqlClient.initDatabase(createTableSQL).onComplete { result ->
-            if (result.succeeded()) {
-                // Migration: Add retain_as_published column if it doesn't exist
-                val checkColumnSql = "PRAGMA table_info($subscriptionsTableName)"
-                sqlClient.executeQuery(checkColumnSql, JsonArray()).onComplete { queryResult ->
-                    if (queryResult.succeeded()) {
-                        val rows = queryResult.result()
-                        val hasColumn = rows.any { row ->
-                            (row as JsonObject).getString("name") == "retain_as_published"
-                        }
-                        if (!hasColumn) {
-                            logger.info("Migrating subscriptions table: adding retain_as_published column")
-                            sqlClient.executeUpdate(
-                                "ALTER TABLE $subscriptionsTableName ADD COLUMN retain_as_published INTEGER DEFAULT 0",
-                                JsonArray()
-                            ).onComplete { updateResult ->
-                                if (updateResult.succeeded()) {
-                                    logger.info("Successfully added retain_as_published column")
-                                } else {
-                                    logger.warning("Migration warning (may be safe to ignore if column exists): ${updateResult.cause()?.message}")
-                                }
-                                logger.info("SQLite session tables are ready [start]")
-                                startPromise.complete()
-                            }
-                        } else {
-                            logger.fine("Column retain_as_published already exists, skipping migration")
-                            logger.info("SQLite session tables are ready [start]")
-                            startPromise.complete()
-                        }
-                    } else {
-                        logger.warning("Could not check for retain_as_published column: ${queryResult.cause()?.message}")
-                        logger.info("SQLite session tables are ready [start]")
-                        startPromise.complete()
-                    }
+        sqlClient.initDatabase(createTableSQL)
+            .compose { migrateSubscriptionColumns() }
+            .onComplete { result ->
+                if (result.succeeded()) {
+                    logger.info("SQLite session tables are ready [start]")
+                    startPromise.complete()
+                } else {
+                    logger.severe("Failed to initialize SQLite session tables: ${result.cause()?.message}")
+                    startPromise.fail(result.cause())
                 }
-            } else {
-                logger.severe("Failed to initialize SQLite session tables: ${result.cause()?.message}")
-                startPromise.fail(result.cause())
             }
+    }
+
+    // Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves the table
+    // of an existing database untouched, so missing columns are added here.
+    private val subscriptionColumnMigrations = listOf(
+        "retain_as_published" to "INTEGER DEFAULT 0",
+        "subscription_id" to "INTEGER DEFAULT 0"  // MQTT v5 Subscription Identifier, 0 = none
+    )
+
+    private fun migrateSubscriptionColumns(): Future<Void> {
+        return sqlClient.executeQuery("PRAGMA table_info($subscriptionsTableName)").compose { rows ->
+            val existing = rows.map { (it as JsonObject).getString("name") }.toSet()
+            var chain: Future<Void> = Future.succeededFuture()
+            subscriptionColumnMigrations.filter { (name, _) -> name !in existing }.forEach { (name, definition) ->
+                chain = chain.compose {
+                    logger.info("Migrating subscriptions table: adding $name column")
+                    sqlClient.executeUpdate("ALTER TABLE $subscriptionsTableName ADD COLUMN $name $definition").mapEmpty()
+                }
+            }
+            chain
         }
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit) {
-        val sql = "SELECT client_id, topic, qos, no_local, retain_handling, retain_as_published FROM $subscriptionsTableName"
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean, subscriptionId: Int) -> Unit) {
+        val sql = "SELECT client_id, topic, qos, no_local, retain_handling, retain_as_published, subscription_id FROM $subscriptionsTableName"
         try {
             val results = sqlClient.executeQueryDirect(sql)
             results.forEach { row ->
@@ -127,7 +121,8 @@ class SessionStoreSQLite(
                 val noLocal = rowObj.getInteger("no_local", 0) == 1  // SQLite stores as 0/1
                 val retainHandling = rowObj.getInteger("retain_handling", 0)
                 val retainAsPublished = rowObj.getInteger("retain_as_published", 0) == 1  // SQLite stores as 0/1
-                callback(topic, clientId, qos, noLocal, retainHandling, retainAsPublished)
+                val subscriptionId = rowObj.getInteger("subscription_id", 0)
+                callback(topic, clientId, qos, noLocal, retainHandling, retainAsPublished, subscriptionId)
             }
         } catch (e: Exception) {
             logger.warning("Error fetching subscriptions: ${e.message} [iterateSubscriptions]")
@@ -294,8 +289,8 @@ class SessionStoreSQLite(
     override fun addSubscriptions(subscriptions: List<MqttSubscription>) {
         if (subscriptions.isEmpty()) return
 
-        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published) VALUES (?, ?, ?, ?, ?, ?, ?) "+
-                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos, no_local = excluded.no_local, retain_handling = excluded.retain_handling, retain_as_published = excluded.retain_as_published"
+        val sql = "INSERT INTO $subscriptionsTableName (client_id, topic, qos, wildcard, no_local, retain_handling, retain_as_published, subscription_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "+
+                  "ON CONFLICT (client_id, topic) DO UPDATE SET qos = excluded.qos, no_local = excluded.no_local, retain_handling = excluded.retain_handling, retain_as_published = excluded.retain_as_published, subscription_id = excluded.subscription_id"
 
         val batchParams = JsonArray()
         subscriptions.forEach { subscription ->
@@ -307,6 +302,7 @@ class SessionStoreSQLite(
                 .add(if (subscription.noLocal) 1 else 0)
                 .add(subscription.retainHandling)
                 .add(if (subscription.retainAsPublished) 1 else 0)
+                .add(subscription.subscriptionId)
             batchParams.add(params)
         }
 

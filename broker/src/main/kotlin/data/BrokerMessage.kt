@@ -302,7 +302,7 @@ class BrokerMessage(
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
-    fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS()): Future<Int> {
+    fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS(), subscriptionIdentifiers: List<Int> = emptyList()): Future<Int> {
         if (isExpired()) {
             return Future.succeededFuture(0)
         }
@@ -360,7 +360,12 @@ class BrokerMessage(
             userProperties?.forEach { (key, value) ->
                 properties.add(io.netty.handler.codec.mqtt.MqttProperties.UserProperty(key, value))
             }
-            
+
+            // Add Subscription Identifiers of all matching subscriptions (Property ID 11, MQTT 5.0 §3.3.4)
+            subscriptionIdentifiers.forEach {
+                properties.add(io.netty.handler.codec.mqtt.MqttProperties.IntegerProperty(11, it))
+            }
+
             return endpoint.publish(topicName, getPayloadAsBuffer(), qos, isDup, isRetain, messageId, properties)
         } else {
             // MQTT v3.1.1 clients - no properties

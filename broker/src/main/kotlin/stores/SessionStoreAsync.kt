@@ -59,7 +59,7 @@ class SessionStoreAsync(private val store: ISessionStoreSync): AbstractVerticle(
         })
     }
 
-    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean) -> Unit): Future<Void> {
+    override fun iterateSubscriptions(callback: (topic: String, clientId: String, qos: Int, noLocal: Boolean, retainHandling: Int, retainAsPublished: Boolean, subscriptionId: Int) -> Unit): Future<Void> {
         return dbExecutor.executeBlocking(Callable {
             store.iterateSubscriptions(callback)
             null

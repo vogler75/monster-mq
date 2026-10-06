@@ -16,6 +16,7 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         buffer.appendByte(if (s.noLocal) 1 else 0)  // noLocal flag
         buffer.appendInt(s.retainHandling)  // retainHandling value (0, 1, or 2)
         buffer.appendByte(if (s.retainAsPublished) 1 else 0)  // retainAsPublished flag
+        buffer.appendInt(s.subscriptionId)  // MQTT v5 Subscription Identifier (0 = none)
     }
 
     override fun decodeFromWire(pos: Int, buffer: Buffer): MqttSubscription {
@@ -35,7 +36,10 @@ class MqttSubscriptionCodec : MessageCodec<MqttSubscription, MqttSubscription> {
         val retainHandling = buffer.getInt(position)  // retainHandling value
         position += 4
         val retainAsPublished = buffer.getByte(position) == 1.toByte()  // retainAsPublished flag
-        return MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished)
+        position += 1
+        // Absent when sent by a node running an older version (rolling upgrade)
+        val subscriptionId = if (position + 4 <= buffer.length()) buffer.getInt(position) else 0
+        return MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId)
     }
 
     override fun transform(s: MqttSubscription): MqttSubscription {

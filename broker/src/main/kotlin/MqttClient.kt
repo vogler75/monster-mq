@@ -22,6 +22,7 @@ import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
 import io.vertx.mqtt.messages.codes.MqttPubAckReasonCode
 import io.vertx.mqtt.messages.codes.MqttPubCompReasonCode
+import io.vertx.mqtt.messages.codes.MqttDisconnectReasonCode
 import io.vertx.mqtt.messages.codes.MqttSubAckReasonCode
 import io.vertx.mqtt.messages.codes.MqttUnsubAckReasonCode
 import io.vertx.mqtt.messages.MqttDisconnectMessage
@@ -624,7 +625,7 @@ class MqttClient(
                 connackProps.add(MqttProperties.IntegerProperty(40, 1))  // 1 = available
                 
                 // Subscription Identifier Available (41)
-                connackProps.add(MqttProperties.IntegerProperty(41, 0))  // 0 = not supported yet
+                connackProps.add(MqttProperties.IntegerProperty(41, 1))  // 1 = available
                 
                 // Shared Subscription Available (42)
                 connackProps.add(MqttProperties.IntegerProperty(42, 0))  // 0 = not supported yet
@@ -779,6 +780,18 @@ class MqttClient(
             val reasonCodeFutures = mutableListOf<Future<MqttSubAckReasonCode>>()
             val messageId = subscribe.messageId()
 
+            // Subscription Identifier (11): at most one per SUBSCRIBE, applies to all its filters
+            val subscriptionIdProperty = subscribe.properties()
+                ?.getProperty(MqttProperties.MqttPropertyType.SUBSCRIPTION_IDENTIFIER.value()) as? MqttProperties.IntegerProperty
+            val subscriptionId = subscriptionIdProperty?.value() ?: 0
+            if (subscriptionIdProperty != null && subscriptionId == 0) {
+                // MQTT 5.0 §3.8.2.1.2: a Subscription Identifier of 0 is a Protocol Error
+                logger.warning("Client [$clientId] SUBSCRIBE with Subscription Identifier 0 - protocol error, disconnecting")
+                endpoint.disconnect(MqttDisconnectReasonCode.PROTOCOL_ERROR, MqttProperties.NO_PROPERTIES)
+                closeConnection()
+                return
+            }
+
             subscribe.topicSubscriptions().forEach { subscription ->
                 val topic = subscription.topicName()
                 var allowed = true
@@ -823,8 +836,8 @@ class MqttClient(
 
                 // Forward allowed subscriptions to SessionHandler
                 if (allowed) {
-                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()} noLocal=$noLocal retainHandling=$retainHandling retainAsPublished=$retainAsPublished" }
-                    val subFuture = sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling, retainAsPublished)
+                    logger.fine { "Client [$clientId] Subscription ALLOWED for [$topic] with QoS ${subscription.qualityOfService()} noLocal=$noLocal retainHandling=$retainHandling retainAsPublished=$retainAsPublished subscriptionId=$subscriptionId" }
+                    val subFuture = sessionHandler.subscribeRequest(this, topic, subscription.qualityOfService(), noLocal, retainHandling, retainAsPublished, subscriptionId)
                         .map { success ->
                             if (success) reasonCode else MqttSubAckReasonCode.UNSPECIFIED_ERROR
                         }
@@ -1326,7 +1339,7 @@ class MqttClient(
             // Increment messages sent to client ONLY when actually publishing to endpoint
             if (message.qosLevel == 0) {
                 sessionHandler.incrementMessagesOut(clientId)
-                message.publishToEndpoint(endpoint)
+                publishToEndpoint(message)
             } else {
                 // MQTT v5.0 Flow Control (Phase 8): Enforce client's Receive Maximum
                 val maxInFlight = if (endpoint.protocolVersion() == 5) {
@@ -1372,11 +1385,20 @@ class MqttClient(
 
                 if (shouldPublish) {
                     sessionHandler.incrementMessagesOut(clientId)
-                    message.publishToEndpoint(endpoint)
+                    publishToEndpoint(message)
                     logger.finest { "Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
                 }
             }
         }
+    }
+
+    private fun publishToEndpoint(message: BrokerMessage) {
+        val subscriptionIds = if (endpoint.protocolVersion() == 5) {
+            sessionHandler.getSubscriptionIdentifiers(clientId, message.topicName)
+        } else {
+            emptyList()
+        }
+        message.publishToEndpoint(endpoint, subscriptionIdentifiers = subscriptionIds)
     }
 
     private fun publishMessageCheckNext() {
@@ -1400,7 +1422,7 @@ class MqttClient(
         
         msgToPublish?.let { msg ->
             sessionHandler.incrementMessagesOut(clientId)
-            msg.publishToEndpoint(endpoint)
+            publishToEndpoint(msg)
             logger.finest { "Client [$clientId] Subscribe: next message [${msg.messageId}] from queue delivered [${Utils.getCurrentFunctionName()}]" }
         }
     }
@@ -1610,7 +1632,7 @@ class MqttClient(
                 when (retryAction) {
                     1 -> {
                         logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [1] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                        inFlightMessage.message.publishToEndpoint(endpoint)
+                        publishToEndpoint(inFlightMessage.message)
                     }
                     2 -> {
                         logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [2] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
