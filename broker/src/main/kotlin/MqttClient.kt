@@ -1312,10 +1312,11 @@ class MqttClient(
         if (!endpoint.isConnected) {
             logger.finest("Client [$clientId] QoS [${message.qosLevel}] message [${message.messageId}] for topic [${message.topicName}] not delivered, client not connected [${Utils.getCurrentFunctionName()}]")
         } else {
-            // Delivery-time ACL filtering: when AclCheckOnSubscription is false,
-            // check ACL against the concrete topic before delivering to the client
-            if (!Monster.aclCheckOnSubscription() && userManager.isUserManagementEnabled()) {
-                val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
+            // Delivery-time ACL filtering: check the concrete topic before delivering,
+            // so wildcard subscriptions overlapping a deny rule and rules changed
+            // after subscribing are enforced (same as the Go edge broker)
+            val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
+            if (userManager.isUserManagementEnabled() && !userManager.isAdmin(username)) {
                 if (!userManager.canSubscribe(username, message.topicName, clientId)) {
                     logger.finest { "Client [$clientId] Message for topic [${message.topicName}] dropped by delivery-time ACL filter for user [$username]" }
                     return

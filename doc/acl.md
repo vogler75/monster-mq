@@ -11,18 +11,57 @@ permissions as follows:
 
 1. The global `canPublish` or `canSubscribe` flag must be true for the operation.
 2. If the account has no ACL rules, that global permission allows every topic.
-3. If any ACL rules exist, at least one matching rule must enable the operation.
-4. Without a matching allow rule, access is denied.
+3. If any ACL rules exist, they are scanned in descending numeric priority. On
+   equal priority, deny rules are scanned first. The first matching rule that
+   decides the operation wins.
+4. Without a deciding rule, access is denied.
 
 Admin accounts bypass topic ACL checks. Authentication separately checks whether
 an account is enabled. An authenticated user's unmatched topic is not retried
 against the `Anonymous` account.
 
-**Rules are allow rules.** A rule with `canPublish: false` is skipped for publish
-checks; it is not an explicit deny that overrides another matching allow rule.
-Rules are scanned in descending numeric priority, but priority does not turn a
-false permission into a deny rule. For isolation, enable only the required global
-operations and grant only the desired topic patterns.
+### Allow and Deny Rules
+
+| `canPublish` | `canSubscribe` | Rule type |
+|---|---|---|
+| true | true | Allows publish and subscribe |
+| true | false | Allows publish; skipped for subscribe checks |
+| false | true | Allows subscribe; skipped for publish checks |
+| false | false | **Denies** publish and subscribe |
+
+A rule that grants only one operation never blocks the other one: a
+publish-only rule on `telemetry/#` does not prevent a lower-priority rule from
+allowing subscriptions there. A rule with both flags false is a deny rule and
+blocks both operations for matching topics unless a higher-priority rule allows
+them first.
+
+Example: allow everything except the `secret/#` subtree, but keep
+`secret/public/#` readable:
+
+| Priority | Pattern | `canPublish` | `canSubscribe` |
+|---|---|---|---|
+| 200 | `secret/public/#` | false | true |
+| 100 | `secret/#` | false | false |
+| 1 | `#` | true | true |
+
+To deny only one operation, put a deny rule below a higher-priority rule that
+allows the other operation on the same pattern, for example a read-only
+`machine/#` (`canSubscribe: true` at priority 20) above a deny `machine/#` (at
+priority 10).
+
+Deny rules also apply to subscription filters: a filter inside a denied subtree
+(`secret/#`, `secret/+`) is rejected. A broader filter that only partly overlaps
+a denied subtree (`#`, `+/x`) is admitted when an allow rule covers it, and each
+delivered message is checked against its concrete topic, so denied topics are
+never delivered.
+
+A pattern covers a subscription filter only if it covers every topic the
+filter can match: `a/+` covers `a/b` and `a/+`, but not `a/#`. Wildcards at the
+first level never cover topics starting with `$` (for example `$SYS/...`);
+grant those with a pattern that starts with `$`.
+
+The Go edge broker (`monster-mq-edge`) evaluates the same rules identically,
+including `%u`/`%c` substitution and the `Anonymous` user's rules.
 
 Implementation: [AclCache.kt](../broker/src/main/kotlin/auth/AclCache.kt),
 `checkPermissionInternal` and `resolvePattern`.
@@ -52,8 +91,11 @@ UserManagement:
 
 | Setting | Subscription admission | Message delivery |
 |---|---|---|
-| `true` (default) | Check the requested filter against ACLs | No additional per-message ACL check |
+| `true` (default) | Check the requested filter against ACLs | Check each concrete message topic |
 | `false` | Check exact topics; allow wildcard filters when global subscription permission permits | Check each concrete message topic |
+
+Delivery-time checks for non-admin accounts make deny rules effective for broad
+wildcard subscriptions, and rule changes apply to existing subscriptions.
 
 For example, a user with global subscribe permission and an allow rule for
 `sensors/#` cannot subscribe to `#` in the default mode. With the setting false,
@@ -132,7 +174,8 @@ an interval of unrestricted access during provisioning.
 Check the account's enabled state and global permission first, then inspect its
 rules, wildcard pattern, substitutions, and the subscription-check mode. A
 matching ACL cannot grant an operation whose global flag is false. Conversely,
-a false flag on one rule cannot cancel another allow rule.
+a rule that grants only one operation cannot cancel another allow rule; only a
+rule with both flags false denies.
 
 User and rule updates refresh the cache; periodic refresh is configured with
 `UserManagement.CacheRefreshInterval`. Use [system logs](graphql-system-logs.md)

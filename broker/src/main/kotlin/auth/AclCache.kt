@@ -36,31 +36,7 @@ class AclCache {
 
         return store.loadAllUsersAndAcls().compose { (allUsers, allAcls) ->
             try {
-                // Clear existing data
-                users.clear()
-                userAcls.clear()
-                permissionCache.clear()
-
-                // Load users
-                allUsers.forEach { user ->
-                    users[user.username] = user
-                }
-
-                // Group ACL rules by username and build topic trees
-                val groupedAcls = allAcls.groupBy { it.username }
-                groupedAcls.forEach { (username, rules) ->
-                    userAcls[username] = rules.sortedByDescending { it.priority }
-
-                    // Add rules to topic trees for efficient matching
-                    rules.forEach { rule ->
-                        if (rule.canSubscribe) {
-                            subscribeTopicTree.add(rule.topicPattern, username, rule)
-                        }
-                        if (rule.canPublish) {
-                            publishTopicTree.add(rule.topicPattern, username, rule)
-                        }
-                    }
-                }
+                load(allUsers, allAcls)
 
                 val endTime = System.currentTimeMillis()
                 val duration = endTime - startTime
@@ -76,6 +52,40 @@ class AclCache {
         }
     }
     
+    /**
+     * Replace the cached users and ACL rules.
+     */
+    fun load(allUsers: List<User>, allAcls: List<AclRule>) {
+        // Clear existing data
+        users.clear()
+        userAcls.clear()
+        permissionCache.clear()
+
+        // Load users
+        allUsers.forEach { user ->
+            users[user.username] = user
+        }
+
+        // Group ACL rules by username and build topic trees
+        val groupedAcls = allAcls.groupBy { it.username }
+        groupedAcls.forEach { (username, rules) ->
+            // Highest priority first; on equal priority the deny rule is checked first
+            userAcls[username] = rules.sortedWith(
+                compareByDescending<AclRule> { it.priority }.thenByDescending { isDenyRule(it) }
+            )
+
+            // Add rules to topic trees for efficient matching
+            rules.forEach { rule ->
+                if (rule.canSubscribe) {
+                    subscribeTopicTree.add(rule.topicPattern, username, rule)
+                }
+                if (rule.canPublish) {
+                    publishTopicTree.add(rule.topicPattern, username, rule)
+                }
+            }
+        }
+    }
+
     /**
      * Get a user by username
      */
@@ -158,6 +168,7 @@ class AclCache {
      */
     private fun checkPermissionInternal(username: String, topic: String, isSubscribe: Boolean, clientId: String? = null): Boolean {
         val user = users[username] ?: return false
+        if (!user.enabled) return false
         
         // Admin users bypass ACL checks
         if (user.isAdmin) return true
@@ -175,23 +186,32 @@ class AclCache {
             return hasGeneralPermission
         }
         
-        // Check rules in priority order (highest priority first)
+        // Check rules in priority order (highest priority first, deny first on
+        // equal priority); the first matching rule that decides wins.
+        // - canSubscribe=false and canPublish=false: deny rule for both operations
+        // - otherwise: allow rule for the operations set to true; it is skipped
+        //   for the other operation
+        // A wildcard subscription that only partly overlaps a deny rule is
+        // admitted; publishMessage re-checks the concrete topic on delivery.
         for (rule in rules) {
-            val ruleApplies = if (isSubscribe) rule.canSubscribe else rule.canPublish
-            if (!ruleApplies) continue
+            val deny = isDenyRule(rule)
+            val grants = if (isSubscribe) rule.canSubscribe else rule.canPublish
+            if (!deny && !grants) continue
             
             val resolvedPattern = resolvePattern(rule.topicPattern, username, clientId)
-            if (resolvedPattern != null && topicMatches(resolvedPattern, topic)) {
-                logger.finest { "ACL rule match: user=$username, topic=$topic, pattern=${rule.topicPattern}, resolved=$resolvedPattern, allow=${if (isSubscribe) "subscribe" else "publish"}" }
-                return true
+            if (resolvedPattern != null && aclMatches(resolvedPattern, topic)) {
+                logger.finest { "ACL rule match: user=$username, topic=$topic, pattern=${rule.topicPattern}, resolved=$resolvedPattern, ${if (deny) "deny" else "allow"}=${if (isSubscribe) "subscribe" else "publish"}" }
+                return !deny
             }
         }
         
-        // No matching allow rule found among existing rules
+        // No matching rule found among existing rules
         logger.finest { "No ACL rule match: user=$username, topic=$topic, operation=${if (isSubscribe) "subscribe" else "publish"}" }
         return false
     }
     
+    private fun isDenyRule(rule: AclRule): Boolean = !rule.canSubscribe && !rule.canPublish
+
     /**
      * Resolve %c and %u placeholders in an ACL topic pattern.
      * - %u is replaced with the username
@@ -209,16 +229,28 @@ class AclCache {
     }
     
     /**
-     * Check if a topic matches an MQTT topic pattern (supports + and # wildcards)
+     * Check if the ACL pattern covers topic, which is either a concrete topic or a
+     * subscription filter (then every topic the filter can match must be covered).
+     * Wildcards at the first level do not cover topics starting with '$' (MQTT 4.7.2).
+     * Same as topicMatches in the Go edge broker (internal/auth/auth.go).
      */
-    private fun topicMatches(pattern: String, topic: String): Boolean {
-        return TopicTree.matches(pattern, topic)
+    private fun aclMatches(pattern: String, topic: String): Boolean {
+        val pp = pattern.split('/')
+        val tt = topic.split('/')
+        if (tt[0].startsWith('$') && !pp[0].startsWith('$') && (pp[0] == "+" || pp[0] == "#")) return false
+        for (i in pp.indices) {
+            val p = pp[i]
+            if (p == "#") return true
+            if (i >= tt.size) return false
+            if (p == "+") {
+                // A single-level wildcard does not cover a multi-level filter
+                if (tt[i] == "#") return false
+                continue
+            }
+            if (p != tt[i]) return false
+        }
+        return pp.size == tt.size
     }
-    
-    /**
-     * Recursive topic matching implementation
-     */
-    // Unified matching now via TopicTree.matches
     
     /**
      * Clear the permission cache (useful after ACL updates)

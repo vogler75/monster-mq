@@ -390,7 +390,7 @@
           "type": "boolean",
           "title": "ACL Check On Subscription",
           "default": true,
-          "description": "When true (default), ACL is checked at subscribe time against the topic filter. When false (Mosquitto mode), wildcard subscriptions are allowed and ACL is evaluated per-message at publish time."
+          "description": "When true (default), ACL is checked at subscribe time against the topic filter. When false (Mosquitto mode), wildcard subscriptions are admitted without an ACL check. In both modes every delivered message is checked against its concrete topic for non-admin users."
         }
       }
     },
