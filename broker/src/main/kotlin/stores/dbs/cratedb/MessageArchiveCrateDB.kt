@@ -78,12 +78,13 @@ class MessageArchiveCrateDB (
 
                 // Only try JSON conversion if payloadFormat is JSON
                 if (payloadFormat == at.rocworks.stores.PayloadFormat.JSON) {
-                    val payloadJson = message.getPayloadAsJson()
+                    // Only a JSON object fits the OBJECT column; other JSON values would be stored as {}
+                    val payloadJson = message.getPayloadAsJsonObject()
                     if (payloadJson != null) {
                         preparedStatement.setNull(3, Types.VARCHAR)
                         preparedStatement.setString(4, payloadJson)
                     } else {
-                        // JSON format requested but payload is not valid JSON - store as base64
+                        // JSON format requested but payload is not a JSON object - store as base64
                         preparedStatement.setString(3, message.getPayloadAsBase64())
                         preparedStatement.setNull(4, Types.VARCHAR)
                     }
@@ -325,11 +326,10 @@ class MessageArchiveCrateDB (
                     for (field in effectiveFields) {
                         val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
                         val valueExpr = if (field.isEmpty()) {
-                            // Raw value - try payload_obj first, then decode payload_b64 (base64 string)
-                            // CrateDB stores non-JSON as base64 encoded string in payload_b64
-                            // We need to decode the base64 and convert to double
-                            // CrateDB has encode/decode functions for base64
-                            "COALESCE(TRY_CAST(payload_obj AS DOUBLE), TRY_CAST(decode(payload_b64, 'base64') AS DOUBLE))"
+                            // Raw value - try payload_obj first, then decode payload_b64 (base64 string).
+                            // decode(.., 'base64') returns hex text (\x3230); encode(.., 'escape') turns it
+                            // back into the payload text so it can be cast to DOUBLE.
+                            "COALESCE(TRY_CAST(payload_obj AS DOUBLE), TRY_CAST(encode(decode(payload_b64, 'base64'), 'escape') AS DOUBLE))"
                         } else {
                             // JSON field extraction - CrateDB uses subscript notation for OBJECT
                             val pathParts = field.split(".")

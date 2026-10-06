@@ -207,13 +207,14 @@ class MessageStoreCrateDB(
 
                             // Handle payload based on configured format
                             if (payloadFormat == PayloadFormat.JSON) {
-                                val payloadJson = message.getPayloadAsJson()
+                                // Only a JSON object fits the OBJECT column; other JSON values would be stored as {}
+                                val payloadJson = message.getPayloadAsJsonObject()
                                 if (payloadJson != null) {
-                                    // JSON format configured and payload is valid JSON
+                                    // JSON format configured and payload is a JSON object
                                     preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 5, Types.VARCHAR) // payload_b64 = NULL
                                     preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 6, payloadJson)  // payload_obj = JSON
                                 } else {
-                                    // JSON format configured but payload is not valid JSON - store as base64
+                                    // JSON format configured but payload is not a JSON object - store as base64
                                     preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 5, message.getPayloadAsBase64())
                                     preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 6, Types.VARCHAR) // payload_obj = NULL
                                 }

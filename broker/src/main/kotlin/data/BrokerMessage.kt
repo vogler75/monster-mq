@@ -223,6 +223,17 @@ class BrokerMessage(
         }
     }
 
+    // Payload as a JSON string only when it is a JSON object. CrateDB OBJECT
+    // columns store any other JSON value (42, [1,2], "x") silently as {}.
+    fun getPayloadAsJsonObject(): String? {
+        return try {
+            val jsonString = String(payload, Charsets.UTF_8)
+            if (Json.decodeValue(jsonString) is io.vertx.core.json.JsonObject) jsonString else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun getPayloadAsJsonValue(): Any? {
         return try {
             val jsonString = String(payload, Charsets.UTF_8)
