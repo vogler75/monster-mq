@@ -21,6 +21,7 @@ Keep this index as the curated entry point for active and completed developer pl
 - [plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md](plans/AMAZON_KINESIS_CLIENT_ISSUE_110.md) — Amazon Kinesis client integration
 - [plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md](plans/EDGE_TOPIC_SCHEMA_GOVERNANCE.md) — Implementing topic schema governance in the Go edge broker
 - [plans/KNOWLEDGE_GRAPH.md](plans/KNOWLEDGE_GRAPH.md) — Knowledge Graph & semantic topic subscriptions with Apache Jena (#167)
+- [plans/PEER_REDUNDANCY_ROLES.md](plans/PEER_REDUNDANCY_ROLES.md) — Active/standby roles for PeerLink broker pairs (WinCC OA redundancy), hot/cold standby for bridges and archive groups
 - [plans/REDIS_PROTOCOL_SERVER.md](plans/REDIS_PROTOCOL_SERVER.md) — Redis-compatible protocol server for topic access through archive group last-value stores
 - [plans/TOPIC_BASED_DECISION_MAKING.md](plans/TOPIC_BASED_DECISION_MAKING.md) — Topic-based decision making with OpenRouter / Jev (#196)
 
