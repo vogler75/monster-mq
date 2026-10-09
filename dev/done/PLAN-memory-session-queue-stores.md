@@ -47,7 +47,7 @@ selected by `DefaultStoreType`.
   - `QueueStoreType: MEMORY` means queued messages use our queue logic but are
     lost on broker restart.
   - `QueuedMessagesEnabled: false` still bypasses our queue hook and relies on
-    mochi's in-process inflight behavior.
+    the MQTT engine's in-process inflight behavior.
   - `SessionStoreType: MEMORY` does not implicitly change the queue store; queue
     memory is explicit via `QueueStoreType`.
 
