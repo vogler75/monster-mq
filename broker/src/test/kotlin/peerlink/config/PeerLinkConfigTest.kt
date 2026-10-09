@@ -53,7 +53,7 @@ class PeerLinkConfigTest {
         assertTrue(p.receive.getBus())
         assertFalse(p.receive.bridgeOutbound)
         assertTrue(p.receive.getArchive())
-        assertFalse(p.receive.queue)
+        assertTrue(p.receive.queue)
         assertEquals("SKIP", p.receive.effectiveSharedSubscriptions())
         assertEquals(3.0, p.receive.getCatchUpRateFactor(), 0.001)
         assertEquals((16 shl 20) + (64 shl 10), p.receive.getMaxFrameBytes())
@@ -186,5 +186,69 @@ class PeerLinkConfigTest {
         assertTrue(validCIDR("::1/128"))
         assertFalse(validCIDR("10.0.0.0/35"))
         assertFalse(validCIDR("not-a-cidr"))
+    }
+
+    private fun assertInvalid(p: PeerLinkConfig, part: String) {
+        try {
+            validatePeerLink(p, defaultEnv())
+            fail("Expected validation error containing \"$part\"")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message, e.message!!.contains(part))
+        }
+    }
+
+    @Test
+    fun testInterestDefaultsAndParse() {
+        val d = PeerLinkConfig().interest
+        assertFalse(d.enabled)
+        assertEquals("ALL", d.effectiveUnknown())
+        assertEquals(5, d.getFlushMs())
+        assertEquals(65536, d.getMaxScanPerFetch())
+        assertEquals(100_000, d.getMaxFiltersPerPeer())
+        assertEquals(1024, d.getMaxFilterBytes())
+
+        val json = JsonObject()
+            .put("Enabled", true)
+            .put("Interest", JsonObject()
+                .put("Enabled", true).put("Unknown", "none").put("FlushMs", 20)
+                .put("MaxScanPerFetch", 2048).put("MaxFiltersPerPeer", 10).put("MaxFilterBytes", 256))
+            .put("Peers", JsonArray().add(JsonObject().put("NodeId", "node-b").put("Interest", "OFF")))
+        val p = PeerLinkConfigParser.parse(json)
+        assertTrue(p.interest.enabled)
+        assertEquals("NONE", p.interest.effectiveUnknown())
+        assertEquals(20, p.interest.getFlushMs())
+        assertEquals(2048, p.interest.getMaxScanPerFetch())
+        assertEquals(10, p.interest.getMaxFiltersPerPeer())
+        assertEquals(256, p.interest.getMaxFilterBytes())
+        assertTrue(p.peers[0].interestOff())
+
+        try {
+            PeerLinkConfigParser.parse(JsonObject().put("Interest", JsonObject().put("Bogus", 1)))
+            fail("Expected unknown key error")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("PeerLink.Interest.Bogus"))
+        }
+    }
+
+    @Test
+    fun testInterestValidation() {
+        val ok = validPeerLink()
+        ok.interest.enabled = true
+        validatePeerLink(ok, defaultEnv())
+
+        assertInvalid(validPeerLink().apply { interest.unknown = "SOME" }, "Interest.Unknown")
+        assertInvalid(validPeerLink().apply { interest.flushMs = 0 }, "Interest.FlushMs")
+        assertInvalid(validPeerLink().apply { interest.maxScanPerFetch = 1023 }, "Interest.MaxScanPerFetch")
+        assertInvalid(validPeerLink().apply { interest.maxFiltersPerPeer = 0 }, "Interest.MaxFiltersPerPeer")
+        assertInvalid(validPeerLink().apply { interest.maxFilterBytes = 0 }, "Interest.MaxFilterBytes")
+        assertInvalid(validPeerLink().apply { interest.maxFilterBytes = 32769 }, "Interest.MaxFilterBytes")
+        assertInvalid(validPeerLink().apply { peers[0].interest = "MAYBE" }, "Peers[0].Interest")
+
+        val many = validPeerLink()
+        many.interest.enabled = true
+        many.peers = (1..65).map { PeerConfig(nodeID = "node-$it", serve = true) }
+        assertInvalid(many, "at most 64")
+        many.interest.enabled = false
+        validatePeerLink(many, defaultEnv())
     }
 }

@@ -272,6 +272,15 @@ class Puller(
             val hs = doHandshake(currentSocket, sslSocket)
             sessions.incrementAndGet()
 
+            // With the agreed CapInterest the full interest snapshot goes out before anything else
+            // (plan-peerlink-interest-routing section 5.3); later deltas ride ahead of each FETCH.
+            val tracker = manager.tracker
+            if (tracker != null && (hs.caps and CapInterest) != 0L) {
+                val f = tracker.subscribe { interestWake?.invoke() }
+                feed = f
+                writeInterest(hs.output, f)
+            }
+
             val ac = ApplyContext(
                 srcRoot = hs.srcRoot,
                 ownRoot = "",
@@ -345,10 +354,38 @@ class Puller(
             res.livedMs = System.currentTimeMillis() - started
             return res
         } finally {
+            feed?.let { f -> manager.tracker?.unsubscribe(f) }
+            feed = null
+            interestWake = null
             try {
                 currentSocketSafeClose()
             } catch (_: Exception) {}
         }
+    }
+
+    // The interest feed of the current session; null without the agreed CapInterest.
+    @Volatile private var feed: InterestTracker.Feed? = null
+    @Volatile private var interestWake: (() -> Unit)? = null
+    private val interestDeltasSent = AtomicLong()
+    private val interestSnapshotsSent = AtomicLong()
+
+    private fun interestWanted(): Boolean =
+        manager.tracker != null && manager.config.interest.enabled && !peer.interestOff()
+
+    // writeInterest sends the pending interest frames of the feed; only the thread that owns the
+    // output may call it.
+    private fun writeInterest(out: OutputStream, f: InterestTracker.Feed) {
+        val frames = f.poll()
+        if (frames.isEmpty()) return
+        for (fr in frames) {
+            writeFrame(out, fr)
+            when (fr) {
+                is InterestDelta -> interestDeltasSent.incrementAndGet()
+                is InterestSnapshot -> interestSnapshotsSent.incrementAndGet()
+                else -> {}
+            }
+        }
+        out.flush()
     }
 
     private fun currentSocketSafeClose() {
@@ -394,7 +431,8 @@ class Puller(
         } else null
 
         val hello = Hello(
-            capabilities = CapsV1 or CapSnapshotFill or CapResyncNewer or CapBatchCRC,
+            capabilities = CapsV1 or CapSnapshotFill or CapResyncNewer or CapBatchCRC or
+                (if (interestWanted()) CapInterest else 0L),
             instanceID = manager.instanceId,
             maxRecordBytes = injector.maxMessageSize,
             retainedClass = RetainedClass.DB,
@@ -554,6 +592,7 @@ class Puller(
         data class FetchCmd(val offset: Long) : WriteCmd()
         data class CommitCmd(val offset: Long) : WriteCmd()
         data class FinalCmd(val goAway: Boolean) : WriteCmd()
+        object InterestCmd : WriteCmd()
     }
 
     private fun doStreaming(hs: HandshakeState, ac: ApplyContext): SessionResult {
@@ -565,6 +604,8 @@ class Puller(
         val lastFetchSent = AtomicLong(0)
         val closed = AtomicBoolean(false)
         val writerDone = CountDownLatch(1)
+        // A wake only needs one queued InterestCmd; offer never blocks the tracker worker.
+        interestWake = { cmds.offer(WriteCmd.InterestCmd) }
 
         val writerThread = Thread.ofVirtual().name("puller-writer-$nodeId").start {
             var fetchId = 0
@@ -583,6 +624,7 @@ class Puller(
                     val applied = appliedNext.get()
                     when (cmd) {
                         is WriteCmd.FetchCmd -> {
+                            feed?.let { writeInterest(hs.output, it) }
                             fetchId++
                             val commit = if (applied > lastCommit) {
                                 lastCommit = applied
@@ -602,6 +644,9 @@ class Puller(
                             )
                             writeFrame(hs.output, f)
                             hs.output.flush()
+                        }
+                        is WriteCmd.InterestCmd -> {
+                            feed?.let { writeInterest(hs.output, it) }
                         }
                         is WriteCmd.CommitCmd -> {
                             if (cmd.offset > lastCommit) {
@@ -667,7 +712,11 @@ class Puller(
                             }
                         }
 
-                        next = if (h.baseOffset != 0L) h.baseOffset + h.count.toLong() else next
+                        if (b.isSparse() && (hs.caps and CapInterest) == 0L) {
+                            throw GoAwayException(GoAwayCode.Protocol, "sparse BATCH without CapInterest", isLocal = true)
+                        }
+                        // A sparse batch covers span offsets, not count (plan-peerlink-interest-routing 6.4).
+                        next = if (h.baseOffset != 0L) h.baseOffset + b.span() else next
                         handoff.put(inBatch)
                         cmds.offer(WriteCmd.FetchCmd(next))
                     } else if (t == FrameType.Pong) {
@@ -787,7 +836,9 @@ class Puller(
                 p50 = injector.hist.quantile(0.5),
                 p99 = injector.hist.quantile(0.99),
                 p999 = injector.hist.quantile(0.999)
-            )
+            ),
+            interest = if (interestWanted()) SourceInterest(active = feed != null,
+                deltasSent = interestDeltasSent.get(), snapshotsSent = interestSnapshotsSent.get()) else null
         )
     }
 }

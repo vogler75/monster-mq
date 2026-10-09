@@ -36,6 +36,13 @@ class PeerLinkManager(
     var server: PeerServer? = null
     val pullers = mutableMapOf<String, Puller>()
     var onStateChange: (() -> Unit)? = null
+    // Remote interest of the consumers served by this node; null when PeerLink.Interest is disabled.
+    val interest: InterestTable?
+    @Volatile private var interestTicker: Thread? = null
+    // Local interest announced to the sources this node pulls from; null when PeerLink.Interest is
+    // disabled or no pulled peer has interest on.
+    val tracker: InterestTracker?
+    @Volatile var redundancyProvider: RedundancyComponentProvider = NoRedundancyComponents
 
     init {
         // Wire into SessionHandler and MessageHandler
@@ -43,17 +50,29 @@ class PeerLinkManager(
         sessionHandler.peerLinkReceiveBus = config.receive.getBus()
         sessionHandler.peerLinkReceiveQueue = config.receive.queue
         messageHandler.peerLinkReceiveArchive = config.receive.getArchive()
+        sessionHandler.peerLinkReceiveBridgeOutbound = config.receive.bridgeOutbound
 
         val maxRecordBytes = config.log.getMaxRecordBytes(512 * 1024)
-        val consumerList = setup.peers.filter { it.getServe() }.map { it.nodeId.trim().lowercase() }
+        val servedPeers = setup.peers.filter { it.getServe() }
+        val consumerList = servedPeers.map { it.nodeId.trim().lowercase() }
+        val interestOn = config.interest.enabled && consumerList.size <= peerLinkMaxInterestConsumers
         log = PeerLog(
             LogConfig(
                 maxMessages = config.log.getMaxMessages().toLong(),
                 maxBytes = config.log.getMaxBytes(),
                 maxRecordBytes = maxRecordBytes,
-                consumers = consumerList
+                consumers = consumerList,
+                masked = interestOn,
+                maxScan = config.interest.getMaxScanPerFetch()
             )
         )
+        interest = if (interestOn) InterestTable(
+            consumers = servedPeers.map { InterestTable.Consumer(it.nodeId.trim().lowercase(), !it.interestOff()) },
+            unknownAll = config.interest.unknownAll(),
+            maxFilters = config.interest.getMaxFiltersPerPeer(),
+            maxBytes = config.interest.getMaxFilterBytes(),
+            logger = logger
+        ) else null
 
         val captureInclude = config.capture.effectiveInclude()
         val captureExclude = config.capture.getExclude("")
@@ -66,6 +85,14 @@ class PeerLinkManager(
             echoSuppressMs = config.capture.echoSuppressMs,
             maxExpirySec = 0L
         )
+        hook.interest = interest
+
+        tracker = if (config.interest.enabled && setup.peers.any { !it.interestOff() }) InterestTracker(
+            flushMs = config.interest.getFlushMs().toLong(),
+            maxFilterBytes = config.interest.getMaxFilterBytes(),
+            classifier = ClientClassifier { sessionHandler.peerLinkInterestClass(it) },
+            logger = logger
+        ) else null
 
         if (config.tls.enabled) {
             val tls = PeerTls(config.tls, nodeId)
@@ -142,11 +169,18 @@ class PeerLinkManager(
                 logger.warning("PeerLink: $warn")
             }
 
+            tracker?.let { t ->
+                refreshStaticInterest()
+                t.start()
+                sessionHandler.setSubscriptionObserver(t)
+                sessionHandler.replaySubscriptions(t)
+            }
             server?.start()
             for (puller in pullers.values) {
                 puller.start()
             }
             hook.active.set(true)
+            startInterestTicker()
             logger.info("PeerLink: started with NodeId \"$nodeId\"")
         }
     }
@@ -168,6 +202,13 @@ class PeerLinkManager(
             hook.draining.set(true)
             hook.active.set(false)
 
+            interestTicker?.interrupt()
+            interestTicker = null
+            tracker?.let {
+                sessionHandler.setSubscriptionObserver(null)
+                it.stop()
+            }
+
             // Stage 5: Drain log and seal
             log.drain(drainMs)
             log.seal()
@@ -175,6 +216,52 @@ class PeerLinkManager(
             server?.stop()
             logger.info("PeerLink: shutdown complete")
         }
+    }
+
+    // Every 100 ms: advance consumers past records not meant for them, run the persistent-expiry
+    // backlog sweep; once a second: expire persistent interest of disconnected consumers.
+    private fun startInterestTicker() {
+        if (interest == null && tracker == null) return
+        val table = interest
+        interestTicker = Thread.ofVirtual().name("peerlink-interest").start {
+            var lastExpire = 0L
+            while (running.get()) {
+                try {
+                    Thread.sleep(100)
+                } catch (_: InterruptedException) {
+                    break
+                }
+                try {
+                    val now = System.currentTimeMillis()
+                    if (table != null) {
+                        log.advanceSkipped()
+                        if (now - lastExpire >= 1000) table.expire(now)
+                        table.sweep(log)
+                    }
+                    if (now - lastExpire >= 1000) {
+                        lastExpire = now
+                        refreshStaticInterest()
+                    }
+                } catch (e: Exception) {
+                    logger.warning("peerlink: interest maintenance failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    // refreshStaticInterest updates the tracker's static sources: the topic filters of the deployed
+    // archive groups (PER, never expiring; only with Receive.Archive) and the redundancy provider.
+    fun refreshStaticInterest() {
+        val t = tracker ?: return
+        val archive = HashMap<String, InterestClass>()
+        if (config.receive.getArchive()) {
+            at.rocworks.Monster.getArchiveHandler()?.getDeployedArchiveGroups()?.values?.forEach { g ->
+                val filters = g.topicFilter.ifEmpty { listOf("#") }
+                for (f in filters) archive[f] = InterestClass.PER_NEVER
+            }
+        }
+        t.setSource("archive", archive)
+        t.setSource("redundancy", redundancyProvider.filters())
     }
 
     fun status(): Status {
@@ -233,7 +320,26 @@ class PeerLinkManager(
             log = logStatus,
             admission = admStatus,
             consumers = consumerList,
-            sources = sourceList
+            sources = sourceList,
+            interest = interestCounters()
+        )
+    }
+
+    private fun interestCounters(): InterestCounters? {
+        val t = interest
+        val tr = tracker
+        if (t == null && tr == null) return null
+        return InterestCounters(
+            interestSkipped = t?.skipped?.sum() ?: 0L,
+            interestMatched = t?.matched?.sum() ?: 0L,
+            sparseBatches = t?.sparseBatches?.sum() ?: 0L,
+            volatileDropped = t?.volatileDropped?.get() ?: 0L,
+            persistentExpired = t?.persistentExpired?.get() ?: 0L,
+            interestBacklogDiscarded = t?.backlogDiscarded?.get() ?: 0L,
+            interestRejected = t?.rejected?.get() ?: 0L,
+            interestOverLimit = t?.overLimitCount?.get() ?: 0L,
+            deltasReceived = t?.deltasReceived?.get() ?: 0L,
+            local = tr?.status()
         )
     }
 }

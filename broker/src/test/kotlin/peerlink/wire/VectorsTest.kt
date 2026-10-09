@@ -230,4 +230,41 @@ class VectorsTest {
         assertEquals("a", truncUTF8(combined, 2))
         assertEquals("a", truncUTF8(combined, 1))
     }
+
+    // M5: edge's interest vectors decode to the expected entries, and main encodes the same frames to the same bytes.
+    @Test
+    fun testInterestVectors() {
+        val frames = loadVectors().getJsonArray("frames")
+        fun hexOf(name: String): String = (0 until frames.size()).map { frames.getJsonObject(it) }
+            .first { it.getString("name") == name }.getString("hex")
+
+        val snapHex = hexOf("INTEREST_SNAPSHOT")
+        val snap = decodeFrame(FrameType.InterestSnapshot, hexFormat.parseHex(snapHex).copyOfRange(FrameHeaderLen,
+            snapHex.length / 2)) as InterestSnapshot
+        assertEquals(3L, snap.generation)
+        assertEquals(InterestFlagFirst or InterestFlagLast, snap.flags)
+        assertEquals(listOf(InterestEntry(InterestVol, 0L, "a/#"), InterestEntry(InterestPer, InterestExpiryNever, "b/+")),
+            snap.entries)
+        val mainSnap = InterestSnapshot(3L, InterestFlagFirst or InterestFlagLast, mutableListOf(
+            InterestEntry(InterestVol, 0L, "a/#"), InterestEntry(InterestPer, InterestExpiryNever, "b/+")))
+        assertEquals(snapHex, hexFormat.formatHex(mainSnap.encode()))
+
+        val deltaHex = hexOf("INTEREST_DELTA")
+        val delta = decodeFrame(FrameType.InterestDelta, hexFormat.parseHex(deltaHex).copyOfRange(FrameHeaderLen,
+            deltaHex.length / 2)) as InterestDelta
+        assertEquals(4L, delta.generation)
+        assertEquals(listOf(InterestEntry(InterestNone, 0L, "a/#"), InterestEntry(InterestPer, 60L, "c")), delta.entries)
+        val mainDelta = InterestDelta(4L, mutableListOf(InterestEntry(InterestNone, 0L, "a/#"),
+            InterestEntry(InterestPer, 60L, "c")))
+        assertEquals(deltaHex, hexFormat.formatHex(mainDelta.encode()))
+    }
+
+    // The resource is a copy of edge's golden file; fail on drift when the edge checkout sits next to this one.
+    @Test
+    fun testResourceMatchesEdge() {
+        val edge = listOf("../../edge/internal/peerlink/wire/testdata/vectors.json",
+            "../edge/internal/peerlink/wire/testdata/vectors.json").map { java.io.File(it) }.firstOrNull { it.isFile }
+        org.junit.Assume.assumeTrue("edge checkout not found", edge != null)
+        assertEquals(JsonObject(edge!!.readText()), loadVectors())
+    }
 }

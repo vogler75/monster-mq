@@ -38,6 +38,17 @@ const val PeerLinkIdentityDNS = "DNS"
 const val PeerLinkIdentityCN = "CN"
 const val PeerLinkTrustStorePEM = "PEM"
 const val PeerLinkTrustStorePKCS12 = "PKCS12"
+const val PeerLinkInterestAll = "ALL"
+const val PeerLinkInterestNone = "NONE"
+const val PeerLinkInterestInherit = "INHERIT"
+const val PeerLinkInterestOff = "OFF"
+const val peerLinkDefaultInterestFlushMs = 5
+const val peerLinkDefaultInterestMaxScan = 65536
+const val peerLinkMinInterestMaxScan = 1024
+const val peerLinkDefaultInterestMaxFilters = 100_000
+const val peerLinkDefaultInterestMaxFilterBytes = 1024
+const val peerLinkMaxInterestFilterBytes = 32768
+const val peerLinkMaxInterestConsumers = 64
 
 enum class ClientAuthType {
     NONE, REQUEST, REQUIRED;
@@ -88,11 +99,30 @@ data class PeerConfig(
     var serve: Boolean? = null,
     var sharedSecrets: List<String> = emptyList(),
     var tls: PeerTLSConfig = PeerTLSConfig(),
-    var receive: PeerReceiveConfig = PeerReceiveConfig()
+    var receive: PeerReceiveConfig = PeerReceiveConfig(),
+    var interest: String = "" // INHERIT | OFF
 ) {
     val nodeId: String get() = nodeID
     fun getServe(): Boolean = serve ?: true
     fun pulls(): Boolean = address.isNotEmpty()
+    fun interestOff(): Boolean = interest.equals(PeerLinkInterestOff, ignoreCase = true)
+}
+
+// PeerLink.Interest (plan-peerlink-interest-routing section 7).
+data class PeerLinkInterestConfig(
+    var enabled: Boolean = false,
+    var unknown: String = "", // ALL | NONE
+    var flushMs: Int? = null,
+    var maxScanPerFetch: Int? = null,
+    var maxFiltersPerPeer: Int? = null,
+    var maxFilterBytes: Int? = null
+) {
+    fun effectiveUnknown(): String = unknown.ifEmpty { PeerLinkInterestAll }.uppercase()
+    fun unknownAll(): Boolean = effectiveUnknown() == PeerLinkInterestAll
+    fun getFlushMs(): Int = flushMs ?: peerLinkDefaultInterestFlushMs
+    fun getMaxScanPerFetch(): Int = maxScanPerFetch ?: peerLinkDefaultInterestMaxScan
+    fun getMaxFiltersPerPeer(): Int = maxFiltersPerPeer ?: peerLinkDefaultInterestMaxFilters
+    fun getMaxFilterBytes(): Int = maxFilterBytes ?: peerLinkDefaultInterestMaxFilterBytes
 }
 
 data class PeerLinkListenerConfig(
@@ -193,7 +223,7 @@ data class PeerLinkReceiveConfig(
     var bus: Boolean? = null,
     var bridgeOutbound: Boolean = false,
     var archive: Boolean? = null,
-    var queue: Boolean = false,
+    var queue: Boolean = true,
     var sharedSubscriptions: String = "",
     var markReplicas: Boolean = false,
     var catchUpRateFactor: Double? = null,
@@ -222,6 +252,7 @@ data class PeerLinkConfig(
     var snapshot: PeerLinkSnapshotConfig = PeerLinkSnapshotConfig(),
     var fetch: PeerLinkFetchConfig = PeerLinkFetchConfig(),
     var receive: PeerLinkReceiveConfig = PeerLinkReceiveConfig(),
+    var interest: PeerLinkInterestConfig = PeerLinkInterestConfig(),
     var peers: List<PeerConfig> = emptyList()
 ) {
     fun getKeepAliveSeconds(): Int = keepAliveSeconds ?: peerLinkDefaultKeepAlive
@@ -257,7 +288,7 @@ object PeerLinkConfigParser {
 
     private val allowedPeerLinkKeys = setOf(
         "Enabled", "AllowUnauthenticatedPeers", "Listener", "Tls", "SharedSecrets",
-        "KeepAliveSeconds", "Log", "Capture", "Snapshot", "Fetch", "Receive", "Peers"
+        "KeepAliveSeconds", "Log", "Capture", "Snapshot", "Fetch", "Receive", "Interest", "Peers"
     )
     private val allowedListenerKeys = setOf("Address", "Port", "AllowedNetworks", "MaxPreAuthPerIp", "AllowPlaintext")
     private val allowedTLSKeys = setOf(
@@ -272,7 +303,8 @@ object PeerLinkConfigParser {
         "Bus", "BridgeOutbound", "Archive", "Queue", "SharedSubscriptions", "MarkReplicas",
         "CatchUpRateFactor", "MaxApplyRate", "MaxRecordAgeMs", "MaxFrameBytes", "InjectWorkers"
     )
-    private val allowedPeerKeys = setOf("NodeId", "Address", "Serve", "SharedSecrets", "Tls", "Receive")
+    private val allowedPeerKeys = setOf("NodeId", "Address", "Serve", "SharedSecrets", "Tls", "Receive", "Interest")
+    private val allowedInterestKeys = setOf("Enabled", "Unknown", "FlushMs", "MaxScanPerFetch", "MaxFiltersPerPeer", "MaxFilterBytes")
     private val allowedPeerTLSKeys = setOf(
         "Enabled", "PinnedSha256", "CertificateIdentity", "ServerName", "RequireClientCert", "InsecureSkipVerify"
     )
@@ -291,6 +323,7 @@ object PeerLinkConfigParser {
         obj.getJsonObject("Snapshot")?.let { checkSub(it, allowedSnapshotKeys, "$path.Snapshot") }
         obj.getJsonObject("Fetch")?.let { checkSub(it, allowedFetchKeys, "$path.Fetch") }
         obj.getJsonObject("Receive")?.let { checkSub(it, allowedReceiveKeys, "$path.Receive") }
+        obj.getJsonObject("Interest")?.let { checkSub(it, allowedInterestKeys, "$path.Interest") }
         obj.getJsonArray("Peers")?.let { arr ->
             for (i in 0 until arr.size()) {
                 val peerObj = arr.getJsonObject(i) ?: continue
@@ -381,7 +414,7 @@ object PeerLinkConfigParser {
             if (r.containsKey("Bus")) p.receive.bus = r.getBoolean("Bus")
             p.receive.bridgeOutbound = r.getBoolean("BridgeOutbound", false)
             if (r.containsKey("Archive")) p.receive.archive = r.getBoolean("Archive")
-            p.receive.queue = r.getBoolean("Queue", false)
+            p.receive.queue = r.getBoolean("Queue", true)
             p.receive.sharedSubscriptions = r.getString("SharedSubscriptions", "")
             p.receive.markReplicas = r.getBoolean("MarkReplicas", false)
             if (r.containsKey("CatchUpRateFactor")) p.receive.catchUpRateFactor = r.getDouble("CatchUpRateFactor")
@@ -389,6 +422,15 @@ object PeerLinkConfigParser {
             p.receive.maxRecordAgeMs = r.getInteger("MaxRecordAgeMs", 0)
             if (r.containsKey("MaxFrameBytes")) p.receive.maxFrameBytes = r.getInteger("MaxFrameBytes")
             if (r.containsKey("InjectWorkers")) p.receive.injectWorkers = r.getInteger("InjectWorkers")
+        }
+
+        obj.getJsonObject("Interest")?.let { ic ->
+            p.interest.enabled = ic.getBoolean("Enabled", false)
+            p.interest.unknown = ic.getString("Unknown", "")
+            if (ic.containsKey("FlushMs")) p.interest.flushMs = ic.getInteger("FlushMs")
+            if (ic.containsKey("MaxScanPerFetch")) p.interest.maxScanPerFetch = ic.getInteger("MaxScanPerFetch")
+            if (ic.containsKey("MaxFiltersPerPeer")) p.interest.maxFiltersPerPeer = ic.getInteger("MaxFiltersPerPeer")
+            if (ic.containsKey("MaxFilterBytes")) p.interest.maxFilterBytes = ic.getInteger("MaxFilterBytes")
         }
 
         obj.getJsonArray("Peers")?.let { arr ->
@@ -399,6 +441,7 @@ object PeerLinkConfigParser {
                 pc.nodeID = po.getString("NodeId", "")
                 pc.address = po.getString("Address", "")
                 if (po.containsKey("Serve")) pc.serve = po.getBoolean("Serve")
+                pc.interest = po.getString("Interest", "")
                 po.getJsonArray("SharedSecrets")?.let { ss -> pc.sharedSecrets = ss.map { it.toString() } }
 
                 po.getJsonObject("Tls")?.let { pt ->
@@ -707,6 +750,34 @@ fun validatePeerLink(p: PeerLinkConfig, env: PeerLinkEnv): PeerLinkSetup {
     }
     if (r.getInjectWorkers() !in 1..16) {
         fail("Receive.InjectWorkers %d must be 1..16", r.getInjectWorkers())
+    }
+
+    val ic = p.interest
+    if (ic.effectiveUnknown() != PeerLinkInterestAll && ic.effectiveUnknown() != PeerLinkInterestNone) {
+        fail("Interest.Unknown \"%s\" must be ALL or NONE", ic.unknown)
+    }
+    if (ic.getFlushMs() <= 0) {
+        fail("Interest.FlushMs %d must be positive", ic.getFlushMs())
+    }
+    if (ic.getMaxScanPerFetch() < peerLinkMinInterestMaxScan) {
+        fail("Interest.MaxScanPerFetch %d must be at least %d", ic.getMaxScanPerFetch(), peerLinkMinInterestMaxScan)
+    }
+    if (ic.getMaxFiltersPerPeer() < 1) {
+        fail("Interest.MaxFiltersPerPeer %d must be at least 1", ic.getMaxFiltersPerPeer())
+    }
+    if (ic.getMaxFilterBytes() !in 1..peerLinkMaxInterestFilterBytes) {
+        fail("Interest.MaxFilterBytes %d must be 1..%d", ic.getMaxFilterBytes(), peerLinkMaxInterestFilterBytes)
+    }
+    for ((i, pc) in p.peers.withIndex()) {
+        if (pc.interest.isNotEmpty() && !pc.interest.equals(PeerLinkInterestInherit, ignoreCase = true) && !pc.interestOff()) {
+            fail("Peers[%d].Interest \"%s\" must be INHERIT or OFF", i, pc.interest)
+        }
+    }
+    if (ic.enabled) {
+        val consumers = p.peers.count { it.getServe() }
+        if (consumers > peerLinkMaxInterestConsumers) {
+            fail("Interest.Enabled supports at most %d consuming peers, %d are configured", peerLinkMaxInterestConsumers, consumers)
+        }
     }
 
     if (errs.isNotEmpty()) {

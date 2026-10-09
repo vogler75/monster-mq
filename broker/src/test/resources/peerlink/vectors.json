@@ -72,6 +72,18 @@
       "type": 20,
       "hex": "0900000014ffffffffffffffff",
       "payload": ""
+    },
+    {
+      "name": "INTEREST_SNAPSHOT",
+      "type": 32,
+      "hex": "1e0000002003000000030200000001000000000300612f2302ffffffff0300622f2b",
+      "payload": ""
+    },
+    {
+      "name": "INTEREST_DELTA",
+      "type": 33,
+      "hex": "1b00000021040000000200000000000000000300612f23023c000000010063",
+      "payload": ""
     }
   ],
   "records": [

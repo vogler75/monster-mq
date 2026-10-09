@@ -334,6 +334,18 @@ class TopicTree<K, V> : ITopicTree<K, V> {
         }
     }
 
+    /** Calls cb for every key/value stored in the tree with the topic name of its node. */
+    fun forEachData(cb: (topicName: String, key: K, value: V) -> Unit) {
+        fun walk(node: Node<K, V>, path: String?) {
+            node.children.forEach { (level, child) ->
+                val name = if (path == null) level else "$path/$level"
+                child.dataset.forEach { (k, v) -> cb(name, k, v) }
+                walk(child, name)
+            }
+        }
+        walk(root, null)
+    }
+
     fun size(): Int {
         fun countNodes(node: Node<K, V>): Int {
             var count = node.dataset.size

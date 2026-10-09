@@ -1,6 +1,21 @@
 # Plan: PeerLink interest routing for the main broker (forward only what a peer subscribes to)
 
-**Status: reviewed and clarified (2026-10-09); implementation planned.**
+**Status: reviewed and clarified (2026-10-09); IR-M0–IR-M6 implemented on branch
+`feature/peerlink-interest-routing` (not committed, under review).**
+
+Implementation status (2026-10-09):
+- IR-M0: `Receive.Queue` defaults to `true`; `InterestMainProcessTest` checks that a forwarded QoS 1
+  message is queued for an offline persistent session and delivered on reconnect.
+- IR-M1–IR-M5: observer, `InterestTracker`, `InterestTable`, wire frames and sparse batches, status
+  fields. The redundancy provider is a hook (`PeerLinkManager.redundancyProvider`); main has no
+  HOT/COLD_STANDBY roles yet (step 2), so only the provider path is tested (`InterestClassifierTest`).
+- Shared acceptance tests: overlapping PER expiry over several MaxScanPerFetch ticks
+  (`InterestSweepTest`), snapshot during churn and u32 generation rollover (`InterestTrackerTest`),
+  mixed pairs with the Go edge broker incl. per-direction `Interest: OFF` (`InterestMixedEdgeTest`).
+- G-IR1 (Apple M-series, not target hardware): end to end, 100 % interest 0.97–1.07 of routing off and
+  10 % interest about 10 times faster; skipped publishes allocate nothing. Passed. Source side alone,
+  a needed publish captures in about 125 ns instead of 67 ns (the match is 40–50 ns), the same ratio as
+  the edge broker reports.
 
 This is the Kotlin counterpart of the edge plan
 `edge/dev/plans/plan-peerlink-interest-routing.md`. Both brokers speak the same

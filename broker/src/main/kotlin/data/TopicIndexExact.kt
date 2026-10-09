@@ -107,6 +107,11 @@ class TopicIndexExact {
      */
     fun topicCount(): Int = index.size
 
+    /** Calls cb for every (topic, clientId) subscription. */
+    fun forEachSubscription(cb: (topic: String, clientId: String) -> Unit) {
+        index.forEach { (topic, subs) -> subs.toList().forEach { cb(topic, it.first) } }
+    }
+
     /**
      * Get total number of subscriptions across all topics.
      */

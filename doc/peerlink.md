@@ -84,7 +84,7 @@ retained store. The other subsystems are controlled by `PeerLink.Receive`:
 | Internal bus (GraphQL subscriptions, flows, Zenoh) | gets replicas | `Bus: true` |
 | Archive groups | get replicas | `Archive: true` (set `false` when both brokers archive into one shared database) |
 | Outbound bridges (MQTT client, Kafka, NATS, …) | do **not** forward replicas (loop guard) | `BridgeOutbound: false` |
-| Offline queues of persistent sessions | skip replicas | `Queue: false` |
+| Offline queues of persistent sessions | get replicas (a session that reconnects on the other broker loses nothing) | `Queue: true` |
 | Shared subscription groups | each message once, on the broker it was published on | `SharedSubscriptions: SKIP` (or `DELIVER`) |
 
 Network clients may not use the client ids `inline` or `peerlink:*`.
@@ -308,7 +308,7 @@ How replicas are applied on this broker.
 | `Bus` | `true` | Deliver replicas to the internal bus (GraphQL subscriptions, flows, Zenoh). |
 | `BridgeOutbound` | `false` | Let outbound bridges (MQTT client, Kafka, NATS, …) forward replicas. Loop risk, see [Loop guards](#8-loop-guards). |
 | `Archive` | `true` | Archive groups store replicas. |
-| `Queue` | `false` | Offline persistent sessions queue replicas. |
+| `Queue` | `true` | Offline persistent sessions queue replicas. |
 | `SharedSubscriptions` | `SKIP` | `SKIP`: shared subscription groups get a message only on the broker it was published on. `DELIVER`: also replicas. |
 | `MarkReplicas` | `false` | Add the user property `mmq-peer-src=<NodeId>` to replicas. |
 | `CatchUpRateFactor` | `3` | While catching up (lag > `Fetch.MaxRecords`), apply at most this factor × the source's publish rate (at least 1000/s), so local subscribers are not flooded. 0 = no pacing, else ≥ 1.5. |
@@ -332,8 +332,22 @@ How replicas are applied on this broker.
 | `Tls.RequireClientCert` | `false` | Require a client certificate from this peer (needs `ClientAuth` `REQUEST` or `REQUIRED`). |
 | `Tls.InsecureSkipVerify` | `false` | Do not verify the peer's certificate; the pull direction then counts as unauthenticated unless a shared secret is used. |
 | `Receive.Include` / `Receive.Exclude` | `["#"]` / `[]` | Topic filters for records accepted from this peer. |
+| `Interest` | `INHERIT` | `INHERIT` or `OFF`. `OFF` turns interest routing off with this peer in both directions (dense link). See [Interest routing](#13-interest-routing). |
 
-### 4.10 Validation
+### 4.10 `Interest`
+
+Interest routing, see [Interest routing](#13-interest-routing).
+
+| Key | Default | Description |
+|---|---|---|
+| `Enabled` | `false` | Announce this broker's subscriptions to its sources and serve peers only what they subscribe to. At most 64 consuming peers. |
+| `Unknown` | `ALL` | What a capable peer gets before its first interest snapshot arrives: `ALL` or `NONE`. |
+| `FlushMs` | `5` | Coalescing window for interest changes sent to sources. > 0. |
+| `MaxScanPerFetch` | `65536` | Records a source skips at most per `FETCH` before it answers. ≥ 1024. |
+| `MaxFiltersPerPeer` | `100000` | A peer announcing more filters is served everything (one WARN, `interestOverLimit`). ≥ 1. |
+| `MaxFilterBytes` | `1024` | Longer filters are not announced (`interestRejected`). 1..32768. |
+
+### 4.11 Validation
 
 Startup fails (fail-closed) when, among others:
 
@@ -486,7 +500,9 @@ guard), so use `curl` with `127.0.0.1` or `localhost`.
 | `log` | `epoch`, `lso`, `leo`, `lwm`, `records`, `bytes`, `maxBytes`, `capacitySeconds`, `appended{client,inline,will}`, `evictedUnread`, `evictedBy`, `captureDropped`, `echoSuppressed`, `uncapturedAtShutdown` |
 | `admission` | `accepted`, `refusedNetwork`, `refusedBusy`, `refusedPlaintext`, `tlsFailures`, `authFailures{code}` |
 | `consumers[]` (peers pulling from this broker) | `nodeId`, `state` (`NEVER_CONNECTED`, `CONNECTED`, `DISCONNECTED`), `remote`, `committed`, `lag`, `lostTotal`, `servedRecords`, `snapshotServed`, `shutdownUnserved`, `oaRetained`, `topicRootMismatch`, `retainedClassMismatch` |
-| `sources[]` (peers this broker pulls from) | `nodeId`, `address`, `state` (`STOPPED`, `BACKOFF`, `DIALING`, `HANDSHAKE`, `SNAPSHOT`, `STREAMING`), `lagRecords`, `injected`, `retainOnly`, `dupSkipped`, `dropped{malformed,size_source,namespace,filtered,size,expired,stale,will_superseded}`, `gapLostTotal`, `sourceResets`, `resetLostLowerBound`, `retainedDiverged`, `snapshotFilled`, `clockSkewMs`, `rttMs`, `applyDelayMs{p50,p99,p99_9}`, `lastError`, `oaRetained` |
+| `consumers[].interest` | `state` (`UNKNOWN`, `LIVE`, `DISCONNECTED`, `OFF`), `mode` (`FILTERED`, `ALL`, `NONE`), `filters`, `filtersPersistent`, `snapshotGeneration`, `lastSnapshotAt`, `instanceId` (hex) |
+| `interest` (only with `Interest.Enabled`) | `interestSkipped`, `interestMatched`, `sparseBatches`, `volatileDropped`, `persistentExpired`, `interestBacklogDiscarded`, `interestRejected`, `interestOverLimit`, `deltasReceived`, `local{filters,generation,rejected}` (this broker's announced interest) |
+| `sources[]` (peers this broker pulls from) | `interest{active,deltasSent,snapshotsSent}` (only while interest routing is on for the peer), `nodeId`, `address`, `state` (`STOPPED`, `BACKOFF`, `DIALING`, `HANDSHAKE`, `SNAPSHOT`, `STREAMING`), `lagRecords`, `injected`, `retainOnly`, `dupSkipped`, `dropped{malformed,size_source,namespace,filtered,size,expired,stale,will_superseded}`, `gapLostTotal`, `sourceResets`, `resetLostLowerBound`, `retainedDiverged`, `snapshotFilled`, `clockSkewMs`, `rttMs`, `applyDelayMs{p50,p99,p99_9}`, `lastError`, `oaRetained` |
 
 `retainedClassMismatch` is informational: replication works across different
 retained store types.
@@ -545,3 +561,56 @@ keys, so Kotlin and Go brokers can be linked in any combination. Differences:
 - Edge filters the WinCC OA namespace and announces a WinCC OA system name
   when embedded in WinCC OA; this broker announces none.
 - Default maximum message size: 512 KB here, 1 MiB on Edge. Align them.
+
+---
+
+## 13. Interest routing
+
+Without interest routing a source forwards every captured publish to every
+peer, and the consumer drops what nobody subscribed to. With
+`Interest.Enabled: true` on both brokers, each broker tells its sources which
+topic filters it needs, and a source skips the other records for that peer.
+
+What a broker announces:
+
+| Local interest | Class |
+|---|---|
+| Network client, clean session / clean start | volatile: dropped when the link breaks |
+| Network client, persistent session | persistent: kept by the source for the session expiry interval (MQTT 5) or forever (MQTT 3.1.1) |
+| GraphQL subscriptions and other internal bus listeners | volatile, only with `Receive.Bus: true` |
+| Outbound bridges (MQTT client) | volatile, only with `Receive.BridgeOutbound: true` |
+| Archive groups | persistent, only with `Receive.Archive: true` |
+
+Never announced: PeerLink's own clients, `$` filters (no `$share` support on
+this broker) and invalid filters (empty, not UTF-8, longer than
+`MaxFilterBytes`, bad wildcards; counted in `interestRejected`).
+
+Behaviour:
+
+- Interest routing is negotiated per link (capability bit). A peer without it
+  (an older broker, or `Peers[].Interest: OFF` on either side) is served
+  everything, as before.
+- After the handshake the consumer sends a full interest snapshot, then
+  coalesced changes (every `FlushMs`) ahead of its fetches.
+- Retained publishes and retained deletions still go to every peer, so the
+  retained stores stay in sync; only non-retained records are filtered.
+- When the link breaks, the source drops the peer's volatile filters and the
+  backlog only they needed; persistent filters keep their records in the log
+  until they expire or the log limits evict them.
+- A peer with more than `MaxFiltersPerPeer` filters is served everything until
+  a later snapshot fits again.
+
+Cost on the source (gate G-IR1; Apple M-series, two consumers, 1k and 10k
+filters, half wildcards): a publish nobody needs is skipped before the record
+is built, without allocation. Matching a publish against the filters takes
+about 40–50 ns, so capturing a publish every peer needs costs roughly 125 ns
+instead of 67 ns. End to end over loopback TCP this does not show: with every
+publish needed, the link carries 0.97–1.07 times the publishes per second of a
+link without interest routing; with 10 % needed, it is about 10 times faster
+and carries a tenth of the bytes. Run the benchmarks with
+`mvn -o test -Dtest=InterestBenchTest -Dpeerlink.bench=true`.
+
+Together with interest routing, the default of `Receive.Queue` changed to
+`true`: a persistent session announces its filters, so a session that moves to
+the other broker keeps receiving replicas while it is offline.
+

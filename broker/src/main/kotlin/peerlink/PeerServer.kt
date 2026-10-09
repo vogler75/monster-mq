@@ -216,6 +216,7 @@ class ServerSession(
     val snapOK: Boolean
 ) {
     val fetches = LinkedBlockingQueue<Fetch>(16)
+    val deltas = at.rocworks.peerlink.core.IntList()
     val waiter = LogWaiter()
     val closed = AtomicBoolean(false)
     val writeLock = ReentrantLock()
@@ -605,7 +606,9 @@ class PeerServer(
         }
 
         val shNonce = newNonce()
-        val ownCaps = CapsV1 or CapSnapshotFill or CapResyncNewer or CapBatchCRC
+        // CapInterest is offered before the peer is known and dropped below for a peer with Interest OFF.
+        var ownCaps = CapsV1 or CapSnapshotFill or CapResyncNewer or CapBatchCRC
+        if (manager.interest != null) ownCaps = ownCaps or CapInterest
         var authModes: Byte = 0
         if (isTls && manager.config.tls.clientAuth != at.rocworks.peerlink.config.ClientAuthType.NONE) {
             authModes = (authModes.toInt() or AuthClientCertRequested.toInt()).toByte()
@@ -699,6 +702,8 @@ class PeerServer(
             return
         }
 
+        if (slot.peer.interestOff()) ownCaps = ownCaps and CapInterest.inv()
+
         val remote = socket.remoteSocketAddress.toString()
         val sess = ServerSession(
             server = this,
@@ -769,6 +774,7 @@ class PeerServer(
             return
         }
 
+        manager.interest?.connect(slot.idx, hello.instanceID, (sess.caps and CapInterest) != 0L)
         slot.sessions.incrementAndGet()
         logger.info("peerlink: consumer connected [peer=$cid, remote=$remote, tls=$isTls, resumeAt=${resume.resumeAt}]")
         manager.onStateChange?.invoke()
@@ -776,6 +782,7 @@ class PeerServer(
         runSessionLoops(sess)
 
         if (slot.release(manager.log, sess)) {
+            manager.interest?.disconnect(slot.idx)
             logger.info("peerlink: consumer disconnected [peer=$cid, remote=$remote]")
             manager.onStateChange?.invoke()
         }
@@ -840,6 +847,9 @@ class PeerServer(
                         FrameType.GoAway -> {
                             break
                         }
+                        FrameType.InterestSnapshot, FrameType.InterestDelta -> {
+                            if (!interestFrame(sess, t, body)) break
+                        }
                         else -> {}
                     }
                 }
@@ -866,6 +876,37 @@ class PeerServer(
             sess.close()
             readThread.join(1000)
         }
+    }
+
+    // Applies an interest frame; any fault, or the frame without the agreed CapInterest, is a protocol
+    // error (plan-peerlink-interest-routing 5.3, 5.4).
+    private fun interestFrame(sess: ServerSession, t: FrameType, body: ByteArray): Boolean {
+        val table = manager.interest
+        if ((sess.caps and CapInterest) == 0L || table == null) {
+            sess.goAway(GoAwayCode.Protocol, "interest frame without CapInterest")
+            return false
+        }
+        try {
+            when (val f = decodeFrame(t, body)) {
+                is InterestSnapshot -> table.applySnapshot(sess.slot.idx, f)
+                is InterestDelta -> table.applyDelta(sess.slot.idx, f)
+                else -> {}
+            }
+        } catch (e: Exception) {
+            sess.goAway(GoAwayCode.Protocol, e.message ?: "invalid interest frame")
+            return false
+        }
+        return true
+    }
+
+    // Reads for this consumer: sparse when CapInterest was agreed, so records the consumer has no
+    // interest in are skipped (plan-peerlink-interest-routing 6.4).
+    private fun read(sess: ServerSession, from: Long, maxRecords: Int, maxBytes: Int, frames: MutableList<ByteArray>): at.rocworks.peerlink.core.LogReadResult {
+        if ((sess.caps and CapInterest) != 0L) {
+            sess.deltas.clear()
+            return manager.log.readSparse(sess.slot.idx, from, maxRecords, maxBytes, frames, sess.deltas)
+        }
+        return manager.log.readFor(sess.slot.idx, from, maxRecords, maxBytes, frames)
     }
 
     private fun serveSnapshot(sess: ServerSession, f: Fetch) {
@@ -943,18 +984,36 @@ class PeerServer(
             manager.log.waitFor(sess.waiter, f.offset + minRecords, maxWaitMs)
         }
 
+        val deadline = System.currentTimeMillis() + maxWaitMs
         val frames = mutableListOf<ByteArray>()
-        val res = try {
-            manager.log.readFor(sess.slot.idx, f.offset, maxRecords, maxBytes, frames)
+        var res = try {
+            read(sess, f.offset, maxRecords, maxBytes, frames)
         } catch (e: Exception) {
             sess.goAway(GoAwayCode.OffsetOutOfRange, "fetch offset beyond log end")
             return
+        }
+        // Every record up to leo was skipped for this consumer: keep the long poll open.
+        while (res.count == 0 && res.span > 0 && res.base + res.span >= res.leo && System.currentTimeMillis() < deadline && !sess.closed.get()) {
+            frames.clear()
+            manager.log.waitFor(sess.waiter, res.base + res.span + 1, deadline - System.currentTimeMillis())
+            res = try {
+                read(sess, f.offset, maxRecords, maxBytes, frames)
+            } catch (e: Exception) {
+                sess.goAway(GoAwayCode.OffsetOutOfRange, "fetch offset beyond log end")
+                return
+            }
         }
 
         var flags = 0
         if (res.lost > 0L) flags = flags or BatchFlagGap
         if (res.truncated) flags = flags or BatchFlagTruncated
-        if (res.count == 0) flags = flags or BatchFlagEmpty
+        var sparse: ByteArray? = null
+        if (res.sparse) {
+            flags = flags or BatchFlagSparse
+            sparse = encodeSparseTable(res.span.toInt(), sess.deltas.data, res.count)
+        } else if (res.count == 0) {
+            flags = flags or BatchFlagEmpty
+        }
 
         val now = System.currentTimeMillis()
         val h = BatchHeader(
@@ -971,7 +1030,9 @@ class PeerServer(
         )
 
         val skipped = substituteTombstones(frames, sess.maxRec)
-        writeBatch(sess, h, frames)
+        if (skipped > 0) h.recordsBytes = frames.sumOf { it.size }
+        writeBatch(sess, h, frames, sparse)
+        if (res.sparse) manager.interest?.sparseBatches?.increment()
         sess.slot.servedRecords.addAndGet(res.count.toLong())
         sess.slot.servedBytes.addAndGet(res.bytes.toLong())
         sess.slot.servedSkipped.addAndGet(skipped.toLong())
@@ -989,19 +1050,20 @@ class PeerServer(
         return n
     }
 
-    private fun writeBatch(sess: ServerSession, h: BatchHeader, frames: List<ByteArray>) {
+    private fun writeBatch(sess: ServerSession, h: BatchHeader, frames: List<ByteArray>, sparse: ByteArray? = null) {
         if ((sess.caps and CapBatchCRC) != 0L) {
             h.flags = h.flags or BatchFlagCRC
         }
         val prefix = ByteArray(BatchPrefixLen)
         encodeBatchPrefix(prefix, h)
         if ((h.flags and BatchFlagCRC) != 0) {
-            setBatchCRC(prefix, frames)
+            setBatchCRC(prefix, frames, sparse = sparse)
         }
 
         sess.writeLock.lock()
         try {
             sess.output.write(prefix)
+            if (sparse != null) sess.output.write(sparse)
             for (f in frames) {
                 sess.output.write(f)
             }
@@ -1055,7 +1117,7 @@ class PeerServer(
         val list = mutableListOf<ConsumerStatus>()
         for (slot in consumers) {
             val ls = manager.log.consumerStats(slot.idx)
-            list.add(slot.status(ls))
+            list.add(slot.status(ls).copy(interest = manager.interest?.status(slot.idx)))
         }
         return list
     }

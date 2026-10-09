@@ -38,7 +38,10 @@ enum class FrameType(val code: Byte, val frameName: String) {
     Batch(0x11, "BATCH"),
     Commit(0x12, "COMMIT"),
     Ping(0x13, "PING"),
-    Pong(0x14, "PONG");
+    Pong(0x14, "PONG"),
+    // C→S, only with the agreed CapInterest (plan-peerlink-interest-routing section 4)
+    InterestSnapshot(0x20, "INTEREST_SNAPSHOT"),
+    InterestDelta(0x21, "INTEREST_DELTA");
 
     override fun toString(): String = frameName
 
@@ -53,6 +56,8 @@ enum class FrameType(val code: Byte, val frameName: String) {
             0x12.toByte() -> Commit
             0x13.toByte() -> Ping
             0x14.toByte() -> Pong
+            0x20.toByte() -> InterestSnapshot
+            0x21.toByte() -> InterestDelta
             else -> null
         }
     }
@@ -64,6 +69,11 @@ const val CapSnapshotFill: Long = 1L shl 1
 const val CapResyncNewer: Long = 1L shl 2
 const val CapTombstone: Long = 1L shl 3
 const val CapsV1: Long = CapBatchCRC or CapSnapshotFill or CapResyncNewer or CapTombstone
+// Reserved for the redundancy role extension (plan-peerlink-redundancy).
+const val CapRole: Long = 1L shl 4
+// INTEREST_SNAPSHOT/INTEREST_DELTA and sparse batches; offered only with PeerLink.Interest.Enabled,
+// usable only when HELLO_OK.capabilities (the final agreement) carries it.
+const val CapInterest: Long = 1L shl 5
 
 // SERVER_HELLO authModes bits (frame.go: lines 112-115)
 const val AuthClientCertRequested: Byte = (1 shl 0).toByte()
@@ -87,6 +97,25 @@ const val BatchFlagCRC: Int = 1 shl 2
 const val BatchFlagSnapshot: Int = 1 shl 3
 const val BatchFlagSnapshotEnd: Int = 1 shl 4
 const val BatchFlagTruncated: Int = 1 shl 5
+// A u32 span and u32 deltas[count] follow the header (needs CapInterest).
+const val BatchFlagSparse: Int = 1 shl 6
+
+// Interest classes of INTEREST_SNAPSHOT/INTEREST_DELTA entries.
+const val InterestNone: Int = 0 // delta only: the filter is withdrawn
+const val InterestVol: Int = 1
+const val InterestPer: Int = 2
+
+// expirySec of a PER entry that never expires (u32 0xFFFFFFFF).
+const val InterestExpiryNever: Long = 0xFFFFFFFFL
+
+// INTEREST_SNAPSHOT flags.
+const val InterestFlagFirst: Int = 1 shl 0
+const val InterestFlagLast: Int = 1 shl 1
+
+// Fixed body before the entries, and the fixed part of one entry.
+const val InterestSnapshotHeaderLen = 9
+const val InterestDeltaHeaderLen = 8
+const val InterestEntryOverhead = 7
 
 // RetainedClass (frame.go: lines 141-159)
 enum class RetainedClass(val code: Byte, val stringName: String) {
@@ -138,6 +167,8 @@ class ShortFrameException : WireException("peerlink/wire: frame body shorter tha
 class UnknownFrameException : WireException("peerlink/wire: unknown frame type")
 class BatchRecordsException : WireException("peerlink/wire: recordsBytes exceeds the frame body")
 class BatchCountRangeException : WireException("peerlink/wire: batch count exceeds what the records region can hold")
+class BatchSparseException : WireException("peerlink/wire: invalid sparse batch span or deltas")
+class InterestCountException : WireException("peerlink/wire: interest entry count does not match the frame body")
 class MalformedRecordException(val what: String) : WireException("peerlink/wire: malformed record: $what")
 
 
@@ -378,6 +409,8 @@ fun decodeFrame(t: FrameType, body: ByteArray): Frame {
         FrameType.Commit -> Commit()
         FrameType.Ping -> Ping()
         FrameType.Pong -> Pong()
+        FrameType.InterestSnapshot -> InterestSnapshot()
+        FrameType.InterestDelta -> InterestDelta()
     }
     f.decode(body)
     return f
@@ -672,19 +705,35 @@ data class BatchHeader(
     }
 }
 
-// EncodeBatchPrefix (frame.go: lines 791-798)
+// Length of the sparse table of a batch with count records: u32 span and u32 deltas[count].
+fun sparseTableLen(count: Int): Int = 4 + 4 * count
+
+// Sparse table length h announces: 0 without BatchFlagSparse.
+fun BatchHeader.sparseLen(): Int = if (flags and BatchFlagSparse == 0) 0 else sparseTableLen(count)
+
+// Encodes the sparse table: u32 span and one u32 delta per record.
+fun encodeSparseTable(span: Int, deltas: IntArray, count: Int = deltas.size): ByteArray {
+    val bb = ByteBuffer.allocate(sparseTableLen(count)).order(ByteOrder.LITTLE_ENDIAN)
+    bb.putInt(span)
+    for (i in 0 until count) bb.putInt(deltas[i])
+    return bb.array()
+}
+
+// EncodeBatchPrefix (frame.go: lines 791-798). frameLen includes the sparse table when
+// BatchFlagSparse is set; the caller writes the table after the prefix, before the records.
 fun encodeBatchPrefix(dst: ByteArray, h: BatchHeader, offset: Int = 0) {
     val bb = ByteBuffer.wrap(dst, offset, BatchPrefixLen).order(ByteOrder.LITTLE_ENDIAN)
-    val frameLen = 1 + BatchHeaderLen + h.recordsBytes
+    val frameLen = 1 + BatchHeaderLen + h.sparseLen() + h.recordsBytes
     bb.putInt(frameLen)
     bb.put(FrameType.Batch.code)
     h.put(dst, offset + FrameHeaderLen)
 }
 
 // SetBatchCRC (frame.go: lines 800-810)
-fun setBatchCRC(prefix: ByteArray, records: List<ByteArray>, prefixOffset: Int = 0): Int {
+fun setBatchCRC(prefix: ByteArray, records: List<ByteArray>, prefixOffset: Int = 0, sparse: ByteArray? = null): Int {
     val crc = CRC32C()
     crc.update(prefix, prefixOffset + FrameHeaderLen, BatchCRCCovered)
+    if (sparse != null) crc.update(sparse, 0, sparse.size)
     for (r in records) {
         crc.update(r, 0, r.size)
     }
@@ -700,42 +749,94 @@ data class Batch(
     var records: ByteArray = ByteArray(0)
 ) : Frame {
     var rawHeader: ByteArray? = null
+    // Raw sparse table (u32 span, u32 deltas[count]) of a BatchFlagSparse batch, null otherwise.
+    var sparse: ByteArray? = null
 
     override fun type(): FrameType = FrameType.Batch
 
+    // The header is written as given (recordsBytes and crc32c are not recomputed, so tests can
+    // craft faulty frames), followed by the sparse table and the records.
     override fun appendFrame(wb: WireBuffer) {
-        val s = beginFrame(wb, FrameType.Batch, BatchHeaderLen + records.size)
+        val sp = sparse
+        val s = beginFrame(wb, FrameType.Batch, BatchHeaderLen + (sp?.size ?: 0) + records.size)
         val hBytes = ByteArray(BatchHeaderLen)
         header.put(hBytes)
         wb.putBytes(hBytes)
+        if (sp != null) wb.putBytes(sp)
         wb.putBytes(records)
         endFrame(wb, s)
     }
 
     override fun decode(body: ByteArray) {
         rawHeader = null
+        sparse = null
         if (body.size < BatchHeaderLen) throw ShortFrameException()
         header.parse(body)
-        val end = BatchHeaderLen.toLong() + (header.recordsBytes.toLong() and 0xFFFFFFFFL)
+        var start = BatchHeaderLen.toLong()
+        if (header.flags and BatchFlagSparse != 0) {
+            val end = start + 4L + 4L * (header.count.toLong() and 0xFFFFFFFFL)
+            if (end > body.size.toLong()) {
+                records = ByteArray(0)
+                throw BatchSparseException()
+            }
+            sparse = body.copyOfRange(start.toInt(), end.toInt())
+            start = end
+        }
+        val end = start + (header.recordsBytes.toLong() and 0xFFFFFFFFL)
         if (end > body.size.toLong()) {
             records = ByteArray(0)
+            sparse = null
             throw BatchRecordsException()
         }
-        val endInt = end.toInt()
         val hb = ByteArray(BatchHeaderLen)
         System.arraycopy(body, 0, hb, 0, BatchHeaderLen)
         rawHeader = hb
         records = ByteArray(header.recordsBytes)
-        System.arraycopy(body, BatchHeaderLen, records, 0, header.recordsBytes)
+        System.arraycopy(body, start.toInt(), records, 0, header.recordsBytes)
         if ((header.count.toLong() and 0xFFFFFFFFL) * MinRecordFrame > (header.recordsBytes.toLong() and 0xFFFFFFFFL)) {
             throw BatchCountRangeException()
         }
+        if (sparse != null) checkSparse()
+    }
+
+    // Deltas strictly increasing and below span; span >= count and span > 0.
+    private fun checkSparse() {
+        val span = span()
+        val count = header.count.toLong() and 0xFFFFFFFFL
+        if (span == 0L || span < count) throw BatchSparseException()
+        var prev = -1L
+        for (i in 0 until count.toInt()) {
+            val d = delta(i)
+            if (d <= prev || d >= span) throw BatchSparseException()
+            prev = d
+        }
+    }
+
+    fun isSparse(): Boolean = sparse != null
+
+    // Number of offsets the batch covers: the sparse span, or count for a dense batch.
+    fun span(): Long {
+        val sp = sparse ?: return header.count.toLong() and 0xFFFFFFFFL
+        return ByteBuffer.wrap(sp, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
+    }
+
+    // Offset of record i relative to baseOffset.
+    fun delta(i: Int): Long {
+        val sp = sparse ?: return i.toLong()
+        return ByteBuffer.wrap(sp, 4 + 4 * i, 4).order(ByteOrder.LITTLE_ENDIAN).getInt().toLong() and 0xFFFFFFFFL
+    }
+
+    // Sets the sparse table and BatchFlagSparse (tests and test peers).
+    fun setSparse(span: Int, deltas: IntArray) {
+        sparse = encodeSparseTable(span, deltas)
+        header.flags = header.flags or BatchFlagSparse
     }
 
     fun computeCRC(): Int {
         val hb = rawHeader ?: ByteArray(BatchHeaderLen).also { header.put(it) }
         val crc = CRC32C()
         crc.update(hb, 0, BatchCRCCovered)
+        sparse?.let { crc.update(it, 0, it.size) }
         crc.update(records, 0, records.size)
         return crc.value.toInt()
     }
@@ -801,6 +902,118 @@ data class Pong(var token: Long = 0L) : Frame {
         val d = WireDecoder(body)
         token = d.u64()
         d.checkErr()
+    }
+}
+
+// One entry of INTEREST_SNAPSHOT/INTEREST_DELTA: the absolute class of a filter. The decoder does
+// not validate class or filter; the receiver ignores invalid entries (section 4). filterBytes keeps
+// the raw bytes so that invalid UTF-8 can be detected (filter is then decoded with replacements).
+class InterestEntry(
+    var cls: Int = InterestVol,
+    var expirySec: Long = 0L, // PER only; 0 for VOL/NONE; InterestExpiryNever for no expiry
+    filter: String = ""
+) {
+    var filterBytes: ByteArray = filter.toByteArray(Charsets.UTF_8)
+    val filter: String get() = String(filterBytes, Charsets.UTF_8)
+
+    // Encoded size of the entry.
+    fun len(): Int = InterestEntryOverhead + filterBytes.size
+
+    // Whether filterBytes are well-formed UTF-8.
+    fun validUtf8(): Boolean = try {
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(filterBytes))
+        true
+    } catch (e: java.nio.charset.CharacterCodingException) {
+        false
+    }
+
+    override fun equals(other: Any?): Boolean = other is InterestEntry && other.cls == cls &&
+        other.expirySec == expirySec && other.filterBytes.contentEquals(filterBytes)
+    override fun hashCode(): Int = (cls * 31 + expirySec.hashCode()) * 31 + filterBytes.contentHashCode()
+    override fun toString(): String = "InterestEntry(cls=$cls, expirySec=$expirySec, filter=$filter)"
+}
+
+private fun appendInterestEntries(wb: WireBuffer, es: List<InterestEntry>) {
+    wb.putIntLE(es.size)
+    for (e in es) {
+        wb.putByte(e.cls.toByte())
+        wb.putIntLE(e.expirySec.toInt())
+        wb.putShortLE(e.filterBytes.size.toShort())
+        wb.putBytes(e.filterBytes)
+    }
+}
+
+// Reads u32 count and the entries. A body shorter than count entries or with bytes left after them
+// is InterestCountException.
+private fun decodeInterestEntries(d: WireDecoder): MutableList<InterestEntry> {
+    val n = d.u32().toLong() and 0xFFFFFFFFL
+    d.checkErr()
+    if (n * InterestEntryOverhead > d.remaining()) throw InterestCountException()
+    val res = ArrayList<InterestEntry>(n.toInt())
+    for (i in 0 until n.toInt()) {
+        val e = InterestEntry()
+        e.cls = d.u8().toInt() and 0xFF
+        e.expirySec = d.u32().toLong() and 0xFFFFFFFFL
+        val len = d.u16().toInt() and 0xFFFF
+        e.filterBytes = d.take(len) ?: throw InterestCountException()
+        if (d.short) throw InterestCountException()
+        res.add(e)
+    }
+    if (d.remaining() != 0) throw InterestCountException()
+    return res
+}
+
+private fun interestBodyLen(es: List<InterestEntry>): Int = es.sumOf { it.len() }
+
+// INTEREST_SNAPSHOT (0x20, C→S): the consumer's full interest set at generation, possibly split over
+// several frames from FIRST to LAST that carry the same generation.
+class InterestSnapshot(
+    var generation: Long = 0L, // u32
+    var flags: Int = 0,
+    var entries: MutableList<InterestEntry> = ArrayList()
+) : Frame {
+    override fun type(): FrameType = FrameType.InterestSnapshot
+
+    override fun appendFrame(wb: WireBuffer) {
+        val s = beginFrame(wb, FrameType.InterestSnapshot, InterestSnapshotHeaderLen + interestBodyLen(entries))
+        wb.putIntLE(generation.toInt())
+        wb.putByte(flags.toByte())
+        appendInterestEntries(wb, entries)
+        endFrame(wb, s)
+    }
+
+    // Unlike other frames, bytes after the entries are an error, as is a body shorter than count.
+    override fun decode(body: ByteArray) {
+        val d = WireDecoder(body)
+        generation = d.u32().toLong() and 0xFFFFFFFFL
+        flags = d.u8().toInt() and 0xFF
+        d.checkErr()
+        entries = decodeInterestEntries(d)
+    }
+}
+
+// INTEREST_DELTA (0x21, C→S): absolute classes of changed filters; generations strictly increase.
+class InterestDelta(
+    var generation: Long = 0L, // u32
+    var entries: MutableList<InterestEntry> = ArrayList()
+) : Frame {
+    override fun type(): FrameType = FrameType.InterestDelta
+
+    override fun appendFrame(wb: WireBuffer) {
+        val s = beginFrame(wb, FrameType.InterestDelta, InterestDeltaHeaderLen + interestBodyLen(entries))
+        wb.putIntLE(generation.toInt())
+        appendInterestEntries(wb, entries)
+        endFrame(wb, s)
+    }
+
+    override fun decode(body: ByteArray) {
+        val d = WireDecoder(body)
+        generation = d.u32().toLong() and 0xFFFFFFFFL
+        d.checkErr()
+        entries = decodeInterestEntries(d)
     }
 }
 

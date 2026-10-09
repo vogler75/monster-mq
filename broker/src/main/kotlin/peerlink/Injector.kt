@@ -249,7 +249,7 @@ class Injector(
     fun applyBatch(ac: ApplyContext, inBatch: BatchIn): Long {
         val h = inBatch.batch.header
         val snapshot = (h.flags and BatchFlagSnapshot) != 0
-        var next = h.baseOffset + h.count.toLong()
+        var next = h.baseOffset + inBatch.batch.span()
         if (snapshot) next = 0L
 
         if (inBatch.poison) {
@@ -274,7 +274,7 @@ class Injector(
             }
             if (!hasRecord) break
 
-            val off = h.baseOffset + i.toLong()
+            val off = h.baseOffset + inBatch.batch.delta(i)
             if (malformed != null) {
                 dropped[DROP_MALFORMED].increment()
                 val (ok, n) = rate.allow("malformed", 10_000L)

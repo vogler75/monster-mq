@@ -171,6 +171,9 @@ class CaptureHook(
     val refusedIDs = LongAdder()
     val usernameStripped = LongAdder()
 
+    // Remote interest table; null when interest routing is disabled (plan-peerlink-interest-routing 6.2).
+    @Volatile var interest: InterestTable? = null
+
     fun accept(topic: String): Boolean {
         if (topic.isEmpty() || topic[0] == '$' || (namespacePredicate != null && namespacePredicate.invoke(topic))) {
             return false
@@ -213,6 +216,24 @@ class CaptureHook(
             filtered.increment()
             return
         }
+        if (echo != null && !will && echo.match(message.topicName, message.payload, message.isRetain, System.nanoTime())) {
+            echoSuppressed.increment()
+            return
+        }
+
+        // Retained publishes go to every consumer; others only to consumers whose interest matches. The
+        // record is built only after this check, so a skipped publish allocates nothing (G-IR1).
+        val table = interest
+        var mask = log?.allMask ?: 0L
+        if (table != null && !message.isRetain) {
+            mask = table.match(message.topicName)
+            if (mask == 0L) {
+                table.skipped.increment()
+                return
+            }
+            table.matched.increment()
+        }
+
         val inline = message.clientId.isEmpty() || message.clientId == "inline"
         val kind = when {
             will -> LogKind.Will
@@ -239,11 +260,6 @@ class CaptureHook(
         val userProps = mutableListOf<UserProp>()
         message.userProperties?.forEach { (k, v) ->
             userProps.add(UserProp(k, v))
-        }
-
-        if (echo != null && !will && echo.match(message.topicName, message.payload, message.isRetain, System.nanoTime())) {
-            echoSuppressed.increment()
-            return
         }
 
         val rec = Record(
@@ -280,7 +296,7 @@ class CaptureHook(
         }
         val buf = ByteArray(size)
         encodeRecord(buf, rec)
-        log?.append(buf, kind)
+        if (table != null) log?.appendMask(buf, kind, mask) else log?.append(buf, kind)
     }
 
     fun recapture(message: BrokerMessage, nowSec: Long): Boolean {

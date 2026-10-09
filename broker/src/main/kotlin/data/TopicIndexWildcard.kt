@@ -117,6 +117,11 @@ class TopicIndexWildcard {
         return continueIteration
     }
 
+    /** Calls cb for every (pattern, clientId) subscription. */
+    fun forEachSubscription(cb: (pattern: String, clientId: String) -> Unit) {
+        tree.forEachData { pattern, clientId, _ -> cb(pattern, clientId) }
+    }
+
     /**
      * Get the count of wildcard subscription patterns.
      */

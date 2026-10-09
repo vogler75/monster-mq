@@ -23,9 +23,15 @@ const val logDefaultMaxMessages = 2_000_000L
 const val logDefaultMaxBytes = 256L shl 20 // 256 MiB
 const val logDefaultMaxRecordBytes = (1 shl 20) + (64 shl 10) // 1 MiB + 64 KiB
 
+// Accounted footprint of a chunk's consumer mask array (interest routing only).
+const val logMasksBytes = logChunkSlots * 8L
+const val logDefaultMaxScan = 65536
+const val logMinMaxScan = 1024
+
 class LogOffsetOutOfRangeException : Exception("peerlink: log offset out of range")
 class LogCommitBeyondEndException : Exception("peerlink: commit beyond log end")
 class LogUnknownConsumerException : Exception("peerlink: unknown log consumer")
+class LogTooManyConsumersException : Exception("peerlink: interest routing supports at most 64 consumers")
 
 enum class LogKind {
     Client,
@@ -55,7 +61,11 @@ data class LogConfig(
     var maxMessages: Long = logDefaultMaxMessages,
     var maxBytes: Long = logDefaultMaxBytes,
     var maxRecordBytes: Int = logDefaultMaxRecordBytes,
-    var consumers: List<String> = emptyList()
+    var consumers: List<String> = emptyList(),
+    // Per-record consumer masks (interest routing, plan-peerlink-interest-routing 6.3); at most 64 consumers.
+    var masked: Boolean = false,
+    // Bounds the offsets one sparse read or one lagging advance scans (MaxScanPerFetch).
+    var maxScan: Int = logDefaultMaxScan
 )
 
 class LogChunk {
@@ -101,6 +111,10 @@ data class LogReadResult(
     var bytes: Int = 0,
     var lost: Long = 0L,
     var truncated: Boolean = false,
+    // Offsets covered: base..base+span-1; equals count unless records were skipped.
+    var span: Long = 0L,
+    // Records without the consumer's bit were skipped; the deltas list holds the offsets.
+    var sparse: Boolean = false,
     var lso: Long = 0L,
     var leo: Long = 0L
 )
@@ -166,6 +180,9 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
     private val startMonoNs: Long = System.nanoTime()
 
     private val chunks = ArrayList<LogChunk>()
+    // Per-record consumer masks parallel to chunks when masked. Written before the slot is published and
+    // changed later only by expiry sweeps.
+    private val masks = ArrayList<java.util.concurrent.atomic.AtomicLongArray>()
     private var firstBase: Long = 0L
     private val spares = Array(logSpareChunks) { AtomicReference<LogChunk?>(null) }
     private var lso: Long = 1L
@@ -182,6 +199,11 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
     var maxMessages: Long = cfg.maxMessages
     var maxBytes: Long = cfg.maxBytes
     var maxRecordBytes: Int = cfg.maxRecordBytes
+    val masked: Boolean = cfg.masked
+    private val maxScan: Int = if (cfg.maxScan <= 0) logDefaultMaxScan else cfg.maxScan
+    private val chunkBytes: Long = if (cfg.masked) logChunkBytes + logMasksBytes else logChunkBytes
+    // The mask with a bit for every consumer.
+    val allMask: Long = if (cfg.consumers.size >= 64) -1L else (1L shl cfg.consumers.size) - 1
 
     private var appendedClient: Long = 0L
     private var appendedInline: Long = 0L
@@ -217,6 +239,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             maxRecordBytes = minOf(q, Int.MAX_VALUE.toLong()).toInt()
         }
 
+        if (cfg.masked && cfg.consumers.size > 64) throw LogTooManyConsumersException()
         consumers = Array(cfg.consumers.size) { i ->
             LogConsumer(cfg.consumers[i], committed = 1L, served = 1L, acctNext = 1L)
         }
@@ -293,7 +316,12 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         }
     }
 
-    fun append(frame: ByteArray, kind: LogKind = LogKind.Client): Pair<Long, Boolean> {
+    fun append(frame: ByteArray, kind: LogKind = LogKind.Client): Pair<Long, Boolean> =
+        appendMask(frame, kind, allMask)
+
+    // appendMask stores frame with a bit per consumer index that needs the record; mask is ignored when
+    // the log is not masked.
+    fun appendMask(frame: ByteArray, kind: LogKind, mask: Long): Pair<Long, Boolean> {
         val n = frame.size
         if (n < 4) {
             droppedInv.increment()
@@ -315,6 +343,9 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
 
         var needRefill = false
         val off: Long
+        var tck: LogChunk? = null
+        var ta = 0L
+        var tb = 0L
         lock.lock()
         try {
             if (sealed) {
@@ -346,10 +377,15 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             val ck = chunks[ci]
             val slot = (rel and logChunkMask.toLong()).toInt()
             ck.cum[slot] = total
+            if (masked) masks[ci].set(slot, mask)
             ck.slots[slot] = frame
             total += acc
             bytes += acc
             leo = off + 1
+            if (masked && (mask and allMask) != allMask) {
+                val t = skipCaughtUpLocked(off, mask)
+                tck = t.first; ta = t.second; tb = t.third
+            }
             if (leo - lso > maxMessages || bytes > maxBytes) {
                 evictLocked(off)
             }
@@ -359,6 +395,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         } finally {
             lock.unlock()
         }
+        clearLogSlots(tck, ta, tb)
         if (needRefill) {
             refillTrigger.offer(Unit)
         }
@@ -376,7 +413,104 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             spareMisses++
         }
         chunks.add(ck)
-        bytes += logChunkBytes
+        if (masked) masks.add(java.util.concurrent.atomic.AtomicLongArray(logChunkSlots))
+        bytes += chunkBytes
+    }
+
+    // skipCaughtUpLocked advances C[c] over the record at off for every caught-up consumer whose bit is not
+    // in mask (6.5 rule 1), so records a consumer never needs do not pin the log.
+    private fun skipCaughtUpLocked(off: Long, mask: Long): Triple<LogChunk?, Long, Long> {
+        var moved = false
+        for (i in consumers.indices) {
+            val con = consumers[i]
+            if (con.committed == off && (mask and (1L shl i)) == 0L) {
+                con.committed = off + 1
+                moved = true
+            }
+        }
+        if (!moved) return Triple(null, 0L, 0L)
+        return updateLWMLocked()
+    }
+
+    // maskAtLocked returns the consumer mask of the record at x, lso <= x < leo, of a masked log.
+    private fun maskAtLocked(x: Long): Long {
+        val rel = x - firstBase
+        return masks[(rel shr logChunkShift).toInt()].get((rel and logChunkMask.toLong()).toInt())
+    }
+
+    // skipLaggingLocked advances C[c] over the leading run of records without bit c, scanning at most
+    // maxScan offsets (6.5 rule 2).
+    private fun skipLaggingLocked(c: Int): Boolean {
+        val con = consumers[c]
+        var x = maxOf(con.committed, lso)
+        if (x >= leo) return false
+        val bit = 1L shl c
+        val end = minOf(leo, x + maxScan)
+        val start = x
+        while (x < end && (maskAtLocked(x) and bit) == 0L) x++
+        if (x == start || x <= con.committed) return false
+        con.committed = x
+        return true
+    }
+
+    // advanceSkipped applies the lagging advance (6.5 rule 2) to every consumer. The manager calls it
+    // every 100 ms; it is a no-op on an unmasked log.
+    fun advanceSkipped() {
+        if (!masked) return
+        var t: Triple<LogChunk?, Long, Long> = Triple(null, 0L, 0L)
+        lock.lock()
+        try {
+            var moved = false
+            for (c in consumers.indices) {
+                if (skipLaggingLocked(c)) moved = true
+            }
+            if (moved) {
+                t = updateLWMLocked()
+                commitCondition.signalAll()
+            }
+        } finally {
+            lock.unlock()
+        }
+        clearLogSlots(t.first, t.second, t.third)
+    }
+
+    // clearConsumerBits is the persistent-expiry sweep (6.5): starting at from (raised to max(C[c], lso)),
+    // it scans at most maxScan offsets and clears bit c of every record for which drop returns true. drop
+    // is called under the log lock and must not call into the log. It returns the offset after the last
+    // scanned one (leo when done) and the number of bits cleared.
+    fun clearConsumerBits(c: Int, from: Long, drop: (ByteArray) -> Boolean): Pair<Long, Long> {
+        if (!masked || c < 0 || c >= consumers.size) return Pair(0L, 0L)
+        val bit = 1L shl c
+        var cleared = 0L
+        var t: Triple<LogChunk?, Long, Long> = Triple(null, 0L, 0L)
+        var x: Long
+        lock.lock()
+        try {
+            x = maxOf(from, consumers[c].committed, lso)
+            val end = minOf(leo, x + maxScan)
+            while (x < end) {
+                val rel = x - firstBase
+                val ci = (rel shr logChunkShift).toInt()
+                val slot = (rel and logChunkMask.toLong()).toInt()
+                val m = masks[ci].get(slot)
+                if ((m and bit) != 0L) {
+                    val frame = chunks[ci].slots[slot]
+                    if (frame != null && drop(frame)) {
+                        masks[ci].set(slot, m and bit.inv())
+                        cleared++
+                    }
+                }
+                x++
+            }
+            if (cleared > 0 && skipLaggingLocked(c)) {
+                t = updateLWMLocked()
+                commitCondition.signalAll()
+            }
+        } finally {
+            lock.unlock()
+        }
+        clearLogSlots(t.first, t.second, t.third)
+        return Pair(x, cleared)
     }
 
     private fun detachLocked() {
@@ -388,8 +522,9 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         if (k > 0) {
             for (i in 0 until k) {
                 chunks.removeAt(0)
+                if (masked) masks.removeAt(0)
             }
-            bytes -= k.toLong() * logChunkBytes
+            bytes -= k.toLong() * chunkBytes
         }
     }
 
@@ -415,10 +550,23 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             ck.slots[slot] = null
             if (byCount) evictedByCount++ else evictedByBytes++
             if (off >= lwm) evictedUnread++
+            if (masked) accountEvictLocked(off, maskAtLocked(off))
             lso = off + 1
             if (lso - firstBase >= logChunkSlots.toLong()) {
                 detachLocked()
             }
+        }
+    }
+
+    // accountEvictLocked charges the evicted record at off as lost only to the consumers that needed it.
+    // On a masked log loss is accounted at eviction, where the record's mask is still known; observeLocked
+    // then finds nothing left to charge. A consumer with a read in progress is left to observeLocked.
+    private fun accountEvictLocked(off: Long, mask: Long) {
+        for (i in consumers.indices) {
+            val con = consumers[i]
+            if (con.reading > 0 || off < maxOf(con.acctNext, con.committed, con.served)) continue
+            if ((mask and (1L shl i)) != 0L) con.lostTotal++
+            con.acctNext = off + 1
         }
     }
 
@@ -502,11 +650,24 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         return readRetry(c, from, maxRecords, maxBytes, out)
     }
 
-    private fun readRetry(c: Int, from: Long, maxRecords: Int, maxBytes: Int, out: MutableList<ByteArray>): LogReadResult {
+    // readSparse is readFor that skips the records without consumer c's bit (6.4). The offsets of the
+    // returned frames relative to base go to deltas (cleared first) when the result is sparse. It scans
+    // at most maxScan offsets. On an unmasked log it is readFor.
+    fun readSparse(c: Int, from: Long, maxRecords: Int, maxBytes: Int, out: MutableList<ByteArray>, deltas: IntList): LogReadResult {
+        deltas.clear()
+        if (c < 0 || c >= consumers.size) {
+            out.clear()
+            throw LogUnknownConsumerException()
+        }
+        return readRetry(c, from, maxRecords, maxBytes, out, if (masked) deltas else null)
+    }
+
+    private fun readRetry(c: Int, from: Long, maxRecords: Int, maxBytes: Int, out: MutableList<ByteArray>, deltas: IntList? = null): LogReadResult {
         var attempt = 0
         while (true) {
-            val res = readInternal(c, from, maxRecords, maxBytes, out)
-            if (res.count > 0 || !res.truncated || attempt == 2) {
+            val res = if (deltas != null) readSparseInternal(c, from, maxRecords, maxBytes, out, deltas)
+            else readInternal(c, from, maxRecords, maxBytes, out)
+            if (res.span > 0 || !res.truncated || attempt == 2) {
                 return res
             }
             attempt++
@@ -582,6 +743,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             totalBytes += size
         }
         res.count = out.size
+        res.span = res.count.toLong()
         res.bytes = totalBytes
 
         if (c >= 0) {
@@ -597,6 +759,99 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         return res
     }
 
+    private fun readSparseInternal(c: Int, from: Long, maxRecords: Int, maxBytes: Int, out: MutableList<ByteArray>, deltas: IntList): LogReadResult {
+        val cks = arrayOfNulls<LogChunk>(logReadMaxChunks)
+        val mks = arrayOfNulls<java.util.concurrent.atomic.AtomicLongArray>(logReadMaxChunks)
+        out.clear()
+        deltas.clear()
+
+        val snapLso: Long
+        val snapLeo: Long
+        val base: Long
+        var n: Long
+        val fb: Long
+        var c0 = 0L
+        lock.lock()
+        try {
+            snapLso = lso
+            snapLeo = leo
+            if (from == 0L || from > snapLeo) {
+                return LogReadResult(base = from, lso = snapLso, leo = snapLeo)
+            }
+            val con = consumers[c]
+            observeLocked(con)
+            con.reading++
+            base = maxOf(from, snapLso)
+            n = minOf(snapLeo - base, maxScan.toLong())
+            if (maxRecords <= 0) n = 0
+            fb = firstBase
+            if (n > 0) {
+                c0 = (base - fb) shr logChunkShift
+                var cLast = (base + n - 1 - fb) shr logChunkShift
+                if (cLast - c0 >= logReadMaxChunks.toLong()) {
+                    cLast = c0 + logReadMaxChunks - 1
+                    n = fb + ((cLast + 1) shl logChunkShift) - base
+                }
+                for (k in 0 until (cLast - c0 + 1).toInt()) {
+                    val idx = (c0 + k).toInt()
+                    if (idx < chunks.size) {
+                        cks[k] = chunks[idx]
+                        mks[k] = masks[idx]
+                    }
+                }
+            }
+        } finally {
+            lock.unlock()
+        }
+
+        val res = LogReadResult(base = base, lost = base - from, lso = snapLso, leo = snapLeo)
+        val bit = 1L shl c
+        var totalBytes = 0
+        var skipped = false
+        var i = 0L
+        while (i < n) {
+            val rel = base + i - fb
+            val k = ((rel shr logChunkShift) - c0).toInt()
+            val slot = (rel and logChunkMask.toLong()).toInt()
+            val frame = if (k in 0 until logReadMaxChunks) cks[k]?.slots?.get(slot) else null
+            if (frame == null) {
+                res.truncated = true
+                break
+            }
+            if ((mks[k]!!.get(slot) and bit) == 0L) {
+                // The span table (4 bytes per record plus span) counts against maxBytes once the batch is sparse.
+                if (!skipped && maxBytes > 0 && out.isNotEmpty() && totalBytes + 4 + 4 * out.size > maxBytes) break
+                skipped = true
+                i++
+                continue
+            }
+            val size = frame.size
+            val cost = if (skipped) size + 4 else size
+            val owed = if (skipped) 4 + 4 * out.size else 0
+            if (maxBytes > 0 && out.isNotEmpty() && totalBytes + cost + owed > maxBytes) break
+            out.add(frame)
+            deltas.add(i.toInt())
+            totalBytes += size
+            i++
+            if (out.size >= maxRecords) break
+        }
+        res.span = i
+        res.count = out.size
+        res.bytes = totalBytes
+        res.sparse = res.count.toLong() < res.span
+        if (!res.sparse) deltas.clear()
+
+        lock.lock()
+        try {
+            val con = consumers[c]
+            con.served = maxOf(con.served, base + res.span)
+            con.reading--
+        } finally {
+            lock.unlock()
+        }
+        return res
+    }
+
     fun commit(c: Int, off: Long) {
         if (c < 0 || c >= consumers.size) throw LogUnknownConsumerException()
         var ck: LogChunk? = null
@@ -608,6 +863,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             val con = consumers[c]
             if (off <= con.committed) return
             con.committed = off
+            if (masked) skipLaggingLocked(c)
             val triple = updateLWMLocked()
             ck = triple.first
             a = triple.second
@@ -879,6 +1135,23 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         }
         return true
     }
+}
+
+// IntList is a growable int array (the sparse delta table) that avoids boxing.
+class IntList(capacity: Int = 64) {
+    var data = IntArray(capacity)
+        private set
+    var size = 0
+        private set
+
+    fun add(v: Int) {
+        if (size == data.size) data = data.copyOf(maxOf(16, data.size * 2))
+        data[size++] = v
+    }
+
+    operator fun get(i: Int): Int = data[i]
+    fun clear() { size = 0 }
+    fun toIntArray(): IntArray = data.copyOf(size)
 }
 
 // Memory size classes & accounting (log.go: lines 1024-1064)

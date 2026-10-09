@@ -206,6 +206,13 @@
             <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
             <version>1.2.5</version>
         </dependency>
+        <!-- MQTT 5 client for session expiry tests -->
+        <dependency>
+            <groupId>org.eclipse.paho</groupId>
+            <artifactId>org.eclipse.paho.mqttv5.client</artifactId>
+            <version>1.2.5</version>
+            <scope>test</scope>
+        </dependency>
         <!-- BouncyCastle: pinned to 1.85 across prov, pkix, tls, and util to prevent signer mismatch -->
         <dependency>
             <groupId>org.bouncycastle</groupId>

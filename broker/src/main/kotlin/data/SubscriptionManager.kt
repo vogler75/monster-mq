@@ -24,8 +24,24 @@ import java.util.concurrent.ConcurrentHashMap
  * This manager handles LOCAL subscription tracking only.
  * Cluster replication of topicNodeMapping is handled by SessionHandler via SetMapReplicator.
  */
+/**
+ * Observes subscription changes, e.g. for PeerLink interest routing. Calls happen outside the index
+ * locks and must only queue work. added may repeat for an existing subscription.
+ */
+interface SubscriptionObserver {
+    fun added(clientId: String, filter: String)
+    fun removed(clientId: String, filter: String)
+}
+
 class SubscriptionManager {
     private val logger = Utils.getLogger(this::class.java)
+
+    @Volatile
+    private var observer: SubscriptionObserver? = null
+
+    fun setObserver(o: SubscriptionObserver?) {
+        observer = o
+    }
 
     // Exact subscriptions: O(1) lookup
     private val exactIndex = TopicIndexExact()
@@ -77,6 +93,7 @@ class SubscriptionManager {
         retainAsPublishedMap[key] = retainAsPublished
 
         setSubscriptionIdentifier(clientId, topicOrPattern, subscriptionId)
+        observer?.added(clientId, topicOrPattern)
     }
 
     /**
@@ -153,6 +170,7 @@ class SubscriptionManager {
 
         removeSubscriptionIdentifier(clientId, topicOrPattern)
 
+        if (removed) observer?.removed(clientId, topicOrPattern)
         return removed
     }
 
@@ -291,6 +309,12 @@ class SubscriptionManager {
         return result
     }
 
+    /** Calls cb for every current (clientId, topic or pattern) subscription. */
+    fun forEachSubscription(cb: (clientId: String, topicOrPattern: String) -> Unit) {
+        exactIndex.forEachSubscription { t, c -> cb(c, t) }
+        wildcardIndex.forEachSubscription { p, c -> cb(c, p) }
+    }
+
     /**
      * Remove all subscriptions for a disconnected client.
      * Triggers cluster replication cleanup via the caller (SessionHandler).
@@ -319,6 +343,8 @@ class SubscriptionManager {
         subscriptionIdentifiers.remove(clientId)
 
         logger.fine { "SubscriptionManager.disconnectClient: removed subscriptions from ${affectedTopics.size} topics/patterns" }
+
+        observer?.let { o -> affectedTopics.forEach { o.removed(clientId, it) } }
 
         return affectedTopics
     }

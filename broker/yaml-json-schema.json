@@ -1309,6 +1309,19 @@
             "MaxTopics": { "type": "integer", "minimum": 1, "default": 1000000 }
           }
         },
+        "Interest": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Interest routing: each node announces the topic filters it has local interest in, and a source forwards only matching records. Peers without interest support are served everything.",
+          "properties": {
+            "Enabled":           { "type": "boolean", "default": false, "description": "Announce local subscriptions to sources and filter what peers pull. At most 64 consuming peers." },
+            "Unknown":           { "type": "string", "enum": ["ALL", "NONE"], "default": "ALL", "description": "What a capable peer gets before its first interest snapshot: ALL (everything) or NONE." },
+            "FlushMs":           { "type": "integer", "minimum": 1, "default": 5, "description": "Coalescing window for interest deltas." },
+            "MaxScanPerFetch":   { "type": "integer", "minimum": 1024, "default": 65536, "description": "Records a source skips at most per FETCH before it answers with a sparse batch." },
+            "MaxFiltersPerPeer": { "type": "integer", "minimum": 1, "default": 100000, "description": "More filters from one peer: that peer is served everything (one WARN)." },
+            "MaxFilterBytes":    { "type": "integer", "minimum": 1, "maximum": 32768, "default": 1024, "description": "Longer filters are not announced (counted as rejected)." }
+          }
+        },
         "Fetch": {
           "type": "object",
           "additionalProperties": false,
@@ -1331,7 +1344,7 @@
             "Bus":                 { "type": "boolean", "default": true, "description": "Deliver replicas to the internal bus (scripts, REST SSE, GraphQL subscriptions, Redfish)." },
             "BridgeOutbound":      { "type": "boolean", "default": false, "description": "MQTT bridges forward replicas to their remote broker (loop risk)." },
             "Archive":             { "type": "boolean", "default": true, "description": "Archive replicas; set false when both nodes archive into one shared database." },
-            "Queue":               { "type": "boolean", "default": false, "description": "Queue replicas for offline persistent sessions." },
+            "Queue":               { "type": "boolean", "default": true, "description": "Queue replicas for offline persistent sessions (default since interest routing, so a session that moves between nodes keeps receiving)." },
             "SharedSubscriptions": { "type": "string", "enum": ["SKIP", "DELIVER"], "default": "SKIP", "description": "SKIP: shared subscription groups get a message only on the node it was published on." },
             "MarkReplicas":        { "type": "boolean", "default": false, "description": "Add the user property mmq-peer-src=<NodeId> to replicas." },
             "CatchUpRateFactor":   { "type": "number", "minimum": 0, "default": 3, "description": "While behind, apply at most this factor x the source's publish rate; 0 = no pacing, otherwise at least 1.5." },
@@ -1356,6 +1369,7 @@
         "NodeId":        { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
         "Address":       { "type": "string", "description": "host:port of the peer's PeerLink listener; present = this node pulls from it." },
         "Serve":         { "type": "boolean", "default": true, "description": "The peer may pull from this node." },
+        "Interest":      { "type": "string", "enum": ["INHERIT", "OFF"], "default": "INHERIT", "description": "OFF: no interest routing with this peer in either direction (dense link)." },
         "SharedSecrets": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Per-peer secrets (base64, at least 16 bytes); replace the group secrets for this peer. Recommended with more than two nodes." },
         "Tls": {
           "type": "object",

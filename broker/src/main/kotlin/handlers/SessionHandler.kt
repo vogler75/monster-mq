@@ -61,7 +61,8 @@ open class SessionHandler(
 
     var peerLinkManager: at.rocworks.peerlink.PeerLinkManager? = null
     var peerLinkReceiveBus: Boolean = true
-    var peerLinkReceiveQueue: Boolean = false
+    var peerLinkReceiveQueue: Boolean = true
+    var peerLinkReceiveBridgeOutbound: Boolean = false
 
     // Timestamp tracking for rate calculations
     private var lastMetricsResetTime = System.currentTimeMillis()
@@ -892,6 +893,39 @@ open class SessionHandler(
     }
 
     fun getClientDetails(clientId: String): ClientDetails? = clientDetails[clientId]
+
+    /**
+     * PeerLink interest class of a subscription owner (plan-peerlink-interest-routing 5.2); null means
+     * the owner's filters are not announced. Network clients are PER when persistent (MQTT 5: session
+     * expiry interval, MQTT 3.1.1 and restored offline sessions: never expires), otherwise VOL. Clients
+     * without session details are internal clients or message listeners: VOL, with the bus listeners
+     * (graphql-*) gated by Receive.Bus and the bridge outbound clients (mqttclient-*) by
+     * Receive.BridgeOutbound.
+     */
+    fun peerLinkInterestClass(clientId: String): at.rocworks.peerlink.InterestClass? {
+        val details = clientDetails[clientId]
+        if (details == null) {
+            if (clientId.startsWith("graphql-") && !peerLinkReceiveBus) return null
+            if (clientId.startsWith("mqttclient-") && !peerLinkReceiveBridgeOutbound) return null
+            return at.rocworks.peerlink.InterestClass.VOL
+        }
+        if (details.cleanSession) return at.rocworks.peerlink.InterestClass.VOL
+        val info = details.information?.let { try { JsonObject(it) } catch (e: Exception) { null } }
+        val expiry = if (info?.getInteger("ProtocolVersion") == 5) {
+            info.getValue("sessionExpiryInterval")?.let { (it as? Number)?.toLong()?.and(0xFFFFFFFFL) }
+                ?: at.rocworks.peerlink.wire.InterestExpiryNever
+        } else {
+            at.rocworks.peerlink.wire.InterestExpiryNever
+        }
+        return at.rocworks.peerlink.InterestClass(at.rocworks.peerlink.wire.InterestPer, expiry)
+    }
+
+    /** Sets the observer of local subscription changes (PeerLink interest tracker). */
+    fun setSubscriptionObserver(o: at.rocworks.data.SubscriptionObserver?) = subscriptionManager.setObserver(o)
+
+    /** Reports every current subscription to o as added (subscriptions restored before o was set). */
+    fun replaySubscriptions(o: at.rocworks.data.SubscriptionObserver) =
+        subscriptionManager.forEachSubscription { clientId, filter -> o.added(clientId, filter) }
 
     /**
      * Get the MQTT protocol version for a client (4 for v3.1.1, 5 for v5.0)

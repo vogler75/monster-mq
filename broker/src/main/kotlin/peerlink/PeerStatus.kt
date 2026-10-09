@@ -2,6 +2,10 @@ package at.rocworks.peerlink
 
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.databind.JsonSerializer
+import com.fasterxml.jackson.databind.SerializerProvider
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import java.util.concurrent.atomic.LongAdder
 
 val latencyBounds = longArrayOf(
@@ -38,16 +42,53 @@ class LatencyHist {
     }
 }
 
+// Epochs are uint64 on the wire; the status writes them unsigned like the edge broker.
+class UnsignedLongSerializer : JsonSerializer<Long>() {
+    override fun serialize(value: Long, gen: JsonGenerator, serializers: SerializerProvider) {
+        gen.writeNumber(java.lang.Long.toUnsignedString(value))
+    }
+}
+
 data class Status(
     val enabled: Boolean,
     val nodeId: String,
-    val epoch: Long,
+    @get:JsonSerialize(using = UnsignedLongSerializer::class) val epoch: Long,
     val listen: String,
     val tls: Boolean,
     val log: LogStatus,
     val admission: AdmissionStatus,
     val consumers: List<ConsumerStatus>,
-    val sources: List<SourceStatus>
+    val sources: List<SourceStatus>,
+    @JsonInclude(JsonInclude.Include.NON_NULL) val interest: InterestCounters? = null
+)
+
+// Node-wide interest routing counters (plan-peerlink-interest-routing 8); null while interest routing
+// is disabled.
+data class InterestCounters(
+    val interestSkipped: Long,
+    val interestMatched: Long,
+    val sparseBatches: Long,
+    val volatileDropped: Long,
+    val persistentExpired: Long,
+    val interestBacklogDiscarded: Long,
+    val interestRejected: Long,
+    val interestOverLimit: Long,
+    val deltasReceived: Long,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val local: TrackerStatus? = null
+)
+
+// Node-wide consumer interest state; null while this node announces no interest.
+data class TrackerStatus(
+    val filters: Int,
+    val generation: Long,
+    val rejected: Long
+)
+
+// Consumer side of interest routing on one source link; null while interest is off for the peer.
+data class SourceInterest(
+    val active: Boolean,
+    val deltasSent: Long,
+    val snapshotsSent: Long
 )
 
 data class KindCounts(
@@ -57,7 +98,7 @@ data class KindCounts(
 )
 
 data class LogStatus(
-    val epoch: Long,
+    @get:JsonSerialize(using = UnsignedLongSerializer::class) val epoch: Long,
     val lso: Long,
     val leo: Long,
     val lwm: Long,
@@ -115,14 +156,15 @@ data class ConsumerStatus(
     val shutdownUnserved: Long,
     val oaRetained: Boolean,
     val topicRootMismatch: Boolean,
-    val retainedClassMismatch: Boolean
+    val retainedClassMismatch: Boolean,
+    @JsonInclude(JsonInclude.Include.NON_NULL) val interest: InterestStatus? = null
 )
 
 data class SourceStatus(
     val nodeId: String,
     val address: String,
     val state: String,
-    val epoch: Long,
+    @get:JsonSerialize(using = UnsignedLongSerializer::class) val epoch: Long,
     val appliedNext: Long,
     val sourceLeo: Long,
     val lagRecords: Long,
@@ -157,7 +199,8 @@ data class SourceStatus(
     val topicRootMismatch: Boolean,
     val retainedClassMismatch: Boolean,
     val oaRetained: Boolean,
-    val applyDelayMs: ApplyDelay
+    val applyDelayMs: ApplyDelay,
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val interest: SourceInterest? = null
 )
 
 data class ApplyDelay(
