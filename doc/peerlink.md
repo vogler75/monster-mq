@@ -213,7 +213,7 @@ link: add the new value on both sides, move it to the first position on both
 
 All keys live under `PeerLink`. **Unknown keys fail startup, even while
 `Enabled` is false.** Validation of values runs when `Enabled` is true.
-`config.yaml.example` lists every key with its default; `yaml-json-schema.json`
+`broker/config-default.yaml` has a commented example; `yaml-json-schema.json`
 gives editor completion.
 
 ### 4.1 General
@@ -347,6 +347,31 @@ Interest routing, see [Interest routing](#13-interest-routing).
 | `MaxFiltersPerPeer` | `100000` | A peer announcing more filters is served everything (one WARN, `interestOverLimit`). ≥ 1. |
 | `MaxFilterBytes` | `1024` | Longer filters are not announced (`interestRejected`). 1..32768. |
 
+```yaml
+PeerLink:
+  Interest:
+    Enabled: true
+    Unknown: ALL          # serve everything until the peer's first snapshot
+    FlushMs: 5
+    MaxScanPerFetch: 65536
+    MaxFiltersPerPeer: 100000
+    MaxFilterBytes: 1024
+  Peers:
+    - NodeId: edge-1
+      Address: "edge-1.local:1890"
+      Serve: true
+    - NodeId: legacy-1      # old broker or no filtering wanted: dense link
+      Address: "legacy-1.local:1890"
+      Interest: OFF
+```
+
+`Interest.Enabled` acts in both directions: this broker announces its own
+interest to the peers it pulls from, and filters what it serves to peers that
+announce theirs. Both sides need it for filtering in a direction; otherwise
+the link stays dense. `Unknown: NONE` saves bandwidth right after a consumer
+connects but delays its first records until the snapshot arrives (usually a
+few milliseconds); keep `ALL` unless the link is very constrained.
+
 ### 4.11 Validation
 
 Startup fails (fail-closed) when, among others:
@@ -359,6 +384,9 @@ Startup fails (fail-closed) when, among others:
   a shared secret (or `InsecureSkipVerify` plus a secret), unless
   `AllowUnauthenticatedPeers` is set;
 - secrets or pins are used without TLS in that direction;
+- `Interest.Unknown` is not `ALL`/`NONE`, `Peers[].Interest` is not
+  `INHERIT`/`OFF`, or `Interest.Enabled` is set with more than 64 serving
+  peers;
 - a numeric value is out of range (`Fetch.MaxWaitMs` vs. `KeepAliveSeconds`,
   `Log.MaxBytes` vs. `MaxRecordBytes`, `Receive.MaxFrameBytes` vs.
   `Fetch.MaxBytes`, …).
@@ -527,6 +555,11 @@ Common messages:
 | `source restarted (new epoch)` | The source crashed or restarted; `resetLostLowerBound` estimates the loss. |
 | `handshake refused` | Identity, secret or configuration mismatch; `code` and `reason` name it (ERROR, rate-limited). |
 | `clock skew` | Clocks differ by more than 1 s; synchronise with NTP. |
+| `peer "<id>" interest LIVE` / `interest DISCONNECTED` | A consumer's interest snapshot was applied, or its link broke (volatile filters dropped). |
+| `interest not agreed with consumer` | The consumer has no interest routing (old broker or `Interest: OFF`); it is served everything. |
+| `interest exceeds MaxFiltersPerPeer` | The consumer announces too many filters and is served everything until it fits again. Raise `Interest.MaxFiltersPerPeer` or reduce subscriptions. |
+| `interest filter of client "<id>" not announced` / `invalid interest entries ... ignored` | A filter is invalid or longer than `Interest.MaxFilterBytes`; that subscription gets no replicas from filtering sources. Logged once per client. |
+| `persistent interest of peer "<id>" expired` | A persistent session's filters expired while the peer was away; its backlog that only they needed is reclaimed. |
 
 ---
 

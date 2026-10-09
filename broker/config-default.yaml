@@ -91,7 +91,15 @@ Features:
 #   Snapshot:
 #     Mode: FILL
 #     MaxTopics: 500000
+#   Interest: # Announce subscriptions; sources forward only what is needed
+#     Enabled: false
+#     Unknown: ALL # ALL or NONE until a peer's first interest snapshot
+#     FlushMs: 5
+#     MaxScanPerFetch: 65536
+#     MaxFiltersPerPeer: 100000
+#     MaxFilterBytes: 1024
 #   Peers:
 #     - NodeId: edge-1
 #       Address: "edge-1.local:1890"
 #       Serve: true
+#       Interest: INHERIT # OFF = no interest routing with this peer
