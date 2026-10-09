@@ -391,7 +391,7 @@ See `doc/` for full documentation:
 - [graphql-data](.agents/skills/graphql-data/SKILL.md) - AI skill for GraphQL data retrieval & archive inspection
 - [graphql-config](.agents/skills/graphql-config/SKILL.md) - AI skill for GraphQL configuration & mutations
 
-See also `dev/` for developer and AI coding documentation (iX guidelines, device integration guide, implementation plans). Start with [dev/INDEX.md](dev/INDEX.md).
+See also `dev/` for developer and AI coding documentation (iX guidelines, device integration guide, implementation plans). Start with [dev/index.md](dev/index.md).
 
 ## Requirements
 

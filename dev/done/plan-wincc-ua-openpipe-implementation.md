@@ -352,4 +352,4 @@ writeCh <- jsonBytes
 | `dev/OpenPipeTest.js` | Node.js standalone test: probe → BrowseTags → SubscribeTag → live notifications |
 | `dev/OpenPipeTest.java` | Java standalone test (kept for reference; use the Node.js version — Java RandomAccessFile deadlocks) |
 | `dev/run-openpipe-test.bat` | Batch wrapper to locate a JDK and run the Java test |
-| `dev/WinCC_Unified_OpenPipe_Reference.md` | Full protocol reference |
+| `dev/wincc-unified-openpipe-reference.md` | Full protocol reference |

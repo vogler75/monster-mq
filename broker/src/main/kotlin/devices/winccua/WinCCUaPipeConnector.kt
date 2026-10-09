@@ -26,7 +26,7 @@ import java.util.logging.Logger
  *
  * Talks to WinCC Unified Runtime via the local Open Pipe interface (`\\.\pipe\HmiRuntime` on
  * Windows, `/tmp/HmiRuntime` on Linux) using the expert (JSON) syntax. See
- * `dev/WinCC_Unified_OpenPipe_Reference.md` for the protocol.
+ * `dev/wincc-unified-openpipe-reference.md` for the protocol.
  *
  * Differences vs. [WinCCUaConnector] (GraphQL):
  *  - No HTTP/WebSocket; a single duplex named pipe. Authentication is implicit via OS group

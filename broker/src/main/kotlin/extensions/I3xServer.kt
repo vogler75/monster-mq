@@ -38,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * Exposes MonsterMQ's topic tree, current values, history, and subscriptions
  * under `/i3x/v1` using the v1 envelope and address-space model described in
- * `dev/plans/I3X_SPEC.md`.
+ * `dev/done/plan-i3x-spec.md`.
  */
 class I3xServer(
     private val host: String,

@@ -86,4 +86,4 @@ When behavior changes, update its owning guide above and check:
 Examples were checked statically during this review. External database/device
 connections, Windows service installation, and live protocol behavior were not
 integration-tested. For developer architecture and implementation plans, use
-[the developer documentation index](../dev/INDEX.md).
+[the developer documentation index](../dev/index.md).

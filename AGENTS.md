@@ -122,7 +122,7 @@ Devices follow a pattern of Extension (cluster-aware coordinator) + Connector (p
 - `devices/neo4j/` - Neo4j graph database bridge
 - `devices/sparkplugb/` - SparkplugB decoder
 
-For device integration guidance, see `dev/plans/DEVICE_INTEGRATION.md`.
+For device integration guidance, see `dev/plans/plan-device-integration.md`.
 
 ### Key Directories
 
@@ -185,7 +185,7 @@ component changes appearance as you navigate. Use `window.ui` instead of
 | GraphQL + Dashboard | 4000 | HTTP API and web UI |
 | MCP Server | 3000 | Model Context Protocol for AI |
 | Grafana | 3001 | Grafana integration |
-| I3X API | 3002 | i3X v1 manufacturing API (mounted at /i3x/v1 — see `dev/plans/I3X_SPEC.md`) |
+| I3X API | 3002 | i3X v1 manufacturing API (mounted at /i3x/v1 — see `dev/done/plan-i3x-spec.md`) |
 
 ### Configuration
 
@@ -217,7 +217,7 @@ The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard
 ### Extension Points
 
 1. **MCP Server** (`extensions/McpServer.kt`, `extensions/McpHandler.kt`): Model Context Protocol integration for AI models
-2. **I3X API** (`extensions/I3xServer.kt`): i3X v1 API for manufacturing data — mounted under `/i3x/v1`. See `dev/plans/I3X_SPEC.md` for the v1 envelope and endpoints.
+2. **I3X API** (`extensions/I3xServer.kt`): i3X v1 API for manufacturing data — mounted under `/i3x/v1`. See `dev/done/plan-i3x-spec.md` for the v1 envelope and endpoints.
 3. **REST API** (`extensions/RestApiServer.kt`): REST API endpoints for external integrations
 4. **Prometheus** (`extensions/PrometheusServer.kt`): Prometheus metrics exporter
 5. **OA4J Bridge** (`extensions/Oa4jBridge.kt`): WinCC OA Java API bridge for datapoint subscriptions
@@ -266,10 +266,10 @@ The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard
 - Clustering is optional and controlled via `-cluster` command line argument
 - Logging level can be configured via command line or properties files in `src/main/resources/`
 - The MCP Server integration uses the official MCP SDK (io.modelcontextprotocol.sdk)
-- Device integrations follow the Extension + Connector pattern (see `dev/plans/DEVICE_INTEGRATION.md`)
+- Device integrations follow the Extension + Connector pattern (see `dev/plans/plan-device-integration.md`)
 - The iX dashboard uses vanilla JS with `GraphQLDashboardClient` and Vite for bundling
 - GraphQL schema is split across `broker/src/main/resources/schema-*.graphqls` files. Changes to the GraphQL interface must be avoided and require explicit human commitment (see GraphQL Interface Policy above).
-- Developer and AI coding documentation is in `dev/` — see `dev/INDEX.md` for a full index. Implementation plans are in `dev/plans/`
+- Developer and AI coding documentation is in `dev/` — see `dev/index.md` for a full index. Implementation plans are in `dev/plans/`
 - MQTT publish topics are validated to reject wildcard characters (`+`, `#`) per MQTT spec §3.3.2.1 — enforced in `MqttClient.publishHandler()` and GraphQL `MutationResolver.publish()`/`publishBatch()`
 - GraphQL resolvers for device types have paired Query and Mutation files (e.g. `Plc4xClientConfigQueries.kt` + `Plc4xClientConfigMutations.kt`) — when adding new fields to a device config, both the `deviceToMap()` methods must be updated to include the new field
 - PLC4X addresses support a `jsonPath` field for extracting values from JSON MQTT payloads when writing to PLC registers (dot-notation path, e.g. `data.temperature.value`)

@@ -17,7 +17,7 @@ This skill provides step-by-step instructions for adding a new device connector,
 
 ## Architecture Blueprint & Core Reference
 
-Read the primary specification guide at [`dev/plans/DEVICE_INTEGRATION.md`](file:///home/vogler/Workspace/monster-mq/dev/plans/DEVICE_INTEGRATION.md) — it contains the complete Extension + Connector architecture overview, code templates, and verification checklist.
+Read the primary specification guide at [`dev/plans/plan-device-integration.md`](file:///home/vogler/Workspace/monster-mq/dev/plans/plan-device-integration.md) — it contains the complete Extension + Connector architecture overview, code templates, and verification checklist.
 
 ### Reference Implementations by Complexity
 - **Simple Bridge**: MQTT Client (`devices/mqttclient/`, `graphql/MqttClient*`, dashboard `mqtt-client*`)
