@@ -1,6 +1,6 @@
 # Plan: PeerLink and broker redundancy (Kotlin MonsterMQ broker)
 
-**Status (2026-10-09):**
+**Status (2026-10-09): reviewed and clarified; implementation planned for Parts II/III. GraphQL remains gated.**
 
 | Part | Content | Status |
 |---|---|---|
@@ -14,9 +14,9 @@ This file replaces three earlier documents, merged without loss of content:
 - `PEER_REDUNDANCY_ROLES.md` → Part II (roles, component setting, nodeId cleanup)
 - `plan-redundancy-witness.md` → Part II (role source `WITNESS`, split mode)
 
-Normative edge spec: `edge/winccoa/doc/spec-peerlink-redundancy.md` (the older path `edge/dev/plans/...` no longer exists). "spec §x" means that spec. `K/` means `main/broker/src/main/kotlin/`.
+Normative edge spec: `edge/winccoa/doc/spec-peerlink-redundancy.md`. The edge redundancy plan is `edge/dev/plans/plan-peerlink-redundancy.md`; the edge PeerLink plan `edge/dev/plans/plan-peerlink.md` was removed, its last version is at commit `2fe2282:dev/plans/plan-peerlink.md` in the edge repo. "spec §x" means that spec. `K/` means `main/broker/src/main/kotlin/`.
 
-**How the parts fit together.** PeerLink (Part I) is active-active: every node accepts clients and replicates every publish. That is correct for data but wrong for components that talk to external systems (bridges, devices, archive groups on a shared DB, outbound loggers): they run on every node and duplicate work. Part II adds one broker role per node and one gate in the code, so such components act only on the `ACTIVE` node. The role travels over the existing PeerLink connection (`CapRole`), and is decided by a role source: a static setting, an external witness lease, or (later) an election. The main broker has no WinCC OA role source; deriving the role from WinCC OA redundancy needs the native WinCC OA link and is done by the edge broker (`edge/dev/plans/plan-peerlink-redundancy.md`, source `WINCCOA`).
+**How the parts fit together.** PeerLink (Part I) is active-active: every node accepts clients and replicates every publish. That is correct for data but wrong for components that talk to external systems (bridges, devices, archive groups on a shared DB, outbound loggers): they run on every node and duplicate work. Part II adds one broker role per node and one gate in the code, so such components act only on the `ACTIVE` node. The role travels over the existing PeerLink connection (`CapRole`), and is decided by a role source: a static setting or an external witness lease. The main broker has no WinCC OA role source; deriving the role from WinCC OA redundancy needs the native WinCC OA link and is done by the edge broker (`edge/dev/plans/plan-peerlink-redundancy.md`, source `WINCCOA`).
 
 Inside Part I, section numbers ("section 5a", "6.3", "spec §x") refer to Part I and the edge spec, as in the original document.
 
@@ -28,8 +28,8 @@ Inside Part I, section numbers ("section 5a", "6.3", "spec §x") refer to Part I
 
 | Document | Role |
 |---|---|
-| `edge/winccoa/doc/spec-peerlink-redundancy.md` (edge repo, last changed in `c19866b`) | **Normative.** Section 3 (wire protocol), sections 4-9 (behaviour), section 10 (configuration), sections 11-12 (security, observability). Section 17 is the first JVM code map; this plan replaces it. |
-| `edge/dev/plans/plan-peerlink.md` | Design rationale and rejected alternatives. |
+| `edge/winccoa/doc/spec-peerlink-redundancy.md` (edge repo, last changed in `c19866b`) | **Normative.** Section 3 (wire protocol), sections 4-9 (behaviour), section 10 (configuration), sections 11-12 (security, observability). Section 17 is the first JVM code map; it is superseded by this plan and carries a note pointing here. |
+| `edge/dev/plans/plan-peerlink.md` (removed from the edge repo; last version at commit `2fe2282:dev/plans/plan-peerlink.md`) | Design rationale and rejected alternatives. |
 | `edge/internal/peerlink/**` | Reference implementation. Where the spec and the Go code disagree, the Go code wins, as on the edge. |
 
 Below, "spec §x" means the edge spec, and `K/` means `main/broker/src/main/kotlin/`.
@@ -433,11 +433,177 @@ The order is strict: J2 needs J1's vectors, and J4 needs J2's server.
   - `K/stores/devices/DeviceConfig.kt`;
   - `broker/pom.xml` (explicit `bctls-jdk18on`, aligned BouncyCastle versions);
   - `broker/yaml-json-schema.json` (`PeerLink` block), `broker/config-default.yaml` (commented example), `doc/configuration.md`, `doc/zenoh.md`.
-- Edge repo: golden-vector generator and `testdata/vectors.json`. The edge spec §17 is replaced by a pointer to this plan.
+- Edge repo: golden-vector generator and `testdata/vectors.json`. Edge spec §17 is superseded by this plan; §17 carries a note pointing here.
 
 ---
 
 # Part II: Redundancy roles on PeerLink broker pairs (plan)
+
+## II.0 Shared contract with the edge broker
+
+This contract is word for word the same in `edge/dev/plans/plan-peerlink-redundancy.md` (section 3.0) and `main/dev/plans/plan-peerlink-redundancy.md` (section II.0). Change both or neither. Where the rest of either plan disagrees with this contract, the contract wins. The only intended difference between the brokers: `Source: WINCCOA` exists on the edge broker only (it needs the native WinCC OA link); the main broker rejects it at startup.
+
+**C1 Wire: `CapRole` (`mmq-peer/1`, spec section 3.6).** One wire change for both code bases; accepted for both brokers with the owner-authorized review recommendations (2026-10-09); requires one new golden-vector set (Kotlin and Go).
+
+- Capability bit `CapRole = 1<<4` (after `CapTombstone`). `CapInterest = 1<<5` belongs to the interest-routing plans.
+- Role block, 18 bytes, little-endian:
+
+  | Offset | Field | Type | Meaning |
+  |---|---|---|---|
+  | 0 | `role` | u8 | `UNKNOWN=0`, `ACTIVE=1`, `STANDBY=2`; any other value reads as `UNKNOWN` |
+  | 1 | `roleSeq` | u64 | sender's counter, starts at 1 with the process, +1 on each own role change |
+  | 9 | `leaseEpoch` | u64 | witness lease epoch the sender acts on; 0 without `WITNESS` |
+  | 17 | `flags` | u8 | bit 0 `witnessReachable`, bit 1 `leaseHolder`; other bits sent as 0, ignored on read |
+
+- The block is appended after the last field of `HELLO` (when the consumer offers `CapRole`) and of `HELLO_OK`, `PING` and `PONG` (when `CapRole` is agreed). Decoders ignore trailing bytes, so a peer without `CapRole` reads all four frames unchanged; its role counts as `UNKNOWN`. Data replication is not affected.
+- The field is called `leaseEpoch` to keep it apart from the log `epoch` in `HELLO_OK` and in the PeerLink status.
+- With `CapRole` agreed:
+  - the consumer sends `PING` every `keepAlive/2` also while a `FETCH` is outstanding, and at once after its own role changes;
+  - the source answers every `PING` with a `PONG` carrying its role block, and sends an unsolicited `PONG` with token 0 at once after its own role changes. Token 0 is never used for RTT; consumers never send token 0.
+- Every build that implements `CapRole` offers it in `SERVER_HELLO` and `HELLO` whatever `Redundancy.Source` is, so a `Source: NONE` node is never seen as `UNKNOWN`.
+- `Source: NONE` is sent as `ACTIVE`. `STANDALONE` and the WinCC OA view `PASSIVE` never go on the wire.
+
+**C2 Peer reachability and peer role.**
+
+- A peer is reachable when a `HELLO`, `HELLO_OK`, `PING` or `PONG` from it arrived on any PeerLink connection, in either direction, within the last `PeerTimeoutMs`. Frames without a role block count for reachability too.
+- The peer's role is taken from the role block with the highest `roleSeq` received from it; a new `HELLO` or `HELLO_OK` from the peer resets the stored `roleSeq` (the peer may have restarted). An unreachable peer has role `UNKNOWN`.
+- `Partner` set: only that peer counts in the role rules (C4). `Partner` empty: every PeerLink peer counts; "peer reachable" means any peer is reachable, "peer `ACTIVE`" means any reachable peer reports `ACTIVE`. On edge with `WINCCOA`, an empty `Partner` defaults to the peer with `RedundancyPartner: true`.
+
+**C3 Timing.**
+
+- `STANDBY → ACTIVE`: at once when the rule says so (peer unreachable for `PeerTimeoutMs`, lease won, own WinCC OA host active, `STATIC` switch).
+- `ACTIVE → STANDBY`: after `StandbyGraceMs`, and only if the rule still says `STANDBY` then.
+- Fencing, at once without grace: local lease validity expires (except the explicit total-isolation `KEEP` case), lease lost to a higher `leaseEpoch`, a split resolved against this node, or voluntary handover. `StandbyGraceMs` never extends a valid lease.
+- `WITNESS`: the preferred node acquires an expired lease at once, the others only after `Witness.TakeoverDelayMs` past expiry. A confirmed voluntary release bypasses that delay. There is no other hold-down.
+
+**C4 Role rules.**
+
+- `NONE` (default): always `ACTIVE`; component modes (C6) have no effect.
+- `STATIC` and `WINCCOA` share one table. Own input: `STATIC` = `Static.Role` or its runtime override (C9); `WINCCOA` = own WinCC OA host active → `ACTIVE`, passive → `STANDBY`, unknown → `UNKNOWN`.
+
+  | Own input | Peer reachable | Peer role | Role |
+  |---|---|---|---|
+  | `ACTIVE` | any | any | `ACTIVE` |
+  | `STANDBY` / `UNKNOWN` | yes | `ACTIVE` | `STANDBY` |
+  | `STANDBY` / `UNKNOWN` | yes | `STANDBY` / `UNKNOWN` | `ACTIVE` |
+  | `STANDBY` / `UNKNOWN` | no | – | `ACTIVE` (fail open) |
+
+  Both `ACTIVE` with the link up (e.g. both WinCC OA hosts active in split mode, or a misconfigured `STATIC` pair): both stay `ACTIVE`, WARN, `split: SPLIT_DUAL_ACTIVE`.
+- `WITNESS`: the role table, isolation rule (`OnIsolation`), split cases and resolution are the same in both plans (main II.6.2, II.8; edge 3.4). Resolution order: lease holder, then higher `leaseEpoch`, then lower `Priority`, then lower `NodeId`; the loser goes `STANDBY` at once.
+- `ELECTION` is dropped from v1 (owner authorized the review recommendations on 2026-10-09). `WITNESS` covers pairs and larger groups; `ELECTION` is a startup error in both brokers.
+
+**C5 YAML.** Same key set and the same JSON schema in both brokers:
+
+```yaml
+Redundancy:
+  Source: NONE             # NONE | STATIC | WITNESS | WINCCOA (edge only)
+  Partner: ""              # PeerLink NodeId of the other half; empty = all peers
+                           # (edge with WINCCOA: the peer with RedundancyPartner: true)
+  Priority: 100            # lower = preferred (WITNESS); tie: lower NodeId
+  StandbyGraceMs: 5000     # ACTIVE -> STANDBY delay (C3)
+  PeerTimeoutMs: 10000     # peer unreachable after this (C2)
+  Static:
+    Role: ACTIVE           # ACTIVE | STANDBY; required with Source: STATIC
+  Witness:
+    Group: plant-a         # lease name, same on all nodes of the group; required with WITNESS
+    Store: POSTGRES        # POSTGRES | MONGODB
+    Connection: default    # default = the broker's Postgres / MongoDB section,
+                           # or an own Url/User/Password block
+    LeaseTtlMs: 10000
+    RenewIntervalMs: 2500
+    SafetyMarginMs: 2000
+    TakeoverDelayMs: 3000
+    Failback: false
+    OnIsolation: STANDBY   # STANDBY | KEEP
+```
+
+- Keys outside this block are a schema error in both brokers. A key or value that a broker cannot act on is accepted with one WARN at start, except `Source: WINCCOA` on main, which is a startup error (otherwise the broker would run without a role source).
+- Validation, same in both:
+  - `Source != NONE` without PeerLink: WARN (no peer fallback, no split detection over the link);
+  - `STATIC` without `Static.Role`: startup error;
+  - `Partner` names no configured PeerLink peer: WARN;
+  - `WITNESS` without `Witness.Group`, or with `SafetyMarginMs >= LeaseTtlMs` or `RenewIntervalMs > LeaseTtlMs / 2`: startup error;
+  - `WITNESS` with `Connection: default` whose store host is this node: WARN (witness not independent);
+  - `Priority` outside 0..2147483647, non-positive lease/renew/peer timeout, negative safety margin/takeover delay/standby grace: startup error;
+  - `Source: ELECTION`: startup error (dropped from v1).
+- `Witness.Connection` is either the string `default`, or `{Url: <connection URL>, User: <optional username>, Password: <optional password>}` for the selected store; unknown keys fail validation. Group is a non-empty, case-sensitive string used verbatim in both stores; NodeId follows PeerLink canonicalization. Do not apply hostname or lowercase normalization to Group.
+
+**C6 Component setting `Redundancy`.** On every device / bridge config, every archive group and every script:
+
+```text
+Redundancy: ALWAYS | HOT_STANDBY | COLD_STANDBY      (default ALWAYS)
+```
+
+| Mode | On `ACTIVE` | On `STANDBY` |
+|---|---|---|
+| `ALWAYS` | runs (today's behaviour) | runs (today's behaviour) |
+| `HOT_STANDBY` | runs; inbound is published; outbound sends **all** messages, local and replicas | runs and stays connected; inbound is discarded; nothing is sent outbound; device writes rejected with a log line; scripts run with outputs suppressed; archive groups stay connected and drop writes (the last-value store keeps being fed) |
+| `COLD_STANDBY` | as `HOT_STANDBY` | not started, no connection (archive groups: writer and DB connection stopped, last-value store kept); the persisted `enabled` flag is not changed |
+
+- Bidirectional bridges apply the mode to both directions together.
+- Server-type components (listeners) offer only `ALWAYS` and `COLD_STANDBY`.
+- With `Source: NONE` every mode behaves like `ALWAYS`.
+- `HOT_STANDBY` / `COLD_STANDBY`: `PeerLink.Receive.BridgeOutbound` is ignored; the role decides.
+- `ALWAYS`: the `BridgeOutbound` guard applies as today (deprecated, one WARN when set with `Source != NONE`). One WARN at start for every outbound bridge left at `ALWAYS` while `Source != NONE`.
+- Interest routing (`CapInterest`): the filters of `HOT_STANDBY` and `COLD_STANDBY` components are announced to the peers whatever the role and `BridgeOutbound`, also while a `COLD_STANDBY` component is not running, so a switchover never waits for an interest update.
+
+**C7 Status, metrics, log.**
+
+- `$SYS/broker/redundancy/role`, retained, published on every change by both brokers (edge also in native mode):
+  `{role, source, epoch, holder, witnessReachable, peers: [{nodeId, reachable, role}], split, since, reason}`.
+  `role`: `ACTIVE` | `STANDBY` | `UNKNOWN` (`NONE` reports `ACTIVE`); `source`: the YAML value; `epoch`: `leaseEpoch`, 0 without `WITNESS`; `holder`: lease holder `NodeId` or `null`; `witnessReachable`: `null` without `WITNESS`; `split`: `NONE` | `SPLIT_LINK` | `SPLIT_DUAL_ACTIVE`; `since`: ISO-8601 UTC with milliseconds; `reason`: text of the last change.
+- Metrics: `redundancy_role` (0 `UNKNOWN`, 1 `ACTIVE`, 2 `STANDBY`), `redundancy_epoch`, `redundancy_split` (0 / 1), `redundancy_lease_renew_failures_total`, `redundancy_role_changes_total`.
+- PeerLink status JSON (spec section 12.1): every entry of `consumers[]` and `sources[]` gets `role`, `roleSeq`, `leaseEpoch`, `witnessReachable`, `leaseHolder` of that peer (`"UNKNOWN"`, 0, `false` without `CapRole`). The existing `epoch` there stays the log epoch.
+- Log: one INFO line per role change with the reason; WARN on split entry and exit.
+
+**C8 Witness storage.** One layout, so edge and main nodes can share one witness group.
+
+- Postgres: tables `redundancylease` and `redundancynodes` exactly as main II.5.1, acquire / renew statement exactly as main II.5.2 (edge 3.4 repeats it). `role` holds `ACTIVE` | `STANDBY` | `UNKNOWN`. Lease `released` is Boolean, default false; heartbeat `priority` is integer, default 100.
+- MongoDB, field names and types fixed:
+  - `redundancylease`: `{_id: <group>, holder: <NodeId>, epoch: Int64, expiresAt: Date, updatedAt: Date, released: Boolean}`;
+  - `redundancynodes`: `{_id: {group: <group>, nodeId: <NodeId>}, role: "ACTIVE" | "STANDBY" | "UNKNOWN", epoch: Int64, linkUp: Boolean, priority: Int32, version: String, heartbeatAt: Date}`.
+- Expiry uses the store clock only (`now()` / `$$NOW`); nodes measure durations on their monotonic clock.
+- Priority is learned from witness heartbeat rows, not from the 18-byte role block. Fresh means age no greater than `PeerTimeoutMs`, measured with the store clock. Cache the last known priorities for resolution during witness loss; if either priority is unknown, use lower NodeId for that tie-break. The preferred candidate is the lowest `(priority, NodeId)` among self and known group members that are configured PeerLink peers. Retain their last recorded priority even when their heartbeat becomes stale, so a dead preferred node does not remove the non-preferred takeover delay. Ignore rows for peers removed from configuration. Before a peer has ever reported its priority, first-winner startup applies; freshness is required for failback availability, not for priority ranking. A simultaneous first start may elect whichever node acquires first; `Failback: false` does not promise preferred ownership on a cold start.
+- `released: true` distinguishes voluntary handover from timeout. Acquire/renew sets it false. Release matches group, holder and epoch, sets it true and expiry to store-now, and keeps the row/epoch. Quiesce component outputs and complete in-flight external operations before release; if quiescence cannot be confirmed, do not release early. A releasing node must not reacquire during shutdown or while a fresh preferred candidate is available for failback.
+- Lease validity is checked before each external operation, including after a process pause, and again after every acquire/renew response. A response received after its local deadline cannot enable outputs. Timers alone are insufficient; cold components are also gated while stopping. Operations already sent cannot be fenced by a broker role change, so strict exactly-once side effects across failover are not promised.
+
+**C9 GraphQL.** Same SDL in both brokers (both schemas already have `scalar Long`; timestamps are `String`). Needs human commitment per AGENTS.md in both repositories.
+
+```graphql
+enum RedundancyRole { UNKNOWN ACTIVE STANDBY }
+enum RedundancySource { NONE STATIC WITNESS WINCCOA }
+enum RedundancySplit { NONE SPLIT_LINK SPLIT_DUAL_ACTIVE }
+enum ComponentRedundancy { ALWAYS HOT_STANDBY COLD_STANDBY }
+
+type RedundancyPeer {
+    nodeId: String!
+    reachable: Boolean!
+    role: RedundancyRole!
+}
+
+type BrokerRedundancy {
+    role: RedundancyRole!
+    source: RedundancySource!
+    epoch: Long!
+    holder: String
+    witnessReachable: Boolean
+    split: RedundancySplit!
+    peers: [RedundancyPeer!]!
+    since: String!
+    reason: String
+}
+
+# added to type Query
+brokerRedundancy: BrokerRedundancy!
+
+# added to type Mutation (top level in both brokers)
+setRedundancyRole(role: RedundancyRole!): BrokerRedundancy!
+```
+
+- `setRedundancyRole` is valid only with `Source: STATIC` and `role` `ACTIVE` or `STANDBY`; otherwise a GraphQL error. It overrides `Static.Role` at runtime, is not persisted, and is lost on restart.
+- Per component: `redundancy: ComponentRedundancy` on every device / bridge, archive group and script input (optional, default `ALWAYS`) and output (non-null), next to `nodeId`.
+
+Implementation order is coordinated with the interest plan's "Implementation readiness and cross-plan order" section. Role/component core and configured-filter providers are implemented before interest integration; GraphQL and all dashboard work ship only in main R7 / edge PG after the separate commitment gate. This plan revision accepts the review recommendations; it does not authorize GraphQL implementation or claim native-pair verification.
 
 ## II.1 Problem
 
@@ -454,7 +620,7 @@ Components that talk to external systems run on both brokers, and nothing coordi
 
 The Kotlin broker has no notion of WinCC OA redundancy (`_ReduManager`), and this plan does not add one: a role source based on WinCC OA belongs to the edge broker, which has the native link (`edge/internal/winccoanative/redu.go`).
 
-Without a witness, the only role sources would be `STATIC` (no automatic failover) and `ELECTION` (majority for N≥3, fail open for N=2), so a pair goes dual-active on every link break. The `WITNESS` source (II.5) fixes this: the broker decides internally which node is active, with a third-party store as tie breaker, and handles the worst case where the store shows both nodes alive but the nodes have no PeerLink connection.
+Without a witness, the only role sources would be `STATIC` with fail-open peer fallback, so a pair goes dual-active on every link break. The `WITNESS` source (II.5) fixes this: the broker decides internally which node is active, with a third-party store as tie breaker, and handles the worst case where the store shows both nodes alive but the nodes have no PeerLink connection.
 
 ## II.2 Design principles
 
@@ -462,8 +628,8 @@ Without a witness, the only role sources would be `STATIC` (no automatic failove
    - `nodeId` answers *on which Hazelcast cluster node does this component run*. That doesn't change.
    - The new `Redundancy` setting answers *does this component act on this broker, given the broker's current role*.
    - PeerLink and cluster mode are mutually exclusive (startup aborts, `Monster.kt:1145`). In a peer setup every broker is a single node, so the two settings never interact. We do **not** treat a peer pair as a cluster, and the Vert.x cluster (`-cluster`) is neither used nor touched.
-2. **One role per broker, one gate in the code.** Connectors must not each implement their own redundancy logic. That's how the current `BridgeOutbound` guard ended up implemented in only 4 of ~15 connectors.
-3. **Fail open by default.** If in doubt, a broker becomes ACTIVE. Duplicate data is acceptable; lost data is not. Exceptions, chosen explicitly: `ELECTION` without majority (II.9) and `WITNESS` with `OnIsolation: STANDBY` (II.5.6).
+2. **One role per broker, one gate in the code.** Connectors must not each implement their own redundancy logic. That's how the current `BridgeOutbound` guard ended up implemented in only 4 of ~15 connectors. The role check for `HOT_STANDBY` / `COLD_STANDBY` is therefore central; the old `BridgeOutbound` guard for `ALWAYS` stays where it is today and is not extended here (II.11.3, D-R7).
+3. **Fail open by default.** If in doubt, a broker becomes ACTIVE. Duplicate data is acceptable; lost data is not. Exceptions, chosen explicitly: `WITNESS` without a valid local lease, except the explicit total-isolation `KEEP` policy (II.5.6).
 4. **Default = today's behavior.** `Redundancy: ALWAYS` on every component, and no role source configured means the broker is always ACTIVE.
 5. **For `WITNESS`: the witness decides, the link confirms.** The holder of a lease in an external store is `ACTIVE`. PeerLink carries role and epoch so a split is detected even if the store is fine.
 6. **The witness is outside both nodes.** A Postgres or MongoDB both brokers reach, not running on either broker host. A witness on one node gives that node the tie break by construction.
@@ -472,14 +638,15 @@ Without a witness, the only role sources would be `STATIC` (no automatic failove
 
 ## II.3 Broker role and configuration
 
-Each broker has exactly one role: `ACTIVE` or `STANDBY` (plus `UNKNOWN` as an internal transient state, see II.4).
+Each broker has exactly one role: `ACTIVE` or `STANDBY` (plus `UNKNOWN` as a transient state at startup, before the first decision; defined in II.10).
 
 New top-level config block (all sources in one schema):
 
 ```yaml
 Redundancy:
-  Source: WITNESS          # NONE (default) | STATIC | WITNESS | ELECTION
-  Priority: 10             # lower = preferred; used by WITNESS and ELECTION; tie: lower NodeId
+  Source: WITNESS          # NONE (default) | STATIC | WITNESS (WINCCOA: edge only, startup error here)
+  Partner: ""              # PeerLink NodeId of the other half; empty = all peers (C2)
+  Priority: 10             # lower = preferred; used by WITNESS; tie: lower NodeId; default 100
   StandbyGraceMs: 5000     # delay before ACTIVE -> STANDBY takes effect (II.7)
   PeerTimeoutMs: 10000     # peer considered unreachable after this (II.4)
   Static:
@@ -498,34 +665,32 @@ Redundancy:
     OnIsolation: STANDBY   # STANDBY | KEEP (II.5.6)
 ```
 
-Merge notes: `Priority` was `Election.Priority` in the roles spec and top-level `Priority` in the witness plan; it is now one top-level key for both sources. `Group`, `Failback` and `OnIsolation` were top-level in the witness plan and now live under `Witness`, since only that source uses them.
+The key set, defaults and validation are those of the shared contract (C5); this block shows the main broker's typical values.
+
+Merge notes: `Priority` was `Election.Priority` in the roles spec and top-level `Priority` in the witness plan; it is now one top-level key for WITNESS; ELECTION is dropped. `Group`, `Failback` and `OnIsolation` were top-level in the witness plan and now live under `Witness`, since only that source uses them.
 
 | Source | Behavior |
 |---|---|
 | `NONE` | Always ACTIVE. Redundancy settings on components have no effect. This is the default. |
-| `STATIC` | Role comes from config and can be switched at runtime. No automatic failover, but the peer fallback in II.6.1 still applies. |
+| `STATIC` | Role comes from `Static.Role` and can be switched at runtime with `setRedundancyRole` (C9). Automatic fail-open takeover on peer loss (II.6.1); it does not provide witness fencing. |
 | `WITNESS` | The holder of a lease in an external Postgres/MongoDB is ACTIVE (II.5). For pairs or N brokers. Recommended. |
-| `ELECTION` | Phase R6, for 3+ brokers (II.9). May be dropped in favour of `WITNESS` (D-R3). |
+| `ELECTION` | Dropped from v1; startup error. Use `WITNESS`. |
 
 There is deliberately no `WINCCOA` source in main. The GraphQL-based WinCC OA connector (`devices/winccoa/WinCCOaConnector.kt`) stays a normal inbound device; a pair that must follow WinCC OA redundancy uses edge brokers with the native link (edge source `WINCCOA`), which also announce their role over `CapRole`.
 
 ## II.4 Exchanging roles over PeerLink: `CapRole`
 
-Each broker must know whether its peer is reachable and which role it claims. This goes over the existing PeerLink connection. **One wire change** covers both the roles spec and the witness plan:
+Each broker must know whether its peer is reachable and which role it claims. This goes over the existing PeerLink connection. **One wire change** covers both the roles spec and the witness plan. C1 is normative; where this section is shorter, C1 applies.
 
-- New capability bit `CapRole` (next free bit, `1L shl 4`, after `CapTombstone` in `K/peerlink/wire/Frames.kt:62-66`). Both the Kotlin broker and the Go edge implement it, since the wire protocol is shared.
-- When `CapRole` is negotiated, `HelloOK` and `Pong` (today `Pong` carries only `token`) get:
-  - `role` (u8): `UNKNOWN=0`, `ACTIVE=1`, `STANDBY=2`;
-  - `roleSeq` (u64): incremented on every role change;
-  - `epoch` (u64): lease epoch the node acts on, 0 without witness;
-  - `flags` (u8): bit 0 `witnessReachable`, bit 1 `leaseHolder`.
-  Each side learns about role changes within one keep-alive interval.
+- New capability bit `CapRole` (`1L shl 4`, after `CapTombstone` in `K/peerlink/wire/Frames.kt:62-66`). Both the Kotlin broker and the Go edge implement it, since the wire protocol is shared.
+- The 18-byte role block of C1 (`role` u8, `roleSeq` u64, `leaseEpoch` u64, `flags` u8) is appended to `Hello` when `CapRole` is offered, and to `HelloOK`, `Ping` and `Pong` when it is agreed. The field is called `leaseEpoch` on the wire and in status to keep it apart from the log `epoch` in `HelloOK`.
+- With `CapRole` the consumer (`Puller`) sends `Ping` every keepAlive/2 also while a `Fetch` is outstanding, and at once on its own role change. The source (`PeerServer`) answers every `Ping` with a `Pong` carrying its role block, and sends an unsolicited `Pong` with token 0 on its own role change. Token 0 is never used for RTT, and consumers never send token 0. Each side learns about a role change within one frame round trip, at worst one `Ping` interval.
 - If the peer doesn't support `CapRole`, its role is treated as `UNKNOWN`. Data replication keeps working.
-- **Peer reachable** means the Puller session to that peer is established and the last `Pong` is younger than `PeerTimeoutMs`.
+- **Peer reachable** (C2): a `Hello`, `HelloOK`, `Ping` or `Pong` from that peer arrived on any PeerLink connection, in either direction, within `PeerTimeoutMs`. The earlier "Puller session established and last `Pong` younger than `PeerTimeoutMs`" is replaced, so a peer that only pulls from this node also counts.
 
 No extra port or topic is needed. The role is tied to the same connection that carries the data, so "the peer is alive" and "the peer is replicating to me" are the same signal.
 
-Shipping all four fields at once avoids a second negotiation step later. The Go edge must decode them (it may ignore `epoch`/`flags`). **Needs owner sign-off on both sides** (spec `mmq-peer/1`, section 3.6), and a new golden-vector set (Part I, section 9).
+Shipping all four fields at once avoids a second negotiation step later. The Go edge decodes and uses all of them (edge plan 3.0, same contract). **Accepted for both brokers (2026-10-09)**; requires a new golden-vector set (Part I, section 9).
 
 ## II.5 Role source `WITNESS`
 
@@ -539,7 +704,8 @@ CREATE TABLE IF NOT EXISTS redundancylease (
   holder     TEXT NOT NULL,
   epoch      BIGINT NOT NULL,
   expiresat  TIMESTAMPTZ NOT NULL,
-  updatedat  TIMESTAMPTZ NOT NULL
+  updatedat  TIMESTAMPTZ NOT NULL,
+  released   BOOLEAN NOT NULL DEFAULT FALSE
 );
 CREATE TABLE IF NOT EXISTS redundancynodes (
   groupname   TEXT NOT NULL,
@@ -547,50 +713,67 @@ CREATE TABLE IF NOT EXISTS redundancynodes (
   role        TEXT NOT NULL,
   epoch       BIGINT NOT NULL,
   linkup      BOOLEAN NOT NULL,   -- PeerLink to the partner up, as seen by this node
+  priority    INTEGER NOT NULL DEFAULT 100,
   version     TEXT,
   heartbeatat TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (groupname, nodeid)
 );
 ```
 
-MongoDB: collections `redundancylease` (`_id` = group) and `redundancynodes` (`_id` = `{group, nodeId}`).
+MongoDB: collections `redundancylease` and `redundancynodes` with the document layout of C8 (`_id` = group; `_id` = `{group, nodeId}`; lease fields `holder`, `epoch` (Int64), `expiresAt`, `updatedAt`, `released`; node fields `role`, `epoch`, `linkUp`, `priority` (Int32), `version`, `heartbeatAt`).
 
 ### II.5.2 Acquire and renew (one statement)
 
 ```sql
-INSERT INTO redundancylease (groupname, holder, epoch, expiresat, updatedat)
-VALUES ($1, $2, 1, now() + $3 * interval '1 millisecond', now())
+INSERT INTO redundancylease (groupname, holder, epoch, expiresat, updatedat, released)
+VALUES ($1, $2, 1, now() + $3 * interval '1 millisecond', now(), FALSE)
 ON CONFLICT (groupname) DO UPDATE SET
   holder    = EXCLUDED.holder,
   epoch     = CASE WHEN redundancylease.holder = EXCLUDED.holder
+                   AND NOT redundancylease.released AND redundancylease.expiresat > now()
                    THEN redundancylease.epoch ELSE redundancylease.epoch + 1 END,
   expiresat = EXCLUDED.expiresat,
-  updatedat = now()
-WHERE redundancylease.holder = EXCLUDED.holder OR redundancylease.expiresat < now()
+  updatedat = now(),
+  released  = FALSE
+WHERE (redundancylease.holder = EXCLUDED.holder AND NOT redundancylease.released
+       AND redundancylease.expiresat > now())
+   OR (redundancylease.expiresat <= now()
+       AND (redundancylease.released OR $4
+            OR redundancylease.expiresat + $5 * interval '1 millisecond' <= now()))
 RETURNING holder, epoch;
 ```
 
-- A row returned → this node holds the lease with that epoch.
-- No row → another node holds a valid lease; read it for status.
+- `$4` is whether this node is the preferred candidate; `$5` is `TakeoverDelayMs`; `$3` is `LeaseTtlMs`. Preference uses the latest group heartbeat read (C8); the final SQL atomically rechecks expiry, release and non-preferred delay. Initial insert on an empty group is first-winner. Use autocommit and bounded request timeouts; re-read/retry on contention.
+- Conditional release after quiescence:
 
-MongoDB: `findOneAndUpdate` with filter `{_id: group, $or: [{holder: me}, {$expr: {$lt: ["$expiresAt", "$$NOW"]}}]}`, an update pipeline that sets `expiresAt` from `$$NOW`, `upsert: true`, `returnDocument: AFTER`. A duplicate-key error means "not won".
+  ```sql
+  UPDATE redundancylease SET expiresat = now(), updatedat = now(), released = TRUE
+  WHERE groupname = $1 AND holder = $2 AND epoch = $3 AND NOT released
+  RETURNING epoch;
+  ```
+
+  Zero rows means ownership has changed or release already completed; never overwrite a new holder. Retain the row so the next acquisition increments epoch.
+- A row returned → this node holds the lease with that epoch, subject to the local deadline check.
+- No row → acquisition/renewal was not permitted; read the lease for status and eligibility. An expired lease still waiting for takeover delay is also possible.
+
+MongoDB: atomic `findOneAndUpdate` with the same holder/validity, released, preference and expiry/delay predicates as Postgres, using `$$NOW`; update pipeline sets `released: false`, expiry and epoch (increment on every acquisition, including an expired lease acquired again by the same NodeId). Upsert only for initial creation; a duplicate-key error means "not won". Return the document after the update.
 
 ### II.5.3 Local validity
 
 - `tSend` = monotonic time before the statement is sent.
 - After success the lease is valid locally until `tSend + LeaseTtlMs - SafetyMarginMs`.
-- The holder stays `ACTIVE` only while the local validity has not passed. The standby can only win after the store-side expiry, which is later than the holder's local validity, so the holders never overlap (assuming clock drift over one TTL stays below the margin).
+- The holder stays `ACTIVE` only while local validity has not passed, except explicit total-isolation `KEEP`. Expiry fences immediately without standby grace. Check validity on each external operation and after every lease response, including process resume. The no-overlap claim concerns authorization to start operations and assumes clock drift stays below the margin; it does not fence operations already sent to external systems.
 - Renew every `RenewIntervalMs`; a failed renew is retried until the local validity runs out.
 
 ### II.5.4 Takeover, priority, release
 
-- The preferred node (lowest `Priority`, tie: lowest NodeId) tries to acquire at once; others try only after the lease has been expired for `TakeoverDelayMs`.
-- `Failback: false` (default): a returning preferred node does not take the lease from a valid holder. `true`: the holder releases at the next renew when it sees the preferred node's heartbeat row fresh and its link up.
-- Graceful shutdown: the holder sets `expiresat = now()` (release) so the partner takes over without waiting for the TTL. This hooks into the shutdown sequence of Part I section 7, before `stopPullers`.
+- Candidate preference and heartbeat freshness follow C8. Preferred candidates acquire at once; others wait `TakeoverDelayMs` after expiry, except confirmed voluntary release. First acquisition on an empty group is first-winner; preference is enforced subsequently only with `Failback: true`.
+- `Failback: false` (default): a returning preferred node does not take the lease from a valid holder. `true`: the holder begins quiescence at the next renew when it sees the preferred node's heartbeat row fresh and its link up, then releases conditionally (C8).
+- Graceful shutdown and failback follow C8: fence new outputs, complete in-flight external operations, then conditionally release with holder/epoch and `released = true`. Do this before `stopPullers`, while keeping replication available. Confirmed release bypasses takeover delay; the next acquisition increments epoch. Failed release never re-enables the quiesced node. A stale release must not modify a newer holder.
 
 ### II.5.5 Heartbeat row
 
-Every renew cycle each node upserts its `redundancynodes` row (role, epoch, `linkup`, version, `heartbeatat = now()`). This is what makes a split visible in the store (II.8).
+Every renew cycle each node upserts its `redundancynodes` row (role, epoch, `linkup`, priority, version, `heartbeatat = now()`). This is what makes a split visible in the store (II.8).
 
 ### II.5.6 Isolation (`OnIsolation`)
 
@@ -603,7 +786,7 @@ A node that reaches neither the witness nor the partner:
 
 Evaluated on every input change (role source, peer state, peer role, lease state).
 
-### II.6.1 Source `STATIC` (and `ELECTION` for N=2)
+### II.6.1 Source `STATIC`
 
 | My source says | Peer reachable? | Peer role | **My role** |
 |---|---|---|---|
@@ -619,7 +802,9 @@ Important cases:
 
 - **The `STATIC` active broker crashes.** The other broker is configured standby, but its peer is unreachable, so it becomes ACTIVE. Without this rule nobody would publish.
 - **Network partition between the brokers.** Both become ACTIVE. Inbound data is duplicated and a central DB may get double writes for the duration. That's an accepted trade-off, documented as split-brain behavior. Archive writes should be idempotent where the backend supports it (upsert on topic + time); optional, out of scope for the first phases.
-- **Both brokers see ACTIVE from their source** (misconfigured `STATIC`). Both stay ACTIVE (fail open), and a warning is logged and shown in the status.
+- **Both brokers see ACTIVE from their source** (misconfigured `STATIC`). Both stay ACTIVE (fail open), a WARN is logged and the status shows `split: SPLIT_DUAL_ACTIVE` (C4, C7).
+
+This table is the C4 table of the shared contract, with "unknown" and "passive / standby" folded into one input there; the edge uses the same table for `WINCCOA`.
 
 ### II.6.2 Source `WITNESS`
 
@@ -630,14 +815,14 @@ Important cases:
 | reachable | expired / none | any | try acquire (II.5.4); result decides |
 | unreachable | I hold it, local validity left | up | **ACTIVE** |
 | unreachable | – | up, partner `ACTIVE` | **STANDBY** |
-| unreachable | – | up, partner not `ACTIVE` | keep current role (both can't acquire; the link keeps them consistent) |
+| unreachable | no valid local lease | up, partner not `ACTIVE` | **STANDBY**; neither node may act without a valid lease |
 | unreachable | – | down | `OnIsolation` (II.5.6) |
 
 ## II.7 Flapping
 
 - STANDBY → ACTIVE takes effect **immediately** (for `WITNESS`: after a won acquire).
 - ACTIVE → STANDBY takes effect only after `StandbyGraceMs`, and only if the decision is still STANDBY at that point.
-- Exception (`WITNESS`): when the lease is lost to a higher epoch, or a split is resolved against this node (II.8.2), ACTIVE → STANDBY happens at once (fencing).
+- Exception (`WITNESS`): lease validity expires (except total-isolation `KEEP`), a higher epoch wins, a split is resolved against this node, or voluntary handover begins: fence at once without grace (C3/C8).
 
 During a switchover (lease takeover, runtime `STATIC` switch, a peer flapping) the states can briefly read *both active* or *both passive*. The grace period keeps cold-standby components from being torn down and rebuilt during such a brief flip.
 
@@ -650,16 +835,16 @@ During a switchover (lease takeover, runtime `STATIC` switch, a peer flapping) t
 | Link down, both reach the witness | store: both heartbeats fresh, `linkup = false` on both | one lease holder → one `ACTIVE`; replication paused, reported as `SPLIT_LINK` |
 | Link down, one isolated | holder or standby with witness | witness side runs; isolated node per `OnIsolation` |
 | Store shows two `ACTIVE` rows, no link | store | worst case: e.g. `OnIsolation: KEEP`, or a node with a stale lease that did not notice. Reported as `SPLIT_DUAL_ACTIVE` |
-| Link up, both claim `ACTIVE` | PeerLink `Pong` | resolved at once (II.8.2) |
+| Link up, both claim `ACTIVE` | PeerLink role block (`Ping` / `Pong`, C1) | resolved at once (II.8.2) |
 
-For non-witness sources only the last row applies (link up, both ACTIVE): with `STATIC` both stay ACTIVE per II.6.1 (fail open) and a WARN is logged.
+For non-witness sources only the last row applies (link up, both ACTIVE): with `STATIC` (and edge `WINCCOA`) both stay ACTIVE per II.6.1 (fail open), a WARN is logged and the status shows `SPLIT_DUAL_ACTIVE`.
 
 ### II.8.2 Resolution (`WITNESS`)
 
-When a node learns the partner is also `ACTIVE` (via `Pong` or via the partner's heartbeat row):
+When a node learns the partner is also `ACTIVE` (via the role block in `Ping` / `Pong` or via the partner's heartbeat row):
 
 1. The current lease holder wins (checked in the store if reachable).
-2. Otherwise the higher epoch wins.
+2. Otherwise the higher `leaseEpoch` wins.
 3. Otherwise the lower `Priority`, then the lower NodeId.
 
 The loser goes `STANDBY` at once (no grace). Duplicates written while split are accepted; archive upserts on topic + time reduce them where the backend supports it.
@@ -672,13 +857,9 @@ PeerLink resync fills the gaps in both directions (`CapResyncNewer`, `CapTombsto
 
 - **Data:** PeerLink supports N brokers as a **full mesh**. Delivery is one hop, so chains and rings don't propagate (Part I, spec §7).
 - **Mixed with edge brokers on `WINCCOA`:** main brokers in the mesh use `Source: NONE` (always ACTIVE, components `ALWAYS`) or their own `WITNESS` group; they do not take part in the WinCC OA pair.
+- **`Partner` in mixed meshes** (same rule as the edge): when the mesh has more PeerLink peers than the redundant nodes, `Partner` must be set on every `STATIC` / `WITNESS` node here (and on the edge's `WINCCOA` nodes). A `Source: NONE` node reports `ACTIVE` (C1), so with an empty `Partner` it counts as an `ACTIVE` peer (C2) and both nodes of the pair go `STANDBY`. Validation: one WARN at start when `Source` is `STATIC`, `Partner` is empty and more than one PeerLink peer is configured.
 - **With `WITNESS`:** works for N brokers unchanged: one lease holder among N, all with the same `Witness.Group`.
-- **`ELECTION`** (phase R6, only if D-R3 keeps it):
-  - Each broker has `Priority`. Ties are broken by NodeId.
-  - A broker is ACTIVE if it has the lowest priority among the brokers it can reach (itself included) **and** it reaches a strict majority of the configured brokers.
-  - Without a majority it goes STANDBY. This deliberately deviates from fail-open for N≥3, because a majority makes split brain impossible.
-  - For N=2, election has no quorum and degrades to II.6.1: fail open, possible dual-active. Two brokers should use `WITNESS` (or `STATIC`, or accept dual-active).
-  - Roles travel in the same `HelloOK`/`Pong` fields. A peer's role for election purposes is its *claimed* priority plus reachability; no extra rounds are needed.
+- **`ELECTION` is dropped from v1.** Use `WITNESS` for N brokers; no election phase or priority extension to the role wire block.
 
 ## II.10 RoleManager (Kotlin)
 
@@ -686,25 +867,27 @@ New `K/redundancy/RoleManager.kt`, created in `Monster.kt` after PeerLink (~line
 
 ```kotlin
 object RedundancyRole {
-    fun current(): Role                 // ACTIVE | STANDBY
-    fun isActive(): Boolean             // hot path, a volatile read
+    fun current(): Role                 // UNKNOWN | ACTIVE | STANDBY
+    fun isActive(): Boolean             // hot path, a volatile read; false for UNKNOWN
     const val ROLE_CHANGED = "mq.redundancy.role"   // event bus address, payload {role, seq, reason}
 }
 ```
 
+- **Own role `UNKNOWN`.** The own role is `UNKNOWN` only at startup, before the first decision. With `NONE` and `STATIC` the first decision is made at once when `RoleManager` starts; with `WITNESS` the role stays `UNKNOWN` until the first bounded lease attempt (II.5.2) completes. A failed attempt or timeout chooses STANDBY, including with KEEP when no ACTIVE role has ever been established. After that the own role is always `ACTIVE` or `STANDBY`. `isActive()` (and the component checks built on it, II.12) treat `UNKNOWN` as not active, so `HOT_STANDBY` and `COLD_STANDBY` components do not act until the first decision; `ALWAYS` components are not affected.
+
 - `isActive()` must be a plain volatile read, because it is called per message on the hot path.
 - Inputs: the configured source (static value, `WitnessLease`), and per peer the reachability and the `CapRole` fields from the `Puller`/`PeerServer` sessions.
 - One INFO log line per role change with the reason (e.g. `"peer unreachable"`, `"static role switched"`, `"lease lost to epoch 7"`); WARN on split entry and exit.
-- **Status** (always, no human commitment needed):
+- **Status** (always, no human commitment needed), exactly as C7:
   - `$SYS/broker/redundancy/role` (retained): `{role, source, epoch, holder, witnessReachable, peers: [{nodeId, reachable, role}], split, since, reason}`;
-  - metrics: `redundancy_role`, `redundancy_epoch`, `redundancy_lease_renew_failures_total`, `redundancy_split` (0 / 1), `redundancy_role_changes_total`;
-  - the PeerLink status JSON (`K/peerlink/PeerStatus.kt`) gets per-peer role, epoch and flags.
-- **GraphQL** (needs human commitment per AGENTS.md, D-R5): `brokerRedundancy { role source epoch holder witnessReachable split peers { nodeId reachable role } since reason }` and mutation `setRedundancyRole` (needed for runtime switching with `Source: STATIC`). The two source documents disagreed here (roles spec: GraphQL; witness plan: `$SYS` only). The edge has no such GraphQL field (YAML / `$SYS` only). Without GraphQL, `STATIC` runtime switching needs another path (e.g. a `$SYS` command topic or REST), or `STATIC` becomes config-only.
-- Dashboard: role badge on the PeerLink page / header when `Source != NONE`, read from `$SYS` or GraphQL depending on D-R5.
+  - metrics: `redundancy_role` (0 `UNKNOWN`, 1 `ACTIVE`, 2 `STANDBY`), `redundancy_epoch`, `redundancy_lease_renew_failures_total`, `redundancy_split` (0 / 1), `redundancy_role_changes_total`;
+  - the PeerLink status JSON (`K/peerlink/PeerStatus.kt`): every `consumers[]` and `sources[]` entry gets `role`, `roleSeq`, `leaseEpoch`, `witnessReachable`, `leaseHolder`; the existing `epoch` stays the log epoch.
+- **GraphQL** (C9, in both brokers; held behind the human commitment gate per AGENTS.md in both repositories and shipped together with the edge, D-R5, R7; until then `$SYS` + metrics only): query `brokerRedundancy: BrokerRedundancy!` and top-level mutation `setRedundancyRole(role: RedundancyRole!): BrokerRedundancy!` (runtime override of `Static.Role`, only with `Source: STATIC`, not persisted). In main the SDL goes into a new `schema-redundancy.graphqls` with `extend type Query` / `extend type Mutation`; the resulting schema is the same as the edge's.
+- Dashboard: role badge on the PeerLink page / header when `Source != NONE`, read from GraphQL.
 
 ## II.11 Component setting: `Redundancy`
 
-New field on `DeviceConfig` (all connector types) and on `ArchiveGroupConfig`:
+New field on `DeviceConfig` (all connector types), on `ArchiveGroupConfig` and on the script config (C6):
 
 ```
 Redundancy: ALWAYS | HOT_STANDBY | COLD_STANDBY      (default ALWAYS)
@@ -730,6 +913,10 @@ Discarding inbound data on the standby is safe. The active broker publishes the 
 
 Bidirectional connectors such as the MQTT bridge apply the mode to both directions together. There is no separate inbound/outbound mode, to keep the config simple.
 
+With `Source: NONE` every mode behaves like `ALWAYS` (C4).
+
+Interest routing (`CapInterest`, plan-peerlink-interest-routing.md): the filters of `HOT_STANDBY` and `COLD_STANDBY` components are announced to the peers whatever the role and `BridgeOutbound`, also while a `COLD_STANDBY` component is not running (C6).
+
 ### II.11.2 Recommended configurations
 
 | Setup | Archive groups | Inbound bridges | `Receive.Archive` |
@@ -742,7 +929,7 @@ In both cases the active broker archives the messages it got from its peer (clie
 ### II.11.3 Relation to `Receive.BridgeOutbound`
 
 - `HOT_STANDBY` / `COLD_STANDBY`: the role decides. Outbound on the ACTIVE broker sends everything, including replicas. On the STANDBY broker nothing is sent. `BridgeOutbound` is ignored for these components.
-- `ALWAYS`: unchanged; the `BridgeOutbound` guard applies. As part of this work, that guard moves into the central outbound gate (II.12.2), so it finally applies to **all** outbound connectors, not just the four that have it today.
+- `ALWAYS`: today's behaviour, unchanged. The `BridgeOutbound` guard stays exactly where it is today (MQTT, NATS, Kafka and Redis client connectors) and checks `msg.peer` as today; it is deprecated (one WARN when set with `Source != NONE`, and one WARN for every outbound connector left at `ALWAYS` while `Source != NONE`, C6). The other outbound connectors keep forwarding replicas with `ALWAYS`, as today. Extending the guard to all outbound connectors and to Zenoh-relayed replicas is out of scope (D-R7).
 
 ## II.12 Implementation
 
@@ -765,14 +952,34 @@ The internal subscription that feeds outbound connectors (`subscribeInternalClie
 
 ```kotlin
 fun shouldForwardOutbound(device: DeviceConfig, msg: BrokerMessage): Boolean = when (device.redundancy) {
-    ALWAYS -> msg.peer == null || peerLinkBridgeOutbound   // today's guard, now everywhere
-    HOT_STANDBY, COLD_STANDBY -> RedundancyRole.isActive()
+    ALWAYS -> true                                          // today's behaviour; the gate does not decide
+    HOT_STANDBY, COLD_STANDBY -> RedundancyRole.isActive()  // role decides; BridgeOutbound ignored
 }
 ```
 
-Replace the four ad-hoc guards (`MqttClientConnector.kt:582`, `NatsClientConnector.kt:327`, `KafkaClientConnector.kt:329`, `RedisClientConnector.kt:559`), and add the call to the remaining outbound connectors.
+Add the call to every outbound connector. Only `HOT_STANDBY` / `COLD_STANDBY` are decided by the role. With `ALWAYS` the gate returns `true`, and the existing per-connector `BridgeOutbound` guard still runs where it exists today (`MqttClientConnector.kt:582`, `NatsClientConnector.kt:327`, `KafkaClientConnector.kt:329`, `RedisClientConnector.kt:559`); in those four connectors it is skipped for `HOT_STANDBY` / `COLD_STANDBY` (C6). The guard is not moved into the gate and not added to other connectors (II.11.3, D-R7).
 
-Correction against the roles spec: it wrote `msg.peerSource == null`. In the implemented code the replica marker is `BrokerMessage.peer` (`K/data/BrokerMessage.kt:48`), which the four guards check today; `peerSource` (`:49`) marks a replica relayed over Zenoh (Part I, section 5a). Whether a Zenoh-relayed replica also counts as a replica for the `ALWAYS` guard is open (D-R7).
+Correction against the roles spec: it wrote `msg.peerSource == null`. In the implemented code the replica marker is `BrokerMessage.peer` (`K/data/BrokerMessage.kt:48`), which the four guards check today; `peerSource` (`:49`) marks a replica relayed over Zenoh (Part I, section 5a). The `ALWAYS` guard keeps checking `msg.peer` only; treating Zenoh-relayed replicas as replicas is out of scope (D-R7).
+
+### II.12.2a Write gate (hot standby)
+
+C6 requires that on a `STANDBY` node a `HOT_STANDBY` device rejects writes. Main has no such gate today, so one is added. A write here is a value or command that the broker sends **to a device**: the device connector's write/command path, where an MQTT publish on the connector's write topics is turned into a write to the field system (e.g. writing a value to an OPC UA node or a PLC tag). One shared check is used by every connector that has such a path:
+
+```kotlin
+fun allowDeviceWrite(device: DeviceConfig, topic: String): Boolean {
+    if (device.redundancy == HOT_STANDBY && !RedundancyRole.isActive()) {
+        logRateLimited(device.name, "write to $topic rejected: redundancy role ${RedundancyRole.current()}")
+        metrics.writesRejectedStandby++
+        return false
+    }
+    return true
+}
+```
+
+- Called at the start of each connector's write handler, before anything is sent to the device. A rejected write is dropped; nothing is queued for later.
+- One log line per rejected write, rate-limited per device (e.g. at most one line per device per 10 s with the count of writes rejected since the last line).
+- `ALWAYS`: no check, writes go through as today. `COLD_STANDBY`: the connector is not running on the `STANDBY` node, so there is no write path to gate. `UNKNOWN` counts as not active (II.10).
+- The write handlers are found the same way as the publish calls in II.12.1 (grep for the write/command subscriptions under `devices/`); this plan does not name them per connector.
 
 ### II.12.3 Cold standby lifecycle
 
@@ -784,9 +991,9 @@ Correction against the roles spec: it wrote `msg.peerSource == null`. In the imp
 ### II.12.4 Config, GraphQL, UI
 
 - `DeviceConfig.redundancy`, persisted in all config stores (SQLite, Postgres, Mongo, CrateDB). The schema migration adds a column/field with default `ALWAYS`.
-- `ArchiveGroupConfig.redundancy`, same treatment.
-- GraphQL inputs/outputs for every device type and archive group. This is a component config field (like `nodeId`), separate from the broker-level `brokerRedundancy` query in D-R5, but it is still a GraphQL change and needs commitment.
-- `broker/yaml-json-schema.json`: `Redundancy` block with `additionalProperties: false`, as for `PeerLink`.
+- `ArchiveGroupConfig.redundancy` and the script config (`ScriptConfig` / `ScriptConfigInput`), same treatment.
+- GraphQL: `redundancy: ComponentRedundancy` on every device type, archive group and script input (optional, default `ALWAYS`) and output (non-null), next to `nodeId` (C9). It needs commitment like the broker-level query (D-R5).
+- `broker/yaml-json-schema.json`: `Redundancy` block with the full key set of C5 (including `Partner` and `Static.Role`) and `additionalProperties: false`, as for `PeerLink`.
 - Dashboard:
   - a role badge in the header when `Source != NONE`;
   - a Redundancy dropdown in every device/archive-group form, where server-type components offer only ALWAYS/COLD;
@@ -800,20 +1007,17 @@ Correction against the roles spec: it wrote `msg.peerSource == null`. In the imp
 | `K/redundancy/witness/WitnessLease.kt` | interface: `acquireOrRenew()`, `release()`, `read()`, `heartbeat()`, `nodes()` |
 | `K/redundancy/witness/PostgresWitnessLease.kt` | SQL of II.5.2 on the Vert.x pg client |
 | `K/redundancy/witness/MongoWitnessLease.kt` | II.5.2 MongoDB variant |
-| `K/peerlink/wire/Frames.kt` | `CapRole`; `role`, `roleSeq`, `epoch`, `flags` in `HelloOK` / `Pong` |
-| `K/peerlink/PeerStatus.kt` | per-peer role, epoch, flags |
-| `K/peerlink/Puller.kt`, `PeerServer.kt` | feed peer reachability and role into `RoleManager` |
+| `K/peerlink/wire/Frames.kt` | `CapRole`; role block (`role`, `roleSeq`, `leaseEpoch`, `flags`) in `Hello`, `HelloOK`, `Ping`, `Pong` (C1) |
+| `K/peerlink/PeerStatus.kt` | per-peer `role`, `roleSeq`, `leaseEpoch`, `witnessReachable`, `leaseHolder` (C7) |
+| `K/peerlink/Puller.kt`, `PeerServer.kt` | `Ping` also with a `Fetch` outstanding and on role change; unsolicited `Pong` token 0 on role change; feed reachability (C2) and role into `RoleManager` |
 | `K/Monster.kt` (~1139) | create the witness and `RoleManager` after PeerLink; validation II.12.6; release in the shutdown hook |
 
 ### II.12.6 Validation
 
-- `Redundancy.Source != NONE` without PeerLink: WARN; the role then only follows the source (or lease), without the peer fallback and without split detection over the link.
+The shared validation list is C5 (and the `Partner` WARN of II.9). Main-only checks:
+
 - `Source != NONE` together with `-cluster`: startup error (PeerLink and cluster are already exclusive).
 - `Source: WINCCOA`: startup error (edge-only source; use `WITNESS` or `STATIC`).
-- `Source: WITNESS`:
-  - `Witness.Connection: default` while the configured store host is this node: WARN that the witness is not independent;
-  - `SafetyMarginMs >= LeaseTtlMs` or `RenewIntervalMs > LeaseTtlMs / 2`: startup error;
-  - `Witness.Group` missing: startup error.
 
 ## II.13 Cluster `nodeId` cleanup (separate track, independent)
 
@@ -831,20 +1035,20 @@ Related: Part I risk R5 (`DeviceConfig.isAssignedToNode` must accept the PeerLin
 
 # Part III: Decisions, phases, tests, docs
 
-## III.1 Open decisions (Part II)
+## III.1 Decisions and remaining gates (Part II)
 
 Part I decisions D1-D9 are closed (Part I, section 2).
 
 | # | Question | Recommendation |
 |---|---|---|
-| D-R1 | Witness: own `Witness.Connection` required, or allow `default`? | Allow, WARN when the store host is a node |
-| D-R2 | `OnIsolation` default `STANDBY` (no dual-active) or `KEEP` (no loss)? | `STANDBY` (as drafted); note it contradicts the general fail-open principle, so it must be explicit in the docs |
-| D-R3 | Does `WITNESS` replace `ELECTION` for N≥3 (one lease holder among N), so `ELECTION` can be dropped? | Yes, simpler; drop phase R6 |
-| D-R4 | `Witness.Failback` default `false`? | Yes |
-| D-R5 | GraphQL: `brokerRedundancy` query and `setRedundancyRole` mutation, or `$SYS` + metrics only? Affects `STATIC` runtime switching. | Needs human commitment (AGENTS.md). Phase R1 ships `$SYS` + metrics only; GraphQL added if committed |
-| D-R6 | `CapRole` wire change (`role`, `roleSeq`, `epoch`, `flags`) in `mmq-peer/1` | Needs owner sign-off for both code bases; ship all four fields in one change |
-| D-R7 | Does a Zenoh-relayed replica (`peerSource != null`, `peer == null`) count as a replica for the `ALWAYS` outbound guard? | Yes (it is PeerLink data); guard becomes `msg.peer == null && msg.peerSource == null` |
-| D-R8 | Storage parity: the edge plan adds `WITNESS` too (same lease tables), next to its native `WINCCOA` source. | Keep the table layout identical in both brokers so an edge+main pair can share one witness group |
+| D-R1 | Witness: own `Witness.Connection` required, or allow `default`? | **Decided (C5):** `default` allowed, WARN when the store host is this node |
+| D-R2 | `OnIsolation` default `STANDBY` (no dual-active) or `KEEP` (no loss)? | **Decided (C5):** `STANDBY`; it contradicts the general fail-open principle, so it must be explicit in the docs |
+| D-R3 | Does `WITNESS` replace `ELECTION` for N≥3? | **Closed (owner authorized review recommendations, 2026-10-09):** yes; drop phase R6 and the planned enum value. |
+| D-R4 | `Witness.Failback` default `false`? | **Decided (C5):** `false` |
+| D-R5 | GraphQL: `brokerRedundancy` query, `setRedundancyRole` mutation and per-component `redundancy` field | Decided: in both brokers with the same SDL (C9). Held behind the human commitment gate per AGENTS.md in both repositories: GraphQL ships only after the commitment in both, together with the edge. Until then `$SYS` + metrics only |
+| D-R6 | `CapRole` wire change: role block (`role`, `roleSeq`, `leaseEpoch`, `flags`) in `Hello`, `HelloOK`, `Ping`, `Pong` in `mmq-peer/1` | Accepted for both code bases (2026-10-09, C1); ship with shared golden vectors |
+| D-R7 | Extend the `ALWAYS` outbound guard to all outbound connectors, and count a Zenoh-relayed replica (`peerSource != null`, `peer == null`) as a replica for it? | **Out of scope:** kept as today (guard only on the MQTT, NATS, Kafka and Redis connectors, checking `msg.peer`); a separate change may extend the guard to all connectors and to Zenoh-relayed replicas (`peerSource`) |
+| D-R8 | Storage parity: the edge plan adds `WITNESS` too (same lease tables), next to its native `WINCCOA` source. | Closed: one layout for Postgres and MongoDB (C8), so an edge+main pair can share one witness group |
 | D-R9 | Remove the Vert.x cluster mode later? | Out of scope; nothing here depends on it |
 
 ## III.2 Phases
@@ -852,13 +1056,13 @@ Part I decisions D1-D9 are closed (Part I, section 2).
 | Phase | Scope | Depends on |
 |---|---|---|
 | **P** PeerLink | Part I, milestones J0-J6 | **Done** (`2795cde0`) |
-| **R1** Roles core | `RoleManager` with `NONE`/`STATIC`, `CapRole` wire extension with all four fields (Kotlin **and** Go edge, new golden vectors), table II.6.1, grace period, `$SYS` status and metrics, dashboard badge | P; D-R6 |
-| **R2** Component setting | `Redundancy` on devices and archive groups: inbound gate, outbound gate (incl. migrating `BridgeOutbound` to all connectors), cold-standby lifecycle, config store migrations, schema, UI | R1 |
+| **R1** Roles core | `RoleManager` with `NONE`/`STATIC`, `CapRole` role block in `Hello`/`HelloOK`/`Ping`/`Pong` (Kotlin **and** Go edge, new golden vectors), reachability C2, table II.6.1, grace period, `$SYS` status, metrics and PeerLink status fields (C7); no dashboard work | P; D-R6 |
+| **R2** Component setting | `Redundancy` on devices, archive groups and scripts: inbound gate, outbound gate (`BridgeOutbound` guard unchanged, II.11.3), write gate (II.12.2a), cold-standby lifecycle, config store migrations and YAML schema; no GraphQL or UI | R1 |
 | **R3** Witness lease | `WitnessLease` for Postgres, lease + heartbeat rows, unit tests against a test DB | – (parallel to R1) |
 | **R4** `WITNESS` source | Table II.6.2, `OnIsolation`, release on shutdown, split detection and resolution (II.8) via `epoch`/`flags`, witness status fields | R1, R3 |
 | **R5** MongoDB witness | II.5.2 MongoDB variant | R3 |
-| **R6** `ELECTION` | II.9 | R1; only if D-R3 keeps it |
-| **R7** GraphQL | `brokerRedundancy`, `setRedundancyRole`, per-component field | D-R5 committed |
+| **R6** | Removed: `ELECTION` dropped | – |
+| **R7** GraphQL | `brokerRedundancy`, `setRedundancyRole`, per-component field, SDL identical to the edge (C9), dashboard badge, component forms and runtime states; ships together with edge PG | D-R5: human commitment in both repositories |
 | **C** nodeId cleanup | II.13 | independent |
 
 ## III.3 Tests
@@ -868,8 +1072,11 @@ PeerLink tests: Part I, section 9 (implemented).
 Redundancy, unit:
 
 - Decision tables II.6.1 and II.6.2 as table-driven tests, including grace-period timing and the fencing exception.
-- `CapRole` encode/decode against Go golden vectors; a peer without `CapRole` reads as `UNKNOWN`.
-- Lease SQL (II.5.2) against a test Postgres: acquire, renew, expiry takeover, epoch increment, release.
+- `CapRole` encode/decode of `Hello`, `HelloOK`, `Ping`, `Pong` with and without the role block against shared Go golden vectors; a peer without `CapRole` reads as `UNKNOWN`; reachability (C2) from frames in either direction; `roleSeq` reset on a new `Hello`.
+- Validation list of C5, YAML schema accepts exactly the C5 key set; `Source: WINCCOA` and `-cluster` are startup errors (II.12.6); `Partner` WARN (II.9): `STATIC` with empty `Partner` and two or more PeerLink peers logs one WARN, with one peer or with `Partner` set none.
+- Own role `UNKNOWN` (II.10): `STATIC` decides at once; `WITNESS` stays `UNKNOWN` until the first lease attempt completes; `isActive()` is false while `UNKNOWN`.
+- PeerLink status JSON (C7): every `consumers[]` and `sources[]` entry has `role`, `roleSeq`, `leaseEpoch`, `witnessReachable`, `leaseHolder` with the peer's values; for a peer without `CapRole` they are `"UNKNOWN"`, 0, 0, `false`, `false`; the existing `epoch` stays the log epoch.
+- Lease SQL and MongoDB: acquire, renew, expiry takeover, same-NodeId reacquisition increments epoch, conditional release cannot alter a newer holder, voluntary release bypasses delay, late lease response cannot activate, and priority/freshness tie-breaks. Test delayed replies, expiry during output activity, cold-stop races and failback while writes are in flight.
 
 Integration, two brokers + PeerLink + a mocked role source (pytest process fixture from Part I):
 
@@ -879,24 +1086,26 @@ Integration, two brokers + PeerLink + a mocked role source (pytest process fixtu
 - SQLite archive group with ALWAYS: both node DBs contain all messages.
 - Kill the active broker: the standby becomes ACTIVE within `PeerTimeoutMs` + connect time.
 - Partition (non-witness source): both brokers go ACTIVE, and after healing exactly one returns to STANDBY.
-- Outbound connectors without `BridgeOutbound` today (e.g. a JDBC logger): no duplicate forwarding with `ALWAYS`.
+- `ALWAYS` keeps today's behaviour: an MQTT client connector with `BridgeOutbound: false` does not forward replicas; an outbound connector without the guard today (e.g. a JDBC logger) forwards replicas as before.
+- HOT_STANDBY device write path: on the STANDBY node an MQTT write to the device is rejected, nothing reaches the device, and the log shows one rate-limited line (not one per write under load); on the ACTIVE node the write reaches the device; with `ALWAYS` writes go through on both nodes.
+- CapRole always: a `Source: NONE` node offers `CapRole` in `SERVER_HELLO` / `HELLO` and its peers see it as `ACTIVE`, not `UNKNOWN`.
 
 Witness scenarios:
 
 | # | Scenario | Expected |
 |---|---|---|
-| T1 | Start A (prio 10) and B (prio 20) | A `ACTIVE` epoch 1, B `STANDBY` |
+| T1 | Start A (prio 10), then B (prio 20); also test simultaneous cold start | Sequential: A `ACTIVE` epoch 1, B `STANDBY`; simultaneous: one holder, first acquisition need not be preferred |
 | T2 | Kill A | B `ACTIVE` after TTL + `TakeoverDelayMs`, epoch 2 |
 | T3 | Stop A gracefully | B `ACTIVE` within one renew interval |
 | T4 | A returns, `Failback: false` | A `STANDBY` |
 | T5 | Block PeerLink only | roles unchanged, `split = SPLIT_LINK`, resync after unblock |
-| T6 | Block witness only | roles unchanged (link up) |
+| T6 | Block witness only, link up | Holder stays ACTIVE until local validity expires, then fences immediately; both STANDBY until witness recovers |
 | T7 | Isolate A completely, `OnIsolation: STANDBY` | A `STANDBY` after local validity, B `ACTIVE` after store expiry, never both |
 | T8 | Same with `KEEP` | both `ACTIVE`, `SPLIT_DUAL_ACTIVE` reported; after reconnect the lower epoch steps down |
-| T9 | Pause A (SIGSTOP) longer than TTL, resume | A sees higher epoch at next renew / Pong and steps down at once |
+| T9 | Pause A (SIGSTOP) longer than TTL, let B acquire, resume A | A cannot start an external operation before checking expiry; no grace, even before the next renew/Pong |
 | T10 | Clock skew on one node of ±5 s | no overlap (store clock only) |
 
-Mixed pair: an edge broker and a main broker in one `WITNESS` group (same lease tables), failover in both directions. WinCC OA redundancy tests live in the edge plan.
+Mixed pair: an edge broker and a main broker in one `WITNESS` group (same lease tables, Postgres and MongoDB), failover in both directions; the same pair with `STATIC`, role change seen by the other side within one `Ping` interval. GraphQL: `brokerRedundancy` matches `$SYS/broker/redundancy/role`; `setRedundancyRole` errors without `STATIC`; the introspected redundancy SDL equals the edge's. WinCC OA redundancy tests live in the edge plan.
 
 ## III.4 Documentation
 
@@ -906,7 +1115,7 @@ Mixed pair: an edge broker and a main broker in one `WITNESS` group (same lease 
 - `doc/archiving.md`: central DB vs per-node DB recommendations (II.11.2).
 - `doc/configuration.md`, `broker/config-default.yaml`: `Redundancy` block.
 - `doc/clustering.md`: clarify `nodeId` semantics after II.13.
-- Edge spec: `CapRole` fields in section 3.6.
+- Edge spec: done as "planned" text (3.6.1 `CapRole`, 3.6.2 `CapInterest`, 3.5/3.12 `PING` rule, 12.1 status fields); drop the "planned" marks when built.
 
 ## III.5 Risks (Part II)
 
@@ -917,7 +1126,7 @@ Part I risks R1-R13: Part I, section 12.
 | RR1 | `isActive()` on the per-message hot path adds overhead | Plain volatile read; no locking, no allocation |
 | RR2 | Connectors bypass `publishFromDevice` / `shouldForwardOutbound` and keep duplicating | Grep-based migration; integration test per connector kind; code review rule |
 | RR3 | Role flapping tears down cold-standby components | `StandbyGraceMs`; fencing only on epoch loss |
-| RR4 | Witness on a broker host gives that node the tie break | WARN (II.12.6); docs recommend an independent store |
+| RR4 | Witness on a broker host gives that node the tie break | WARN (C5); docs recommend an independent store |
 | RR5 | Clock drift over one TTL larger than `SafetyMarginMs` → overlapping holders | Store clock for expiry; monotonic durations locally; T10 |
 | RR6 | `OnIsolation: STANDBY` with both nodes isolated → nothing active, data loss | Explicit default (D-R2), documented; `KEEP` for loss-sensitive sites |
-| RR7 | Wire drift between Kotlin and Go for `CapRole` | Golden vectors, as Part I R11 |
+| RR7 | Wire drift between Kotlin and Go for `CapRole` | Golden vectors, as Part I R11; shared contract II.0 / edge 3.0 changed only together |
