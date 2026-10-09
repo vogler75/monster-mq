@@ -76,7 +76,7 @@ Features:
 #     Address: "0.0.0.0"
 #     Port: 1890
 #     AllowedNetworks: []
-#     MaxPreAuthPerIp: 4
+#     MaxPreAuthPerIp: 2
 #     AllowPlaintext: false
 #   Tls:
 #     Enabled: true
