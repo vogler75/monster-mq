@@ -1,5 +1,7 @@
 # Plan: Mutual TLS for the MQTT-Client bridge (issue #111)
 
+**Status (2026-10-09): done for the main broker (`efa61eb5`) and dashboard (dashboard `f4c8e23`). The edge broker part (section 3) is tracked in vogler75/monster-mq-edge#20.**
+
 Scope: main broker (Kotlin), edge broker (Go), dashboard. All three change together so the
 GraphQL shape stays identical (AGENTS.md parity rule). This plan is the GraphQL sign-off request.
 

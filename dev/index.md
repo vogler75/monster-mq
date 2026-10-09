@@ -22,7 +22,6 @@ File names use lowercase kebab-case (`like-this.md`).
 - [plans/plan-amazon-kinesis-client-issue-110.md](plans/plan-amazon-kinesis-client-issue-110.md) — Amazon Kinesis client integration
 - [plans/plan-edge-topic-schema-governance.md](plans/plan-edge-topic-schema-governance.md) — Implementing topic schema governance in the Go edge broker
 - [plans/plan-knowledge-graph.md](plans/plan-knowledge-graph.md) — Knowledge Graph & semantic topic subscriptions with Apache Jena (#167)
-- [plans/plan-mqtt-client-mtls-issue-111.md](plans/plan-mqtt-client-mtls-issue-111.md) — Mutual TLS for the MQTT-Client bridge (#111); main broker and dashboard done, edge broker open
 - [plans/plan-peerlink-interest-routing.md](plans/plan-peerlink-interest-routing.md) — PeerLink interest routing: consumers announce their subscription filters, the source forwards only matching publishes (sparse batches, per-record consumer masks); wire-compatible with the edge broker
 - [plans/plan-peerlink-redundancy.md](plans/plan-peerlink-redundancy.md) — PeerLink replication (implemented) plus redundancy roles for the main broker without native WinCC OA connectivity: ACTIVE/STANDBY decided by a witness lease in Postgres/MongoDB (or static config), split-mode handling when the link is down, hot/cold standby for bridges and archive groups; the edge counterpart with native WinCC OA is in the edge repo
 
@@ -41,6 +40,7 @@ File names use lowercase kebab-case (`like-this.md`).
 - [done/plan-mqtt5-implementation-plan-issue-86.md](done/plan-mqtt5-implementation-plan-issue-86.md) — MQTT v5 implementation plan
 - [done/plan-multi-db-archive-connections.md](done/plan-multi-db-archive-connections.md) — Multi-database archive connections
 - [done/plan-hmi-mqtt-sync.md](done/plan-hmi-mqtt-sync.md) — Native MQTT HMI file synchronization (#195)
+- [done/plan-mqtt-client-mtls-issue-111.md](done/plan-mqtt-client-mtls-issue-111.md) — Mutual TLS for the MQTT-Client bridge (#111); edge part tracked in monster-mq-edge#20
 - [done/plan-opcua-client-write-support-issue-95.md](done/plan-opcua-client-write-support-issue-95.md) — OPC UA client write operations
 - [done/plan-script-engine-python.md](done/plan-script-engine-python.md) — Python script engine (GraalPy)
 - [done/plan-redis-protocol-server.md](done/plan-redis-protocol-server.md) — Redis-compatible protocol server for topic access through archive group last-value stores
