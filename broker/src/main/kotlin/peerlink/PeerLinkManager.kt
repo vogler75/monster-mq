@@ -314,6 +314,10 @@ class PeerLinkManager(
         return Status(
             enabled = config.enabled,
             nodeId = nodeId,
+            brokerType = at.rocworks.peerlink.wire.BrokerTypeFull,
+            brokerVersion = at.rocworks.Version.getVersion(),
+            protocolVersion = at.rocworks.peerlink.wire.protocolVersion(
+                at.rocworks.peerlink.wire.VersionMajor, at.rocworks.peerlink.wire.VersionMinor),
             epoch = log.epoch,
             listen = listenAddr,
             tls = config.tls.enabled,

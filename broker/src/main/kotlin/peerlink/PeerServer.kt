@@ -89,6 +89,8 @@ class ConsumerSlot(
     val oaRetained = AtomicBoolean(false)
     val topicRootMismatch = AtomicBoolean(false)
     val retainedClassMismatch = AtomicBoolean(false)
+    // What the consumer announced in its last accepted handshake.
+    val remoteBroker = java.util.concurrent.atomic.AtomicReference<PeerBroker?>(null)
 
     data class Takeover(val atMs: Long, val from: Long, val to: Long)
 
@@ -204,7 +206,10 @@ class ConsumerSlot(
             shutdownUnserved = shutdownUnserved.get(),
             oaRetained = oaRetained.get(),
             topicRootMismatch = topicRootMismatch.get(),
-            retainedClassMismatch = retainedClassMismatch.get()
+            retainedClassMismatch = retainedClassMismatch.get(),
+            peerBrokerType = remoteBroker.get()?.type.orEmpty(),
+            peerBrokerVersion = remoteBroker.get()?.version.orEmpty(),
+            peerProtocolVersion = remoteBroker.get()?.protocol.orEmpty()
         )
     }
 }
@@ -611,7 +616,7 @@ class PeerServer(
         val input = existingInput ?: BufferedInputStream(socket.getInputStream(), 64 shl 10)
         val out = BufferedOutputStream(socket.getOutputStream(), 64 shl 10)
 
-        val (major, _) = readPreamble(input)
+        val (major, minor) = readPreamble(input)
         if (major != VersionMajor) {
             writeFrame(out, GoAway(GoAwayCode.Version, "unsupported version"))
             out.flush()
@@ -748,6 +753,7 @@ class PeerServer(
             return
         }
 
+        slot.remoteBroker.set(PeerBroker(hello.brokerType, hello.brokerVersion, protocolVersion(major, minor)))
         val ok = HelloOK(
             capabilities = sess.caps,
             epoch = manager.log.epoch,
@@ -762,7 +768,9 @@ class PeerServer(
             retainedClass = RetainedClass.DB,
             sourceNodeID = manager.nodeId,
             topicRoot = "",
-            oaSystem = ""
+            oaSystem = "",
+            brokerType = BrokerTypeFull,
+            brokerVersion = at.rocworks.Version.getVersion()
         )
         if (resume.sourceReset) ok.flags = ok.flags or HelloOKSourceReset
         if (resume.consumerStateUsed) ok.flags = ok.flags or HelloOKConsumerStateUsed

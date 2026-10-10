@@ -1,10 +1,15 @@
 package at.rocworks.graphql
 
 import at.rocworks.Monster
+import at.rocworks.Version
 import at.rocworks.peerlink.PeerLinkManager
 import at.rocworks.peerlink.Status
 import at.rocworks.peerlink.config.PeerConfig
 import at.rocworks.peerlink.config.PeerLinkInterestOff
+import at.rocworks.peerlink.wire.BrokerTypeFull
+import at.rocworks.peerlink.wire.VersionMajor
+import at.rocworks.peerlink.wire.VersionMinor
+import at.rocworks.peerlink.wire.protocolVersion
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import graphql.schema.DataFetcher
@@ -15,6 +20,9 @@ data class PeerLinkInfo(
     val nodeId: String,
     val listen: String?,
     val tls: Boolean,
+    val brokerType: String,
+    val brokerVersion: String,
+    val protocolVersion: String,
     val peers: List<PeerLinkPeer>,
     val status: Map<String, Any?>?
 )
@@ -29,6 +37,9 @@ data class PeerLinkPeer(
     val serveState: String?,
     val remote: String?,
     val lastError: String?,
+    val brokerType: String?,
+    val brokerVersion: String?,
+    val protocolVersion: String?,
     val source: Map<String, Any?>?,
     val consumer: Map<String, Any?>?
 )
@@ -53,7 +64,9 @@ class PeerLinkQueries(private val vertx: Vertx) {
         private val mapType = object : TypeReference<Map<String, Any?>>() {}
 
         fun disabled(nodeId: String) = PeerLinkInfo(
-            enabled = false, nodeId = nodeId, listen = null, tls = false, peers = emptyList(), status = null
+            enabled = false, nodeId = nodeId, listen = null, tls = false,
+            brokerType = BrokerTypeFull, brokerVersion = Version.getVersion(),
+            protocolVersion = protocolVersion(VersionMajor, VersionMinor), peers = emptyList(), status = null
         )
 
         // Through JSON so that the document matches GET /peerlink/v1/status (unsigned epochs).
@@ -69,10 +82,16 @@ class PeerLinkQueries(private val vertx: Vertx) {
                 nodeId = doc["nodeId"] as? String ?: "",
                 listen = if (listening) (doc["listen"] as? String)?.ifEmpty { null } else null,
                 tls = doc["tls"] as? Boolean ?: false,
+                brokerType = doc["brokerType"] as? String ?: BrokerTypeFull,
+                brokerVersion = doc["brokerVersion"] as? String ?: Version.getVersion(),
+                protocolVersion = doc["protocolVersion"] as? String ?: protocolVersion(VersionMajor, VersionMinor),
                 peers = peers.map { peer ->
                     val id = peer.nodeId.trim().lowercase()
                     val source = if (peer.pulls()) sources[id] else null
                     val consumer = if (peer.getServe()) consumers[id] else null
+                    // What the peer announced; the pull link's handshake first, else the serve link's.
+                    val announced = listOfNotNull(source, consumer)
+                        .firstOrNull { !(it["peerProtocolVersion"] as? String).isNullOrEmpty() }
                     PeerLinkPeer(
                         nodeId = id,
                         address = peer.address.ifEmpty { null },
@@ -83,6 +102,9 @@ class PeerLinkQueries(private val vertx: Vertx) {
                         serveState = if (peer.getServe()) (consumer?.get("state") as? String ?: "NEVER_CONNECTED") else null,
                         remote = (consumer?.get("remote") as? String)?.ifEmpty { null },
                         lastError = (source?.get("lastError") as? String)?.ifEmpty { null },
+                        brokerType = (announced?.get("peerBrokerType") as? String)?.ifEmpty { null },
+                        brokerVersion = (announced?.get("peerBrokerVersion") as? String)?.ifEmpty { null },
+                        protocolVersion = announced?.get("peerProtocolVersion") as? String,
                         source = source,
                         consumer = consumer
                     )

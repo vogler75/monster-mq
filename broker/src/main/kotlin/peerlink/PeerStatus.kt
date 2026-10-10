@@ -52,6 +52,10 @@ class UnsignedLongSerializer : JsonSerializer<Long>() {
 data class Status(
     val enabled: Boolean,
     val nodeId: String,
+    // This node as announced in the handshake.
+    val brokerType: String,
+    val brokerVersion: String,
+    val protocolVersion: String,
     @get:JsonSerialize(using = UnsignedLongSerializer::class) val epoch: Long,
     val listen: String,
     val tls: Boolean,
@@ -157,8 +161,16 @@ data class ConsumerStatus(
     val oaRetained: Boolean,
     val topicRootMismatch: Boolean,
     val retainedClassMismatch: Boolean,
-    @JsonInclude(JsonInclude.Include.NON_NULL) val interest: InterestStatus? = null
+    @JsonInclude(JsonInclude.Include.NON_NULL) val interest: InterestStatus? = null,
+    // The consumer's broker as announced in its last accepted handshake; empty before the first one or
+    // from a peer that predates the fields.
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerBrokerType: String = "",
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerBrokerVersion: String = "",
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerProtocolVersion: String = ""
 )
+
+/** What a peer announced about itself in the handshake. */
+data class PeerBroker(val type: String, val version: String, val protocol: String)
 
 data class SourceStatus(
     val nodeId: String,
@@ -200,7 +212,12 @@ data class SourceStatus(
     val retainedClassMismatch: Boolean,
     val oaRetained: Boolean,
     val applyDelayMs: ApplyDelay,
-    @get:JsonInclude(JsonInclude.Include.NON_NULL) val interest: SourceInterest? = null
+    @get:JsonInclude(JsonInclude.Include.NON_NULL) val interest: SourceInterest? = null,
+    // The source's broker as announced in the last handshake; empty before the first one or from a peer
+    // that predates the fields.
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerBrokerType: String = "",
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerBrokerVersion: String = "",
+    @get:JsonInclude(JsonInclude.Include.NON_EMPTY) val peerProtocolVersion: String = ""
 )
 
 data class ApplyDelay(

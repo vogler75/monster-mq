@@ -12,6 +12,12 @@ type PeerLinkInfo {
     listen: String
     # The peer listener uses TLS
     tls: Boolean!
+    # Broker type of this node: FULL (main broker, Java) or EDGE (edge broker, Go)
+    brokerType: String!
+    # Build version of this broker
+    brokerVersion: String!
+    # PeerLink protocol version this node speaks, as major.minor (e.g. 1.0)
+    protocolVersion: String!
     # Configured peers in configuration order, without this node's own entry
     peers: [PeerLinkPeer!]!
     # The full status document of GET /peerlink/v1/status; null while PeerLink is disabled
@@ -40,6 +46,13 @@ type PeerLinkPeer {
     remote: String
     # Last error of the pull link; null when there is none
     lastError: String
+    # Broker type the peer announced in its last handshake: FULL or EDGE; null before the
+    # first handshake or when the peer does not announce it
+    brokerType: String
+    # Build version the peer announced in its last handshake; null like brokerType
+    brokerVersion: String
+    # PeerLink protocol version the peer speaks, as major.minor; null before the first handshake
+    protocolVersion: String
     # Counters of the pull link, the matching entry of status.sources; null without pull
     source: JSON
     # Counters of the serve link, the matching entry of status.consumers; null without serve

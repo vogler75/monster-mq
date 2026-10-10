@@ -41,7 +41,9 @@ class WireTest {
                 consumerNodeID = "oa-b",
                 expectedSourceNodeID = "oa-a",
                 topicRoot = "winccoa",
-                oaSystem = "System1"
+                oaSystem = "System1",
+                brokerType = BrokerTypeEdge,
+                brokerVersion = "1.4.2+abc"
             ),
             Hello(consumerNodeID = "b", expectedSourceNodeID = "a"),
             HelloOK(
@@ -60,7 +62,9 @@ class WireTest {
                 macS = nonce(4),
                 sourceNodeID = "oa-a",
                 topicRoot = "",
-                oaSystem = ""
+                oaSystem = "",
+                brokerType = BrokerTypeFull,
+                brokerVersion = "1.8.33"
             ),
             GoAway(code = GoAwayCode.Shutdown, reason = "source stopping"),
             GoAway(code = GoAwayCode.AuthFailed),
@@ -148,6 +152,32 @@ class WireTest {
                 }
             }
         }
+    }
+
+    // A HELLO or HELLO_OK from a peer that predates brokerType/brokerVersion decodes with both empty;
+    // a body cut inside the pair is still short.
+    @Test
+    fun testHelloWithoutBrokerInfo() {
+        val frames = listOf<Frame>(
+            Hello(consumerNodeID = "b", expectedSourceNodeID = "a", oaSystem = "S", brokerType = BrokerTypeEdge, brokerVersion = "1.0"),
+            HelloOK(sourceNodeID = "a", oaSystem = "S", brokerType = BrokerTypeFull, brokerVersion = "2.0")
+        )
+        for (f in frames) {
+            val enc = f.encode()
+            val legacyLen = enc.size - FrameHeaderLen - 2 - 4 - 3
+            val decoded = decodeFrame(f.type(), enc.copyOfRange(FrameHeaderLen, FrameHeaderLen + legacyLen))
+            when (decoded) {
+                is Hello -> assertEquals(listOf("S", "", ""), listOf(decoded.oaSystem, decoded.brokerType, decoded.brokerVersion))
+                is HelloOK -> assertEquals(listOf("S", "", ""), listOf(decoded.oaSystem, decoded.brokerType, decoded.brokerVersion))
+                else -> fail("unexpected ${decoded.type()}")
+            }
+            try {
+                decodeFrame(f.type(), enc.copyOfRange(FrameHeaderLen, FrameHeaderLen + legacyLen + 3))
+                fail("body cut inside brokerVersion must be short")
+            } catch (_: ShortFrameException) {
+            }
+        }
+        assertEquals("1.0", protocolVersion(VersionMajor, VersionMinor))
     }
 
     @Test

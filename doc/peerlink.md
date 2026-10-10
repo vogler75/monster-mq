@@ -546,8 +546,9 @@ with the configured peers and the state of their links, for the dashboard's
 PeerLink page:
 
 ```graphql
-{ peerLink { enabled nodeId listen tls peers {
-    nodeId address pull serve interest pullState serveState remote lastError source consumer } } }
+{ peerLink { enabled nodeId listen tls brokerType brokerVersion protocolVersion peers {
+    nodeId address pull serve interest pullState serveState remote lastError
+    brokerType brokerVersion protocolVersion source consumer } } }
 ```
 
 `pull` means this broker dials the peer and receives its messages (`pullState`
@@ -555,6 +556,16 @@ is the `sources[]` state), `serve` means the peer dials this broker and
 receives this broker's messages (`serveState` is the `consumers[]` state).
 `source` and `consumer` are the matching status entries. The query uses the
 normal GraphQL authentication instead of the loopback guard.
+
+Each broker announces its type (`FULL` for the main broker, `EDGE` for the
+edge broker) and build version in the handshake. `brokerType`,
+`brokerVersion` and `protocolVersion` on `peerLink` describe this broker; on a
+peer they are what the peer announced in its last handshake, or null before
+the first one. The PeerLink protocol version is `major.minor` from the
+preamble, currently `1.0`. Brokers refuse a peer with another major version;
+another minor version links. The status document carries the same values as
+`brokerType`, `brokerVersion`, `protocolVersion` and, per link,
+`peerBrokerType`, `peerBrokerVersion`, `peerProtocolVersion`.
 
 ### 10.2 Log messages
 

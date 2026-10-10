@@ -89,6 +89,8 @@ class Puller(
     val clockSkewMs = AtomicLong(0)
     val rttUs = AtomicLong(0)
     val topicRootMismatch = AtomicBoolean(false)
+    // What the source announced in the last handshake.
+    val remoteBroker = java.util.concurrent.atomic.AtomicReference<PeerBroker?>(null)
     val retainedClassMismatch = AtomicBoolean(false)
 
     @Volatile var lastError: String = ""
@@ -439,6 +441,8 @@ class Puller(
             nonceC = newNonce(),
             consumerNodeID = manager.nodeId,
             expectedSourceNodeID = nodeId,
+            brokerType = BrokerTypeFull,
+            brokerVersion = at.rocworks.Version.getVersion(),
             lastEpoch = epoch.get(),
             resumeOffset = appliedNext.get(),
             lastSeenLeo = lastSeenLeo.get()
@@ -492,6 +496,7 @@ class Puller(
 
         val rttUsVal = rtt * 1000L
         rttUs.set(rttUsVal)
+        remoteBroker.set(PeerBroker(ok.brokerType, ok.brokerVersion, protocolVersion(sh.versionMajor, sh.versionMinor)))
         val frameMax = maxOf(manager.config.fetch.getMaxBytes(), ok.maxRecordBytes).toLong() + FrameSlack
         fr.max = frameMax
 
@@ -838,7 +843,10 @@ class Puller(
                 p999 = injector.hist.quantile(0.999)
             ),
             interest = if (interestWanted()) SourceInterest(active = feed != null,
-                deltasSent = interestDeltasSent.get(), snapshotsSent = interestSnapshotsSent.get()) else null
+                deltasSent = interestDeltasSent.get(), snapshotsSent = interestSnapshotsSent.get()) else null,
+            peerBrokerType = remoteBroker.get()?.type.orEmpty(),
+            peerBrokerVersion = remoteBroker.get()?.version.orEmpty(),
+            peerProtocolVersion = remoteBroker.get()?.protocol.orEmpty()
         )
     }
 }

@@ -12,12 +12,17 @@ class PeerLinkQueriesTest {
         "nodeId" to "main",
         "listen" to "0.0.0.0:1890",
         "tls" to true,
+        "brokerType" to "FULL",
+        "brokerVersion" to "1.8.33",
+        "protocolVersion" to "1.0",
         "consumers" to listOf(
-            mapOf("nodeId" to "edge-a", "state" to "CONNECTED", "remote" to "10.0.0.2:51000", "lag" to 3),
+            mapOf("nodeId" to "edge-a", "state" to "CONNECTED", "remote" to "10.0.0.2:51000", "lag" to 3,
+                "peerBrokerType" to "EDGE", "peerBrokerVersion" to "0.9.1", "peerProtocolVersion" to "1.0"),
             mapOf("nodeId" to "edge-b", "state" to "NEVER_CONNECTED", "remote" to "")
         ),
         "sources" to listOf(
-            mapOf("nodeId" to "edge-a", "state" to "STREAMING", "lastError" to "", "lagRecords" to 0),
+            mapOf("nodeId" to "edge-a", "state" to "STREAMING", "lastError" to "", "lagRecords" to 0,
+                "peerBrokerType" to "EDGE", "peerBrokerVersion" to "0.9.2", "peerProtocolVersion" to "1.0"),
             mapOf("nodeId" to "edge-c", "state" to "BACKOFF", "lastError" to "connection refused")
         )
     )
@@ -35,6 +40,9 @@ class PeerLinkQueriesTest {
         assertEquals("main", info.nodeId)
         assertEquals("0.0.0.0:1890", info.listen)
         assertTrue(info.tls)
+        assertEquals("FULL", info.brokerType)
+        assertEquals("1.8.33", info.brokerVersion)
+        assertEquals("1.0", info.protocolVersion)
         assertEquals(listOf("edge-a", "edge-b", "edge-c"), info.peers.map { it.nodeId })
 
         val a = info.peers[0]
@@ -48,6 +56,10 @@ class PeerLinkQueriesTest {
         assertEquals("INHERIT", a.interest)
         assertEquals(3, a.consumer!!["lag"])
         assertEquals(0, a.source!!["lagRecords"])
+        // The pull link's handshake wins over the serve link's.
+        assertEquals("EDGE", a.brokerType)
+        assertEquals("0.9.2", a.brokerVersion)
+        assertEquals("1.0", a.protocolVersion)
 
         val b = info.peers[1]
         assertFalse(b.pull)
@@ -57,6 +69,8 @@ class PeerLinkQueriesTest {
         assertNull(b.source)
         assertEquals("NEVER_CONNECTED", b.serveState)
         assertNull(b.remote)
+        assertNull(b.brokerType)
+        assertNull(b.protocolVersion)
 
         val c = info.peers[2]
         assertTrue(c.pull)
@@ -87,6 +101,8 @@ class PeerLinkQueriesTest {
         assertEquals("node1", info.nodeId)
         assertTrue(info.peers.isEmpty())
         assertNull(info.status)
+        assertEquals("FULL", info.brokerType)
+        assertEquals("1.0", info.protocolVersion)
     }
 
     @Test
@@ -100,7 +116,7 @@ class PeerLinkQueriesTest {
         val peer = registry.getType("PeerLinkPeer").get() as graphql.language.ObjectTypeDefinition
         assertEquals(
             listOf("nodeId", "address", "pull", "serve", "interest", "pullState", "serveState", "remote",
-                "lastError", "source", "consumer"),
+                "lastError", "brokerType", "brokerVersion", "protocolVersion", "source", "consumer"),
             peer.fieldDefinitions.map { it.name }
         )
     }

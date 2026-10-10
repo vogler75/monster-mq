@@ -14,6 +14,13 @@ const val VersionMinor: Int = 0
 const val ALPN = "mmq-peer/1"
 const val PreambleLen = 8
 
+// Broker types announced in HELLO and HELLO_OK.
+const val BrokerTypeFull = "FULL" // the main broker (Kotlin/JVM)
+const val BrokerTypeEdge = "EDGE" // the edge broker (Go)
+
+/** Formats a protocol version as "major.minor". */
+fun protocolVersion(major: Int, minor: Int): String = "$major.$minor"
+
 const val FrameHeaderLen = 5
 const val MaxPreAuthFrame = 4 shl 10
 const val MaxConsumerFrame = 64 shl 10
@@ -337,6 +344,15 @@ class WireDecoder(val b: ByteArray, var offset: Int = 0, val limit: Int = b.size
         return String(bytes, Charsets.UTF_8)
     }
 
+    /**
+     * Reads the brokerType and brokerVersion str8 pair that ends HELLO and HELLO_OK. A body that ends
+     * before the pair comes from a peer that predates it and yields empty strings.
+     */
+    fun brokerInfo(): Pair<String, String> {
+        if (short || remaining() == 0) return Pair("", "")
+        return Pair(str8(), str8())
+    }
+
     fun str16(): String {
         val n = u16().toInt() and 0xFFFF
         val bytes = take(n) ?: return ""
@@ -483,12 +499,15 @@ data class Hello(
     var consumerNodeID: String = "",
     var expectedSourceNodeID: String = "",
     var topicRoot: String = "",
-    var oaSystem: String = ""
+    var oaSystem: String = "",
+    var brokerType: String = "", // BrokerTypeFull or BrokerTypeEdge, empty from older peers
+    var brokerVersion: String = "" // the broker build version, empty from older peers
 ) : Frame {
     override fun type(): FrameType = FrameType.Hello
 
     override fun appendFrame(wb: WireBuffer) {
-        val hint = 111 + 4 + consumerNodeID.length + expectedSourceNodeID.length + topicRoot.length + oaSystem.length + 1
+        val hint = 111 + 4 + consumerNodeID.length + expectedSourceNodeID.length + topicRoot.length + oaSystem.length + 1 +
+            2 + brokerType.length + brokerVersion.length
         val s = beginFrame(wb, FrameType.Hello, hint)
         wb.putShortLE(flags.toShort())
         wb.putLongLE(capabilities)
@@ -504,6 +523,8 @@ data class Hello(
         wb.putStr8(expectedSourceNodeID)
         wb.putStr16(topicRoot)
         wb.putStr8(oaSystem)
+        wb.putStr8(brokerType)
+        wb.putStr8(brokerVersion)
         endFrame(wb, s)
     }
 
@@ -523,6 +544,7 @@ data class Hello(
         expectedSourceNodeID = d.str8()
         topicRoot = d.str16()
         oaSystem = d.str8()
+        d.brokerInfo().let { (t, v) -> brokerType = t; brokerVersion = v }
         d.checkErr()
     }
 }
@@ -544,12 +566,14 @@ data class HelloOK(
     var macS: ByteArray = ByteArray(MACLen),
     var sourceNodeID: String = "",
     var topicRoot: String = "",
-    var oaSystem: String = ""
+    var oaSystem: String = "",
+    var brokerType: String = "", // as in HELLO
+    var brokerVersion: String = "" // as in HELLO
 ) : Frame {
     override fun type(): FrameType = FrameType.HelloOK
 
     override fun appendFrame(wb: WireBuffer) {
-        val hint = 111 + 4 + sourceNodeID.length + topicRoot.length + oaSystem.length
+        val hint = 111 + 4 + sourceNodeID.length + topicRoot.length + oaSystem.length + 2 + brokerType.length + brokerVersion.length
         val s = beginFrame(wb, FrameType.HelloOK, hint)
         wb.putShortLE(flags.toShort())
         wb.putLongLE(capabilities)
@@ -567,6 +591,8 @@ data class HelloOK(
         wb.putStr8(sourceNodeID)
         wb.putStr16(topicRoot)
         wb.putStr8(oaSystem)
+        wb.putStr8(brokerType)
+        wb.putStr8(brokerVersion)
         endFrame(wb, s)
     }
 
@@ -588,6 +614,7 @@ data class HelloOK(
         sourceNodeID = d.str8()
         topicRoot = d.str16()
         oaSystem = d.str8()
+        d.brokerInfo().let { (t, v) -> brokerType = t; brokerVersion = v }
         d.checkErr()
     }
 }
