@@ -108,6 +108,7 @@ class PeerLinkManager(
 
         // Initialize pullers for all configured peers
         for (peerConfig in setup.peers) {
+            if (!peerConfig.pulls()) continue
             val pid = peerConfig.nodeId.trim().lowercase()
             val tp = PeerIdentity(
                 nodeId = pid,
