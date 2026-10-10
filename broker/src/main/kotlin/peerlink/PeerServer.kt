@@ -385,6 +385,8 @@ class PeerServer(
                         manager.peerTls!!.wrapServerSocket(socket, input.readNBytes(input.available()))
                     } catch (e: Exception) {
                         tlsFailures.incrementAndGet()
+                        val (ok, n) = rate.allow("tls:$ipKey", 10_000L)
+                        if (ok) logger.warning("peerlink: TLS handshake failed [remote=$ipKey, error=$e, suppressed=$n]")
                         socket.close()
                         return
                     }
@@ -424,7 +426,10 @@ class PeerServer(
                     socket.close()
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Without this log a failed peer session only shows up as EOF on the consumer.
+            val (ok, n) = rate.allow("conn:$ipKey", 10_000L)
+            if (ok) logger.log(java.util.logging.Level.WARNING, "peerlink: connection from $ipKey failed [error=$e, suppressed=$n]", e)
             try { socket.close() } catch (_: Exception) {}
         } finally {
             preAuthRelease(ipKey)
