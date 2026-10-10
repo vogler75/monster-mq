@@ -988,10 +988,11 @@ class PeerTls(
         }
     }
 
-    fun wrapServerSocket(rawSocket: Socket, firstByte: Byte, sharedSecret: Boolean = false): SSLSocket {
+    // consumed: every byte already read from rawSocket (e.g. by protocol sniffing); TLS replays them first.
+    fun wrapServerSocket(rawSocket: Socket, consumed: ByteArray, sharedSecret: Boolean = false): SSLSocket {
         val ctx = serverSslContext ?: throw IllegalStateException("Server SSLContext not initialized")
         val ca = ClientAuth.parse(config.clientAuth.name)
-        return at.rocworks.peerlink.tls.wrapServerSocket(ctx, rawSocket, byteArrayOf(firstByte), ca, sharedSecret)
+        return at.rocworks.peerlink.tls.wrapServerSocket(ctx, rawSocket, consumed, ca, sharedSecret)
     }
 
     fun wrapClientSocket(

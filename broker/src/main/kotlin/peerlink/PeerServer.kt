@@ -380,7 +380,9 @@ class PeerServer(
                         return
                     }
                     val tlsSocket = try {
-                        manager.peerTls!!.wrapServerSocket(socket, first.toByte())
+                        // The sniff buffered more than the first byte (typically the whole ClientHello);
+                        // hand all of it to TLS, otherwise the handshake waits for bytes that never come.
+                        manager.peerTls!!.wrapServerSocket(socket, input.readNBytes(input.available()))
                     } catch (e: Exception) {
                         tlsFailures.incrementAndGet()
                         socket.close()
@@ -396,7 +398,7 @@ class PeerServer(
                             tlsSocket.close()
                             return
                         }
-                        serveHTTP(tlsSocket, input, loopback = false)
+                        serveHTTP(tlsSocket, tlsSocket.inputStream, loopback = false)
                         return
                     }
                     servePeer(tlsSocket, isTls = true)

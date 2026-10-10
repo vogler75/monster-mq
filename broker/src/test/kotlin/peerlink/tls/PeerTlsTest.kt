@@ -351,4 +351,68 @@ class PeerTlsTest {
 
         serverSocket.close()
     }
+
+    // PeerServer sniffs the first byte through a BufferedInputStream, which pulls the whole
+    // ClientHello off the socket. All buffered bytes must reach TLS or the handshake stalls.
+    @Test
+    fun testServerHandshakeAfterBufferedSniff() {
+        val serverKp = genEC()
+        val serverCert = generateCert(serverKp, "main", uris = listOf("urn:monstermq:node:main"))
+        val serverSsl = createServerSSLContext(
+            ServerTlsOptions(
+                certChain = arrayOf(serverCert),
+                privateKey = serverKp.private,
+                trust = TrustConfig(),
+                clientAuth = ClientAuth.NONE,
+                peers = listOf(PeerIdentity(nodeId = "edge-a")),
+                sharedSecret = true
+            )
+        )
+        val clientSsl = createClientSSLContext(
+            ClientTlsOptions(trust = TrustConfig(), peer = PeerIdentity(nodeId = "main"), sharedSecret = true)
+        )
+
+        val serverSocket = ServerSocket(0)
+        val port = serverSocket.localPort
+        val serverErr = AtomicReference<Throwable>()
+        val clientErr = AtomicReference<Throwable>()
+        val latch = CountDownLatch(2)
+
+        Thread.ofVirtual().start {
+            try {
+                val raw = serverSocket.accept()
+                raw.soTimeout = 5000
+                val input = java.io.BufferedInputStream(raw.getInputStream(), 64 shl 10)
+                input.mark(2)
+                assertEquals(0x16, input.read())
+                input.reset()
+                val ssl = wrapServerSocket(serverSsl, raw, input.readNBytes(input.available()), ClientAuth.NONE, sharedSecret = true)
+                assertEquals(42, ssl.inputStream.read())
+            } catch (t: Throwable) {
+                if (serverErr.get() == null) serverErr.set(t)
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        Thread.ofVirtual().start {
+            try {
+                val raw = Socket("127.0.0.1", port)
+                raw.soTimeout = 5000
+                val ssl = wrapClientSocket(clientSsl, raw, "127.0.0.1", port, sharedSecret = true)
+                ssl.startHandshake()
+                ssl.outputStream.write(42)
+                ssl.outputStream.flush()
+            } catch (t: Throwable) {
+                if (clientErr.get() == null) clientErr.set(t)
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        assertTrue("Handshake timed out", latch.await(10, TimeUnit.SECONDS))
+        assertNull("Server error: ${serverErr.get()}", serverErr.get())
+        assertNull("Client error: ${clientErr.get()}", clientErr.get())
+        serverSocket.close()
+    }
 }
