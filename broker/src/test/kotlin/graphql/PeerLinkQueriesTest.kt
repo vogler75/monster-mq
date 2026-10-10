@@ -113,7 +113,7 @@ class PeerLinkQueriesTest {
         val registry = SchemaParser().parse(sdl)
         val query = registry.objectTypeExtensions()["Query"]!!.flatMap { it.fieldDefinitions }
         assertTrue(query.any { it.name == "peerLink" })
-        val peer = registry.getType("PeerLinkPeer").get() as graphql.language.ObjectTypeDefinition
+        val peer = registry.getTypeOrNull("PeerLinkPeer", graphql.language.ObjectTypeDefinition::class.java)!!
         assertEquals(
             listOf("nodeId", "address", "pull", "serve", "interest", "pullState", "serveState", "remote",
                 "lastError", "brokerType", "brokerVersion", "protocolVersion", "source", "consumer"),

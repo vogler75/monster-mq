@@ -102,7 +102,7 @@ class InterestClassifierTest {
         m.refreshStaticInterest()
         m.tracker!!.added("marker", "done2")
         val end = System.currentTimeMillis() + 5000
-        while (System.currentTimeMillis() < end && !m.tracker!!.announced().containsKey("done2")) Thread.sleep(10)
-        assertFalse(m.tracker!!.announced().containsKey("standby/#"))
+        while (System.currentTimeMillis() < end && !m.tracker.announced().containsKey("done2")) Thread.sleep(10)
+        assertFalse(m.tracker.announced().containsKey("standby/#"))
     }
 }

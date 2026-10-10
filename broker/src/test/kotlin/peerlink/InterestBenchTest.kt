@@ -73,7 +73,7 @@ class InterestBenchTest {
                 repeat(200) { for (i in msgs.indices) h.capture(msgs[i]) }
                 // A single round can pick up unrelated allocations (JIT compilation); one round in five
                 // must allocate nothing.
-                val tid = Thread.currentThread().id
+                val tid = Thread.currentThread().threadId()
                 val rounds = (0 until 5).map {
                     val before = bean.getThreadAllocatedBytes(tid)
                     repeat(100) { for (i in msgs.indices) h.capture(msgs[i]) }

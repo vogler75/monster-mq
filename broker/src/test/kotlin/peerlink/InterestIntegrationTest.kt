@@ -116,13 +116,13 @@ class InterestIntegrationTest {
         val statusA = a.status()
         assertNotNull(statusA.interest)
         assertTrue(statusA.interest!!.interestSkipped >= 1)
-        assertTrue(statusA.interest!!.deltasReceived >= 1)
+        assertTrue(statusA.interest.deltasReceived >= 1)
         assertEquals("LIVE", statusA.consumers[0].interest!!.state)
 
         val src = b.status().sources[0]
         assertTrue(src.interest!!.active)
-        assertTrue(src.interest!!.deltasSent >= 1)
-        assertTrue(src.interest!!.snapshotsSent >= 1)
+        assertTrue(src.interest.deltasSent >= 1)
+        assertTrue(src.interest.snapshotsSent >= 1)
         assertEquals(2, b.status().interest!!.local!!.filters)
 
         // The status JSON has edge's layout: a nested interest object per source, no flat fields.

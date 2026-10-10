@@ -273,8 +273,8 @@ class HmiSyncServiceTest {
         assertEquals("monstermq/hmi/sync/$sessionUUID/downstream", receivedTopic)
         assertNotNull(receivedResp)
         assertTrue(receivedResp!!.getBoolean("success"))
-        assertEquals("req-test-99", receivedResp!!.getString("reqId"))
-        assertEquals("ping", receivedResp!!.getString("action"))
+        assertEquals("req-test-99", receivedResp.getString("reqId"))
+        assertEquals("ping", receivedResp.getString("action"))
     }
 
     private fun calculateSha256Hex(bytes: ByteArray): String {

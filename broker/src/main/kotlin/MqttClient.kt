@@ -782,7 +782,7 @@ class MqttClient(
 
             // Subscription Identifier (11): at most one per SUBSCRIBE, applies to all its filters
             val subscriptionIdProperty = subscribe.properties()
-                ?.getProperty(MqttProperties.MqttPropertyType.SUBSCRIPTION_IDENTIFIER.value()) as? MqttProperties.IntegerProperty
+                ?.getProperty(11) as? MqttProperties.IntegerProperty
             val subscriptionId = subscriptionIdProperty?.value() ?: 0
             if (subscriptionIdProperty != null && subscriptionId == 0) {
                 // MQTT 5.0 §3.8.2.1.2: a Subscription Identifier of 0 is a Protocol Error

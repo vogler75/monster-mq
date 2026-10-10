@@ -1022,8 +1022,7 @@ class PeerTls(
 
     fun verify(chain: Array<java.security.cert.X509Certificate>?, peer: PeerIdentity): Boolean {
         return try {
-            @Suppress("UNCHECKED_CAST")
-            trustConfig.verify(chain as Array<X509Certificate>?, peer, EKU_CLIENT_AUTH)
+            trustConfig.verify(chain, peer, EKU_CLIENT_AUTH)
             true
         } catch (_: Exception) {
             false
