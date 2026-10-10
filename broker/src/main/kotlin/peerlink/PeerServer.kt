@@ -54,6 +54,13 @@ class CidrBlock(val prefix: InetAddress, val prefixLength: Int) {
     }
 }
 
+// host:port like the edge broker's net.Conn.RemoteAddr, not InetSocketAddress's "/host:port".
+fun remoteString(addr: java.net.SocketAddress?): String {
+    val a = addr as? InetSocketAddress ?: return addr?.toString() ?: ""
+    val host = a.address?.hostAddress ?: a.hostString
+    return if (host.contains(':')) "[$host]:${a.port}" else "$host:${a.port}"
+}
+
 class ConsumerSlot(
     val idx: Int,
     val nodeId: String,
@@ -180,7 +187,7 @@ class ConsumerSlot(
         val lastFStr = if (lastF > 0) java.time.Instant.ofEpochMilli(lastF).toString() else null
         return ConsumerStatus(
             nodeId = nodeId,
-            state = ls.state.name,
+            state = ls.state.toString(),
             remote = rem,
             committed = ls.committed,
             served = ls.served,
@@ -711,7 +718,7 @@ class PeerServer(
 
         if (slot.peer.interestOff()) ownCaps = ownCaps and CapInterest.inv()
 
-        val remote = socket.remoteSocketAddress.toString()
+        val remote = remoteString(socket.remoteSocketAddress)
         val sess = ServerSession(
             server = this,
             slot = slot,
