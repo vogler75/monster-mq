@@ -443,7 +443,12 @@ fun loadKeyPair(certPath: String, keyPath: String): Pair<Array<X509Certificate>,
         throw IllegalArgumentException("tlsutil: parse certificate $certPath: no certificates found")
     }
 
-    val key: PrivateKey
+    val key = loadPrivateKey(keyPath)
+
+    return Pair(certs.toTypedArray(), key)
+}
+
+fun loadPrivateKey(keyPath: String): PrivateKey {
     FileReader(keyPath).use { reader ->
         val parser = PEMParser(reader)
         var obj = parser.readObject()
@@ -465,10 +470,21 @@ fun loadKeyPair(certPath: String, keyPath: String): Pair<Array<X509Certificate>,
             }
             obj = parser.readObject()
         }
-        key = pk ?: throw IllegalArgumentException("tlsutil: no PEM private key in $keyPath")
+        return pk ?: throw IllegalArgumentException("tlsutil: no PEM private key in $keyPath")
     }
+}
 
-    return Pair(certs.toTypedArray(), key)
+// Recomputes the public half of a key pair from its private key (EC: Q = d*G, RSA: CRT fields).
+fun derivePublicKey(privateKey: PrivateKey): PublicKey = when (privateKey) {
+    is java.security.interfaces.ECPrivateKey -> {
+        val spec = org.bouncycastle.jcajce.provider.asymmetric.util.EC5Util.convertSpec(privateKey.params)
+        val q = spec.g.multiply(privateKey.s).normalize()
+        val w = java.security.spec.ECPoint(q.affineXCoord.toBigInteger(), q.affineYCoord.toBigInteger())
+        KeyFactory.getInstance("EC").generatePublic(java.security.spec.ECPublicKeySpec(w, privateKey.params))
+    }
+    is java.security.interfaces.RSAPrivateCrtKey ->
+        KeyFactory.getInstance("RSA").generatePublic(java.security.spec.RSAPublicKeySpec(privateKey.modulus, privateKey.publicExponent))
+    else -> throw IllegalStateException("tlsutil: cannot derive public key from ${privateKey.algorithm} private key")
 }
 
 fun loadCertPool(path: String, storeType: String = "PEM", password: String = ""): List<X509Certificate> {
@@ -538,18 +554,8 @@ fun ensurePeerCertificate(certPath: String, keyPath: String, nodeId: String): Pa
 
     val keyPair: KeyPair
     if (keyExists) {
-        val (_, pk) = loadKeyPair(certPath = keyPath, keyPath = keyPath)
-        // If only key exists, we need public key too - load via PEMParser
-        FileReader(keyFile).use { r ->
-            val parser = PEMParser(r)
-            val obj = parser.readObject()
-            val conv = JcaPEMKeyConverter()
-            keyPair = if (obj is PEMKeyPair) {
-                conv.getKeyPair(obj)
-            } else {
-                throw IllegalStateException("tlsutil: existing key in $keyPath cannot be reconstructed into KeyPair")
-            }
-        }
+        val pk = loadPrivateKey(keyPath)
+        keyPair = KeyPair(derivePublicKey(pk), pk)
     } else {
         val kpg = KeyPairGenerator.getInstance("EC")
         kpg.initialize(256, SecureRandom())

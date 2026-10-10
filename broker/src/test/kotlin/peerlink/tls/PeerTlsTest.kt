@@ -148,6 +148,26 @@ class PeerTlsTest {
     }
 
     @Test
+    fun testEnsurePeerCertificateRegeneratesFromExistingKey() {
+        val tempDir = Files.createTempDirectory("peertls-test").toFile()
+        tempDir.deleteOnExit()
+        val certPath = File(tempDir, "peer-node-b.pem").absolutePath
+        val keyPath = File(tempDir, "peer-node-b.key").absolutePath
+
+        val (spki, created) = ensurePeerCertificate(certPath, keyPath, "node-b")
+        assertTrue(created)
+
+        // Key kept, certificate lost: the cert must be re-issued for the same key.
+        assertTrue(File(certPath).delete())
+        val (spki2, created2) = ensurePeerCertificate(certPath, keyPath, "node-b")
+        assertTrue(created2)
+        assertEquals(spki, spki2)
+
+        val (chain, _) = loadKeyPair(certPath, keyPath)
+        assertEquals(spki, spkiFingerprint(chain[0]))
+    }
+
+    @Test
     fun testVerifyChainAndIdentity() {
         val rootKp = genEC()
         val rootCert = generateCert(rootKp, "root-ca", isCa = true)
