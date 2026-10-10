@@ -881,9 +881,9 @@ fun wrapServerSocket(
     params.protocols = if (sharedSecret) arrayOf("TLSv1.3") else arrayOf("TLSv1.3", "TLSv1.2")
     sslSocket.sslParameters = params
 
-    if (sharedSecret) {
-        attachKeyingMaterialHook(sslSocket)
-    }
+    // Always: the listener learns only after HELLO whether the consumer uses a shared secret,
+    // and BC allows exporting only during handshake completion.
+    attachKeyingMaterialHook(sslSocket)
     return sslSocket
 }
 

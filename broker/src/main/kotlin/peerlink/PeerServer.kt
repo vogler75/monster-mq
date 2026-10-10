@@ -690,7 +690,7 @@ class PeerServer(
                 refuse(out, socket, slot, GoAwayCode.AuthFailed, "MAC required", cid)
                 return
             }
-            val exporter = manager.peerTls?.exportKeyingMaterial(sslSocket)
+            val exporter = try { manager.peerTls?.exportKeyingMaterial(sslSocket) } catch (_: Exception) { null }
             if (exporter == null) {
                 refuse(out, socket, slot, GoAwayCode.AuthFailed, "exporter failed", cid)
                 return

@@ -376,6 +376,8 @@ class PeerTlsTest {
         val port = serverSocket.localPort
         val serverErr = AtomicReference<Throwable>()
         val clientErr = AtomicReference<Throwable>()
+        val serverEkm = AtomicReference<ByteArray>()
+        val clientEkm = AtomicReference<ByteArray>()
         val latch = CountDownLatch(2)
 
         Thread.ofVirtual().start {
@@ -386,8 +388,10 @@ class PeerTlsTest {
                 input.mark(2)
                 assertEquals(0x16, input.read())
                 input.reset()
-                val ssl = wrapServerSocket(serverSsl, raw, input.readNBytes(input.available()), ClientAuth.NONE, sharedSecret = true)
+                // sharedSecret = false like PeerServer: the exporter must still be available after the handshake.
+                val ssl = wrapServerSocket(serverSsl, raw, input.readNBytes(input.available()), ClientAuth.NONE)
                 assertEquals(42, ssl.inputStream.read())
+                serverEkm.set(exportKeyingMaterial(ssl, "monstermq-peer/1", ByteArray(0), 32))
             } catch (t: Throwable) {
                 if (serverErr.get() == null) serverErr.set(t)
             } finally {
@@ -403,6 +407,7 @@ class PeerTlsTest {
                 ssl.startHandshake()
                 ssl.outputStream.write(42)
                 ssl.outputStream.flush()
+                clientEkm.set(exportKeyingMaterial(ssl, "monstermq-peer/1", ByteArray(0), 32))
             } catch (t: Throwable) {
                 if (clientErr.get() == null) clientErr.set(t)
             } finally {
@@ -413,6 +418,8 @@ class PeerTlsTest {
         assertTrue("Handshake timed out", latch.await(10, TimeUnit.SECONDS))
         assertNull("Server error: ${serverErr.get()}", serverErr.get())
         assertNull("Client error: ${clientErr.get()}", clientErr.get())
+        assertNotNull(serverEkm.get())
+        assertArrayEquals(serverEkm.get(), clientEkm.get())
         serverSocket.close()
     }
 }
