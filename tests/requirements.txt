@@ -9,6 +9,7 @@ websockets
 requests
 PyYAML>=6.0
 kafka-python-ng
+nats-py
 
 
 # Testing Framework
