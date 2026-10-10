@@ -387,9 +387,13 @@ class PeerServer(
                         return
                     }
                     val tlsSocket = try {
-                        manager.peerTls!!.wrapServerSocket(socket, first.toByte())
+                        // The sniff buffered more than the first byte (typically the whole ClientHello);
+                        // hand all of it to TLS, otherwise the handshake waits for bytes that never come.
+                        manager.peerTls!!.wrapServerSocket(socket, input.readNBytes(input.available()))
                     } catch (e: Exception) {
                         tlsFailures.incrementAndGet()
+                        val (ok, n) = rate.allow("tls:$ipKey", 10_000L)
+                        if (ok) logger.warning("peerlink: TLS handshake failed [remote=$ipKey, error=$e, suppressed=$n]")
                         socket.close()
                         return
                     }
@@ -403,7 +407,7 @@ class PeerServer(
                             tlsSocket.close()
                             return
                         }
-                        serveHTTP(tlsSocket, input, loopback = false)
+                        serveHTTP(tlsSocket, tlsSocket.inputStream, loopback = false)
                         return
                     }
                     servePeer(tlsSocket, isTls = true)
@@ -429,7 +433,10 @@ class PeerServer(
                     socket.close()
                 }
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Without this log a failed peer session only shows up as EOF on the consumer.
+            val (ok, n) = rate.allow("conn:$ipKey", 10_000L)
+            if (ok) logger.log(java.util.logging.Level.WARNING, "peerlink: connection from $ipKey failed [error=$e, suppressed=$n]", e)
             try { socket.close() } catch (_: Exception) {}
         } finally {
             preAuthRelease(ipKey)
@@ -690,7 +697,7 @@ class PeerServer(
                 refuse(out, socket, slot, GoAwayCode.AuthFailed, "MAC required", cid)
                 return
             }
-            val exporter = manager.peerTls?.exportKeyingMaterial(sslSocket)
+            val exporter = try { manager.peerTls?.exportKeyingMaterial(sslSocket) } catch (_: Exception) { null }
             if (exporter == null) {
                 refuse(out, socket, slot, GoAwayCode.AuthFailed, "exporter failed", cid)
                 return

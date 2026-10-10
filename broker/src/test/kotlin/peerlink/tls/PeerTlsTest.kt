@@ -148,6 +148,26 @@ class PeerTlsTest {
     }
 
     @Test
+    fun testEnsurePeerCertificateRegeneratesFromExistingKey() {
+        val tempDir = Files.createTempDirectory("peertls-test").toFile()
+        tempDir.deleteOnExit()
+        val certPath = File(tempDir, "peer-node-b.pem").absolutePath
+        val keyPath = File(tempDir, "peer-node-b.key").absolutePath
+
+        val (spki, created) = ensurePeerCertificate(certPath, keyPath, "node-b")
+        assertTrue(created)
+
+        // Key kept, certificate lost: the cert must be re-issued for the same key.
+        assertTrue(File(certPath).delete())
+        val (spki2, created2) = ensurePeerCertificate(certPath, keyPath, "node-b")
+        assertTrue(created2)
+        assertEquals(spki, spki2)
+
+        val (chain, _) = loadKeyPair(certPath, keyPath)
+        assertEquals(spki, spkiFingerprint(chain[0]))
+    }
+
+    @Test
     fun testVerifyChainAndIdentity() {
         val rootKp = genEC()
         val rootCert = generateCert(rootKp, "root-ca", isCa = true)
@@ -329,6 +349,77 @@ class PeerTlsTest {
         assertEquals(32, sBytes.size)
         assertArrayEquals("Exported keying material must match on both ends!", sBytes, cBytes)
 
+        serverSocket.close()
+    }
+
+    // PeerServer sniffs the first byte through a BufferedInputStream, which pulls the whole
+    // ClientHello off the socket. All buffered bytes must reach TLS or the handshake stalls.
+    @Test
+    fun testServerHandshakeAfterBufferedSniff() {
+        val serverKp = genEC()
+        val serverCert = generateCert(serverKp, "main", uris = listOf("urn:monstermq:node:main"))
+        val serverSsl = createServerSSLContext(
+            ServerTlsOptions(
+                certChain = arrayOf(serverCert),
+                privateKey = serverKp.private,
+                trust = TrustConfig(),
+                clientAuth = ClientAuth.NONE,
+                peers = listOf(PeerIdentity(nodeId = "edge-a")),
+                sharedSecret = true
+            )
+        )
+        val clientSsl = createClientSSLContext(
+            ClientTlsOptions(trust = TrustConfig(), peer = PeerIdentity(nodeId = "main"), sharedSecret = true)
+        )
+
+        val serverSocket = ServerSocket(0)
+        val port = serverSocket.localPort
+        val serverErr = AtomicReference<Throwable>()
+        val clientErr = AtomicReference<Throwable>()
+        val serverEkm = AtomicReference<ByteArray>()
+        val clientEkm = AtomicReference<ByteArray>()
+        val latch = CountDownLatch(2)
+
+        Thread.ofVirtual().start {
+            try {
+                val raw = serverSocket.accept()
+                raw.soTimeout = 5000
+                val input = java.io.BufferedInputStream(raw.getInputStream(), 64 shl 10)
+                input.mark(2)
+                assertEquals(0x16, input.read())
+                input.reset()
+                // sharedSecret = false like PeerServer: the exporter must still be available after the handshake.
+                val ssl = wrapServerSocket(serverSsl, raw, input.readNBytes(input.available()), ClientAuth.NONE)
+                assertEquals(42, ssl.inputStream.read())
+                serverEkm.set(exportKeyingMaterial(ssl, "monstermq-peer/1", ByteArray(0), 32))
+            } catch (t: Throwable) {
+                if (serverErr.get() == null) serverErr.set(t)
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        Thread.ofVirtual().start {
+            try {
+                val raw = Socket("127.0.0.1", port)
+                raw.soTimeout = 5000
+                val ssl = wrapClientSocket(clientSsl, raw, "127.0.0.1", port, sharedSecret = true)
+                ssl.startHandshake()
+                ssl.outputStream.write(42)
+                ssl.outputStream.flush()
+                clientEkm.set(exportKeyingMaterial(ssl, "monstermq-peer/1", ByteArray(0), 32))
+            } catch (t: Throwable) {
+                if (clientErr.get() == null) clientErr.set(t)
+            } finally {
+                latch.countDown()
+            }
+        }
+
+        assertTrue("Handshake timed out", latch.await(10, TimeUnit.SECONDS))
+        assertNull("Server error: ${serverErr.get()}", serverErr.get())
+        assertNull("Client error: ${clientErr.get()}", clientErr.get())
+        assertNotNull(serverEkm.get())
+        assertArrayEquals(serverEkm.get(), clientEkm.get())
         serverSocket.close()
     }
 }
