@@ -1026,6 +1026,8 @@ MORE INFO:
     }
 
     private fun startMonster(vertx: Vertx) {
+        // Surface failures thrown inside startup callbacks instead of letting Vert.x swallow them
+        vertx.exceptionHandler { e -> logger.log(Level.SEVERE, "Unhandled exception: ${e.message ?: e.javaClass.name}", e) }
         val useTcp = configJson.getInteger("TCP", 1883)
         val useWs = configJson.getInteger("WS", 0)
 
@@ -1197,8 +1199,10 @@ MORE INFO:
                                 plManager.stop()
                             })
                         }
-                    } catch (e: Exception) {
-                        logger.severe("PeerLink configuration error: ${e.message}")
+                    } catch (e: Throwable) {
+                        // Throwable, not Exception: an Error here would otherwise be swallowed by the
+                        // Vert.x callback and startup would stall silently.
+                        logger.log(Level.SEVERE, "PeerLink configuration error: ${e.message ?: e.javaClass.name}", e)
                         kotlin.system.exitProcess(1)
                     }
                 }
