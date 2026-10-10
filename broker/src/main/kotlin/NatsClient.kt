@@ -25,21 +25,29 @@ class NatsClient(
     private var authenticated = false
     private var username: String? = null
     private var verbose = false
+    private var headersEnabled = false
     private var closed = false
 
     // SID -> MQTT topic filter
     private val sidToTopic = mutableMapOf<String, String>()
     // MQTT topic filter -> set of SIDs (multiple SIDs can map to same topic)
     private val topicToSids = mutableMapOf<String, MutableSet<String>>()
+    // MQTT topic filter -> number of KV consumers that need it (internal subscription shared with SUB)
+    private val kvTopicRefs = mutableMapOf<String, Int>()
+
+    private val jetStreamKv = NatsJetStreamKv(this)
 
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
 
     // Pending PUB state for binary payload reading
-    private data class PendingPub(val mqttTopic: String, val numBytes: Int, val replyTo: String?)
+    private data class PendingPub(val subject: String, val mqttTopic: String, val headerBytes: Int, val numBytes: Int, val replyTo: String?)
     private var pendingPub: PendingPub? = null
     private lateinit var parser: RecordParser
 
     companion object {
+        // Clients gate features (e.g. KV needs >= 2.6.2) on the advertised server version
+        const val NATS_SERVER_VERSION = "2.10.0"
+
         fun deploy(vertx: Vertx, socket: NetSocket, sessionHandler: SessionHandler, userManager: UserManager) {
             val client = NatsClient(socket, sessionHandler, userManager)
             vertx.deployVerticle(client)
@@ -53,9 +61,11 @@ class NatsClient(
         val info = JsonObject()
             .put("server_id", "monstermq")
             .put("server_name", "MonsterMQ")
-            .put("version", "0.0.1")
+            .put("version", NATS_SERVER_VERSION)
             .put("proto", 1)
+            .put("headers", true)
             .put("max_payload", 1048576)
+            .put("jetstream", true)
             .put("auth_required", userManager.isUserManagementEnabled())
         writeLine("INFO ${info.encode()}")
 
@@ -120,7 +130,8 @@ class NatsClient(
 
         when (cmd) {
             "CONNECT" -> handleConnect(args)
-            "PUB" -> handlePub(args)
+            "PUB" -> handlePub(args, withHeaders = false)
+            "HPUB" -> handlePub(args, withHeaders = true)
             "SUB" -> handleSub(args)
             "UNSUB" -> handleUnsub(args)
             "PING" -> writeLine("PONG")
@@ -151,6 +162,7 @@ class NatsClient(
         }
 
         verbose = json.getBoolean("verbose", false)
+        headersEnabled = json.getBoolean("headers", false)
 
         if (!userManager.isUserManagementEnabled()) {
             authenticated = true
@@ -218,9 +230,10 @@ class NatsClient(
         sids.add(sid)
 
         // Only subscribe once per unique topic
-        if (isNewTopic) {
+        if (isNewTopic && !kvTopicRefs.containsKey(mqttTopic)) {
             sessionHandler.subscribeInternalClient(clientId, mqttTopic, 0)
         }
+        jetStreamKv.onSubscribe()
     }
 
     private fun handleUnsub(args: String) {
@@ -241,46 +254,58 @@ class NatsClient(
         // Only unsubscribe when no more SIDs reference this topic
         if (sids.isEmpty()) {
             topicToSids.remove(mqttTopic)
-            sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
+            if (!kvTopicRefs.containsKey(mqttTopic)) {
+                sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
+            }
         }
+        jetStreamKv.onUnsubscribe()
     }
 
-    private fun handlePub(args: String) {
+    private fun handlePub(args: String, withHeaders: Boolean) {
         if (!checkAuth()) return
 
         // PUB <subject> [reply-to] <#bytes>
-        val parts = args.split(" ")
-        if (parts.size < 2) {
-            writeError("Invalid PUB")
+        // HPUB <subject> [reply-to] <#header bytes> <#total bytes>
+        val op = if (withHeaders) "HPUB" else "PUB"
+        val parts = args.split(" ").filter { it.isNotEmpty() }
+        val minParts = if (withHeaders) 3 else 2
+        if (parts.size < minParts || parts.size > minParts + 1) {
+            writeError("Invalid $op")
             return
         }
 
         val subject = parts[0]
-        val numBytes = try {
-            parts.last().toInt()
-        } catch (e: NumberFormatException) {
-            writeError("Invalid PUB byte count")
+        val numBytes = parts.last().toIntOrNull()
+        val headerBytes = if (withHeaders) parts[parts.size - 2].toIntOrNull() else 0
+        if (numBytes == null || headerBytes == null || numBytes < 0 || headerBytes < 0 || headerBytes > numBytes) {
+            writeError("Invalid $op byte count")
             return
         }
-        val replyTo = if (parts.size == 3) parts[1] else null
+        val replyTo = if (parts.size == minParts + 1) parts[1] else null
 
         val mqttTopic = natsSubjectToMqttTopic(subject)
 
-        // ACL check
+        // ACL check; JetStream API and KV subjects are checked by the KV layer on the bucket topic
         val user = username
-        if (user != null && !userManager.canPublish(user, mqttTopic)) {
+        if (user != null && !NatsJetStreamKv.isJetStreamSubject(subject) && !userManager.canPublish(user, mqttTopic)) {
             writeError("Permissions Violation for Publish to \"$subject\"")
             return
         }
 
         // Switch to fixed-size mode to read exact payload bytes + \r\n
-        pendingPub = PendingPub(mqttTopic, numBytes, replyTo)
+        pendingPub = PendingPub(subject, mqttTopic, headerBytes, numBytes, replyTo)
         parser.fixedSizeMode(numBytes + 2) // +2 for trailing \r\n
     }
 
     private fun handlePubPayload(pending: PendingPub, buffer: Buffer) {
-        // Extract payload (strip trailing \r\n)
-        val payload = buffer.getBytes(0, pending.numBytes)
+        // Extract headers and payload (strip trailing \r\n)
+        val headers = if (pending.headerBytes > 0) parseHeaders(buffer.getString(0, pending.headerBytes)) else emptyMap()
+        val payload = buffer.getBytes(pending.headerBytes, pending.numBytes)
+
+        if (NatsJetStreamKv.isJetStreamSubject(pending.subject)) {
+            jetStreamKv.handlePublish(pending.subject, pending.replyTo, headers, payload)
+            return
+        }
 
         val message = BrokerMessage(
             messageId = 0,
@@ -290,9 +315,92 @@ class NatsClient(
             isRetain = false,
             isDup = false,
             isQueued = false,
-            clientId = clientId
+            clientId = clientId,
+            responseTopic = pending.replyTo?.let { natsSubjectToMqttTopic(it) },
+            userProperties = headers.ifEmpty { null }
         )
         sessionHandler.publishMessage(message)
+    }
+
+    // --- Internals used by the JetStream KV layer ---
+
+    internal val vertxInstance: Vertx get() = vertx
+    internal val sessionHandlerInstance: SessionHandler get() = sessionHandler
+    internal val clientIdentifier: String get() = clientId
+
+    internal fun canPublish(mqttTopic: String): Boolean {
+        val user = username ?: return true
+        return userManager.canPublish(user, mqttTopic)
+    }
+
+    internal fun canSubscribe(mqttTopic: String): Boolean {
+        val user = username ?: return true
+        return userManager.canSubscribe(user, mqttTopic)
+    }
+
+    /** SIDs of this connection whose subscription matches the given concrete NATS subject. */
+    internal fun sidsForSubject(subject: String): List<String> {
+        val topic = natsSubjectToMqttTopic(subject)
+        val result = mutableListOf<String>()
+        for ((filter, sids) in topicToSids) {
+            if (mqttTopicMatchesFilter(topic, filter)) result.addAll(sids)
+        }
+        return result
+    }
+
+    /** Write a message to every local subscription matching [subject] (used for API replies and KV push). */
+    internal fun deliverLocal(subject: String, replyTo: String?, headerBlock: String?, payload: ByteArray) {
+        for (sid in sidsForSubject(subject)) {
+            writeMsg(subject, sid, replyTo, headerBlock, payload)
+        }
+    }
+
+    /** Write a message with [subject] to every local subscription matching [deliverSubject] (JetStream push). */
+    internal fun deliverVia(deliverSubject: String, subject: String, replyTo: String?, headerBlock: String?, payload: ByteArray) {
+        for (sid in sidsForSubject(deliverSubject)) {
+            writeMsg(subject, sid, replyTo, headerBlock, payload)
+        }
+    }
+
+    internal fun addKvTopic(mqttTopic: String) {
+        val refs = kvTopicRefs[mqttTopic] ?: 0
+        kvTopicRefs[mqttTopic] = refs + 1
+        if (refs == 0 && !topicToSids.containsKey(mqttTopic)) {
+            sessionHandler.subscribeInternalClient(clientId, mqttTopic, 0)
+        }
+    }
+
+    internal fun removeKvTopic(mqttTopic: String) {
+        val refs = kvTopicRefs[mqttTopic] ?: return
+        if (refs > 1) {
+            kvTopicRefs[mqttTopic] = refs - 1
+            return
+        }
+        kvTopicRefs.remove(mqttTopic)
+        if (!topicToSids.containsKey(mqttTopic) && !closed) {
+            sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
+        }
+    }
+
+    private fun writeMsg(subject: String, sid: String, replyTo: String?, headerBlock: String?, payload: ByteArray) {
+        val reply = if (replyTo != null) "$replyTo " else ""
+        val buf: Buffer
+        if (headerBlock != null && headersEnabled) {
+            // HMSG <subject> <sid> [reply-to] <#header bytes> <#total bytes>\r\n<headers><payload>\r\n
+            val headerBytes = headerBlock.toByteArray(Charsets.UTF_8)
+            val line = "HMSG $subject $sid $reply${headerBytes.size} ${headerBytes.size + payload.size}\r\n"
+            buf = Buffer.buffer(line.length + headerBytes.size + payload.size + 2)
+            buf.appendString(line)
+            buf.appendBytes(headerBytes)
+        } else {
+            // MSG <subject> <sid> [reply-to] <#bytes>\r\n<payload>\r\n
+            val line = "MSG $subject $sid $reply${payload.size}\r\n"
+            buf = Buffer.buffer(line.length + payload.size + 2)
+            buf.appendString(line)
+        }
+        buf.appendBytes(payload)
+        buf.appendString("\r\n")
+        socket.write(buf)
     }
 
     private fun handleBusMessage(body: Any?) {
@@ -305,22 +413,19 @@ class NatsClient(
 
     private fun deliverMessage(message: BrokerMessage) {
         val natsSubject = mqttTopicToNatsSubject(message.topicName)
+        val replyTo = message.responseTopic?.let { mqttTopicToNatsSubject(it) }
+        val headerBlock = message.userProperties?.takeIf { it.isNotEmpty() }?.let { formatHeaders(null, it) }
 
         // Find all SIDs that match this topic
         for ((filter, sids) in topicToSids) {
             if (mqttTopicMatchesFilter(message.topicName, filter)) {
                 for (sid in sids) {
-                    // MSG <subject> <sid> <#bytes>\r\n<payload>\r\n
-                    val payload = message.payload
-                    val header = "MSG $natsSubject $sid ${payload.size}\r\n"
-                    val buf = Buffer.buffer(header.length + payload.size + 2)
-                    buf.appendString(header)
-                    buf.appendBytes(payload)
-                    buf.appendString("\r\n")
-                    socket.write(buf)
+                    writeMsg(natsSubject, sid, replyTo, headerBlock, message.payload)
                 }
             }
         }
+
+        jetStreamKv.onBrokerMessage(message)
     }
 
     private fun checkAuth(): Boolean {
@@ -336,12 +441,15 @@ class NatsClient(
         if (closed) return
         closed = true
 
+        jetStreamKv.close()
+
         // Unsubscribe all topics
-        for (mqttTopic in topicToSids.keys.toList()) {
+        for (mqttTopic in (topicToSids.keys + kvTopicRefs.keys).toSet()) {
             sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
         }
         sidToTopic.clear()
         topicToSids.clear()
+        kvTopicRefs.clear()
 
         sessionHandler.unregisterInternalClient(clientId)
         sessionHandler.delClient(clientId)
@@ -358,6 +466,21 @@ class NatsClient(
         writeLine("-ERR '$msg'")
     }
 
+    // --- Header helpers ---
+
+    /** Parse a NATS header block (`NATS/1.0[ status]` line, then `Key: Value` lines). First value wins. */
+    private fun parseHeaders(block: String): Map<String, String> {
+        val result = linkedMapOf<String, String>()
+        block.split("\r\n").drop(1).forEach { line ->
+            val idx = line.indexOf(':')
+            if (idx > 0) {
+                val key = line.substring(0, idx).trim()
+                if (!result.containsKey(key)) result[key] = line.substring(idx + 1).trim()
+            }
+        }
+        return result
+    }
+
     // --- Topic conversion helpers ---
 
     /**
@@ -366,7 +489,7 @@ class NatsClient(
      * - `*` -> `+`
      * - `>` -> `#`
      */
-    private fun natsSubjectToMqttTopic(subject: String): String {
+    internal fun natsSubjectToMqttTopic(subject: String): String {
         return subject.replace('.', '/').replace('*', '+').replace('>', '#')
     }
 
@@ -376,14 +499,14 @@ class NatsClient(
      * - `+` -> `*`
      * - `#` -> `>`
      */
-    private fun mqttTopicToNatsSubject(topic: String): String {
+    internal fun mqttTopicToNatsSubject(topic: String): String {
         return topic.replace('/', '.').replace('+', '*').replace('#', '>').replace(' ', '_')
     }
 
     /**
      * Check if a concrete MQTT topic matches an MQTT topic filter (with wildcards).
      */
-    private fun mqttTopicMatchesFilter(topic: String, filter: String): Boolean {
+    internal fun mqttTopicMatchesFilter(topic: String, filter: String): Boolean {
         if (filter == "#") return true
         val topicParts = topic.split('/')
         val filterParts = filter.split('/')
@@ -398,4 +521,16 @@ class NatsClient(
         }
         return i == topicParts.size
     }
+}
+
+/** Format a NATS header block; [status] is e.g. `100 Idle Heartbeat` or `404 Message Not Found`. */
+internal fun formatHeaders(status: String?, headers: Map<String, String>): String {
+    val sb = StringBuilder("NATS/1.0")
+    if (status != null) sb.append(' ').append(status)
+    sb.append("\r\n")
+    // CR/LF would break the header framing, e.g. in MQTT user properties forwarded as headers
+    fun clean(text: String) = text.replace('\r', ' ').replace('\n', ' ')
+    headers.forEach { (k, v) -> sb.append(clean(k).replace(':', '_')).append(": ").append(clean(v)).append("\r\n") }
+    sb.append("\r\n")
+    return sb.toString()
 }

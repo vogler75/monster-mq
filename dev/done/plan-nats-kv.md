@@ -1,8 +1,12 @@
-# NATS KV on top of archive-group last-value stores (draft)
+# NATS KV on top of archive-group last-value stores
+
+Status: implemented in the main broker (2026-10-10): `NatsClient.kt` (headers, HPUB/HMSG, reply-to),
+`NatsJetStreamKv.kt` (JetStream KV subset), `doc/nats.md`, `tests/pytest_tests/nats/test_nats_kv.py`.
+Edge port: phase 2 of the edge repo's `dev/plans/plan-nats-server.md`.
 
 Goal: `nats kv get/put/del/watch/keys/ls/info` against MonsterMQ's native NATS port,
 with **bucket = archive group name** and the group's `lastValStore` as the backing store.
-Status: design sketch only, nothing implemented. Based on reading `NatsClient.kt`,
+Originally based on reading `NatsClient.kt`,
 `handlers/ArchiveGroup.kt`, `stores/IMessageStore.kt`, `data/BrokerMessage.kt`.
 
 ## Mapping
@@ -56,8 +60,17 @@ For `retainedOnly` groups, puts must be published with retain=true (or always re
 
 **Docs/tests**: extend `doc/nats.md`; integration test with jnats (already a dependency for the bridge) doing put/get/del/watch/keys/ls.
 
-## Open questions
-1. Keys: `.`→`/` hierarchy (proposed) vs. raw key as one topic level?
-2. KV put: always retained, or retained only for `retainedOnly` groups?
-3. Should `del` also clear the retained message, or only the group's last-value entry?
-4. Edge broker: same feature there too, or main broker only for now?
+## Decisions taken
+1. Keys: `.`→`/` hierarchy; the key is the full topic (filter `plant/#` → key `plant.line1.temp`).
+2. KV put is always a retained publish.
+3. `del` / `purge` publish an empty retained message, which clears both the retained store and the last-value entry
+   (otherwise the key would come back from the retained store after a restart).
+4. Main broker first; edge follows with the same wire behaviour.
+
+## Implementation notes
+- `allow_direct: false` in the stream config, so `get` uses `STREAM.MSG.GET` (JSON) instead of `DIRECT.GET`.
+- `INFO` advertises version `2.10.0`, `headers` and `jetstream`; nats.go refuses KV below server 2.6.2.
+- Push consumers wait for a subscriber on the deliver subject before sending the snapshot
+  (nats.py subscribes after `CONSUMER.CREATE`, the Go CLI before); `CONSUMER.INFO` waits until the snapshot is loaded.
+- Idle heartbeats carry `Nats-Last-Consumer` / `Nats-Last-Stream`; flow control is never requested.
+- Not done: no-responders status, pull consumers, `DIRECT.GET`, bucket create/delete.

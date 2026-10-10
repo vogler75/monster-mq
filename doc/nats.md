@@ -43,16 +43,61 @@ NATS subjects are automatically translated to MQTT topics and vice versa:
 | Command | Description |
 |---------|-------------|
 | `CONNECT` | Authenticate (respects `auth_required` based on UserManager) |
-| `PUB` | Publish a message (binary-safe payload) |
+| `PUB` | Publish a message (binary-safe payload), optional reply-to subject |
+| `HPUB` | Publish a message with NATS headers |
 | `SUB` | Subscribe to a subject (with wildcards) |
 | `UNSUB` | Unsubscribe |
 | `PING` / `PONG` | Keep-alive |
 
 ### Limitations
 
-- **QoS 0 only** — NATS core is fire-and-forget; no JetStream support in the protocol server
+- **QoS 0 only** — NATS core is fire-and-forget
+- **JetStream: Key-Value only** — see [Key-Value Buckets](#key-value-buckets); streams, pull consumers and object stores are not available
+- **No no-responders status** — a request to a subject nobody answers times out instead of failing fast
 - **No session persistence** — Clean session on every connect; all subscriptions are removed on disconnect
 - **No TLS** — Use the NATS Client Bridge with `nats+tls://` for encrypted connections to external NATS servers
+
+### Headers and Request/Reply
+
+The server advertises `headers: true`. Headers sent with `HPUB` become MQTT v5 user properties, and MQTT user properties are delivered to NATS clients as headers (`HMSG`) when the client enabled headers in `CONNECT`. A reply-to subject becomes the MQTT v5 response topic and vice versa, so `nats request` / `nats reply` work between NATS clients and across MQTT v5 clients (reply subjects are translated like any other subject, e.g. `_INBOX.abc.1` <-> `_INBOX/abc/1`).
+
+The `INFO` line reports version `2.10.0` because NATS clients gate features such as Key-Value on the server version.
+
+### Key-Value Buckets
+
+Archive groups with a last-value store are exposed as NATS JetStream Key-Value buckets, so `nats kv`, nats.go, nats.py and other KV clients work against the NATS port:
+
+| NATS KV | MonsterMQ |
+|---|---|
+| Bucket `Plant` (stream `KV_Plant`) | Archive group `Plant` (deployed, last-value store type other than `NONE`) |
+| Key `plant.line1.temp` | MQTT topic `plant/line1/temp` (`.` <-> `/`) |
+| Value | Payload in the archive group's last-value store |
+| `put` | Retained MQTT publish on the topic; MQTT subscribers, archives and other buckets see it |
+| `del` / `purge` | Empty retained publish: clears the retained message and the last-value entry |
+| `get`, `ls <bucket>`, `watch`, `history` | Read from the last-value store; `watch` then streams live updates |
+| `ls`, `info` | Lists archive groups / shows key count and size |
+| Revision | Message time in epoch milliseconds (synthesized, not a stream sequence) |
+| History | Always 1 (last value only) |
+| `add` / `rm` / `edit` bucket | Not supported; manage archive groups via config, GraphQL or the dashboard |
+
+```bash
+nats kv ls                                   # archive groups
+nats kv put Plant plant.line1.temp 21.5      # retained publish to plant/line1/temp
+nats kv get Plant plant.line1.temp
+nats kv ls Plant                             # keys
+nats kv watch Plant 'plant.line1.>'          # current values, then live updates
+nats kv del Plant plant.line1.temp
+nats kv create Plant plant.line1.new 1       # only if the key does not exist
+```
+
+Notes:
+
+- A key must match the archive group's topic filter, otherwise `put` fails. Keys use the full topic, so with filter `plant/#` the key is `plant.line1.temp`, not `line1.temp`.
+- Putting an empty value deletes the key, because an empty retained MQTT message is a delete.
+- Any MQTT or NATS publish that the archive group stores shows up in the bucket and in running watchers.
+- Puts and deletes are rejected for archive groups with a read-only last-value store.
+- `kv create` / `kv update` compare against the synthesized revision.
+- With user management enabled, `get`, `ls <bucket>` and `watch` need subscribe permission and `put` / `del` need publish permission on the translated MQTT topic.
 
 ### Authentication
 
