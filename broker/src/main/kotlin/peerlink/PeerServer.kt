@@ -812,7 +812,7 @@ class PeerServer(
         }
         val (ok, n) = rate.allow("refuse:$cid:$code", 10_000L)
         if (ok) {
-            logger.severe("peerlink: handshake refused [peer=$cid, code=$code, reason=$reason, suppressed=$n]")
+            logger.severe("peerlink: handshake refused [peer=$cid, remote=${socket.inetAddress?.hostAddress}, code=$code, reason=$reason, suppressed=$n]")
         }
         try {
             writeFrame(out, GoAway(code, reason))
