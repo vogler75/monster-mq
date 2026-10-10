@@ -14,6 +14,7 @@ import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
 import at.rocworks.graphql.KafkaServerConfigQueries
+import at.rocworks.graphql.PeerLinkQueries
 import at.rocworks.graphql.KafkaServerConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigMutations
 import at.rocworks.graphql.OpcUaClientConfigQueries
@@ -368,7 +369,8 @@ class GraphQLServer(
             "schema-kafka-servers.graphqls", // Kafka Servers
             "schema-datacatalog.graphqls",  // Data Catalog
             "schema-redfish.graphqls",      // Redfish Gateway
-            "schema-scripts.graphqls"       // Standalone Python/Starlark Scripts
+            "schema-scripts.graphqls",      // Standalone Python/Starlark Scripts
+            "schema-peerlink.graphqls"      // PeerLink configuration and link state
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -548,6 +550,8 @@ class GraphQLServer(
         val scriptQueries = deviceStore?.let { ScriptQueries(vertx, it) }
         val scriptMutations = deviceStore?.let { ScriptMutations(vertx, it) }
 
+        val peerLinkQueries = PeerLinkQueries(vertx)
+
         return RuntimeWiring.newRuntimeWiring()
             // Register scalar types
             .scalar(ExtendedScalars.GraphQLLong)
@@ -599,6 +603,7 @@ class GraphQLServer(
                     .dataFetcher("getDevices", queryResolver.getDevices())
                     // Metrics queries
                     .dataFetcher("brokerConfig", metricsResolver.brokerConfig())
+                    .dataFetcher("peerLink", peerLinkQueries.peerLink())
                     .dataFetcher("broker", metricsResolver.broker())
                     .dataFetcher("brokers", metricsResolver.brokers())
                     .dataFetcher("sessions", metricsResolver.sessions())

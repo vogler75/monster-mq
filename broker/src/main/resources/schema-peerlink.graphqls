@@ -1,0 +1,52 @@
+# PeerLink configuration and live link state (doc/peerlink.md)
+#
+# Shared with the edge broker: keep this file identical in both repositories.
+
+# PeerLink on the broker node that answers the query
+type PeerLinkInfo {
+    # PeerLink is enabled on this node
+    enabled: Boolean!
+    # PeerLink NodeId of this node (the broker node id while PeerLink is disabled)
+    nodeId: String!
+    # host:port of the peer listener; null when no peer may pull from this node
+    listen: String
+    # The peer listener uses TLS
+    tls: Boolean!
+    # Configured peers in configuration order, without this node's own entry
+    peers: [PeerLinkPeer!]!
+    # The full status document of GET /peerlink/v1/status; null while PeerLink is disabled
+    status: JSON
+}
+
+# One entry of PeerLink.Peers with the state of its links. A peer has up to two links:
+# pull (this node dials the peer and receives its messages) and serve (the peer dials
+# this node and receives this node's messages).
+type PeerLinkPeer {
+    # Canonical NodeId of the peer
+    nodeId: String!
+    # Address this node dials; null when this node does not pull from the peer
+    address: String
+    # This node pulls from the peer: outbound connection, messages flow from the peer to this node
+    pull: Boolean!
+    # The peer may pull from this node: inbound connection, messages flow from this node to the peer
+    serve: Boolean!
+    # Interest routing of the link: INHERIT or OFF
+    interest: String!
+    # State of the pull link: STOPPED, BACKOFF, DIALING, HANDSHAKE, SNAPSHOT or STREAMING; null without pull
+    pullState: String
+    # State of the serve link: NEVER_CONNECTED, CONNECTED or DISCONNECTED; null without serve
+    serveState: String
+    # Remote address of the peer's inbound connection; null while it never connected
+    remote: String
+    # Last error of the pull link; null when there is none
+    lastError: String
+    # Counters of the pull link, the matching entry of status.sources; null without pull
+    source: JSON
+    # Counters of the serve link, the matching entry of status.consumers; null without serve
+    consumer: JSON
+}
+
+extend type Query {
+    # PeerLink configuration and the state of every peer link on this node
+    peerLink: PeerLinkInfo!
+}

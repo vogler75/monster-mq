@@ -541,6 +541,21 @@ retained resync from that source (see [Retained messages](#5-retained-messages))
 `oaRetained` and `topicRootMismatch` are always false on this broker (WinCC OA
 specific, Edge only).
 
+The same document is available over GraphQL as `peerLink.status`, together
+with the configured peers and the state of their links, for the dashboard's
+PeerLink page:
+
+```graphql
+{ peerLink { enabled nodeId listen tls peers {
+    nodeId address pull serve interest pullState serveState remote lastError source consumer } } }
+```
+
+`pull` means this broker dials the peer and receives its messages (`pullState`
+is the `sources[]` state), `serve` means the peer dials this broker and
+receives this broker's messages (`serveState` is the `consumers[]` state).
+`source` and `consumer` are the matching status entries. The query uses the
+normal GraphQL authentication instead of the loopback guard.
+
 ### 10.2 Log messages
 
 All PeerLink log lines start with `peerlink:`. Connects and decisions are INFO,
