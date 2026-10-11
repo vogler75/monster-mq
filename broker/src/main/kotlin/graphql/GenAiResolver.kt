@@ -144,11 +144,14 @@ class GenAiResolver(
 
                 // Get arguments (required fields - null check for safety)
                 val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
-                val topicPattern = env.getArgument<String>("topicPattern") ?: "#"
+                val topicPattern = env.getArgument<String>("topicPattern")
                 val question = env.getArgument<String>("question")
                 val customSystemPrompt = env.getArgument<String>("systemPrompt")
                 val maxTopics = env.getArgument<Int>("maxTopics") ?: 100
                 val maxValueLength = env.getArgument<Int>("maxValueLength") ?: 1000
+
+                @Suppress("UNCHECKED_CAST")
+                val topicDataRaw = env.getArgument<List<Map<String, Any?>>>("topicData")
 
                 // Get chat history for follow-up questions
                 @Suppress("UNCHECKED_CAST")
@@ -172,78 +175,118 @@ class GenAiResolver(
                     return@DataFetcher future
                 }
 
-                // Check if archiveHandler is available
-                if (archiveHandler == null) {
-                    future.complete(TopicAnalysisResponseGraphQL(
-                        response = "",
-                        topicsAnalyzed = 0,
-                        model = genAiProvider.modelName,
-                        error = "ArchiveHandler is not available"
-                    ))
-                    return@DataFetcher future
-                }
+                val topicValues = mutableMapOf<String, String>()
 
-                // Get archive group
-                val deployedGroups = archiveHandler.getDeployedArchiveGroups()
-                val archiveGroup = deployedGroups[archiveGroupName]
-                if (archiveGroup == null) {
-                    future.complete(TopicAnalysisResponseGraphQL(
-                        response = "",
-                        topicsAnalyzed = 0,
-                        model = genAiProvider.modelName,
-                        error = "Archive group '$archiveGroupName' not found"
-                    ))
-                    return@DataFetcher future
-                }
-
-                val lastValueStore = archiveGroup.lastValStore
-                if (lastValueStore == null) {
-                    future.complete(TopicAnalysisResponseGraphQL(
-                        response = "",
-                        topicsAnalyzed = 0,
-                        model = genAiProvider.modelName,
-                        error = "Archive group '$archiveGroupName' has no LastValueStore configured"
-                    ))
-                    return@DataFetcher future
-                }
-
-                // Collect topics matching pattern
-                val topics = mutableListOf<BrokerMessage>()
-                lastValueStore.findMatchingMessages(topicPattern) { msg ->
-                    if (topics.size < maxTopics) {
-                        topics.add(msg)
-                        true // continue
+                // Collect topics matching pattern if topicPattern is provided
+                if (!topicPattern.isNullOrBlank()) {
+                    if (archiveHandler == null) {
+                        if (topicDataRaw.isNullOrEmpty()) {
+                            future.complete(TopicAnalysisResponseGraphQL(
+                                response = "",
+                                topicsAnalyzed = 0,
+                                model = genAiProvider.modelName,
+                                error = "ArchiveHandler is not available"
+                            ))
+                            return@DataFetcher future
+                        } else {
+                            logger.warning("ArchiveHandler is not available, skipping topicPattern search")
+                        }
                     } else {
-                        false // stop
+                        val deployedGroups = archiveHandler.getDeployedArchiveGroups()
+                        val archiveGroup = deployedGroups[archiveGroupName]
+                        if (archiveGroup == null) {
+                            if (topicDataRaw.isNullOrEmpty()) {
+                                future.complete(TopicAnalysisResponseGraphQL(
+                                    response = "",
+                                    topicsAnalyzed = 0,
+                                    model = genAiProvider.modelName,
+                                    error = "Archive group '$archiveGroupName' not found"
+                                ))
+                                return@DataFetcher future
+                            } else {
+                                logger.warning("Archive group '$archiveGroupName' not found, skipping topicPattern search")
+                            }
+                        } else {
+                            val lastValueStore = archiveGroup.lastValStore
+                            if (lastValueStore == null) {
+                                if (topicDataRaw.isNullOrEmpty()) {
+                                    future.complete(TopicAnalysisResponseGraphQL(
+                                        response = "",
+                                        topicsAnalyzed = 0,
+                                        model = genAiProvider.modelName,
+                                        error = "Archive group '$archiveGroupName' has no LastValueStore configured"
+                                    ))
+                                    return@DataFetcher future
+                                } else {
+                                    logger.warning("Archive group '$archiveGroupName' has no LastValueStore, skipping topicPattern search")
+                                }
+                            } else {
+                                val patternMessages = mutableListOf<BrokerMessage>()
+                                lastValueStore.findMatchingMessages(topicPattern) { msg ->
+                                    if (maxTopics <= 0 || patternMessages.size < maxTopics) {
+                                        patternMessages.add(msg)
+                                        true // continue
+                                    } else {
+                                        false // stop
+                                    }
+                                }
+                                for (msg in patternMessages) {
+                                    if (maxTopics > 0 && topicValues.size >= maxTopics) break
+                                    val value = formatTopicValue(msg, maxValueLength)
+                                    if (value != null) {
+                                        topicValues[msg.topicName] = value
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
-                if (topics.isEmpty()) {
+                // Collect topics from directly passed topicData
+                if (!topicDataRaw.isNullOrEmpty()) {
+                    for (item in topicDataRaw) {
+                        val topic = (item["topic"] as? String)?.trim() ?: continue
+                        if (topic.isEmpty()) continue
+                        if (maxTopics > 0 && topicValues.size >= maxTopics && !topicValues.containsKey(topic)) {
+                            break
+                        }
+                        val rawValue = (item["value"] as? String) ?: (item["payload"] as? String) ?: ""
+                        val value = if (maxValueLength > 0 && rawValue.length > maxValueLength) {
+                            rawValue.take(maxValueLength) + "...[truncated]"
+                        } else {
+                            rawValue
+                        }
+                        topicValues[topic] = value
+                    }
+                }
+
+                if (topicValues.isEmpty()) {
+                    val errorMsg = when {
+                        !topicPattern.isNullOrBlank() && !topicDataRaw.isNullOrEmpty() ->
+                            "No topics found matching pattern '$topicPattern' or provided in topicData"
+                        !topicPattern.isNullOrBlank() ->
+                            "No topics found matching pattern '$topicPattern'"
+                        !topicDataRaw.isNullOrEmpty() ->
+                            "No topics found in provided topicData"
+                        else ->
+                            "Either topicPattern or topicData must be provided"
+                    }
                     future.complete(TopicAnalysisResponseGraphQL(
                         response = "",
                         topicsAnalyzed = 0,
                         model = genAiProvider.modelName,
-                        error = "No topics found matching pattern '$topicPattern'"
+                        error = errorMsg
                     ))
                     return@DataFetcher future
                 }
+
+                val analyzedCount = topicValues.size
 
                 // Build hierarchical context string to reduce token usage
-                val topicValues = mutableMapOf<String, String>()
-                var analyzedCount = 0
-
-                for (msg in topics) {
-                    val value = formatTopicValue(msg, maxValueLength)
-                    if (value != null) {
-                        topicValues[msg.topicName] = value
-                        analyzedCount++
-                    }
-                }
-
                 val contextBuilder = StringBuilder()
                 formatTopicsAsHierarchy(topicValues, contextBuilder)
 
-                if (analyzedCount == 0) {
+                if (contextBuilder.isEmpty()) {
                     future.complete(TopicAnalysisResponseGraphQL(
                         response = "",
                         topicsAnalyzed = 0,
@@ -286,7 +329,7 @@ User question: $question
 """.trimIndent()
                 }
 
-                logger.info("Topic analysis request: pattern=$topicPattern, topics=$analyzedCount, isFollowUp=$isFollowUp, question length=${question.length}")
+                logger.info("Topic analysis request: pattern=${topicPattern ?: "(none)"}, topicDataCount=${topicDataRaw?.size ?: 0}, topics=$analyzedCount, isFollowUp=$isFollowUp, question length=${question.length}")
                 logger.fine { "Topic analysis prompt being sent to LLM:\n$fullPrompt" }
 
                 // Call GenAI provider
@@ -347,8 +390,9 @@ User question: $question
         val payload = msg.payload
         if (payload.isEmpty()) return ""
 
-        // Skip large binaries (> 10KB)
-        if (payload.size > 10 * 1024) return null
+        // Skip large payloads if maxLength > 0, or guard against extreme sizes (>5MB) if maxLength <= 0 (unlimited)
+        if (maxLength > 0 && payload.size > maxOf(10 * 1024, maxLength * 4)) return null
+        if (maxLength <= 0 && payload.size > 5 * 1024 * 1024) return null
 
         // Try to convert to string
         val stringValue = try {
@@ -362,8 +406,8 @@ User question: $question
             return null
         }
 
-        // Truncate if too long
-        return if (stringValue.length > maxLength) {
+        // Truncate if too long (0 or negative means unlimited)
+        return if (maxLength > 0 && stringValue.length > maxLength) {
             stringValue.take(maxLength) + "...[truncated]"
         } else {
             stringValue

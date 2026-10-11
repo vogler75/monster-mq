@@ -126,12 +126,13 @@ query AnalyzeTopics {
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `archiveGroup` | String! | - | Name of the archive group to query |
-| `topicPattern` | String! | - | MQTT wildcard pattern (e.g., `#`, `sensors/#`) |
+| `archiveGroup` | String | "Default" | Name of the archive group to query (optional if topicData provided) |
+| `topicPattern` | String | - | MQTT wildcard pattern (optional if topicData provided) |
+| `topicData` | [TopicDataInput] | null | Directly passed list of `{ topic, value }` data (e.g. from UI subscriptions) |
 | `question` | String! | - | The question to ask about the topics |
 | `systemPrompt` | String | Built-in | Custom system prompt for the LLM |
-| `maxTopics` | Int | 100 | Maximum topics to include in context |
-| `maxValueLength` | Int | 1000 | Truncate values longer than this |
+| `maxTopics` | Int | 100 | Maximum topics to include in context (0 for unlimited) |
+| `maxValueLength` | Int | 1000 | Truncate values longer than this (0 for unlimited) |
 | `chatHistory` | [ChatMessage] | null | Previous messages for follow-up questions |
 
 ### Follow-up Questions

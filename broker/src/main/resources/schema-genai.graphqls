@@ -62,20 +62,32 @@ type TopicAnalysisResponse {
 }
 
 # Extend GenAiQuery with topic analysis
+"Topic and its associated value/payload for AI analysis"
+input TopicDataInput {
+    "MQTT topic name"
+    topic: String!
+
+    "Topic value or payload string"
+    value: String
+}
+
 extend type GenAiQuery {
     """
     Analyze MQTT topics using AI.
-    Collects topic values from the LastValueStore and sends them to the LLM for analysis.
+    Collects topic values from the LastValueStore and/or directly passed topicData, and sends them to the LLM for analysis.
 
     On the first request (empty chatHistory), topic data is included in the prompt.
     On subsequent requests, only the chat history is sent to continue the conversation.
     """
     analyzeTopics(
-        "Archive group to query"
-        archiveGroup: String!
+        "Archive group to query (defaults to 'Default'; optional if topicData is provided)"
+        archiveGroup: String
 
-        "MQTT topic pattern (supports + and # wildcards)"
-        topicPattern: String!
+        "MQTT topic pattern (supports + and # wildcards; optional if topicData is provided)"
+        topicPattern: String
+
+        "Directly passed list of topics and their values/payloads (e.g. from UI subscriptions or live table)"
+        topicData: [TopicDataInput!]
 
         "User's question about the topics"
         question: String!
@@ -83,10 +95,10 @@ extend type GenAiQuery {
         "Custom system prompt (optional)"
         systemPrompt: String
 
-        "Max topics to include (default 100)"
+        "Max topics to include (default 100; set to 0 for unlimited)"
         maxTopics: Int
 
-        "Max value length before truncation (default 1000 chars)"
+        "Max value length before truncation (default 1000 chars; set to 0 for unlimited)"
         maxValueLength: Int
 
         "Chat history from previous exchanges (optional). When provided, topic data is not re-sent."
