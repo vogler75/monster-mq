@@ -16,6 +16,7 @@ abstract class DatabaseConnection(
     private val password: String
 ) {
     var connection: Connection? = null
+    val connectionLock = Any()
     private val defaultRetryWaitTime = 3000L
     private var reconnectOngoing = false
     @Volatile
@@ -26,7 +27,7 @@ abstract class DatabaseConnection(
     private var isConnected = false
     private var periodicTimerId: Long? = null
     private var retryTimerId: Long? = null
-    private var vertxInstance: Vertx? = null
+    protected var vertxInstance: Vertx? = null
 
     fun start(vertx: Vertx, startPromise: Promise<Void>) {
         this.vertxInstance = vertx
@@ -43,12 +44,14 @@ abstract class DatabaseConnection(
         }
         periodicTimerId = null
         retryTimerId = null
-        try {
-            connection?.close()
-        } catch (e: Exception) {
-            logger.finer { "Error closing connection: ${e.message}" }
+        synchronized(connectionLock) {
+            try {
+                connection?.close()
+            } catch (e: Exception) {
+                logger.finer { "Error closing connection: ${e.message}" }
+            }
+            connection = null
         }
-        connection = null
         return Future.succeededFuture()
     }
 
@@ -119,26 +122,28 @@ abstract class DatabaseConnection(
             } else {
                 url
             }
-            DriverManager.getConnection(finalUrl, username, password)
-                ?.let { connection ->
-                    this.connection = connection
-                    if (disconnectedLogged) {
-                        disconnectedLogged = false
-                        logger.info("Database connection restored [${Utils.getCurrentFunctionName()}]")
-                    } else {
-                        logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
-                    }
-                    init(connection).onSuccess {
-                        isConnected = true
-                        promise.complete()
-                    }.onFailure {
-                        isConnected = false
-                        promise.fail(it)
-                    }
-                } ?: run {
-                    isConnected = false
-                    promise.fail("DriverManager returned null connection")
+            val newConn = DriverManager.getConnection(finalUrl, username, password)
+            if (newConn != null) {
+                synchronized(connectionLock) {
+                    this.connection = newConn
                 }
+                if (disconnectedLogged) {
+                    disconnectedLogged = false
+                    logger.info("Database connection restored [${Utils.getCurrentFunctionName()}]")
+                } else {
+                    logger.fine("Connection established [${Utils.getCurrentFunctionName()}]")
+                }
+                init(newConn).onSuccess {
+                    isConnected = true
+                    promise.complete()
+                }.onFailure {
+                    isConnected = false
+                    promise.fail(it)
+                }
+            } else {
+                isConnected = false
+                promise.fail("DriverManager returned null connection")
+            }
         } catch (e: Exception) {
             isConnected = false
             logger.warning("Error opening connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
@@ -152,21 +157,23 @@ abstract class DatabaseConnection(
             isConnected = false
             return false
         }
-        if (connection != null && !connection!!.isClosed) {
-            try {
-                val valid = connection!!.isValid(3)
-                isConnected = valid
-                return valid
-            } catch (e: Exception) {
-                isConnected = false
-                logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
-                // If the connection has an aborted transaction, try to rollback
-                if (e.message?.contains("aborted") == true || e.message?.contains("transaction") == true) {
-                    try {
-                        connection?.rollback()
-                        logger.info("Rolled back aborted transaction during connection check [${Utils.getCurrentFunctionName()}]")
-                    } catch (rollbackEx: Exception) {
-                        logger.warning("Error rolling back aborted transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
+        synchronized(connectionLock) {
+            if (connection != null && !connection!!.isClosed) {
+                try {
+                    val valid = connection!!.isValid(3)
+                    isConnected = valid
+                    return valid
+                } catch (e: Exception) {
+                    isConnected = false
+                    logger.warning("Error checking connection [${e.message}] [${Utils.getCurrentFunctionName()}]")
+                    // If the connection has an aborted transaction, try to rollback
+                    if (e.message?.contains("aborted") == true || e.message?.contains("transaction") == true) {
+                        try {
+                            connection?.rollback()
+                            logger.info("Rolled back aborted transaction during connection check [${Utils.getCurrentFunctionName()}]")
+                        } catch (rollbackEx: Exception) {
+                            logger.warning("Error rolling back aborted transaction: ${rollbackEx.message} [${Utils.getCurrentFunctionName()}]")
+                        }
                     }
                 }
             }

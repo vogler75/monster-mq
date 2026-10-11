@@ -62,6 +62,7 @@ class MqttClientConnector : AbstractVerticle() {
     private var isConnected = false
     @Volatile
     private var isReconnecting = false
+    private val isStopped = AtomicBoolean(false)
     private var reconnectTimerId: Long? = null
 
     // Custom TLS setup (CA, client certificate, ALPN, SNI); null uses the JVM default
@@ -82,6 +83,7 @@ class MqttClientConnector : AbstractVerticle() {
     private var eventBusConsumerRegistration: io.vertx.core.eventbus.MessageConsumer<BrokerMessage>? = null
 
     override fun start(startPromise: Promise<Void>) {
+        isStopped.set(false)
         try {
             // Load device configuration
             val deviceJson = config().getJsonObject("device")
@@ -133,6 +135,7 @@ class MqttClientConnector : AbstractVerticle() {
 
             // Attempt initial connection in the background
             vertx.executeBlocking(Callable {
+                if (isStopped.get()) return@Callable null
                 try {
                     connectToRemoteBroker()
                 } catch (e: Exception) {
@@ -148,6 +151,7 @@ class MqttClientConnector : AbstractVerticle() {
     }
 
     override fun stop(stopPromise: Promise<Void>) {
+        isStopped.set(true)
         logger.info("Stopping MqttClientConnector for device: ${deviceConfig.name}")
 
         // Cancel any pending reconnection timer
@@ -300,7 +304,7 @@ class MqttClientConnector : AbstractVerticle() {
     }
 
     private fun connectToRemoteBroker() {
-        if (isConnected || isReconnecting) {
+        if (isStopped.get() || isConnected || isReconnecting) {
             return
         }
 
@@ -317,6 +321,12 @@ class MqttClientConnector : AbstractVerticle() {
                     MemoryPersistence()
                 }
                 client = MqttAsyncClient(mqttConfig.brokerUrl, mqttConfig.clientId, persistence)
+            }
+
+            if (isStopped.get()) {
+                isReconnecting = false
+                disconnectFromRemoteBroker()
+                return
             }
 
             // Configure connection options
@@ -360,7 +370,9 @@ class MqttClientConnector : AbstractVerticle() {
             // Set callback for connection events
             client!!.setCallback(object : MqttCallback {
                 override fun connectionLost(cause: Throwable?) {
+                    if (isStopped.get()) return
                     vertx.runOnContext {
+                        if (isStopped.get()) return@runOnContext
                         logger.warning("Connection lost to remote broker ${deviceConfig.name}: ${cause?.message}")
                         isConnected = false
                         scheduleReconnection()
@@ -379,7 +391,17 @@ class MqttClientConnector : AbstractVerticle() {
             // Connect
             client!!.connect(connOpts, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    if (isStopped.get()) {
+                        isReconnecting = false
+                        disconnectFromRemoteBroker()
+                        return
+                    }
                     vertx.runOnContext {
+                        if (isStopped.get()) {
+                            isReconnecting = false
+                            disconnectFromRemoteBroker()
+                            return@runOnContext
+                        }
                         isConnected = true
                         isReconnecting = false
                         logger.info("Connected to remote MQTT broker: ${mqttConfig.brokerUrl}")
@@ -390,7 +412,15 @@ class MqttClientConnector : AbstractVerticle() {
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                    if (isStopped.get()) {
+                        isReconnecting = false
+                        return
+                    }
                     vertx.runOnContext {
+                        if (isStopped.get()) {
+                            isReconnecting = false
+                            return@runOnContext
+                        }
                         isReconnecting = false
                         logger.severe("Failed to connect to remote MQTT broker: ${exception?.message}")
                         logger.severe("Exception details: ${exception?.toString()}")
@@ -403,7 +433,9 @@ class MqttClientConnector : AbstractVerticle() {
         } catch (e: Exception) {
             isReconnecting = false
             logger.severe("Exception during MQTT connection: ${e.message}")
-            scheduleReconnection()
+            if (!isStopped.get()) {
+                scheduleReconnection()
+            }
         }
     }
 
@@ -414,32 +446,47 @@ class MqttClientConnector : AbstractVerticle() {
             reconnectTimerId = null
         }
 
-        if (client != null && isConnected) {
+        val clientToClose = client
+        client = null
+        isConnected = false
+        isReconnecting = false
+        subscribedAddresses.clear()
+
+        if (clientToClose != null) {
             try {
-                client!!.disconnect()
-                isConnected = false
-                isReconnecting = false
-                client = null
-                subscribedAddresses.clear()
-                logger.info("Disconnected from remote broker for device ${deviceConfig.name}")
+                clientToClose.setCallback(null)
+            } catch (e: Exception) {
+                logger.warning("Error clearing MQTT callback for device ${deviceConfig.name}: ${e.message}")
+            }
+
+            try {
+                if (clientToClose.isConnected) {
+                    clientToClose.disconnectForcibly(1000, 2000)
+                    logger.info("Disconnected from remote broker for device ${deviceConfig.name}")
+                }
             } catch (e: Exception) {
                 logger.warning("Error disconnecting from remote broker: ${e.message}")
             }
-        } else {
-            isConnected = false
-            isReconnecting = false
-            client = null
-            subscribedAddresses.clear()
+
+            try {
+                clientToClose.close(true)
+                logger.fine("Closed MQTT client for device ${deviceConfig.name}")
+            } catch (e: Exception) {
+                logger.warning("Error closing MQTT client: ${e.message}")
+            }
         }
     }
 
     private fun scheduleReconnection() {
+        if (isStopped.get()) return
         if (!isReconnecting && reconnectTimerId == null) {
             reconnectTimerId = vertx.setTimer(mqttConfig.reconnectDelay) {
                 reconnectTimerId = null
+                if (isStopped.get()) return@setTimer
                 if (!isConnected) {
                     logger.info("Attempting to reconnect to remote MQTT broker for device ${deviceConfig.name}...")
                     vertx.executeBlocking(Callable {
+                        if (isStopped.get()) return@Callable null
                         try {
                             connectToRemoteBroker()
                         } catch (e: Exception) {
@@ -454,6 +501,7 @@ class MqttClientConnector : AbstractVerticle() {
     }
 
     private fun setupSubscriptions() {
+        if (isStopped.get()) return
         // Setup all SUBSCRIBE mode addresses
         val subscribeAddresses = mqttConfig.addresses.filter { it.isSubscribe() }
 

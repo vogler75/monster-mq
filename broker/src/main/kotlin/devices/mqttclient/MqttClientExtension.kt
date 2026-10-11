@@ -35,6 +35,9 @@ class MqttClientExtension : AbstractVerticle() {
     // Track deployed connector verticles
     private val deployedConnectors = ConcurrentHashMap<String, String>() // deviceName -> deploymentId
 
+    // Queue operations per device to avoid concurrent deploy/undeploy race conditions
+    private val deviceOperationQueues = ConcurrentHashMap<String, Future<*>>()
+
     // Track active device configurations
     private val activeDevices = ConcurrentHashMap<String, DeviceConfig>() // deviceName -> config
 
@@ -201,27 +204,32 @@ class MqttClientExtension : AbstractVerticle() {
         }
 
         try {
-            // Create connector configuration
-            val connectorConfig = JsonObject()
-                .put("device", device.toJsonObject())
+            val cleanupFuture = if (deployedConnectors.containsKey(device.name)) {
+                undeployConnectorForDevice(device.name)
+            } else {
+                Future.succeededFuture()
+            }
 
-            // Deploy connector verticle
-            val options = DeploymentOptions().setConfig(connectorConfig)
-            vertx.deployVerticle(MqttClientConnector(), options)
-                .onComplete { result ->
-                    if (result.succeeded()) {
-                        val deploymentId = result.result()
-                        deployedConnectors[device.name] = deploymentId
-                        activeDevices[device.name] = device
-                        deviceRegistry[device.namespace] = device.name
+            cleanupFuture.compose {
+                val connectorConfig = JsonObject()
+                    .put("device", device.toJsonObject())
 
-                        logger.info("Deployed MqttClientConnector for device ${device.name} (${deploymentId})")
-                        promise.complete(deploymentId)
-                    } else {
-                        logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
-                        promise.fail(result.cause())
-                    }
+                val options = DeploymentOptions().setConfig(connectorConfig)
+                vertx.deployVerticle(MqttClientConnector(), options)
+            }.onComplete { result ->
+                if (result.succeeded()) {
+                    val deploymentId = result.result()
+                    deployedConnectors[device.name] = deploymentId
+                    activeDevices[device.name] = device
+                    deviceRegistry[device.namespace] = device.name
+
+                    logger.info("Deployed MqttClientConnector for device ${device.name} (${deploymentId})")
+                    promise.complete(deploymentId)
+                } else {
+                    logger.severe("Failed to deploy connector for device ${device.name}: ${result.cause()?.message}")
+                    promise.fail(result.cause())
                 }
+            }
 
         } catch (e: Exception) {
             promise.fail(e)
@@ -311,6 +319,24 @@ class MqttClientExtension : AbstractVerticle() {
         }
     }
 
+    private fun <T> queueDeviceOperation(deviceName: String, operation: () -> Future<T>): Future<T> {
+        val promise = Promise.promise<T>()
+        val previous = deviceOperationQueues.getOrDefault(deviceName, Future.succeededFuture<Any>())
+        val next = previous.recover { Future.succeededFuture() }.compose {
+            operation()
+        }
+        deviceOperationQueues[deviceName] = next
+        next.onComplete { result ->
+            if (result.succeeded()) {
+                promise.complete(result.result())
+            } else {
+                promise.fail(result.cause())
+            }
+            deviceOperationQueues.remove(deviceName, next)
+        }
+        return promise.future()
+    }
+
     private fun handleDeviceConfigChange(message: Message<JsonObject>) {
         try {
             val changeData = message.body()
@@ -319,97 +345,80 @@ class MqttClientExtension : AbstractVerticle() {
 
             logger.info("Handling device config change: $operation for device $deviceName")
 
-            when (operation) {
-                "add", "update", "addAddress", "updateAddress", "deleteAddress" -> {
-                    val deviceJson = changeData.getJsonObject("device")
-                    val device = DeviceConfig.fromJsonObject(deviceJson)
+            queueDeviceOperation(deviceName) {
+                when (operation) {
+                    "add", "update", "addAddress", "updateAddress", "deleteAddress" -> {
+                        val deviceJson = changeData.getJsonObject("device")
+                        val device = DeviceConfig.fromJsonObject(deviceJson)
 
-                    if (device.isAssignedToNode(currentNodeId) && device.enabled) {
-                        // Redeploy connector for this device to pick up address changes
-                        undeployConnectorForDevice(deviceName)
-                            .compose { deployConnectorForDevice(device) }
-                            .onComplete { result ->
-                                if (result.succeeded()) {
+                        if (device.isAssignedToNode(currentNodeId) && device.enabled) {
+                            // Redeploy connector for this device to pick up address changes
+                            undeployConnectorForDevice(deviceName)
+                                .compose { deployConnectorForDevice(device) }
+                                .map {
                                     logger.info("Successfully redeployed connector for device $deviceName after $operation")
-                                    message.reply(JsonObject().put("success", true))
-                                } else {
-                                    logger.warning("Failed to redeploy connector for device $deviceName after $operation: ${result.cause()?.message}")
-                                    message.fail(500, result.cause()?.message ?: "Deployment failed")
-                                }
-                            }
-                    } else {
-                        // Device not for this node or disabled - just undeploy if exists
-                        undeployConnectorForDevice(deviceName)
-                            .onComplete { message.reply(JsonObject().put("success", true)) }
-                    }
-                }
-
-                "delete" -> {
-                    undeployConnectorForDevice(deviceName)
-                        .onComplete { message.reply(JsonObject().put("success", true)) }
-                }
-
-                "toggle" -> {
-                    val enabled = changeData.getBoolean("enabled", false)
-
-                    // First get device from database (might not be in activeDevices if currently disabled)
-                    deviceStore.getDevice(deviceName)
-                        .onComplete { deviceResult ->
-                            if (deviceResult.succeeded()) {
-                                val device = deviceResult.result()
-                                if (device != null) {
-                                    if (enabled && device.isAssignedToNode(currentNodeId)) {
-                                        // Enable: first undeploy if exists, then deploy with new config
-                                        undeployConnectorForDevice(deviceName)
-                                            .compose { deployConnectorForDevice(device.copy(enabled = true)) }
-                                            .onComplete { result ->
-                                                if (result.succeeded()) {
-                                                    message.reply(JsonObject().put("success", true))
-                                                } else {
-                                                    message.fail(500, result.cause()?.message ?: "Deploy failed")
-                                                }
-                                            }
-                                    } else {
-                                        // Disable: undeploy
-                                        undeployConnectorForDevice(deviceName)
-                                            .onComplete { message.reply(JsonObject().put("success", true)) }
-                                    }
-                                } else {
-                                    message.fail(404, "Device not found: $deviceName")
-                                }
-                            } else {
-                                message.fail(500, "Failed to load device: ${deviceResult.cause()?.message}")
-                            }
-                        }
-                }
-
-                "reassign" -> {
-                    val newNodeId = changeData.getString("nodeId")
-                    val device = activeDevices[deviceName]
-
-                    if (device != null) {
-                        if (newNodeId == currentNodeId && device.enabled) {
-                            // Device reassigned TO this node - deploy
-                            deployConnectorForDevice(device.copy(nodeId = newNodeId))
-                                .onComplete { result ->
-                                    if (result.succeeded()) {
-                                        message.reply(JsonObject().put("success", true))
-                                    } else {
-                                        message.fail(500, result.cause()?.message ?: "Deploy failed")
-                                    }
+                                    Unit
                                 }
                         } else {
-                            // Device reassigned FROM this node - undeploy
-                            undeployConnectorForDevice(deviceName)
-                                .onComplete { message.reply(JsonObject().put("success", true)) }
+                            // Device not for this node or disabled - just undeploy if exists
+                            undeployConnectorForDevice(deviceName).map { Unit }
                         }
-                    } else {
-                        message.reply(JsonObject().put("success", true))
+                    }
+
+                    "delete" -> {
+                        undeployConnectorForDevice(deviceName).map { Unit }
+                    }
+
+                    "toggle" -> {
+                        val enabled = changeData.getBoolean("enabled", false)
+                        val deviceJson = changeData.getJsonObject("device")
+                        val deviceFuture = if (deviceJson != null) {
+                            Future.succeededFuture(DeviceConfig.fromJsonObject(deviceJson))
+                        } else {
+                            deviceStore.getDevice(deviceName)
+                        }
+
+                        deviceFuture.compose { device ->
+                            if (device != null) {
+                                if (enabled && device.isAssignedToNode(currentNodeId)) {
+                                    undeployConnectorForDevice(deviceName)
+                                        .compose { deployConnectorForDevice(device.copy(enabled = true)) }
+                                        .map { Unit }
+                                } else {
+                                    undeployConnectorForDevice(deviceName).map { Unit }
+                                }
+                            } else {
+                                Future.failedFuture("Device not found: $deviceName")
+                            }
+                        }
+                    }
+
+                    "reassign" -> {
+                        val newNodeId = changeData.getString("nodeId")
+                        val device = activeDevices[deviceName]
+
+                        if (device != null) {
+                            if (newNodeId == currentNodeId && device.enabled) {
+                                deployConnectorForDevice(device.copy(nodeId = newNodeId)).map { Unit }
+                            } else {
+                                undeployConnectorForDevice(deviceName).map { Unit }
+                            }
+                        } else {
+                            Future.succeededFuture(Unit)
+                        }
+                    }
+
+                    else -> {
+                        Future.failedFuture("Unknown operation: $operation")
                     }
                 }
-
-                else -> {
-                    message.fail(400, "Unknown operation: $operation")
+            }.onComplete { result ->
+                if (result.succeeded()) {
+                    message.reply(JsonObject().put("success", true))
+                } else {
+                    val errorMsg = result.cause()?.message ?: "Operation failed"
+                    logger.warning("Failed device config change $operation for device $deviceName: $errorMsg")
+                    message.fail(500, errorMsg)
                 }
             }
 

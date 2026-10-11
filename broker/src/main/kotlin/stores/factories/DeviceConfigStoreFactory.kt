@@ -46,7 +46,7 @@ object DeviceConfigStoreFactory {
                     val pass = postgresConfig.getString("Pass")
                     val schema = postgresConfig.getString("Schema")
                     if (url != null && user != null && pass != null) {
-                        DeviceConfigStorePostgres(url, user, pass, schema)
+                        DeviceConfigStorePostgres(vertx, url, user, pass, schema)
                     } else {
                         null
                     }
@@ -62,7 +62,7 @@ object DeviceConfigStoreFactory {
                     val user = crateConfig.getString("User")
                     val pass = crateConfig.getString("Pass")
                     if (url != null && user != null && pass != null) {
-                        DeviceConfigStoreCrateDB(url, user, pass)
+                        DeviceConfigStoreCrateDB(vertx, url, user, pass)
                     } else {
                         null
                     }

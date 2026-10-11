@@ -323,6 +323,7 @@ class MqttClientConfigMutations(
                         val changeData = JsonObject()
                             .put("operation", "toggle")
                             .put("deviceName", name)
+                            .put("device", deviceToJson(updatedDevice))
                             .put("enabled", enabled)
 
                         vertx.eventBus().publish(MqttClientExtension.ADDRESS_DEVICE_CONFIG_CHANGED, changeData)

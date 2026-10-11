@@ -14,19 +14,40 @@ import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.concurrent.Callable
 import java.util.logging.Logger
 
 /**
  * PostgreSQL implementation of DeviceConfigStore with automatic reconnection on connection loss
  */
 class DeviceConfigStorePostgres(
+    private val vertx: Vertx,
     private val url: String,
     private val user: String,
     private val password: String,
     private val schema: String? = null
 ) : DatabaseConnection(Utils.getLogger(DeviceConfigStorePostgres::class.java), url, user, password), IDeviceConfigStore {
 
+    constructor(url: String, user: String, password: String, schema: String? = null) :
+        this(Vertx.currentContext()?.owner() ?: Vertx.vertx(), url, user, password, schema)
+
     private val logger: Logger = Utils.getLogger(DeviceConfigStorePostgres::class.java)
+
+    private fun <T> executeBlocking(action: () -> T): Future<T> {
+        val promise = Promise.promise<T>()
+        vertx.executeBlocking<T>(Callable {
+            synchronized(connectionLock) {
+                action()
+            }
+        }).onComplete { ar ->
+            if (ar.succeeded()) {
+                promise.complete(ar.result())
+            } else {
+                promise.fail(ar.cause())
+            }
+        }
+        return promise.future()
+    }
 
     companion object {
         private const val TABLE_NAME = "deviceconfigs"
@@ -132,7 +153,7 @@ class DeviceConfigStorePostgres(
 
     override fun initialize(): Future<Void> {
         val promise = Promise.promise<Void>()
-        start(Vertx.currentContext().owner(), promise)
+        start(vertx, promise)
         return promise.future()
     }
 
@@ -164,10 +185,9 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getAllDevices(): Future<List<DeviceConfig>> {
-        val promise = Promise.promise<List<DeviceConfig>>()
-
-        try {
-            connection!!.prepareStatement(SELECT_ALL).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(SELECT_ALL).use { stmt ->
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
                     while (rs.next()) {
@@ -175,25 +195,18 @@ class DeviceConfigStorePostgres(
                             devices.add(mapResultSetToDevice(rs))
                         } catch (e: DeviceConfigException) {
                             logger.warning("Skipping invalid device record: ${e.message}")
-                            // Continue processing other records instead of failing completely
                         }
                     }
-                    promise.complete(devices)
+                    devices
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to get all devices: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to get all devices", e))
         }
-
-        return promise.future()
     }
 
     override fun getDevicesByType(type: String): Future<List<DeviceConfig>> {
-        val promise = Promise.promise<List<DeviceConfig>>()
-
-        try {
-            connection!!.prepareStatement(SELECT_BY_TYPE).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(SELECT_BY_TYPE).use { stmt ->
                 stmt.setString(1, type)
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
@@ -204,22 +217,16 @@ class DeviceConfigStorePostgres(
                             logger.warning("Skipping invalid device record for type $type: ${e.message}")
                         }
                     }
-                    promise.complete(devices)
+                    devices
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to get devices by type $type: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to get devices by type", e))
         }
-
-        return promise.future()
     }
 
     override fun getDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
-        val promise = Promise.promise<List<DeviceConfig>>()
-
-        try {
-            connection!!.prepareStatement(SELECT_BY_NODE).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(SELECT_BY_NODE).use { stmt ->
                 stmt.setString(1, nodeId)
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
@@ -228,25 +235,18 @@ class DeviceConfigStorePostgres(
                             devices.add(mapResultSetToDevice(rs))
                         } catch (e: DeviceConfigException) {
                             logger.warning("Skipping invalid device record for node $nodeId: ${e.message}")
-                            // Continue processing other records instead of failing completely
                         }
                     }
-                    promise.complete(devices)
+                    devices
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to get devices by node $nodeId: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to get devices by node", e))
         }
-
-        return promise.future()
     }
 
     override fun getEnabledDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
-        val promise = Promise.promise<List<DeviceConfig>>()
-
-        try {
-            connection!!.prepareStatement(SELECT_ENABLED_BY_NODE).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(SELECT_ENABLED_BY_NODE).use { stmt ->
                 stmt.setString(1, nodeId)
                 stmt.executeQuery().use { rs ->
                     val devices = mutableListOf<DeviceConfig>()
@@ -255,79 +255,59 @@ class DeviceConfigStorePostgres(
                             devices.add(mapResultSetToDevice(rs))
                         } catch (e: DeviceConfigException) {
                             logger.warning("Skipping invalid enabled device record for node $nodeId: ${e.message}")
-                            // Continue processing other records instead of failing completely
                         }
                     }
-                    promise.complete(devices)
+                    devices
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to get enabled devices by node $nodeId: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to get enabled devices by node", e))
         }
+    }
 
-        return promise.future()
+    private fun getDeviceSync(name: String): DeviceConfig? {
+        val conn = connection ?: throw DeviceConfigException("Database connection not available")
+        conn.prepareStatement(SELECT_BY_NAME).use { stmt ->
+            stmt.setString(1, name)
+            stmt.executeQuery().use { rs ->
+                return if (rs.next()) {
+                    try {
+                        mapResultSetToDevice(rs)
+                    } catch (e: DeviceConfigException) {
+                        logger.warning("Invalid device record for name $name: ${e.message}")
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
+        }
     }
 
     override fun getDevice(name: String): Future<DeviceConfig?> {
-        val promise = Promise.promise<DeviceConfig?>()
-
-        try {
-            connection!!.prepareStatement(SELECT_BY_NAME).use { stmt ->
-                stmt.setString(1, name)
-                stmt.executeQuery().use { rs ->
-                    if (rs.next()) {
-                        try {
-                            promise.complete(mapResultSetToDevice(rs))
-                        } catch (e: DeviceConfigException) {
-                            logger.warning("Invalid device record for name $name: ${e.message}")
-                            promise.complete(null) // Return null for invalid records
-                        }
-                    } else {
-                        promise.complete(null)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            logger.severe("Failed to get device $name: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to get device", e))
+        return executeBlocking {
+            getDeviceSync(name)
         }
-
-        return promise.future()
     }
 
     override fun isNamespaceInUse(namespace: String, excludeName: String?): Future<Boolean> {
-        val promise = Promise.promise<Boolean>()
-
-        try {
-            connection!!.prepareStatement(CHECK_NAMESPACE).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(CHECK_NAMESPACE).use { stmt ->
                 stmt.setString(1, namespace)
                 stmt.setString(2, excludeName)
                 stmt.executeQuery().use { rs ->
-                    if (rs.next()) {
-                        val count = rs.getInt(1)
-                        promise.complete(count > 0)
-                    } else {
-                        promise.complete(false)
-                    }
+                    if (rs.next()) rs.getInt(1) > 0 else false
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to check namespace usage: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to check namespace usage", e))
         }
-
-        return promise.future()
     }
 
     override fun saveDevice(device: DeviceConfig): Future<DeviceConfig> {
-        val promise = Promise.promise<DeviceConfig>()
-
-        try {
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
             val now = Instant.now()
             val updatedDevice = device.copy(updatedAt = now)
 
-            connection!!.prepareStatement(INSERT_OR_UPDATE).use { stmt ->
+            conn.prepareStatement(INSERT_OR_UPDATE).use { stmt ->
                 stmt.setString(1, device.name)
                 stmt.setString(2, device.namespace)
                 stmt.setString(3, device.nodeId)
@@ -339,110 +319,62 @@ class DeviceConfigStorePostgres(
 
                 val rowsAffected = stmt.executeUpdate()
                 if (rowsAffected > 0) {
-                    promise.complete(updatedDevice)
+                    updatedDevice
                 } else {
-                    promise.fail(DeviceConfigException("No rows affected when saving device"))
+                    throw DeviceConfigException("No rows affected when saving device")
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to save device ${device.name}: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to save device", e))
         }
-
-        return promise.future()
     }
 
     override fun deleteDevice(name: String): Future<Boolean> {
-        val promise = Promise.promise<Boolean>()
-
-        try {
-            connection!!.prepareStatement(DELETE_BY_NAME).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(DELETE_BY_NAME).use { stmt ->
                 stmt.setString(1, name)
-                val rowsAffected = stmt.executeUpdate()
-                promise.complete(rowsAffected > 0)
+                stmt.executeUpdate() > 0
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to delete device $name: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to delete device", e))
         }
-
-        return promise.future()
     }
 
     override fun toggleDevice(name: String, enabled: Boolean): Future<DeviceConfig?> {
-        val promise = Promise.promise<DeviceConfig?>()
-
-        try {
-            connection!!.prepareStatement(UPDATE_ENABLED).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(UPDATE_ENABLED).use { stmt ->
                 stmt.setBoolean(1, enabled)
                 stmt.setTimestamp(2, Timestamp.from(Instant.now()))
                 stmt.setString(3, name)
 
                 val rowsAffected = stmt.executeUpdate()
                 if (rowsAffected > 0) {
-                    // Return updated device
-                    getDevice(name).onComplete { result ->
-                        if (result.succeeded()) {
-                            promise.complete(result.result())
-                        } else {
-                            promise.fail(result.cause())
-                        }
-                    }
+                    getDeviceSync(name)
                 } else {
-                    promise.complete(null)
+                    null
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to toggle device $name: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to toggle device", e))
         }
-
-        return promise.future()
     }
 
     override fun reassignDevice(name: String, nodeId: String): Future<DeviceConfig?> {
-        val promise = Promise.promise<DeviceConfig?>()
-
-        try {
-            connection!!.prepareStatement(UPDATE_NODE_ID).use { stmt ->
+        return executeBlocking {
+            val conn = connection ?: throw DeviceConfigException("Database connection not available")
+            conn.prepareStatement(UPDATE_NODE_ID).use { stmt ->
                 stmt.setString(1, nodeId)
                 stmt.setTimestamp(2, Timestamp.from(Instant.now()))
                 stmt.setString(3, name)
 
                 val rowsAffected = stmt.executeUpdate()
                 if (rowsAffected > 0) {
-                    // Return updated device
-                    getDevice(name).onComplete { result ->
-                        if (result.succeeded()) {
-                            promise.complete(result.result())
-                        } else {
-                            promise.fail(result.cause())
-                        }
-                    }
+                    getDeviceSync(name)
                 } else {
-                    promise.complete(null)
+                    null
                 }
             }
-        } catch (e: Exception) {
-            logger.severe("Failed to reassign device $name: ${e.message}")
-            promise.fail(DeviceConfigException("Failed to reassign device", e))
         }
-
-        return promise.future()
     }
 
     override fun close(): Future<Void> {
-        val promise = Promise.promise<Void>()
-
-        try {
-            connection?.close()
-            promise.complete()
-        } catch (e: Exception) {
-            logger.warning("Error closing database connection: ${e.message}")
-            promise.fail(e)
-        }
-
-        return promise.future()
+        return stop()
     }
 
     private fun mapResultSetToDevice(rs: ResultSet): DeviceConfig {
@@ -517,9 +449,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun exportConfigs(names: List<String>?): Future<List<Map<String, Any?>>> {
-        val promise = Promise.promise<List<Map<String, Any?>>>()
-
-        try {
+        return executeBlocking {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
 
             val query = if (names.isNullOrEmpty()) {
@@ -529,44 +459,34 @@ class DeviceConfigStorePostgres(
                 "SELECT name, namespace, node_id, config, enabled, type, created_at, updated_at FROM $TABLE_NAME WHERE name IN ($placeholders) ORDER BY name"
             }
 
-            val stmt = conn.prepareStatement(query)
-            names?.forEachIndexed { index, name ->
-                stmt.setString(index + 1, name)
+            conn.prepareStatement(query).use { stmt ->
+                names?.forEachIndexed { index, name ->
+                    stmt.setString(index + 1, name)
+                }
+
+                stmt.executeQuery().use { rs ->
+                    val configs = mutableListOf<Map<String, Any?>>()
+                    while (rs.next()) {
+                        val configMap = mapOf(
+                            "name" to rs.getString("name"),
+                            "namespace" to rs.getString("namespace"),
+                            "nodeId" to rs.getString("node_id"),
+                            "config" to JsonObject(rs.getString("config")).map,
+                            "enabled" to rs.getBoolean("enabled"),
+                            "type" to rs.getString("type"),
+                            "createdAt" to rs.getTimestamp("created_at").toInstant().toString(),
+                            "updatedAt" to rs.getTimestamp("updated_at").toInstant().toString()
+                        )
+                        configs.add(configMap)
+                    }
+                    configs
+                }
             }
-
-            val rs = stmt.executeQuery()
-            val configs = mutableListOf<Map<String, Any?>>()
-
-            while (rs.next()) {
-                val configMap = mapOf(
-                    "name" to rs.getString("name"),
-                    "namespace" to rs.getString("namespace"),
-                    "nodeId" to rs.getString("node_id"),
-                    "config" to JsonObject(rs.getString("config")).map,
-                    "enabled" to rs.getBoolean("enabled"),
-                    "type" to rs.getString("type"),
-                    "createdAt" to rs.getTimestamp("created_at").toInstant().toString(),
-                    "updatedAt" to rs.getTimestamp("updated_at").toInstant().toString()
-                )
-                configs.add(configMap)
-            }
-
-            rs.close()
-            stmt.close()
-
-            promise.complete(configs)
-        } catch (e: Exception) {
-            logger.severe("Failed to export device configs: ${e.message}")
-            promise.fail(e)
         }
-
-        return promise.future()
     }
 
     override fun importConfigs(configs: List<Map<String, Any?>>): Future<ImportDeviceConfigResult> {
-        val promise = Promise.promise<ImportDeviceConfigResult>()
-
-        try {
+        return executeBlocking {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             var imported = 0
             val errors = mutableListOf<String>()
@@ -590,34 +510,33 @@ class DeviceConfigStorePostgres(
                     }
 
                     // Try to insert, update if exists
-                    val stmt = conn.prepareStatement(
+                    conn.prepareStatement(
                         """INSERT INTO $TABLE_NAME (name, namespace, node_id, config, enabled, type, created_at, updated_at)
                            VALUES (?, ?, ?, ?::jsonb, ?, ?, ?, ?)
                            ON CONFLICT (name) DO UPDATE SET
                            namespace = ?, node_id = ?, config = ?::jsonb, enabled = ?, type = ?, updated_at = ?"""
-                    )
+                    ).use { stmt ->
+                        val now = Timestamp.from(Instant.now())
 
-                    val now = Timestamp.from(Instant.now())
+                        stmt.setString(1, name)
+                        stmt.setString(2, namespace)
+                        stmt.setString(3, nodeId)
+                        stmt.setString(4, configObj.encode())
+                        stmt.setBoolean(5, enabled)
+                        stmt.setString(6, type)
+                        stmt.setTimestamp(7, now)
+                        stmt.setTimestamp(8, now)
 
-                    stmt.setString(1, name)
-                    stmt.setString(2, namespace)
-                    stmt.setString(3, nodeId)
-                    stmt.setString(4, configObj.encode())
-                    stmt.setBoolean(5, enabled)
-                    stmt.setString(6, type)
-                    stmt.setTimestamp(7, now)
-                    stmt.setTimestamp(8, now)
+                        // Conflict update values
+                        stmt.setString(9, namespace)
+                        stmt.setString(10, nodeId)
+                        stmt.setString(11, configObj.encode())
+                        stmt.setBoolean(12, enabled)
+                        stmt.setString(13, type)
+                        stmt.setTimestamp(14, now)
 
-                    // Conflict update values
-                    stmt.setString(9, namespace)
-                    stmt.setString(10, nodeId)
-                    stmt.setString(11, configObj.encode())
-                    stmt.setBoolean(12, enabled)
-                    stmt.setString(13, type)
-                    stmt.setTimestamp(14, now)
-
-                    stmt.executeUpdate()
-                    stmt.close()
+                        stmt.executeUpdate()
+                    }
 
                     imported++
                 } catch (e: Exception) {
@@ -628,20 +547,13 @@ class DeviceConfigStorePostgres(
             }
 
             val failed = configs.size - imported
-            val result = if (errors.isEmpty()) {
+            if (errors.isEmpty()) {
                 ImportDeviceConfigResult.success(imported)
             } else if (imported > 0) {
                 ImportDeviceConfigResult.partial(imported, failed, errors)
             } else {
                 ImportDeviceConfigResult.failure(errors)
             }
-
-            promise.complete(result)
-        } catch (e: Exception) {
-            logger.severe("Failed to import device configs: ${e.message}")
-            promise.fail(e)
         }
-
-        return promise.future()
     }
 }
