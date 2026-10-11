@@ -557,7 +557,7 @@ receives this broker's messages (`serveState` is the `consumers[]` state).
 `source` and `consumer` are the matching status entries. The query uses the
 normal GraphQL authentication instead of the loopback guard.
 
-Each broker announces its type (`FULL` for the main broker, `EDGE` for the
+Each broker announces its type (`FULL` for MonsterMQ Core, `EDGE` for the
 edge broker) and build version in the handshake. `brokerType`,
 `brokerVersion` and `protocolVersion` on `peerLink` describe this broker; on a
 peer they are what the peer announced in its last handshake, or null before

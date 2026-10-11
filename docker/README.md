@@ -1,4 +1,4 @@
-# MonsterMQ Main Broker Docker Images
+# MonsterMQ Core Docker Images
 
 Build and publication scripts for `rocworks/monstermq` Docker images.
 

@@ -22,7 +22,7 @@ import java.nio.file.Files
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
-// M4: a Kotlin main broker paired with a Go edge broker (plan-peerlink-interest-routing section 11).
+// M4: MonsterMQ Core paired with a Go edge broker (plan-peerlink-interest-routing section 11).
 // The edge binary comes from EdgeBinary; without one the tests are skipped.
 class InterestMixedEdgeTest {
 

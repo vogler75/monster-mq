@@ -281,7 +281,7 @@ A `WARNING` is logged at startup if the Hazelcast IMap shows that other cluster 
 
 ## PeerLink Inter-Broker Replication
 
-PeerLink replicates MQTT messages and retained states across independent MonsterMQ instances (both Kotlin brokers and MonsterMQ Go Edge brokers) over point-to-point connections with low overhead, split-horizon loop protection, and end-to-end TLS 1.3 / mTLS / shared-secret mutual authentication.
+PeerLink replicates MQTT messages and retained states across independent MonsterMQ instances (both MonsterMQ Core and MonsterMQ Edge brokers) over point-to-point connections with low overhead, split-horizon loop protection, and end-to-end TLS 1.3 / mTLS / shared-secret mutual authentication.
 
 ```yaml
 NodeId: central-broker

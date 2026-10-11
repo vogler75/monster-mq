@@ -23,7 +23,7 @@ File names use lowercase kebab-case (`like-this.md`).
 - [plans/plan-edge-topic-schema-governance.md](plans/plan-edge-topic-schema-governance.md) — Implementing topic schema governance in the Go edge broker
 - [plans/plan-knowledge-graph.md](plans/plan-knowledge-graph.md) — Knowledge Graph & semantic topic subscriptions with Apache Jena (#167)
 - [plans/plan-peerlink-interest-routing.md](plans/plan-peerlink-interest-routing.md) — PeerLink interest routing: consumers announce their subscription filters, the source forwards only matching publishes (sparse batches, per-record consumer masks); wire-compatible with the edge broker
-- [plans/plan-peerlink-redundancy.md](plans/plan-peerlink-redundancy.md) — PeerLink replication (implemented) plus redundancy roles for the main broker without native WinCC OA connectivity: ACTIVE/STANDBY decided by a witness lease in Postgres/MongoDB (or static config), split-mode handling when the link is down, hot/cold standby for bridges and archive groups; the edge counterpart with native WinCC OA is in the edge repo
+- [plans/plan-peerlink-redundancy.md](plans/plan-peerlink-redundancy.md) — PeerLink replication (implemented) plus redundancy roles for MonsterMQ Core without native WinCC OA connectivity: ACTIVE/STANDBY decided by a witness lease in Postgres/MongoDB (or static config), split-mode handling when the link is down, hot/cold standby for bridges and archive groups; the edge counterpart with native WinCC OA is in the edge repo
 
 **Architecture analysis:**
 - [plans/plan-graalvm-capabilities-analysis.md](plans/plan-graalvm-capabilities-analysis.md) — GraalVM capabilities analysis

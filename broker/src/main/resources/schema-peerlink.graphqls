@@ -12,7 +12,7 @@ type PeerLinkInfo {
     listen: String
     # The peer listener uses TLS
     tls: Boolean!
-    # Broker type of this node: FULL (main broker, Java) or EDGE (edge broker, Go)
+    # Broker type of this node: FULL (MonsterMQ Core, Java) or EDGE (MonsterMQ Edge, Go)
     brokerType: String!
     # Build version of this broker
     brokerVersion: String!

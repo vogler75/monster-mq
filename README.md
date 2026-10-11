@@ -1,6 +1,6 @@
-# MonsterMQ
+# MonsterMQ Core
 
-MonsterMQ is a high-performance MQTT broker for industrial IoT and real-time messaging, built on Vert.x. It combines MQTT messaging with storage, protocol bridges, workflows, a web dashboard, and management APIs.
+MonsterMQ Core is a high-performance MQTT broker for industrial IoT and real-time messaging, built on Vert.x. It combines MQTT messaging with storage, protocol bridges, workflows, a web dashboard, and management APIs.
 
 ## Highlights
 

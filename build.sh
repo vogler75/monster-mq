@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# build.sh - Build script for MonsterMQ Main Broker, Setup Executables, and Docker Images
+# build.sh - Build script for MonsterMQ Core, Setup Executables, and Docker Images
 #
 # Usage:
 #   ./build.sh --all            Build all artifacts locally (broker zip, setup executables, docker image)

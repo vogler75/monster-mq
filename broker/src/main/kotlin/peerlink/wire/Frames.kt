@@ -15,8 +15,8 @@ const val ALPN = "mmq-peer/1"
 const val PreambleLen = 8
 
 // Broker types announced in HELLO and HELLO_OK.
-const val BrokerTypeFull = "FULL" // the main broker (Kotlin/JVM)
-const val BrokerTypeEdge = "EDGE" // the edge broker (Go)
+const val BrokerTypeFull = "FULL" // MonsterMQ Core (Kotlin/JVM)
+const val BrokerTypeEdge = "EDGE" // MonsterMQ Edge (Go)
 
 /** Formats a protocol version as "major.minor". */
 fun protocolVersion(major: Int, minor: Int): String = "$major.$minor"

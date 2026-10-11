@@ -4,11 +4,11 @@ This file provides guidance to AI coding assistants working with code in this re
 
 ## Project Overview
 
-MonsterMQ is a MQTT broker built with Kotlin on Vert.X and Hazelcast with data persistence through PostgreSQL, CrateDB, MongoDB, or SQLite. It features a web dashboard, GraphQL API, MCP (Model Context Protocol) Server for AI integration, REST API, Prometheus metrics, I3X API for manufacturing data, AI agents with GenAI providers, a flow engine for automation workflows, and device bridging for OPC UA, PLC4X, Kafka, NATS, Redis, Telegram, WinCC OA/Unified, Neo4j, JDBC loggers, and SparkplugB.
+MonsterMQ Core is the Kotlin/Vert.X MQTT broker and core platform with data persistence through PostgreSQL, CrateDB, MongoDB, or SQLite. It features a web dashboard, GraphQL API, MCP (Model Context Protocol) Server for AI integration, REST API, Prometheus metrics, I3X API for manufacturing data, AI agents with GenAI providers, a flow engine for automation workflows, and device bridging for OPC UA, PLC4X, Kafka, NATS, Redis, Telegram, WinCC OA/Unified, Neo4j, JDBC loggers, and SparkplugB.
 
 ### MonsterMQ Edge Broker
 
-MonsterMQ also has an edge broker variant implemented in Go for a lightweight footprint. The edge broker exposes the same GraphQL interface shape as the main broker where supported, but currently implements only a limited subset of the full broker functionality. More GraphQL-backed functionality will be added over time, so new dashboard and API work should consider compatibility with both the full broker and the edge broker when practical.
+MonsterMQ also has an edge broker variant (MonsterMQ Edge) implemented in Go for a lightweight footprint. The edge broker exposes the same GraphQL interface shape as MonsterMQ Core where supported, but currently implements only a limited subset of the full broker functionality. More GraphQL-backed functionality will be added over time, so new dashboard and API work should consider compatibility with both MonsterMQ Core and MonsterMQ Edge when practical.
 
 ## Build and Run Commands
 
@@ -239,7 +239,7 @@ The `Broker.enabledFeatures` GraphQL field returns the active set; the dashboard
 
 **CRITICAL: AVOID CHANGING THE GRAPHQL INTERFACE**
 
-- **Avoid changes at all costs**: The GraphQL interface is the central shared contract connecting the Kotlin broker, Go edge broker (`monster-mq-edge`), web dashboard (`monster-mq-dashboard`), and external integrations. Modifying or extending the GraphQL interface (types, fields, queries, mutations, subscriptions, inputs, arguments, or enums) must be strictly avoided whenever possible.
+- **Avoid changes at all costs**: The GraphQL interface is the central shared contract connecting MonsterMQ Core (`monster-mq`), Go edge broker (`monster-mq-edge`), web dashboard (`monster-mq-dashboard`), and external integrations. Modifying or extending the GraphQL interface (types, fields, queries, mutations, subscriptions, inputs, arguments, or enums) must be strictly avoided whenever possible.
 - **Human commitment required**: Any change to the GraphQL interface must ONLY be done with explicit commitment from the human. Never modify the GraphQL schema or resolvers unilaterally.
 - **Give a clear hint if the GraphQL interface must be changed**: If a task, feature, or bugfix appears to necessitate changing or extending the GraphQL interface:
   1. **Flag it clearly and prominently**: Immediately give a clear hint to the human up front before making any changes.

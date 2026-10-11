@@ -24,7 +24,7 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
-// IR-M0, M1 and M3 (plan-peerlink-interest-routing section 11) against the real main broker: a child
+// IR-M0, M1 and M3 (plan-peerlink-interest-routing section 11) against real MonsterMQ Core: a child
 // JVM running at.rocworks.MonsterKt pulls from a Go edge broker (EdgeBinary). What main announces is
 // read from the edge's consumer status; what reaches main from the main clients themselves.
 class InterestMainProcessTest {

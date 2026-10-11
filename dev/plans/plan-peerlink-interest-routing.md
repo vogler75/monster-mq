@@ -1,4 +1,4 @@
-# Plan: PeerLink interest routing for the main broker (forward only what a peer subscribes to)
+# Plan: PeerLink interest routing for MonsterMQ Core (forward only what a peer subscribes to)
 
 **Status: reviewed and clarified (2026-10-09); IR-M0–IR-M6 implemented on branch
 `feature/peerlink-interest-routing` (not committed, under review).**

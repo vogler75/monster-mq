@@ -1,6 +1,6 @@
-# Plan: Python Script Engine for MonsterMQ (Main Broker)
+# Plan: Python Script Engine for MonsterMQ Core
 
-This document specifies the architecture and implementation plan for adding standalone **Python scripting** to the main JVM/Kotlin **MonsterMQ broker** (`monster-mq`), using **GraalVM Polyglot Python (`GraalPy`)**.
+This document specifies the architecture and implementation plan for adding standalone **Python scripting** to **MonsterMQ Core** (`monster-mq`), using **GraalVM Polyglot Python (`GraalPy`)**.
 
 This implementation pairs directly with the Starlark scripting engine in **MonsterMQ Edge** (`monster-mq-edge`), sharing the exact same `DeviceConfig` JSON format, trigger types, broker APIs, and GraphQL schema.
 

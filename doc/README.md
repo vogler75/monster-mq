@@ -1,8 +1,9 @@
-# MonsterMQ documentation
+# MonsterMQ Core documentation
 
-These guides describe the Kotlin/Vert.x broker in this repository. The Go edge
-broker exposes a compatible subset where implemented; check the running broker's
-schema and enabled features before using a full-broker example on an edge node.
+These guides describe MonsterMQ Core, the Kotlin/Vert.x broker in this repository.
+The Go edge broker (MonsterMQ Edge) exposes a compatible subset where implemented;
+check the running broker's schema and enabled features before using a full-broker
+example on an edge node.
 
 ## Start and operate
 

@@ -11,7 +11,7 @@ import org.mockito.Mockito
 import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
 
-// Interest routing between two main brokers: broker-b pulls from broker-a and announces its subscriptions.
+// Interest routing between two MonsterMQ Core brokers: broker-b pulls from broker-a and announces its subscriptions.
 class InterestIntegrationTest {
 
     private var managerA: PeerLinkManager? = null

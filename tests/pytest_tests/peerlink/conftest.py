@@ -192,7 +192,7 @@ def start_main_node(node_id, mqtt_port, peer_port, remote_node_id, remote_peer_p
 
 @pytest.fixture
 def edge_main_pair(edge_binary):
-    """Starts a connected pair of Go Edge broker and Kotlin Main broker."""
+    """Starts a connected pair of Go Edge broker and MonsterMQ Core."""
     work_dir = tempfile.mkdtemp(prefix="pl_test_")
     edge_mqtt = find_free_port()
     edge_peer = find_free_port()
