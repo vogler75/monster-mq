@@ -79,6 +79,7 @@ class LogConsumer(
     var served: Long = 1L,
     var acctNext: Long = 1L,
     var lostTotal: Long = 0L,
+    var reportedLost: Long = 0L,
     var state: LogConsumerState = LogConsumerState.NeverConnected,
     var reading: Int = 0
 )
@@ -768,6 +769,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         val snapLso: Long
         val snapLeo: Long
         val base: Long
+        val lost: Long
         var n: Long
         val fb: Long
         var c0 = 0L
@@ -781,6 +783,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             val con = consumers[c]
             observeLocked(con)
             con.reading++
+            lost = if (masked) con.lostTotal - con.reportedLost else maxOf(from, snapLso) - from
             base = maxOf(from, snapLso)
             n = minOf(snapLeo - base, maxScan.toLong())
             if (maxRecords <= 0) n = 0
@@ -804,7 +807,7 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
             lock.unlock()
         }
 
-        val res = LogReadResult(base = base, lost = base - from, lso = snapLso, leo = snapLeo)
+        val res = LogReadResult(base = base, lost = lost, lso = snapLso, leo = snapLeo)
         val bit = 1L shl c
         var totalBytes = 0
         var skipped = false
@@ -845,6 +848,9 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
         try {
             val con = consumers[c]
             con.served = maxOf(con.served, base + res.span)
+            if (masked && (!res.truncated || res.span > 0L)) {
+                con.reportedLost += lost
+            }
             con.reading--
         } finally {
             lock.unlock()
@@ -1027,9 +1033,16 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
                         a = triple.second
                         b = triple.third
                     }
+                    observeLocked(con)
                     if (effResumeOffset >= lso) {
                         r.resumeAt = effResumeOffset
                         r.consumerStateUsed = true
+                    } else if (masked) {
+                        r.resumeAt = maxOf(effResumeOffset, con.committed, lso)
+                        r.consumerStateUsed = effResumeOffset >= lso || effResumeOffset >= con.committed
+                        val lost = con.lostTotal - con.reportedLost
+                        con.reportedLost = con.lostTotal
+                        r.lostOnResume = lost
                     } else {
                         r.resumeAt = lso
                         r.lostOnResume = lso - effResumeOffset
@@ -1038,12 +1051,16 @@ class PeerLog(cfg: LogConfig) : AutoCloseable {
                 else -> {
                     r.sourceReset = lastEpoch != 0L
                     r.resumeAt = maxOf(con.committed, lso)
-                    if (lso > con.committed) {
+                    observeLocked(con)
+                    if (masked) {
+                        val lost = con.lostTotal - con.reportedLost
+                        con.reportedLost = con.lostTotal
+                        r.lostOnResume = lost
+                    } else if (lso > con.committed) {
                         r.lostOnResume = lso - con.committed
                     }
                 }
             }
-            observeLocked(con)
             r.lso = lso
             r.committed = con.committed
             return r

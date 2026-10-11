@@ -304,4 +304,30 @@ class PeerLogTest {
             log.close()
         }
     }
+
+    @Test
+    fun testMaskedReadSparseNoFalseGap() {
+        val log = PeerLog(LogConfig(masked = true, consumers = listOf("a", "b")))
+        try {
+            for (i in 0 until 10) {
+                val next = log.getLEO()
+                log.appendMask(logTestFrame(32, next, 0), LogKind.Client, 2L)
+            }
+            log.commit(1, 11L)
+            val (lso, _) = log.bounds()
+            assertEquals(11L, lso)
+
+            val out = ArrayList<ByteArray>()
+            val deltas = IntList()
+            val res = log.readSparse(0, 1L, 100, 0, out, deltas)
+            assertEquals(0L, res.lost)
+            assertEquals(11L, res.base)
+            assertEquals(0, res.count)
+
+            val r = log.resume(0, log.epoch, 1L)
+            assertEquals(0L, r.lostOnResume)
+        } finally {
+            log.close()
+        }
+    }
 }
