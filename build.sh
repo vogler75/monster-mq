@@ -186,6 +186,10 @@ if [ "$BUILD_BROKER" = true ]; then
     mkdir -p broker/src/main/resources/dashboard
     cp -r "${DASHBOARD_DIR}/dist"/* broker/src/main/resources/dashboard/
     rm -f broker/src/main/resources/dashboard/config/brokers.json
+
+    echo -e "${YELLOW}Syncing version.txt to broker resources...${NC}"
+    mkdir -p broker/src/main/resources
+    cp version.txt broker/src/main/resources/version.txt
     
     if [ "$CONTAINER_BUILD" = true ]; then
         echo -e "${YELLOW}Compiling Java broker with Maven in Docker container (GraalVM 21)...${NC}"

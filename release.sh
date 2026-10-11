@@ -28,7 +28,19 @@ fi
 CURRENT_VERSION=$(head -n 1 version.txt | tr -d '\n' | tr -d '\r')
 BASE_VERSION=$(echo "$CURRENT_VERSION" | cut -d'+' -f1)
 
-MODE="bump" # "bump", "explicit", "retag"
+# Parse BASE_VERSION into MAJOR, MINOR, PATCH, and optional PRERELEASE
+if [[ "$BASE_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-([a-zA-Z0-9.-]+))?$ ]]; then
+    MAJOR="${BASH_REMATCH[1]}"
+    MINOR="${BASH_REMATCH[2]}"
+    PATCH="${BASH_REMATCH[3]}"
+    PRERELEASE="${BASH_REMATCH[5]}"
+else
+    echo -e "${RED}Error: Invalid version format in version.txt. Expected format: X.Y.Z or X.Y.Z-dev${NC}"
+    echo -e "${RED}Current content: '$CURRENT_VERSION'${NC}"
+    exit 1
+fi
+
+MODE="bump" # "bump", "finalize", "explicit", "retag"
 NEW_VERSION=""
 
 usage() {
@@ -37,8 +49,9 @@ usage() {
     echo "Usage: $0 [options | version]"
     echo ""
     echo "Options:"
-    echo "  (no arguments)            Auto-increment patch version (e.g. 1.8.31 -> 1.8.32)"
+    echo "  (no arguments)            Auto-increment patch version or finalize active dev version"
     echo "  <version>                 Set explicit version (e.g. 1.9.0)"
+    echo "  --dev, --next [version]   Advance to next development version (e.g. 1.8.34-dev)"
     echo "  -r, --retag, --readjust   Re-adjust/move the latest version tag (v${BASE_VERSION}) to HEAD"
     echo "  -h, --help                Show this help message"
     echo ""
@@ -49,28 +62,57 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     usage
 fi
 
+if [ "$1" = "--dev" ] || [ "$1" = "--next" ]; then
+    if [ -n "${2:-}" ]; then
+        NEXT_DEV="$2"
+        if [[ ! "$NEXT_DEV" =~ -dev$ ]]; then
+            NEXT_DEV="${NEXT_DEV}-dev"
+        fi
+    else
+        if [ -n "$PRERELEASE" ]; then
+            NEXT_DEV="${MAJOR}.${MINOR}.${PATCH}-${PRERELEASE}"
+            echo -e "${YELLOW}Already on a development version: ${NEXT_DEV}${NC}"
+            exit 0
+        else
+            NEXT_DEV="${MAJOR}.${MINOR}.$((PATCH + 1))-dev"
+        fi
+    fi
+    echo -e "${GREEN}=== Advancing to Development Version: ${NEXT_DEV} ===${NC}"
+    echo "$NEXT_DEV" > version.txt
+    mkdir -p broker/src/main/resources
+    cp version.txt broker/src/main/resources/version.txt
+    git add version.txt broker/src/main/resources/version.txt
+    git commit -m "chore(version): prepare next version ${NEXT_DEV}" || {
+        echo -e "${YELLOW}No new changes to commit${NC}"
+    }
+    git push origin HEAD
+    echo -e "${GREEN}✓ Pushed development version ${NEXT_DEV} to origin/main${NC}"
+    exit 0
+fi
+
 if [ "$1" = "-r" ] || [ "$1" = "--retag" ] || [ "$1" = "--re-tag" ] || [ "$1" = "--readjust" ] || [ "$1" = "--re-adjust" ] || [ "$1" = "--current" ]; then
     MODE="retag"
-    NEW_VERSION="$BASE_VERSION"
+    NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 elif [ -n "$1" ]; then
     MODE="explicit"
     NEW_VERSION="$1"
 else
-    MODE="bump"
-    IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-    if [ -z "$MAJOR" ] || [ -z "$MINOR" ] || [ -z "$PATCH" ]; then
-        echo -e "${RED}Error: Invalid version format in version.txt. Expected format: X.Y.Z${NC}"
-        echo -e "${RED}Current content: '$CURRENT_VERSION'${NC}"
-        exit 1
+    if [ -n "$PRERELEASE" ]; then
+        MODE="finalize"
+        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+    else
+        MODE="bump"
+        NEW_PATCH=$((PATCH + 1))
+        NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
     fi
-    NEW_PATCH=$((PATCH + 1))
-    NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 fi
 
 echo -e "${GREEN}=== MonsterMQ Release Script ===${NC}"
 echo -e "${YELLOW}Current version : ${BASE_VERSION}${NC}"
 if [ "$MODE" = "retag" ]; then
-    echo -e "${BLUE}Mode            : Re-adjust tag v${BASE_VERSION} to HEAD${NC}"
+    echo -e "${BLUE}Mode            : Re-adjust tag v${NEW_VERSION} to HEAD${NC}"
+elif [ "$MODE" = "finalize" ]; then
+    echo -e "${GREEN}Finalize dev    : ${BASE_VERSION} -> ${NEW_VERSION}${NC}"
 else
     echo -e "${GREEN}Target version  : ${NEW_VERSION}${NC}"
 fi

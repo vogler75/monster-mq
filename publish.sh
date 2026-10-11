@@ -34,11 +34,18 @@ RAW_VERSION=$(head -n 1 version.txt | tr -d '\r' | tr -d '\n')
 VERSION=$(echo "$RAW_VERSION" | cut -d'+' -f1)
 TAG="v${VERSION}"
 
+if [[ "$VERSION" =~ -dev$ || "$VERSION" =~ -beta$ || "$VERSION" =~ -alpha$ ]]; then
+    echo -e "${RED}Error: Current version ($VERSION) is a development version.${NC}"
+    echo -e "${YELLOW}Please finalize the release by running ./release.sh before publishing.${NC}"
+    exit 1
+fi
+
 PUBLISH_BROKER=false
 PUBLISH_SETUP=false
 PUBLISH_DOCKER=false
 EXPLICIT_TARGET=false
 AUTO_CONFIRM=false
+NO_BUMP=false
 
 usage() {
     echo "Usage: $0 [options]"
@@ -49,6 +56,7 @@ usage() {
     echo "  --broker, -b     Publish standalone broker bundle (.zip) to GitHub release only"
     echo "  --setup, -s      Publish Go setup executables (setup.exe, setup-mac, setup-linux) to GitHub only"
     echo "  --docker         Build multi-arch Docker image and push to Docker Hub only"
+    echo "  --no-bump        Do not advance to next development version after publishing"
     echo "  -y, --yes        Auto-confirm publishing without asking"
     echo "  -h, --help       Show this help message"
     echo ""
@@ -87,6 +95,10 @@ while [[ $# -gt 0 ]]; do
         --docker)
             PUBLISH_DOCKER=true
             EXPLICIT_TARGET=true
+            shift
+            ;;
+        --no-bump|--no-next)
+            NO_BUMP=true
             shift
             ;;
         -y|--yes)
@@ -233,6 +245,38 @@ if [ "$PUBLISH_DOCKER" = true ]; then
     echo -e "${GREEN}[2/2] Publishing Multi-Arch Docker Images to Docker Hub...${NC}"
     (cd docker && ./build.sh -d -y)
     echo -e "${GREEN}✓ Docker Hub images published successfully!${NC}"
+fi
+
+# 3. Advance to Next Development Version
+if [ "$NO_BUMP" = false ]; then
+    if [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        NEXT_MAJOR="${BASH_REMATCH[1]}"
+        NEXT_MINOR="${BASH_REMATCH[2]}"
+        NEXT_PATCH=$((${BASH_REMATCH[3]} + 1))
+        NEXT_DEV_VERSION="${NEXT_MAJOR}.${NEXT_MINOR}.${NEXT_PATCH}-dev"
+
+        DO_BUMP=true
+        if [ "$AUTO_CONFIRM" = false ]; then
+            echo ""
+            read -p "Publish complete! Prepare next development version (${NEXT_DEV_VERSION})? (y/n) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                DO_BUMP=false
+                echo -e "${YELLOW}Skipped preparing next development version.${NC}"
+            fi
+        fi
+
+        if [ "$DO_BUMP" = true ]; then
+            echo -e "${YELLOW}Advancing version to ${NEXT_DEV_VERSION}...${NC}"
+            echo "$NEXT_DEV_VERSION" > version.txt
+            mkdir -p broker/src/main/resources
+            cp version.txt broker/src/main/resources/version.txt
+            git add version.txt broker/src/main/resources/version.txt
+            git commit -m "chore(version): prepare next version ${NEXT_DEV_VERSION}" || true
+            git push origin HEAD
+            echo -e "${GREEN}✓ Advanced version to ${NEXT_DEV_VERSION} on origin/main${NC}"
+        fi
+    fi
 fi
 
 echo -e "\n${GREEN}=== Publish Pipeline Complete ===${NC}"
