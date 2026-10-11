@@ -1,0 +1,60 @@
+Release v1.8.34
+Built from commit: 9c472c51
+Date: 2026-10-11 21:53:05
+
+Changes since v1.8.34-dev:
+---
+9c472c51 fix(mqtt-client): address review findings on reconnection and device store changes
+1046e559 fix(mqtt-client): resolve reconnection loop, event loop blocking and duplicate deployments
+c1db54c7 docs: rename main broker to MonsterMQ Core
+614f1942 feat(genai): extend analyzeTopics to accept topicData and support unlimited limits
+83bd77e7 chore(release): support -dev pre-release versioning and advance to 1.8.34-dev
+9edc277b peerlink: default Interest.Enabled to true
+a6d782e6 fix(peerlink): do not report interest-skipped records as lost in sparse reads
+aac1e0ac PeerLink: do not create pullers for serve-only peers
+f75355d7 Merge branch 'main' of github.com:vogler75/monster-mq
+da8906b3 Add native NATS KV and headers support
+80dbec3f feat(nats): serve JetStream Key-Value buckets from archive groups
+023ea4b2 Create plan-nats-kv.md
+1d142623 fix(build): resolve Kotlin compiler warnings
+952186a6 feat(peerlink): announce broker type and version in the handshake
+0a0b1744 Update PeerServer.kt
+62806ee1 Merge pull request #200 from vogler75/claude/peerlink-graphql-dashboard-b2irsz
+5078ba15 Merge branch 'feature/peerlink-interest-routing' into claude/peerlink-graphql-dashboard-b2irsz
+fd780666 fix(peerlink): capture TLS exporter on server sockets for shared-secret auth
+abd79711 Update PeerServer.kt
+2fe99716 fix(peerlink): pass all sniffed bytes to the TLS handshake
+013206c1 fix(startup): log errors thrown in startup callbacks instead of stalling silently
+0a76ad5f feat(graphql): add peerLink query for PeerLink configuration and link state
+cf4d95d4 fix(peerlink): report consumer state and remote like the edge broker
+a65cdfd7 fix(peerlink): regenerate auto TLS cert when only the key exists
+499c07bd docs(peerlink): document interest routing options
+eb40b94d Update peerlink.md
+419cba0b feat(peerlink): interest routing for the main broker
+8a18e36d docs(plans): close MQTT-Client mTLS plan for the main broker
+6fc821fa docs(dev): normalize dev/ file names to lowercase kebab-case
+8b22ba78 docs: align PeerLink routing and redundancy implementation plans
+ad5cdcb9 docs(plans): merge PeerLink plans, add interest routing plan
+59201234 Update PLAN-memory-session-queue-stores.md
+60c6b753 docs(dev): add spec for redundancy roles in PeerLink broker pairs
+c4442e6b feat(mqtt5): support Subscription Identifiers incl. persistence (#198)
+bc2ff4d0 feat(auth): ACL allow/deny rules with Go edge broker parity
+d97dd8d6 chore: ignore local PeerLink certs directory
+b916bdab docs(peerlink): rewrite PeerLink guide to match the implementation
+e0747fd2 fix(deps): pin all BouncyCastle jars to 1.85 to prevent jar signer mismatch
+2795cde0 feat(peerlink): implement PeerLink inter-broker replication with Go Edge parity
+4b4c87d5 feat(winccua): add trustAllCertificates option to ignore TLS certificate errors
+ea9a81eb fix(cratedb): keep non-object JSON payloads and aggregate raw values
+4ca6dcba feat(opcua-server): configurable security with user authentication (#64)
+efa61eb5 feat(mqtt): support client mTLS for broker bridges (#111)
+d924e3b6 feat(agents): sessions, streaming, RAG, HITL and flow integration (#189-#194)
+950b952a docs: add knowledge graph implementation plan (#167)
+93864b7e feat(hmi): implement native MQTT HMI file synchronization (fixes #195)
+18c73167 feat(plc4x): upgrade to 1.0.0 and remove bacnet driver
+8ef8d4c2 feat(scripting): align timer to wall-clock boundaries and inject trigger_time context
+a06b2b08 feat(genai): enforce explicit provider type for decision agents
+140f1301 feat(genai): add OpenRouter provider and topic decision support
+b2bb2cac fix(scripting): resolve execution freeze and state invalidation in script engine
+da3d5b0a fix: resolve broker issues #173 through #186
+8c449385 Add topic-based decision making plan
+8dd82c9d Update release.sh
