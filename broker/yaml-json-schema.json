@@ -1314,7 +1314,7 @@
           "additionalProperties": false,
           "description": "Interest routing: each node announces the topic filters it has local interest in, and a source forwards only matching records. Peers without interest support are served everything.",
           "properties": {
-            "Enabled":           { "type": "boolean", "default": false, "description": "Announce local subscriptions to sources and filter what peers pull. At most 64 consuming peers." },
+            "Enabled":           { "type": "boolean", "default": true, "description": "Announce local subscriptions to sources and filter what peers pull. At most 64 consuming peers." },
             "Unknown":           { "type": "string", "enum": ["ALL", "NONE"], "default": "ALL", "description": "What a capable peer gets before its first interest snapshot: ALL (everything) or NONE." },
             "FlushMs":           { "type": "integer", "minimum": 1, "default": 5, "description": "Coalescing window for interest deltas." },
             "MaxScanPerFetch":   { "type": "integer", "minimum": 1024, "default": 65536, "description": "Records a source skips at most per FETCH before it answers with a sparse batch." },

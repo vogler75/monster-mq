@@ -200,7 +200,7 @@ class PeerLinkConfigTest {
     @Test
     fun testInterestDefaultsAndParse() {
         val d = PeerLinkConfig().interest
-        assertFalse(d.enabled)
+        assertTrue(d.enabled)
         assertEquals("ALL", d.effectiveUnknown())
         assertEquals(5, d.getFlushMs())
         assertEquals(65536, d.getMaxScanPerFetch())
@@ -221,6 +221,11 @@ class PeerLinkConfigTest {
         assertEquals(10, p.interest.getMaxFiltersPerPeer())
         assertEquals(256, p.interest.getMaxFilterBytes())
         assertTrue(p.peers[0].interestOff())
+
+        val jsonFalse = JsonObject()
+            .put("Interest", JsonObject().put("Enabled", false))
+        val pFalse = PeerLinkConfigParser.parse(jsonFalse)
+        assertFalse(pFalse.interest.enabled)
 
         try {
             PeerLinkConfigParser.parse(JsonObject().put("Interest", JsonObject().put("Bogus", 1)))

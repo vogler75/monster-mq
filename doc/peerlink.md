@@ -340,7 +340,7 @@ Interest routing, see [Interest routing](#13-interest-routing).
 
 | Key | Default | Description |
 |---|---|---|
-| `Enabled` | `false` | Announce this broker's subscriptions to its sources and serve peers only what they subscribe to. At most 64 consuming peers. |
+| `Enabled` | `true` | Announce this broker's subscriptions to its sources and serve peers only what they subscribe to. At most 64 consuming peers. |
 | `Unknown` | `ALL` | What a capable peer gets before its first interest snapshot arrives: `ALL` or `NONE`. |
 | `FlushMs` | `5` | Coalescing window for interest changes sent to sources. > 0. |
 | `MaxScanPerFetch` | `65536` | Records a source skips at most per `FETCH` before it answers. ≥ 1024. |

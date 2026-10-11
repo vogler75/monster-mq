@@ -110,7 +110,7 @@ data class PeerConfig(
 
 // PeerLink.Interest (plan-peerlink-interest-routing section 7).
 data class PeerLinkInterestConfig(
-    var enabled: Boolean = false,
+    var enabled: Boolean = true,
     var unknown: String = "", // ALL | NONE
     var flushMs: Int? = null,
     var maxScanPerFetch: Int? = null,
@@ -425,7 +425,7 @@ object PeerLinkConfigParser {
         }
 
         obj.getJsonObject("Interest")?.let { ic ->
-            p.interest.enabled = ic.getBoolean("Enabled", false)
+            p.interest.enabled = ic.getBoolean("Enabled", true)
             p.interest.unknown = ic.getString("Unknown", "")
             if (ic.containsKey("FlushMs")) p.interest.flushMs = ic.getInteger("FlushMs")
             if (ic.containsKey("MaxScanPerFetch")) p.interest.maxScanPerFetch = ic.getInteger("MaxScanPerFetch")
