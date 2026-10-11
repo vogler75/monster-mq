@@ -391,11 +391,6 @@ class MqttClientConnector : AbstractVerticle() {
             // Connect
             client!!.connect(connOpts, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    if (isStopped.get()) {
-                        isReconnecting = false
-                        disconnectFromRemoteBroker()
-                        return
-                    }
                     vertx.runOnContext {
                         if (isStopped.get()) {
                             isReconnecting = false
@@ -412,10 +407,6 @@ class MqttClientConnector : AbstractVerticle() {
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    if (isStopped.get()) {
-                        isReconnecting = false
-                        return
-                    }
                     vertx.runOnContext {
                         if (isStopped.get()) {
                             isReconnecting = false

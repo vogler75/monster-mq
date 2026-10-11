@@ -33,20 +33,17 @@ class DeviceConfigStorePostgres(
 
     private val logger: Logger = Utils.getLogger(DeviceConfigStorePostgres::class.java)
 
-    private fun <T> executeBlocking(action: () -> T): Future<T> {
-        val promise = Promise.promise<T>()
-        vertx.executeBlocking<T>(Callable {
-            synchronized(connectionLock) {
-                action()
+    private fun <T> executeBlocking(errorMessage: String, action: () -> T): Future<T> {
+        return vertx.executeBlocking<T>(Callable {
+            try {
+                synchronized(connectionLock) {
+                    action()
+                }
+            } catch (e: Exception) {
+                logger.severe("$errorMessage: ${e.message}")
+                throw e as? DeviceConfigException ?: DeviceConfigException(errorMessage, e)
             }
-        }).onComplete { ar ->
-            if (ar.succeeded()) {
-                promise.complete(ar.result())
-            } else {
-                promise.fail(ar.cause())
-            }
-        }
-        return promise.future()
+        })
     }
 
     companion object {
@@ -185,7 +182,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getAllDevices(): Future<List<DeviceConfig>> {
-        return executeBlocking {
+        return executeBlocking("Failed to get all devices") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(SELECT_ALL).use { stmt ->
                 stmt.executeQuery().use { rs ->
@@ -204,7 +201,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getDevicesByType(type: String): Future<List<DeviceConfig>> {
-        return executeBlocking {
+        return executeBlocking("Failed to get devices by type $type") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(SELECT_BY_TYPE).use { stmt ->
                 stmt.setString(1, type)
@@ -224,7 +221,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
-        return executeBlocking {
+        return executeBlocking("Failed to get devices by node $nodeId") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(SELECT_BY_NODE).use { stmt ->
                 stmt.setString(1, nodeId)
@@ -244,7 +241,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getEnabledDevicesByNode(nodeId: String): Future<List<DeviceConfig>> {
-        return executeBlocking {
+        return executeBlocking("Failed to get enabled devices by node $nodeId") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(SELECT_ENABLED_BY_NODE).use { stmt ->
                 stmt.setString(1, nodeId)
@@ -283,13 +280,13 @@ class DeviceConfigStorePostgres(
     }
 
     override fun getDevice(name: String): Future<DeviceConfig?> {
-        return executeBlocking {
+        return executeBlocking("Failed to get device $name") {
             getDeviceSync(name)
         }
     }
 
     override fun isNamespaceInUse(namespace: String, excludeName: String?): Future<Boolean> {
-        return executeBlocking {
+        return executeBlocking("Failed to check namespace usage") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(CHECK_NAMESPACE).use { stmt ->
                 stmt.setString(1, namespace)
@@ -302,7 +299,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun saveDevice(device: DeviceConfig): Future<DeviceConfig> {
-        return executeBlocking {
+        return executeBlocking("Failed to save device ${device.name}") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             val now = Instant.now()
             val updatedDevice = device.copy(updatedAt = now)
@@ -328,7 +325,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun deleteDevice(name: String): Future<Boolean> {
-        return executeBlocking {
+        return executeBlocking("Failed to delete device $name") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(DELETE_BY_NAME).use { stmt ->
                 stmt.setString(1, name)
@@ -338,7 +335,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun toggleDevice(name: String, enabled: Boolean): Future<DeviceConfig?> {
-        return executeBlocking {
+        return executeBlocking("Failed to toggle device $name") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(UPDATE_ENABLED).use { stmt ->
                 stmt.setBoolean(1, enabled)
@@ -356,7 +353,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun reassignDevice(name: String, nodeId: String): Future<DeviceConfig?> {
-        return executeBlocking {
+        return executeBlocking("Failed to reassign device $name") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             conn.prepareStatement(UPDATE_NODE_ID).use { stmt ->
                 stmt.setString(1, nodeId)
@@ -374,7 +371,8 @@ class DeviceConfigStorePostgres(
     }
 
     override fun close(): Future<Void> {
-        return stop()
+        // stop() waits for connectionLock, which a running query may hold; keep that off the event loop
+        return vertx.executeBlocking(Callable { stop() }).compose { it }
     }
 
     private fun mapResultSetToDevice(rs: ResultSet): DeviceConfig {
@@ -449,7 +447,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun exportConfigs(names: List<String>?): Future<List<Map<String, Any?>>> {
-        return executeBlocking {
+        return executeBlocking("Failed to export device configs") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
 
             val query = if (names.isNullOrEmpty()) {
@@ -486,7 +484,7 @@ class DeviceConfigStorePostgres(
     }
 
     override fun importConfigs(configs: List<Map<String, Any?>>): Future<ImportDeviceConfigResult> {
-        return executeBlocking {
+        return executeBlocking("Failed to import device configs") {
             val conn = connection ?: throw DeviceConfigException("Database connection not available")
             var imported = 0
             val errors = mutableListOf<String>()

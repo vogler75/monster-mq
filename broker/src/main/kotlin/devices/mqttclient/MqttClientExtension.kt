@@ -395,16 +395,18 @@ class MqttClientExtension : AbstractVerticle() {
 
                     "reassign" -> {
                         val newNodeId = changeData.getString("nodeId")
-                        val device = activeDevices[deviceName]
+                        // A device reassigned to this node is not in activeDevices yet, so load it from the store
+                        val deviceFuture = activeDevices[deviceName]?.let { Future.succeededFuture(it) }
+                            ?: deviceStore.getDevice(deviceName)
 
-                        if (device != null) {
-                            if (newNodeId == currentNodeId && device.enabled) {
+                        deviceFuture.compose { device ->
+                            if (device == null) {
+                                Future.succeededFuture(Unit)
+                            } else if (newNodeId == currentNodeId && device.enabled) {
                                 deployConnectorForDevice(device.copy(nodeId = newNodeId)).map { Unit }
                             } else {
                                 undeployConnectorForDevice(deviceName).map { Unit }
                             }
-                        } else {
-                            Future.succeededFuture(Unit)
                         }
                     }
 
