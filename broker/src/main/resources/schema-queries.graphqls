@@ -1336,6 +1336,8 @@ enum WinCCUaAddressType {
     TAG_VALUES
     # Subscribe to active alarms
     ACTIVE_ALARMS
+    # Write incoming MQTT topic values to a WinCC Unified tag
+    TAG_WRITE
 }
 
 # WinCC Unified message format options
@@ -1361,9 +1363,9 @@ enum WinCCUaDataAccessMode {
 
 # WinCC Unified address configuration for subscriptions
 type WinCCUaAddress {
-    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    # Address type (TAG_VALUES, ACTIVE_ALARMS, or TAG_WRITE)
     type: WinCCUaAddressType!
-    # MQTT topic prefix for this subscription
+    # MQTT topic prefix for subscriptions or exact MQTT topic for TAG_WRITE
     topic: String!
     # Optional description
     description: String
@@ -1379,6 +1381,14 @@ type WinCCUaAddress {
     filterString: String
     # OpenPipe TAG_VALUES publish mode: SINGLE or BULK
     pipeTagMode: String
+    # Target WinCC Unified tag name for TAG_WRITE (no wildcards)
+    tagName: String
+    # Optional dot-separated JSON path to extract the value from JSON MQTT payloads (blank = 1:1 raw payload)
+    jsonPath: String
+    # Optional dot-separated JSON path to extract the timestamp from JSON MQTT payloads (GraphQL TAG_WRITE only)
+    timestampJsonPath: String
+    # Timestamp format when timestampJsonPath is used: ISO or MS
+    timestampFormat: String
 }
 
 # Topic name transformation configuration

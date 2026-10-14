@@ -433,6 +433,7 @@ class WinCCUaConnector : AbstractVerticle() {
             when (address.type) {
                 WinCCUaAddressType.TAG_VALUES -> handleTagValuesData(data, address)
                 WinCCUaAddressType.ACTIVE_ALARMS -> handleActiveAlarmsData(data, address)
+                WinCCUaAddressType.TAG_WRITE -> {}
             }
 
         } catch (e: Exception) {
@@ -571,6 +572,7 @@ class WinCCUaConnector : AbstractVerticle() {
             when (address.type) {
                 WinCCUaAddressType.TAG_VALUES -> setupTagValuesSubscription(address)
                 WinCCUaAddressType.ACTIVE_ALARMS -> setupActiveAlarmsSubscription(address)
+                WinCCUaAddressType.TAG_WRITE -> Future.succeededFuture()
             }
         }
 

@@ -328,6 +328,7 @@ class WinCCUaPipeConnector : AbstractVerticle() {
             when (address.type) {
                 WinCCUaAddressType.TAG_VALUES -> setupTagValuesSubscription(address)
                 WinCCUaAddressType.ACTIVE_ALARMS -> setupActiveAlarmsSubscription(address)
+                WinCCUaAddressType.TAG_WRITE -> Future.succeededFuture()
             }
         }
         val promise = Promise.promise<Void>()

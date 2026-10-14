@@ -507,6 +507,11 @@ class WinCCUaClientConfigMutations(
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
                 val pipeTagMode = inputMap["pipeTagMode"] as? String ?: WinCCUaAddress.PIPE_TAG_MODE_SINGLE
+                val tagName = inputMap["tagName"] as? String
+                val jsonPath = inputMap["jsonPath"] as? String
+                val timestampJsonPath = inputMap["timestampJsonPath"] as? String
+                val timestampFormat = (inputMap["timestampFormat"] as? String)
+                    ?: if (!timestampJsonPath.isNullOrBlank()) WinCCUaAddress.TIMESTAMP_FORMAT_ISO else null
 
                 // Create the address object
                 val address = WinCCUaAddress(
@@ -518,7 +523,11 @@ class WinCCUaClientConfigMutations(
                     includeQuality = includeQuality,
                     systemNames = systemNames,
                     filterString = filterString,
-                    pipeTagMode = pipeTagMode
+                    pipeTagMode = pipeTagMode,
+                    tagName = tagName,
+                    jsonPath = jsonPath,
+                    timestampJsonPath = timestampJsonPath,
+                    timestampFormat = timestampFormat
                 )
 
                 val validationErrors = address.validate()
@@ -660,6 +669,11 @@ class WinCCUaClientConfigMutations(
                 val systemNames = (inputMap["systemNames"] as? List<*>)?.mapNotNull { it as? String }
                 val filterString = inputMap["filterString"] as? String
                 val pipeTagMode = inputMap["pipeTagMode"] as? String ?: WinCCUaAddress.PIPE_TAG_MODE_SINGLE
+                val tagName = inputMap["tagName"] as? String
+                val jsonPath = inputMap["jsonPath"] as? String
+                val timestampJsonPath = inputMap["timestampJsonPath"] as? String
+                val timestampFormat = (inputMap["timestampFormat"] as? String)
+                    ?: if (!timestampJsonPath.isNullOrBlank()) WinCCUaAddress.TIMESTAMP_FORMAT_ISO else null
 
                 // Create the address object
                 val address = WinCCUaAddress(
@@ -671,7 +685,11 @@ class WinCCUaClientConfigMutations(
                     includeQuality = includeQuality,
                     systemNames = systemNames,
                     filterString = filterString,
-                    pipeTagMode = pipeTagMode
+                    pipeTagMode = pipeTagMode,
+                    tagName = tagName,
+                    jsonPath = jsonPath,
+                    timestampJsonPath = timestampJsonPath,
+                    timestampFormat = timestampFormat
                 )
 
                 val validationErrors = address.validate()
@@ -981,6 +999,18 @@ class WinCCUaClientConfigMutations(
                     }
                     if (address.filterString != null) {
                         addressMap["filterString"] = address.filterString
+                    }
+                    if (!address.tagName.isNullOrBlank()) {
+                        addressMap["tagName"] = address.tagName
+                    }
+                    if (!address.jsonPath.isNullOrBlank()) {
+                        addressMap["jsonPath"] = address.jsonPath
+                    }
+                    if (!address.timestampJsonPath.isNullOrBlank()) {
+                        addressMap["timestampJsonPath"] = address.timestampJsonPath
+                    }
+                    if (!address.timestampFormat.isNullOrBlank()) {
+                        addressMap["timestampFormat"] = address.timestampFormat
                     }
                     addressMap
                 }

@@ -8,15 +8,16 @@ import io.vertx.core.json.JsonObject
  */
 enum class WinCCUaAddressType {
     TAG_VALUES,      // Subscribe to tag value changes
-    ACTIVE_ALARMS    // Subscribe to active alarms
+    ACTIVE_ALARMS,   // Subscribe to active alarms
+    TAG_WRITE        // Write incoming MQTT topic values to a WinCC Unified tag
 }
 
 /**
- * WinCC Unified Client address configuration for subscriptions
+ * WinCC Unified Client address configuration for subscriptions and tag writes
  */
 data class WinCCUaAddress(
-    val type: WinCCUaAddressType,           // Address type: TAG_VALUES or ACTIVE_ALARMS
-    val topic: String,                      // MQTT topic prefix (e.g., "tags" or "alarms")
+    val type: WinCCUaAddressType,           // Address type: TAG_VALUES, ACTIVE_ALARMS, or TAG_WRITE
+    val topic: String,                      // MQTT topic prefix (or exact topic for TAG_WRITE)
     val description: String = "",           // Optional description for this address
     val retained: Boolean = false,          // Whether to publish MQTT messages with retained flag
 
@@ -31,11 +32,19 @@ data class WinCCUaAddress(
     // OpenPipe TAG_VALUES only — controls how tag notifications are mapped to MQTT topics.
     // BULK    : one MQTT message per notification on address.topic; payload = full NotifySubscribeTag JSON.
     // PER_TAG : one MQTT message per changed tag on address.topic/<transformedTagName>; payload = formatted value.
-    val pipeTagMode: String = PIPE_TAG_MODE_SINGLE
+    val pipeTagMode: String = PIPE_TAG_MODE_SINGLE,
+
+    // For TAG_WRITE type
+    val tagName: String? = null,
+    val jsonPath: String? = null,
+    val timestampJsonPath: String? = null,
+    val timestampFormat: String? = null
 ) {
     companion object {
         const val PIPE_TAG_MODE_SINGLE = "SINGLE"
         const val PIPE_TAG_MODE_BULK   = "BULK"
+        const val TIMESTAMP_FORMAT_ISO = "ISO"
+        const val TIMESTAMP_FORMAT_MS  = "MS"
 
         fun fromJsonObject(json: JsonObject): WinCCUaAddress {
             val typeStr = json.getString("type", "TAG_VALUES")
@@ -51,6 +60,9 @@ data class WinCCUaAddress(
             val nameFiltersList = json.getJsonArray("nameFilters")?.map { it.toString() }
                 ?: json.getJsonObject("browseArguments")?.getString("filter")?.let { listOf(it) }
 
+            val tsPath = json.getString("timestampJsonPath")
+            val tsFormat = json.getString("timestampFormat") ?: if (!tsPath.isNullOrBlank()) TIMESTAMP_FORMAT_ISO else null
+
             return WinCCUaAddress(
                 type = type,
                 topic = json.getString("topic"),
@@ -60,7 +72,11 @@ data class WinCCUaAddress(
                 includeQuality = json.getBoolean("includeQuality", false),
                 systemNames = systemNamesList,
                 filterString = json.getString("filterString"),
-                pipeTagMode = json.getString("pipeTagMode", PIPE_TAG_MODE_SINGLE)
+                pipeTagMode = json.getString("pipeTagMode", PIPE_TAG_MODE_SINGLE),
+                tagName = json.getString("tagName"),
+                jsonPath = json.getString("jsonPath"),
+                timestampJsonPath = tsPath,
+                timestampFormat = tsFormat
             )
         }
     }
@@ -89,6 +105,19 @@ data class WinCCUaAddress(
             obj.put("filterString", filterString)
         }
 
+        if (!tagName.isNullOrBlank()) {
+            obj.put("tagName", tagName)
+        }
+        if (!jsonPath.isNullOrBlank()) {
+            obj.put("jsonPath", jsonPath)
+        }
+        if (!timestampJsonPath.isNullOrBlank()) {
+            obj.put("timestampJsonPath", timestampJsonPath)
+        }
+        if (!timestampFormat.isNullOrBlank()) {
+            obj.put("timestampFormat", timestampFormat)
+        }
+
         return obj
     }
 
@@ -107,6 +136,22 @@ data class WinCCUaAddress(
             }
             WinCCUaAddressType.ACTIVE_ALARMS -> {
                 // systemNames and filterString are optional for alarms
+            }
+            WinCCUaAddressType.TAG_WRITE -> {
+                if (topic.contains("+") || topic.contains("#")) {
+                    errors.add("topic cannot contain MQTT wildcards (+ or #) for TAG_WRITE address type")
+                }
+                if (tagName.isNullOrBlank()) {
+                    errors.add("tagName is required for TAG_WRITE address type")
+                } else if (tagName.contains("*") || tagName.contains("?")) {
+                    errors.add("tagName cannot contain wildcards (* or ?) for TAG_WRITE address type")
+                }
+                if (!timestampJsonPath.isNullOrBlank() && jsonPath.isNullOrBlank()) {
+                    errors.add("timestampJsonPath requires jsonPath to be set")
+                }
+                if (!timestampFormat.isNullOrBlank() && timestampFormat !in listOf(TIMESTAMP_FORMAT_ISO, TIMESTAMP_FORMAT_MS)) {
+                    errors.add("timestampFormat must be one of: $TIMESTAMP_FORMAT_ISO, $TIMESTAMP_FORMAT_MS")
+                }
             }
         }
 

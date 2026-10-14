@@ -147,6 +147,18 @@ class WinCCUaClientConfigQueries(
                     if (address.filterString != null) {
                         addressMap["filterString"] = address.filterString
                     }
+                    if (!address.tagName.isNullOrBlank()) {
+                        addressMap["tagName"] = address.tagName
+                    }
+                    if (!address.jsonPath.isNullOrBlank()) {
+                        addressMap["jsonPath"] = address.jsonPath
+                    }
+                    if (!address.timestampJsonPath.isNullOrBlank()) {
+                        addressMap["timestampJsonPath"] = address.timestampJsonPath
+                    }
+                    if (!address.timestampFormat.isNullOrBlank()) {
+                        addressMap["timestampFormat"] = address.timestampFormat
+                    }
                     addressMap
                 }
             ),
