@@ -11,7 +11,6 @@ import io.vertx.core.Promise
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.time.Instant
-import java.util.Base64
 
 /**
  * Clean SQLiteVerticle-only implementation of MessageStore
@@ -42,20 +41,8 @@ class MessageStoreSQLite(
     override fun getName(): String = name
     override fun getType(): MessageStoreType = MessageStoreType.SQLITE
 
-    private fun JsonObject.readBinary(key: String): ByteArray? {
-        return when (val value = getValue(key)) {
-            null -> null
-            is ByteArray -> value
-            is String -> {
-                try {
-                    Base64.getDecoder().decode(value)
-                } catch (_: IllegalArgumentException) {
-                    value.toByteArray()
-                }
-            }
-            else -> null
-        }
-    }
+    // Reads the raw map, as getValue turns a byte[] into a base64url string.
+    private fun JsonObject.readBinary(key: String): ByteArray? = map[key] as? ByteArray
 
     private fun JsonObject.readInt(key: String, default: Int = 0): Int {
         return when (val value = getValue(key)) {

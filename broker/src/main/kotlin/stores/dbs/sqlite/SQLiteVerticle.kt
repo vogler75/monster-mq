@@ -5,11 +5,13 @@ import at.rocworks.Utils
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Promise
+import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.PreparedStatement
 import java.sql.Types
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,6 +37,33 @@ class SQLiteVerticle : AbstractVerticle() {
         // SQLITE_BUSY retry configuration
         const val MAX_RETRY_ATTEMPTS = 3
         const val RETRY_BACKOFF_MS = 100L
+
+        /**
+         * Binds params to the statement; a ByteArray or Buffer is bound as a BLOB. The raw list is
+         * read because JsonArray.getValue and its iterator turn a byte[] into a base64url string,
+         * which would be bound as TEXT.
+         */
+        fun bindParams(statement: PreparedStatement, params: JsonArray) {
+            for (i in 0 until params.size()) {
+                val index = i + 1
+                when (val raw = params.list[i]) {
+                    is ByteArray -> statement.setBytes(index, raw)
+                    is Buffer -> statement.setBytes(index, raw.bytes)
+                    else -> when (val value = params.getValue(i)) {
+                        null -> statement.setNull(index, Types.NULL)
+                        is String -> statement.setString(index, value)
+                        is Int -> statement.setInt(index, value)
+                        is Long -> statement.setLong(index, value)
+                        is Double -> statement.setDouble(index, value)
+                        is Float -> statement.setFloat(index, value)
+                        is Boolean -> statement.setBoolean(index, value)
+                        is JsonArray -> statement.setString(index, value.encode())
+                        is JsonObject -> statement.setString(index, value.encode())
+                        else -> statement.setObject(index, value)
+                    }
+                }
+            }
+        }
     }
     
     override fun start(startPromise: Promise<Void>) {
@@ -140,27 +169,7 @@ class SQLiteVerticle : AbstractVerticle() {
             }
 
             val rowsAffected = connection.prepareStatement(sql).use { preparedStatement ->
-                // Set parameters
-                params.forEachIndexed { index, value ->
-                    when (value) {
-                        null -> preparedStatement.setNull(index + 1, Types.NULL)
-                        is String -> preparedStatement.setString(index + 1, value)
-                        is Number -> {
-                            when (value) {
-                                is Int -> preparedStatement.setInt(index + 1, value)
-                                is Long -> preparedStatement.setLong(index + 1, value)
-                                is Double -> preparedStatement.setDouble(index + 1, value)
-                                is Float -> preparedStatement.setFloat(index + 1, value)
-                                else -> preparedStatement.setObject(index + 1, value)
-                            }
-                        }
-                        is Boolean -> preparedStatement.setBoolean(index + 1, value)
-                        is ByteArray -> preparedStatement.setBytes(index + 1, value)
-                        is JsonArray -> preparedStatement.setString(index + 1, value.encode())
-                        is JsonObject -> preparedStatement.setString(index + 1, value.encode())
-                        else -> preparedStatement.setObject(index + 1, value)
-                    }
-                }
+                bindParams(preparedStatement, params)
                 preparedStatement.executeUpdate()
             }
 
@@ -202,25 +211,8 @@ class SQLiteVerticle : AbstractVerticle() {
             val results = JsonArray()
             
             connection.prepareStatement(sql).use { preparedStatement ->
-                // Set parameters
-                params.forEachIndexed { index, value ->
-                    when (value) {
-                        null -> preparedStatement.setNull(index + 1, Types.NULL)
-                        is String -> preparedStatement.setString(index + 1, value)
-                        is Number -> {
-                            when (value) {
-                                is Int -> preparedStatement.setInt(index + 1, value)
-                                is Long -> preparedStatement.setLong(index + 1, value)
-                                is Double -> preparedStatement.setDouble(index + 1, value)
-                                is Float -> preparedStatement.setFloat(index + 1, value)
-                                else -> preparedStatement.setObject(index + 1, value)
-                            }
-                        }
-                        is Boolean -> preparedStatement.setBoolean(index + 1, value)
-                        else -> preparedStatement.setObject(index + 1, value)
-                    }
-                }
-                
+                bindParams(preparedStatement, params)
+
                 val resultSet = preparedStatement.executeQuery()
                 val metaData = resultSet.metaData
                 val columnCount = metaData.columnCount
@@ -273,27 +265,7 @@ class SQLiteVerticle : AbstractVerticle() {
 
             connection.prepareStatement(sql).use { preparedStatement ->
                 batchParams.forEach { paramsObj ->
-                    val params = paramsObj as JsonArray
-                    params.forEachIndexed { index, value ->
-                        when (value) {
-                            null -> preparedStatement.setNull(index + 1, Types.NULL)
-                            is String -> preparedStatement.setString(index + 1, value)
-                            is Number -> {
-                                when (value) {
-                                    is Int -> preparedStatement.setInt(index + 1, value)
-                                    is Long -> preparedStatement.setLong(index + 1, value)
-                                    is Double -> preparedStatement.setDouble(index + 1, value)
-                                    is Float -> preparedStatement.setFloat(index + 1, value)
-                                    else -> preparedStatement.setObject(index + 1, value)
-                                }
-                            }
-                            is Boolean -> preparedStatement.setBoolean(index + 1, value)
-                            is ByteArray -> preparedStatement.setBytes(index + 1, value)
-                            is JsonArray -> preparedStatement.setString(index + 1, value.encode())
-                            is JsonObject -> preparedStatement.setString(index + 1, value.encode())
-                            else -> preparedStatement.setObject(index + 1, value)
-                        }
-                    }
+                    bindParams(preparedStatement, paramsObj as JsonArray)
                     preparedStatement.addBatch()
                 }
 

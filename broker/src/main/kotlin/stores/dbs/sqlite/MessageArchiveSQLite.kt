@@ -229,7 +229,8 @@ class MessageArchiveSQLite(
                     val rowObj = row as JsonObject
                     val dataRow = JsonArray()
                     header.forEach { columnName ->
-                        val value = rowObj.getValue(columnName as String)
+                        // The raw map, as getValue turns a byte[] into a base64url string
+                        val value = rowObj.map[columnName as String]
                         // Convert ByteArray to String for JSON compatibility
                         when (value) {
                             is ByteArray -> dataRow.add(value.toString(Charsets.UTF_8))

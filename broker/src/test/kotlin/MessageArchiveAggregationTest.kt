@@ -77,9 +77,11 @@ class MessageArchiveAggregationTest {
         val dbFile = File.createTempFile("monstermq-agg-", ".db")
         dbFile.deleteOnExit()
         deploy(SQLiteVerticle(), "sqlite verticle")
-        val archive = MessageArchiveSQLite(uniqueName(PayloadFormat.JSON), dbFile.absolutePath, PayloadFormat.JSON)
-        deploy(archive, "sqlite archive")
-        check(archive, PayloadFormat.JSON)
+        for (format in PayloadFormat.entries) {
+            val archive = MessageArchiveSQLite(uniqueName(format), dbFile.absolutePath, format)
+            deploy(archive, "sqlite archive")
+            check(archive, format)
+        }
     }
 
     @Test

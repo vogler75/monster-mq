@@ -7,7 +7,6 @@ import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import java.sql.Connection
 import java.sql.DriverManager
-import java.sql.Types
 import java.util.concurrent.TimeUnit
 
 /**
@@ -188,23 +187,7 @@ class SQLiteClient(private val vertx: Vertx, private val dbPath: String) {
         val results = JsonArray()
         try {
             readConnection.prepareStatement(sql).use { stmt ->
-                params.forEachIndexed { index, value ->
-                    when (value) {
-                        null -> stmt.setNull(index + 1, Types.NULL)
-                        is String -> stmt.setString(index + 1, value)
-                        is Number -> {
-                            when (value) {
-                                is Int -> stmt.setInt(index + 1, value)
-                                is Long -> stmt.setLong(index + 1, value)
-                                is Double -> stmt.setDouble(index + 1, value)
-                                is Float -> stmt.setFloat(index + 1, value)
-                                else -> stmt.setObject(index + 1, value)
-                            }
-                        }
-                        is Boolean -> stmt.setBoolean(index + 1, value)
-                        else -> stmt.setObject(index + 1, value)
-                    }
-                }
+                SQLiteVerticle.bindParams(stmt, params)
                 val rs = stmt.executeQuery()
                 val meta = rs.metaData
                 val columnCount = meta.columnCount
