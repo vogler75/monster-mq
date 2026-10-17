@@ -30,7 +30,7 @@ object MqttTopicTransformer {
             throw IllegalArgumentException("Address must be SUBSCRIBE mode for remoteToLocal transformation")
         }
 
-        val remoteTopic = address.remoteTopic
+        val remoteTopic = plainFilter(address.remoteTopic)
         val localTopic = address.localTopic
         val removePath = address.removePath
 
@@ -136,6 +136,28 @@ object MqttTopicTransformer {
     }
 
     /**
+     * Strips shared subscription prefix ($share/<group>/ or $queue/) so messages can match the plain topic filter.
+     */
+     fun plainFilter(filter: String): String {
+         if (filter.startsWith("\$share/")) {
+             val parts = filter.split('/', limit = 3)
+             if (parts.size >= 3) {
+                 return parts[2]
+             }
+         }
+         if (filter.startsWith("\$queue/")) {
+             return filter.removePrefix("\$queue/")
+         }
+         return filter
+     }
+
+     /**
+      * Checks if a filter is a shared subscription ($share/ or $queue/).
+      */
+     fun isSharedSubscription(filter: String): Boolean =
+         filter.startsWith("\$share/") || filter.startsWith("\$queue/")
+
+    /**
      * Check if a received remote topic matches the configured remote topic pattern
      *
      * @param receivedTopic The topic to check
@@ -143,7 +165,7 @@ object MqttTopicTransformer {
      * @return true if the topic matches the pattern
      */
     fun matchesRemotePattern(receivedTopic: String, remoteTopicPattern: String): Boolean {
-        return matchesMqttTopic(receivedTopic, remoteTopicPattern)
+        return matchesMqttTopic(receivedTopic, plainFilter(remoteTopicPattern))
     }
 
     /**
