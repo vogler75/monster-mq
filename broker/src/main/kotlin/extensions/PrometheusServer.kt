@@ -26,14 +26,14 @@ import java.util.Base64
  * Prometheus-compatible metrics server.
  *
  * Endpoints:
- * - GET  /metrics                      Prometheus text exposition format (scraping endpoint)
- * - GET  /api/v1/labels                Label names
- * - GET  /api/v1/label/:name/values    Label values
- * - POST /api/v1/series                Series matching selector
- * - POST /api/v1/query_range           Range query (historical topic data from archive groups)
- * - GET  /api/v1/query_range           Range query (same, for GET requests)
- * - POST /api/v1/query                 Instant query (current value from LastValueStore)
- * - GET  /api/v1/query                 Instant query (same, for GET requests)
+ * - GET        /metrics                      Prometheus text exposition format (scraping endpoint)
+ * - GET, POST  /api/v1/labels                Label names
+ * - GET        /api/v1/label/:name/values    Label values
+ * - GET, POST  /api/v1/series                Series matching selector
+ * - POST       /api/v1/query_range           Range query (historical topic data from archive groups)
+ * - GET        /api/v1/query_range           Range query (same, for GET requests)
+ * - POST       /api/v1/query                 Instant query (current value from LastValueStore)
+ * - GET        /api/v1/query                 Instant query (same, for GET requests)
  */
 class PrometheusServer(
     private val host: String,
@@ -41,7 +41,8 @@ class PrometheusServer(
     private val archiveHandler: ArchiveHandler,
     private val userManager: UserManager,
     private val metricsStore: IMetricsStore? = null,
-    private val rawQueryLimit: Int = 10000
+    private val rawQueryLimit: Int = 10000,
+    private val metricsIntervalSeconds: Int = 10
 ) : AbstractVerticle() {
 
     private val logger = Utils.getLogger(this::class.java)
@@ -90,8 +91,10 @@ class PrometheusServer(
         router.get("/metrics").handler { ctx -> handleMetrics(ctx) }
 
         router.get("/api/v1/labels").handler { ctx -> handleLabels(ctx) }
+        router.post("/api/v1/labels").handler { ctx -> handleLabels(ctx) }
         router.get("/api/v1/label/:name/values").handler { ctx -> handleLabelValues(ctx) }
         router.post("/api/v1/series").handler { ctx -> handleSeries(ctx) }
+        router.get("/api/v1/series").handler { ctx -> handleSeries(ctx) }
         router.post("/api/v1/query_range").handler { ctx -> handleQueryRange(ctx) }
         router.get("/api/v1/query_range").handler { ctx -> handleQueryRange(ctx) }
         router.post("/api/v1/query").handler { ctx -> handleQuery(ctx) }
@@ -120,8 +123,16 @@ class PrometheusServer(
 
     // ========== /metrics endpoint ==========
 
+    private fun getClusterNodeIds(): List<String> {
+        return try {
+            Monster.getClusterNodeIds(vertx)
+        } catch (_: Exception) {
+            listOf("local")
+        }
+    }
+
     private fun handleMetrics(ctx: RoutingContext) {
-        val nodeIds = Monster.getClusterNodeIds(vertx)
+        val nodeIds = getClusterNodeIds()
         if (nodeIds.isEmpty()) {
             renderMetrics(ctx, emptyList())
             return
@@ -141,10 +152,17 @@ class PrometheusServer(
         }
     }
 
+    private fun canRead(ctx: RoutingContext, topic: String): Boolean {
+        if (!userManager.isUserManagementEnabled()) return true
+        val user = ctx.get<String>("prometheusUser") ?: Const.ANONYMOUS_USER
+        if (userManager.isAdmin(user)) return true
+        return userManager.canSubscribe(user, topic)
+    }
+
     private fun renderMetrics(ctx: RoutingContext, nodeResults: List<Pair<String, JsonObject>>) {
         val sb = StringBuilder()
         appendBrokerMetrics(sb, nodeResults)
-        appendTopicValueMetrics(sb)
+        appendTopicValueMetrics(ctx, sb)
         ctx.response()
             .setStatusCode(200)
             .putHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
@@ -169,10 +187,11 @@ class PrometheusServer(
         }
     }
 
-    private fun appendTopicValueMetrics(sb: StringBuilder) {
+    private fun appendTopicValueMetrics(ctx: RoutingContext, sb: StringBuilder) {
         appendMetricComment(sb, "topics", "gauge", "Current value of MQTT topic")
         archiveHandler.getDeployedArchiveGroups().forEach { (groupName, group) ->
             group.lastValStore?.findMatchingMessages("#") { message ->
+                if (!canRead(ctx, message.topicName)) return@findMatchingMessages true
                 val payload = String(message.payload, Charsets.UTF_8).trim()
                 val topicName = message.topicName
                 val numVal = payload.toDoubleOrNull()
@@ -250,7 +269,9 @@ class PrometheusServer(
                         logger.warning("Archive group '$groupName' has no lastValStore — topics cannot be discovered")
                     } else {
                         group.lastValStore!!.findMatchingMessages(topicFilter ?: "#") { message ->
-                            topics.add(message.topicName)
+                            if (canRead(ctx, message.topicName)) {
+                                topics.add(message.topicName)
+                            }
                             topics.size < 5000
                         }
                         logger.fine("label/topic/values: group='$groupName' → ${topics.size} topics found")
@@ -275,6 +296,7 @@ class PrometheusServer(
                 val fields = mutableSetOf<String>()
                 groups.forEach { (groupName, group) ->
                     group.lastValStore?.findMatchingMessages(topicFilter ?: "#") { message ->
+                        if (!canRead(ctx, message.topicName)) return@findMatchingMessages true
                         val payload = String(message.payload, Charsets.UTF_8).trim()
                         if (payload.toDoubleOrNull() != null) {
                             fields.add("")
@@ -301,7 +323,7 @@ class PrometheusServer(
                     .end(JsonObject().put("status", "success").put("data", JsonArray(BROKER_METRIC_LABELS)).encode())
             }
             "node" -> {
-                val nodeIds = Monster.getClusterNodeIds(vertx).sorted()
+                val nodeIds = getClusterNodeIds().sorted()
                 logger.fine("label/node/values: returning ${nodeIds.size} nodes: $nodeIds")
                 ctx.response().setStatusCode(200)
                     .putHeader("Content-Type", "application/json")
@@ -321,7 +343,8 @@ class PrometheusServer(
         val matchLabels = extractLabelMatchers(matchSelector)
         val groupFilter = matchLabels["group"]
         val topicFilter = matchLabels["topic"]
-        val metricName = matchLabels["__name__"]
+        val leadingMetric = Regex("""^(\w+)""").find(matchSelector.trim())?.groupValues?.get(1)
+        val metricName = matchLabels["__name__"] ?: leadingMetric
 
         logger.fine("series: __name__=${metricName ?: "(all)"} group=${groupFilter ?: "(all)"} topic=${topicFilter ?: "(all)"}")
         val data = JsonArray()
@@ -332,6 +355,7 @@ class PrometheusServer(
                 .filter { (name, _) -> groupFilter == null || name == groupFilter }
                 .forEach { (groupName, group) ->
                     group.lastValStore?.findMatchingMessages(topicFilter ?: "#") { message ->
+                        if (!canRead(ctx, message.topicName)) return@findMatchingMessages true
                         val payload = String(message.payload, Charsets.UTF_8).trim()
                         val fields = mutableListOf<String>()
                         if (payload.toDoubleOrNull() != null) {
@@ -361,7 +385,7 @@ class PrometheusServer(
 
         // Broker metric series
         if (metricName == null || metricName == "metrics") {
-            val nodeIds = Monster.getClusterNodeIds(vertx)
+            val nodeIds = getClusterNodeIds()
             nodeIds.forEach { nodeId ->
                 BROKER_METRIC_LABELS.forEach { metricLabel ->
                     data.add(
@@ -418,6 +442,12 @@ class PrometheusServer(
             return
         }
 
+        if (!topic.contains('+') && !topic.contains('#') && !canRead(ctx, topic)) {
+            logger.fine("query_range: topic '$topic' denied by ACL, returning empty")
+            sendRangeResult(ctx, JsonArray())
+            return
+        }
+
         val archiveStore = archiveHandler.getDeployedArchiveGroups()[groupName]?.archiveStore as? IMessageArchiveExtended
         if (archiveStore == null) {
             logger.warning("query_range: no IMessageArchiveExtended found for archive group '$groupName'")
@@ -441,6 +471,8 @@ class PrometheusServer(
                 val raw = mutableListOf<Pair<Long, Double>>()
                 for (i in 0 until historyData.size()) {
                     val record = historyData.getJsonObject(i) ?: continue
+                    val recTopic = record.getString("topic") ?: topic
+                    if (!canRead(ctx, recTopic)) continue
                     val timestampMs = record.getLong("timestamp") ?: continue
                     val payloadStr = when (val p = record.getValue("payload")) {
                         is io.vertx.core.json.JsonObject -> p.encode()
@@ -519,7 +551,7 @@ class PrometheusServer(
     ) {
         val metricLabel = parsed.labels["metric"] ?: ""
         val nodeFilter = parsed.labels["node"]
-        val nodeIds = Monster.getClusterNodeIds(vertx).filter { nodeFilter == null || it == nodeFilter }
+        val nodeIds = getClusterNodeIds().filter { nodeFilter == null || it == nodeFilter }
 
         logger.fine("query_range/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
 
@@ -537,15 +569,23 @@ class PrometheusServer(
         val result = java.util.concurrent.CopyOnWriteArrayList<JsonObject>()
         val pending = java.util.concurrent.atomic.AtomicInteger(nodeIds.size)
 
+        val interval = maxOf(metricsIntervalSeconds, 1).toLong()
+        val maxPoints = 50000L
+        var from = startTime
+        if (endTime.epochSecond - from.epochSecond > maxPoints * interval) {
+            from = Instant.ofEpochSecond(endTime.epochSecond - maxPoints * interval)
+        }
+        val limit = (((endTime.epochSecond - from.epochSecond) / interval) + 2).toInt()
+
         nodeIds.forEach { nodeId ->
-            metricsStore.getBrokerMetricsHistory(nodeId, startTime, endTime, null)
+            metricsStore.getBrokerMetricsHistory(nodeId, from, endTime, null, limit)
                 .onComplete { ar ->
                     if (ar.succeeded()) {
                         val history = ar.result()
                         val raw = history.mapNotNull { (ts, metrics) ->
                             val v = extractBrokerMetricValue(metrics, metricLabel) ?: return@mapNotNull null
                             ts.epochSecond to v
-                        }
+                        }.sortedBy { it.first }
                         val values = downsampleByStep(raw, startTime.epochSecond, endTime.epochSecond, stepSeconds)
                         logger.fine("query_range/metric: node='$nodeId' metric='$metricLabel' → ${history.size} history points → ${values.size()} result points")
                         result.add(buildMetricSeriesEntry(nodeId, metricLabel, values))
@@ -576,7 +616,7 @@ class PrometheusServer(
         if (parsed.metric == "metrics") {
             val metricLabel = parsed.labels["metric"] ?: ""
             val nodeFilter = parsed.labels["node"]
-            val nodeIds = Monster.getClusterNodeIds(vertx).filter { nodeFilter == null || it == nodeFilter }
+            val nodeIds = getClusterNodeIds().filter { nodeFilter == null || it == nodeFilter }
 
             logger.fine("query/metric: metric='$metricLabel' node=${nodeFilter ?: "(all)"} nodes=$nodeIds")
 
@@ -623,6 +663,7 @@ class PrometheusServer(
         if (topic.isNotEmpty()) {
             val group = archiveHandler.getDeployedArchiveGroups()[groupName]
             group?.lastValStore?.findMatchingMessages(topic) { message ->
+                if (!canRead(ctx, message.topicName)) return@findMatchingMessages true
                 val payload = String(message.payload, Charsets.UTF_8).trim()
                 val numVal = extractNumericValue(payload, field)
                 if (numVal != null) {
@@ -761,7 +802,7 @@ class PrometheusServer(
     private fun parsePromQL(query: String): ParsedQuery {
         val q = query.trim()
 
-        val funcPattern = Regex("""^(avg|min|max|count)_over_time\((.+)\[\w+]\s*\)$""", RegexOption.IGNORE_CASE)
+        val funcPattern = Regex("""^(avg|min|max|count)_over_time\((.+)\[(\w+)]\s*\)$""", RegexOption.IGNORE_CASE)
         val funcMatch = funcPattern.find(q)
 
         val function: String?
@@ -892,6 +933,7 @@ class PrometheusServer(
         if (authHeader == null) {
             if (userManager.isAnonymousEnabled()) {
                 logger.fine("Prometheus API allowed for Anonymous user")
+                ctx.put("prometheusUser", Const.ANONYMOUS_USER)
                 return true
             }
             ctx.response().setStatusCode(401)
@@ -906,6 +948,7 @@ class PrometheusServer(
             val username = JwtService.extractUsername(token)
             if (username != null && !JwtService.isTokenExpired(token)) {
                 logger.fine("Prometheus API authenticated via JWT for user: $username")
+                ctx.put("prometheusUser", username)
                 return true
             }
             ctx.response().setStatusCode(401)
@@ -923,6 +966,7 @@ class PrometheusServer(
                     userManager.authenticate(parts[0], parts[1]).onComplete { authResult ->
                         if (authResult.succeeded() && authResult.result()?.enabled == true) {
                             logger.fine("Prometheus API authenticated via Basic Auth for user: ${parts[0]}")
+                            ctx.put("prometheusUser", parts[0])
                             ctx.next()
                         } else {
                             ctx.response().setStatusCode(401)

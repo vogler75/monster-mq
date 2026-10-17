@@ -1336,6 +1336,11 @@ MORE INFO:
                 val metricsConfig = configJson.getJsonObject("Metrics", JsonObject())
                 val metricsEnabled = metricsConfig.getBoolean("Enabled", true)
 
+                val metricsIntervalSeconds = metricsConfig.getInteger(
+                    "CollectionIntervalSeconds",
+                    metricsConfig.getInteger("CollectionInterval", 10)
+                )
+
                 val (metricsStore, metricsCollector) = if (metricsEnabled) {
                     try {
                         val legacyMetricsStoreConfig = configJson.getJsonObject("MetricsStore", JsonObject())
@@ -1357,10 +1362,7 @@ MORE INFO:
 
                         val maxHistoryRows = metricsConfig.getInteger("MaxHistoryRows", 3600)
                         val store = MetricsStoreFactory.create(storeType, configJson, "metrics", maxHistoryRows)
-                        val collectionInterval = metricsConfig.getInteger(
-                            "CollectionIntervalSeconds",
-                            metricsConfig.getInteger("CollectionInterval", 10)
-                        )
+                        val collectionInterval = metricsIntervalSeconds
                         val retentionHours = metricsConfig.getInteger("RetentionHours", 24)
                         logger.fine("Starting Metrics Store: ${store.getName()} (${store.getType()}) with ${collectionInterval}s collection interval, ${retentionHours}h retention, ${maxHistoryRows} max history rows")
                         val collector = MetricsHandler(sessionHandler, store, messageBus, messageHandler, collectionInterval, retentionHours)
@@ -1376,9 +1378,13 @@ MORE INFO:
                 }
 
                 // Prometheus Server (needs metricsStore for historical broker metrics)
-                val prometheusRawQueryLimit = prometheusConfig.getInteger("RawQueryLimit", 10000)
+                val rawQueryLimitConfig = prometheusConfig.getInteger("RawQueryLimit", 10000)
+                val prometheusRawQueryLimit = if (rawQueryLimitConfig < 1) {
+                    logger.warning("Prometheus RawQueryLimit must be >= 1, falling back to 10000")
+                    10000
+                } else rawQueryLimitConfig
                 val prometheusServer = if (prometheusEnabled) {
-                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore, prometheusRawQueryLimit)
+                    PrometheusServer("0.0.0.0", prometheusPort, archiveHandler, userManager, metricsStore, prometheusRawQueryLimit, metricsIntervalSeconds)
                 } else {
                     logger.fine("Prometheus server is disabled in configuration")
                     null

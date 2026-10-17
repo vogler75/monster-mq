@@ -54,7 +54,7 @@ both directions.
 Instant topic queries use the selected last-value store; range queries require
 an archive backend implementing historical queries. Broker metric history
 requires an enabled metrics store. In range queries, steps under 60 seconds use
-raw topic history, capped by `RawQueryLimit` (0 means unlimited). Larger steps use
+raw topic history, capped by `RawQueryLimit` (defaults to 10000; values under 1 fall back to 10000). Larger steps use
 supported archive aggregation intervals.
 
 This is a limited compatibility API, not a full PromQL engine. Use the simple
@@ -67,9 +67,9 @@ scrape `/metrics` when those capabilities are needed.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/metrics` | Prometheus text exposition for scraping |
-| GET | `/api/v1/labels` | Discover label names |
+| GET, POST | `/api/v1/labels` | Discover label names |
 | GET | `/api/v1/label/{name}/values` | Discover label values |
-| POST | `/api/v1/series` | Discover series matching a selector |
+| GET, POST | `/api/v1/series` | Discover series matching a selector |
 | GET, POST | `/api/v1/query` | Current values |
 | GET, POST | `/api/v1/query_range` | Historical values |
 
