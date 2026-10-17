@@ -44,11 +44,14 @@ class SQLiteVerticle : AbstractVerticle() {
             enableWAL = config.getBoolean("EnableWAL", true)
             logger.info("SQLiteVerticle starting with WAL mode: $enableWAL")
 
-            // Register event bus consumers
-            vertx.eventBus().consumer<JsonObject>(EB_INIT_DB, this::handleInitDb)
-            vertx.eventBus().consumer<JsonObject>(EB_EXECUTE_UPDATE, this::handleExecuteUpdate)
-            vertx.eventBus().consumer<JsonObject>(EB_EXECUTE_QUERY, this::handleExecuteQuery)
-            vertx.eventBus().consumer<JsonObject>(EB_EXECUTE_BATCH, this::handleExecuteBatch)
+            // Register node-local event bus consumers. In cluster mode every node deploys its own
+            // SQLiteVerticle on these addresses, and point-to-point requests round-robin across all
+            // nodes that registered one. A request must stay on the node that owns the db file
+            // (and must not go through the wire codec, which turns byte[] params into base64 text).
+            vertx.eventBus().localConsumer<JsonObject>(EB_INIT_DB, this::handleInitDb)
+            vertx.eventBus().localConsumer<JsonObject>(EB_EXECUTE_UPDATE, this::handleExecuteUpdate)
+            vertx.eventBus().localConsumer<JsonObject>(EB_EXECUTE_QUERY, this::handleExecuteQuery)
+            vertx.eventBus().localConsumer<JsonObject>(EB_EXECUTE_BATCH, this::handleExecuteBatch)
             
             logger.info("SQLiteVerticle started and listening on event bus")
             startPromise.complete()
