@@ -40,9 +40,17 @@ class NatsClient(
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
 
     // Pending PUB state for binary payload reading
-    private data class PendingPub(val subject: String, val mqttTopic: String, val headerBytes: Int, val numBytes: Int, val replyTo: String?)
+    private data class PendingPub(val subject: String, val mqttTopic: String, val headerBytes: Int, val numBytes: Int, val replyTo: String?, val discard: Boolean = false)
     private var pendingPub: PendingPub? = null
     private lateinit var parser: RecordParser
+
+    private data class SidState(
+        val sid: String,
+        val topicFilter: String,
+        var delivered: Long = 0,
+        var maxMsgs: Long? = null
+    )
+    private val sidStates = mutableMapOf<String, SidState>()
 
     companion object {
         // Clients gate features (e.g. KV needs >= 2.6.2) on the advertised server version
@@ -73,6 +81,11 @@ class NatsClient(
         parser = RecordParser.newDelimited("\r\n") { buffer ->
             handleRecord(buffer)
         }
+        parser.maxRecordSize(65536)
+        parser.exceptionHandler { err ->
+            writeError("Maximum Control Line Exceeded")
+            socket.close()
+        }
 
         socket.handler(parser)
 
@@ -82,6 +95,10 @@ class NatsClient(
 
         socket.exceptionHandler { err ->
             logger.fine { "NATS client [$clientId] socket error: ${err.message}" }
+            if (err.message?.contains("maximum limit", ignoreCase = true) == true) {
+                writeError("Maximum Control Line Exceeded")
+                socket.close()
+            }
             cleanup()
         }
 
@@ -117,7 +134,14 @@ class NatsClient(
             pendingPub = null
             // Switch back to line-delimited mode
             parser.delimitedMode("\r\n")
+            parser.maxRecordSize(65536)
             handlePubPayload(pending, buffer)
+            return
+        }
+
+        if (buffer.length() > 65536) {
+            writeError("Maximum Control Line Exceeded")
+            socket.close()
             return
         }
 
@@ -189,12 +213,14 @@ class NatsClient(
             return
         }
 
+        socket.pause()
         userManager.authenticate(user, pass).onComplete { ar ->
             if (ar.succeeded() && ar.result() != null) {
                 authenticated = true
                 username = user
                 if (verbose) writeLine("+OK")
                 registerSession()
+                socket.resume()
             } else {
                 writeError("Authorization Violation")
                 socket.close()
@@ -202,11 +228,27 @@ class NatsClient(
         }
     }
 
+    private fun removeSid(sid: String) {
+        val mqttTopic = sidToTopic.remove(sid) ?: return
+        sidStates.remove(sid)
+        val sids = topicToSids[mqttTopic] ?: return
+        sids.remove(sid)
+
+        // Only unsubscribe when no more SIDs reference this topic
+        if (sids.isEmpty()) {
+            topicToSids.remove(mqttTopic)
+            if (!kvTopicRefs.containsKey(mqttTopic)) {
+                sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
+            }
+        }
+        jetStreamKv.onUnsubscribe()
+    }
+
     private fun handleSub(args: String) {
         if (!checkAuth()) return
 
         // SUB <subject> [queue group] <sid>
-        val parts = args.split(" ")
+        val parts = args.split(" ").filter { it.isNotEmpty() }
         if (parts.size < 2) {
             writeError("Invalid SUB")
             return
@@ -214,17 +256,22 @@ class NatsClient(
         val subject = parts[0]
         val sid = parts.last() // SID is always last
 
+        if (sidToTopic.containsKey(sid)) {
+            removeSid(sid)
+        }
+
         val mqttTopic = natsSubjectToMqttTopic(subject)
 
         // ACL check
         val user = username
-        if (user != null && !userManager.canSubscribe(user, mqttTopic)) {
+        if (user != null && !canSubscribe(mqttTopic)) {
             writeError("Permissions Violation for Subscription to \"$subject\"")
             return
         }
 
         // Track SID -> topic mapping
         sidToTopic[sid] = mqttTopic
+        sidStates[sid] = SidState(sid, mqttTopic)
         val sids = topicToSids.getOrPut(mqttTopic) { mutableSetOf() }
         val isNewTopic = sids.isEmpty()
         sids.add(sid)
@@ -240,30 +287,27 @@ class NatsClient(
         if (!checkAuth()) return
 
         // UNSUB <sid> [max_msgs]
-        val parts = args.split(" ")
+        val parts = args.split(" ").filter { it.isNotEmpty() }
         if (parts.isEmpty()) {
             writeError("Invalid UNSUB")
             return
         }
         val sid = parts[0]
+        val maxMsgs = parts.getOrNull(1)?.toLongOrNull()
 
-        val mqttTopic = sidToTopic.remove(sid) ?: return
-        val sids = topicToSids[mqttTopic] ?: return
-        sids.remove(sid)
-
-        // Only unsubscribe when no more SIDs reference this topic
-        if (sids.isEmpty()) {
-            topicToSids.remove(mqttTopic)
-            if (!kvTopicRefs.containsKey(mqttTopic)) {
-                sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
+        if (maxMsgs == null || maxMsgs <= 0) {
+            removeSid(sid)
+        } else {
+            val state = sidStates[sid] ?: return
+            if (state.delivered >= maxMsgs) {
+                removeSid(sid)
+            } else {
+                state.maxMsgs = maxMsgs
             }
         }
-        jetStreamKv.onUnsubscribe()
     }
 
     private fun handlePub(args: String, withHeaders: Boolean) {
-        if (!checkAuth()) return
-
         // PUB <subject> [reply-to] <#bytes>
         // HPUB <subject> [reply-to] <#header bytes> <#total bytes>
         val op = if (withHeaders) "HPUB" else "PUB"
@@ -281,23 +325,36 @@ class NatsClient(
             writeError("Invalid $op byte count")
             return
         }
-        val replyTo = if (parts.size == minParts + 1) parts[1] else null
 
-        val mqttTopic = natsSubjectToMqttTopic(subject)
-
-        // ACL check; JetStream API and KV subjects are checked by the KV layer on the bucket topic
-        val user = username
-        if (user != null && !NatsJetStreamKv.isJetStreamSubject(subject) && !userManager.canPublish(user, mqttTopic)) {
-            writeError("Permissions Violation for Publish to \"$subject\"")
+        if (numBytes > 1048576) {
+            writeError("Maximum Payload Violation")
+            socket.close()
             return
         }
 
+        var discard = false
+        if (!checkAuth()) {
+            discard = true
+        } else {
+            val mqttTopic = natsSubjectToMqttTopic(subject)
+            val user = username
+            if (user != null && !NatsJetStreamKv.isJetStreamSubject(subject) && !canPublish(mqttTopic)) {
+                writeError("Permissions Violation for Publish to \"$subject\"")
+                discard = true
+            }
+        }
+
+        val replyTo = if (parts.size == minParts + 1) parts[1] else null
+        val mqttTopic = natsSubjectToMqttTopic(subject)
+
         // Switch to fixed-size mode to read exact payload bytes + \r\n
-        pendingPub = PendingPub(subject, mqttTopic, headerBytes, numBytes, replyTo)
+        pendingPub = PendingPub(subject, mqttTopic, headerBytes, numBytes, replyTo, discard)
         parser.fixedSizeMode(numBytes + 2) // +2 for trailing \r\n
     }
 
     private fun handlePubPayload(pending: PendingPub, buffer: Buffer) {
+        if (pending.discard) return
+
         // Extract headers and payload (strip trailing \r\n)
         val headers = if (pending.headerBytes > 0) parseHeaders(buffer.getString(0, pending.headerBytes)) else emptyMap()
         val payload = buffer.getBytes(pending.headerBytes, pending.numBytes)
@@ -320,6 +377,7 @@ class NatsClient(
             userProperties = headers.ifEmpty { null }
         )
         sessionHandler.publishMessage(message)
+        sessionHandler.incrementMessagesIn(clientId)
     }
 
     // --- Internals used by the JetStream KV layer ---
@@ -329,13 +387,17 @@ class NatsClient(
     internal val clientIdentifier: String get() = clientId
 
     internal fun canPublish(mqttTopic: String): Boolean {
-        val user = username ?: return true
-        return userManager.canPublish(user, mqttTopic)
+        if (!userManager.isUserManagementEnabled()) return true
+        val user = username ?: Const.ANONYMOUS_USER
+        if (userManager.isAdmin(user)) return true
+        return userManager.canPublish(user, mqttTopic, clientId)
     }
 
     internal fun canSubscribe(mqttTopic: String): Boolean {
-        val user = username ?: return true
-        return userManager.canSubscribe(user, mqttTopic)
+        if (!userManager.isUserManagementEnabled()) return true
+        val user = username ?: Const.ANONYMOUS_USER
+        if (userManager.isAdmin(user)) return true
+        return userManager.canSubscribe(user, mqttTopic, clientId)
     }
 
     /** SIDs of this connection whose subscription matches the given concrete NATS subject. */
@@ -412,18 +474,31 @@ class NatsClient(
     }
 
     private fun deliverMessage(message: BrokerMessage) {
+        if (!canSubscribe(message.topicName)) return
+
         val natsSubject = mqttTopicToNatsSubject(message.topicName)
         val replyTo = message.responseTopic?.let { mqttTopicToNatsSubject(it) }
         val headerBlock = message.userProperties?.takeIf { it.isNotEmpty() }?.let { formatHeaders(null, it) }
 
         // Find all SIDs that match this topic
+        val sidsToRemove = mutableListOf<String>()
         for ((filter, sids) in topicToSids) {
             if (mqttTopicMatchesFilter(message.topicName, filter)) {
-                for (sid in sids) {
+                for (sid in sids.toList()) {
                     writeMsg(natsSubject, sid, replyTo, headerBlock, message.payload)
+                    sessionHandler.incrementMessagesOut(clientId)
+                    val state = sidStates[sid]
+                    if (state != null) {
+                        state.delivered++
+                        val max = state.maxMsgs
+                        if (max != null && state.delivered >= max) {
+                            sidsToRemove.add(sid)
+                        }
+                    }
                 }
             }
         }
+        sidsToRemove.forEach { removeSid(it) }
 
         jetStreamKv.onBrokerMessage(message)
     }
@@ -448,6 +523,7 @@ class NatsClient(
             sessionHandler.unsubscribeInternalClient(clientId, mqttTopic)
         }
         sidToTopic.clear()
+        sidStates.clear()
         topicToSids.clear()
         kvTopicRefs.clear()
 

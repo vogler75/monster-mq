@@ -83,6 +83,7 @@ class NatsJetStreamKv(private val client: NatsClient) {
 
     fun onBrokerMessage(message: BrokerMessage) {
         if (consumers.isEmpty()) return
+        if (!client.canSubscribe(message.topicName)) return
         for (consumer in consumers.values) {
             if (!consumer.matches(message.topicName)) continue
             if (consumer.ready) deliver(consumer, message, 0) else consumer.pendingLive.add(message)
@@ -367,6 +368,7 @@ class NatsJetStreamKv(private val client: NatsClient) {
                 clientId = client.clientIdentifier
             )
             client.sessionHandlerInstance.publishMessage(message)
+            client.sessionHandlerInstance.incrementMessagesIn(client.clientIdentifier)
             ack(JsonObject().put("stream", "$STREAM_PREFIX$bucket").put("seq", revision(message)))
         }
 
@@ -448,7 +450,9 @@ class NatsJetStreamKv(private val client: NatsClient) {
                 val store = group.lastValStore
                 for (filter in filters) {
                     store?.findMatchingMessages(filter) { message ->
-                        if (message.payload.isNotEmpty() && revision(message) >= startSeq) snapshot[message.topicName] = message
+                        if (message.payload.isNotEmpty() && revision(message) >= startSeq && client.canSubscribe(message.topicName)) {
+                            snapshot[message.topicName] = message
+                        }
                         true
                     }
                 }
@@ -552,6 +556,7 @@ class NatsJetStreamKv(private val client: NatsClient) {
             else ->
                 client.deliverVia(consumer.deliverSubject, subject, ackSubject, null, message.payload)
         }
+        client.sessionHandlerInstance.incrementMessagesOut(client.clientIdentifier)
     }
 
     private fun sendHeartbeat(consumer: Consumer) {

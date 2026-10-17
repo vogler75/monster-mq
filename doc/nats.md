@@ -43,15 +43,19 @@ NATS subjects are automatically translated to MQTT topics and vice versa:
 | Command | Description |
 |---------|-------------|
 | `CONNECT` | Authenticate (respects `auth_required` based on UserManager) |
-| `PUB` | Publish a message (binary-safe payload), optional reply-to subject |
+| `PUB` | Publish a message (binary-safe payload, up to 1 MiB `max_payload`), optional reply-to subject |
 | `HPUB` | Publish a message with NATS headers |
-| `SUB` | Subscribe to a subject (with wildcards) |
-| `UNSUB` | Unsubscribe |
+| `SUB` | Subscribe to a subject (with wildcards; queue groups in `SUB <subject> [queue group] <sid>` are ignored) |
+| `UNSUB` | Unsubscribe: `UNSUB <sid> [max_msgs]` unsubscribes immediately or auto-unsubscribes after `max_msgs` messages |
 | `PING` / `PONG` | Keep-alive |
 
 ### Limitations
 
 - **QoS 0 only** — NATS core is fire-and-forget
+- **Queue groups ignored** — Queue group syntax in `SUB` is accepted for protocol compatibility, but messages are delivered to all subscribers
+- **Control line limit** — Maximum control line size is 64 KiB (65,536 bytes)
+- **Maximum payload** — Maximum message payload size is 1 MiB (1,048,576 bytes)
+- **Delivery-time ACL** — Wildcard subscriptions and KV watches re-verify read permissions on each concrete topic at delivery time; messages matching deny rules are dropped
 - **JetStream: Key-Value only** — see [Key-Value Buckets](#key-value-buckets); streams, pull consumers and object stores are not available
 - **No no-responders status** — a request to a subject nobody answers times out instead of failing fast
 - **No session persistence** — Clean session on every connect; all subscriptions are removed on disconnect
