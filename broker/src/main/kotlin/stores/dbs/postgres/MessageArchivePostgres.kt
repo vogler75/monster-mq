@@ -365,9 +365,9 @@ class MessageArchivePostgres (
                     for (field in effectiveFields) {
                         val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
                         val valueExpr = if (field.isEmpty()) {
-                            // Raw value - try payload_json first, then decode payload_blob as UTF-8 text
+                            // Raw value - try payload_json first, then decode payload_blob as text
                             // COALESCE tries payload_json first, if null tries converting payload_blob to text
-                            "COALESCE((payload_json)::NUMERIC, (convert_from(payload_blob, 'UTF8'))::NUMERIC)"
+                            RAW_NUMBER_EXPR
                         } else {
                             // JSON field extraction - handle nested paths
                             val pathParts = field.split(".")
@@ -581,5 +581,15 @@ class MessageArchivePostgres (
             try { db.connection?.rollback() } catch (_: Exception) {}
             false
         }
+    }
+
+    companion object {
+        // The raw payload as a number when it is a plain JSON number, else NULL. Casting a jsonb
+        // object or non-numeric text to NUMERIC raises an error, so both casts are guarded.
+        // encode(.., 'escape') never fails on invalid UTF-8, unlike convert_from.
+        private const val RAW_NUMBER_EXPR = "COALESCE(" +
+            "CASE WHEN jsonb_typeof(payload_json) = 'number' THEN (payload_json)::NUMERIC END, " +
+            """CASE WHEN encode(payload_blob, 'escape') ~ '^[ \t\n\r]*-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?[ \t\n\r]*$' """ +
+            "THEN (encode(payload_blob, 'escape'))::NUMERIC END)"
     }
 }

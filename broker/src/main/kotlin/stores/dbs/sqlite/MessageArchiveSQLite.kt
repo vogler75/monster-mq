@@ -250,6 +250,12 @@ class MessageArchiveSQLite(
         }
     }
 
+    // The raw payload as a number when it is a plain JSON number, else NULL. A bare CAST turns
+    // an object or text into 0.0, and json_type raises an error on malformed JSON, hence the
+    // nested CASE.
+    private fun jsonNumberExpr(text: String) =
+        "CASE WHEN json_valid($text) THEN CASE WHEN json_type($text) IN ('integer', 'real') THEN CAST($text AS REAL) END END"
+
     override fun getAggregatedHistory(
         topics: List<String>,
         startTime: Instant,
@@ -300,7 +306,7 @@ class MessageArchiveSQLite(
                             // Raw value - try payload_json first, then decode payload_blob as UTF-8 text
                             // COALESCE tries payload_json first, if null tries converting payload_blob (BLOB) to text
                             // SQLite's CAST on BLOB returns the bytes as text (UTF-8)
-                            "COALESCE(CAST(payload_json AS REAL), CAST(CAST(payload_blob AS TEXT) AS REAL))"
+                            "COALESCE(${jsonNumberExpr("payload_json")}, ${jsonNumberExpr("CAST(payload_blob AS TEXT)")})"
                         } else {
                             // JSON field extraction - SQLite uses json_extract
                             "CAST(json_extract(payload_json, '\$.${field.replace(".", ".")}') AS REAL)"

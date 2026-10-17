@@ -52,6 +52,9 @@ class MessageArchiveMongoDB(
     private var lastConnectionAttempt: Long = 0
     @Volatile
     private var reconnectOngoing: Boolean = false
+    // $convert turns binData into a string only from MongoDB 8.0 on (the format option)
+    @Volatile
+    private var convertsBinaryToString: Boolean = false
 
     private val connectionRetryInterval = 30_000L // 30 seconds
     private val healthCheckInterval = 10_000L // 10 seconds for more responsive detection
@@ -101,6 +104,10 @@ class MessageArchiveMongoDB(
 
                 // Test connection with ping
                 newDatabase.runCommand(Document("ping", 1))
+                val majorVersion = runCatching {
+                    (newDatabase.runCommand(Document("buildInfo", 1))["versionArray"] as? List<*>)?.firstOrNull() as? Number
+                }.getOrNull()
+                convertsBinaryToString = (majorVersion?.toInt() ?: 0) >= 8
 
                 // Create time-series collection if not exists
                 if (!newDatabase.listCollectionNames().into(mutableListOf()).contains(collectionName)) {
@@ -345,6 +352,28 @@ class MessageArchiveMongoDB(
         return JsonArray().add("MongoDB does not support SQL queries")
     }
 
+    // The raw payload as a double when it is a plain JSON number, else null. payload only ever
+    // holds a JSON object, so such a number is always in payload_blob. Reading binData as text
+    // needs MongoDB 8.0; older servers get null.
+    private fun rawNumberExpr(): Document? {
+        if (!convertsBinaryToString) return null
+        val text = Document("\$convert", Document(mapOf(
+            "input" to "\$payload_blob", "to" to "string", "format" to "utf8", "onError" to null, "onNull" to null
+        )))
+        val number = Document("\$convert", Document(mapOf(
+            "input" to Document("\$trim", Document(mapOf("input" to "\$\$s", "chars" to " \t\n\r"))),
+            "to" to "double", "onError" to null, "onNull" to null
+        )))
+        return Document("\$let", Document(mapOf(
+            "vars" to Document("s", text),
+            "in" to Document("\$cond", listOf(
+                Document("\$regexMatch", Document(mapOf("input" to "\$\$s", "regex" to JSON_NUMBER_PATTERN))),
+                number,
+                null
+            ))
+        )))
+    }
+
     override fun getAggregatedHistory(
         topics: List<String>,
         startTime: Instant,
@@ -417,20 +446,19 @@ class MessageArchiveMongoDB(
             for ((fieldIndex, field) in effectiveFields.withIndex()) {
                 val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
 
-                // Pure native MQL — aggregation only works with JSON payloads
-                val inputExpr = if (field.isEmpty()) {
-                    // No field specified: treat payload as a numeric value (native MQL, no JS)
-                    "\$payload"
+                // Pure native MQL
+                val valueExpr = if (field.isEmpty()) {
+                    // No field specified: the raw payload if it is a plain JSON number
+                    rawNumberExpr()
                 } else {
                     // JSON field path: extract nested field from payload document
-                    "\$payload.${field.split(".").joinToString(".")}"
+                    Document("\$convert", Document(mapOf(
+                        "input" to "\$payload.${field.split(".").joinToString(".")}",
+                        "to" to "double",
+                        "onError" to null,
+                        "onNull" to null
+                    )))
                 }
-                val valueExpr = Document("\$convert", Document(mapOf(
-                    "input" to inputExpr,
-                    "to" to "double",
-                    "onError" to null,
-                    "onNull" to null
-                )))
 
                 for (func in functions) {
                     val funcLower = func.lowercase()
@@ -748,5 +776,10 @@ class MessageArchiveMongoDB(
             logger.warning("Error creating table: ${e.message}")
             false
         }
+    }
+
+    companion object {
+        // A plain JSON number with optional JSON whitespace
+        private const val JSON_NUMBER_PATTERN = """^[ \t\n\r]*-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?[ \t\n\r]*$"""
     }
 }

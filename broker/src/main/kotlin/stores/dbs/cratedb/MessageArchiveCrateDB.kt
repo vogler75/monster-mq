@@ -326,10 +326,16 @@ class MessageArchiveCrateDB (
                     for (field in effectiveFields) {
                         val fieldAlias = if (field.isEmpty()) "" else ".${field.replace(".", "_")}"
                         val valueExpr = if (field.isEmpty()) {
-                            // Raw value - try payload_obj first, then decode payload_b64 (base64 string).
+                            // Raw value - decode payload_b64 (base64 string).
                             // decode(.., 'base64') returns hex text (\x3230); encode(.., 'escape') turns it
                             // back into the payload text so it can be cast to DOUBLE.
-                            "COALESCE(TRY_CAST(payload_obj AS DOUBLE), TRY_CAST(encode(decode(payload_b64, 'base64'), 'escape') AS DOUBLE))"
+                            // It counts only if it is a plain JSON number. payload_obj only ever holds a
+                            // JSON object, so such a number is always in payload_b64. TRY_CAST alone would
+                            // also accept NaN, Infinity or 007. CrateDB's ~ is a full-match Lucene regex:
+                            // no ^/$ anchors and no \ classes, hence the escape string E'..' for the
+                            // whitespace characters.
+                            """CASE WHEN encode(decode(payload_b64, 'base64'), 'escape') ~ E'[ \t\n\r]*-?(0|[1-9][0-9]*)([.][0-9]+)?([eE][+-]?[0-9]+)?[ \t\n\r]*' """ +
+                                "THEN TRY_CAST(encode(decode(payload_b64, 'base64'), 'escape') AS DOUBLE) END"
                         } else {
                             // JSON field extraction - CrateDB uses subscript notation for OBJECT
                             val pathParts = field.split(".")
