@@ -1240,9 +1240,9 @@ input WinCCUaConnectionConfigInput {
 }
 
 input WinCCUaAddressInput {
-    # Address type (TAG_VALUES or ACTIVE_ALARMS)
+    # Address type (TAG_VALUES, ACTIVE_ALARMS, or TAG_WRITE)
     type: WinCCUaAddressType!
-    # MQTT topic prefix for this subscription
+    # MQTT topic prefix for subscriptions or exact MQTT topic for TAG_WRITE
     topic: String!
     # Optional description
     description: String
@@ -1258,6 +1258,14 @@ input WinCCUaAddressInput {
     filterString: String
     # OpenPipe TAG_VALUES publish mode: SINGLE (one subscription per tag, topic/<tagName>) or BULK (all tags, full JSON to topic)
     pipeTagMode: String = "SINGLE"
+    # Target WinCC Unified tag name for TAG_WRITE (no wildcards)
+    tagName: String
+    # Optional dot-separated JSON path to extract the value from JSON MQTT payloads (blank = 1:1 raw payload)
+    jsonPath: String
+    # Optional dot-separated JSON path to extract the timestamp from JSON MQTT payloads (GraphQL TAG_WRITE only)
+    timestampJsonPath: String
+    # Timestamp format when timestampJsonPath is used: ISO or MS
+    timestampFormat: String
 }
 
 input WinCCUaClientInput {
