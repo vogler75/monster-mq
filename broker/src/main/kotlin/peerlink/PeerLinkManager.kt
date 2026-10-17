@@ -257,6 +257,7 @@ class PeerLinkManager(
         val archive = HashMap<String, InterestClass>()
         if (config.receive.getArchive()) {
             at.rocworks.Monster.getArchiveHandler()?.getDeployedArchiveGroups()?.values?.forEach { g ->
+                if (g.lastValReadOnly && g.archiveReadOnly) return@forEach
                 val filters = g.topicFilter.ifEmpty { listOf("#") }
                 for (f in filters) archive[f] = InterestClass.PER_NEVER
             }

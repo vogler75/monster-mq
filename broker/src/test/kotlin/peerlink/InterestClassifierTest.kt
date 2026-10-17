@@ -1,5 +1,8 @@
 package at.rocworks.peerlink
 
+import at.rocworks.Monster
+import at.rocworks.handlers.ArchiveGroup
+import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.handlers.MessageHandler
 import at.rocworks.handlers.SessionHandler
 import at.rocworks.peerlink.config.*
@@ -27,7 +30,7 @@ class InterestClassifierTest {
         throw UnsupportedOperationException("Unexpected dependency call: ${method.name}")
     })
 
-    private fun manager(bus: Boolean, bridgeOutbound: Boolean): PeerLinkManager {
+    private fun manager(bus: Boolean, bridgeOutbound: Boolean, archive: Boolean = false): PeerLinkManager {
         val messageHandler = Mockito.mock(MessageHandler::class.java)
         Mockito.`when`(messageHandler.getRetainedStore()).thenReturn(TestMessageStore())
         val sessions = SessionHandler(unused(ISessionStoreAsync::class.java), unused(IQueueStoreAsync::class.java),
@@ -37,7 +40,7 @@ class InterestClassifierTest {
             allowUnauthenticatedPeers = true,
             listener = PeerLinkListenerConfig(address = "127.0.0.1", port = ServerSocket(0).use { it.localPort },
                 allowedNetworks = listOf("127.0.0.1/32"), allowPlaintext = true),
-            receive = PeerLinkReceiveConfig(bus = bus, bridgeOutbound = bridgeOutbound, archive = false),
+            receive = PeerLinkReceiveConfig(bus = bus, bridgeOutbound = bridgeOutbound, archive = archive),
             peers = listOf(PeerConfig(nodeID = "broker-a", address = "127.0.0.1:1", serve = false)),
             interest = PeerLinkInterestConfig(enabled = true, unknown = "ALL", flushMs = 5)
         )
@@ -104,5 +107,47 @@ class InterestClassifierTest {
         val end = System.currentTimeMillis() + 5000
         while (System.currentTimeMillis() < end && !m.tracker.announced().containsKey("done2")) Thread.sleep(10)
         assertFalse(m.tracker.announced().containsKey("standby/#"))
+    }
+
+    @Test
+    fun testArchiveReadOnlyBothSkippedFromStaticInterest() {
+        val m = manager(bus = false, bridgeOutbound = false, archive = true)
+        val monsterMock = Mockito.mock(Monster::class.java)
+        val archiveHandlerMock = Mockito.mock(ArchiveHandler::class.java)
+        Mockito.`when`(monsterMock.archiveHandler).thenReturn(archiveHandlerMock)
+
+        val singletonField = Monster::class.java.getDeclaredField("singleton")
+        singletonField.isAccessible = true
+        val prevSingleton = singletonField.get(null)
+        singletonField.set(null, monsterMock)
+
+        try {
+            val roGroup = Mockito.mock(ArchiveGroup::class.java)
+            Mockito.`when`(roGroup.lastValReadOnly).thenReturn(true)
+            Mockito.`when`(roGroup.archiveReadOnly).thenReturn(true)
+            Mockito.`when`(roGroup.topicFilter).thenReturn(listOf("ro/#"))
+
+            val rwGroup = Mockito.mock(ArchiveGroup::class.java)
+            Mockito.`when`(rwGroup.lastValReadOnly).thenReturn(false)
+            Mockito.`when`(rwGroup.archiveReadOnly).thenReturn(true)
+            Mockito.`when`(rwGroup.topicFilter).thenReturn(listOf("rw/#"))
+
+            Mockito.`when`(archiveHandlerMock.getDeployedArchiveGroups()).thenReturn(mapOf("RO" to roGroup, "RW" to rwGroup))
+
+            m.refreshStaticInterest()
+            val a = announce(m)
+            assertFalse(a.containsKey("ro/#"))
+            assertEquals(InterestClass.PER_NEVER, a["rw/#"])
+
+            // Flipping roGroup lastValReadOnly to false brings the filter back after refresh
+            Mockito.`when`(roGroup.lastValReadOnly).thenReturn(false)
+            m.refreshStaticInterest()
+            m.tracker!!.added("marker", "done3")
+            val end = System.currentTimeMillis() + 5000
+            while (System.currentTimeMillis() < end && !m.tracker.announced().containsKey("done3")) Thread.sleep(10)
+            assertEquals(InterestClass.PER_NEVER, m.tracker.announced()["ro/#"])
+        } finally {
+            singletonField.set(null, prevSingleton)
+        }
     }
 }
