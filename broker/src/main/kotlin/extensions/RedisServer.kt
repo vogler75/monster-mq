@@ -8,6 +8,7 @@ import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.handlers.SessionHandler
 import io.vertx.core.AbstractVerticle
+import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.Json
@@ -18,6 +19,8 @@ import io.vertx.core.net.NetSocket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Callable
 import java.util.concurrent.atomic.AtomicLong
+
+class RedisProtocolException(message: String) : Exception(message)
 
 class RedisServer(
     private val config: JsonObject,
@@ -37,11 +40,51 @@ class RedisServer(
     private val keysLimit = redisConfig.getInteger("KeysLimit", 10000).coerceAtLeast(1)
 
     private val connectionSequence = AtomicLong()
+    private val keyChains = HashMap<String, Future<Void>>()
 
     companion object {
         private const val REDIS_TYPE_FIELD = "type"
         private const val REDIS_VALUE_FIELD = "value"
         private const val WRONG_TYPE = "WRONGTYPE Operation against a key holding the wrong kind of value"
+    }
+
+    private fun <T> withKeyLocks(groupName: String, topics: List<String>, block: () -> Future<T>): Future<T> {
+        val sortedKeys = topics.distinct().sorted().map { "$groupName\u0000$it" }
+        if (sortedKeys.isEmpty()) {
+            return block()
+        }
+        val currentFutures = sortedKeys.map { lockKey ->
+            keyChains[lockKey] ?: Future.succeededFuture<Void>()
+        }
+        val allPrior = Future.join(currentFutures as List<Future<*>>)
+        val resultPromise = Promise.promise<T>()
+        val newChain = Promise.promise<Void>()
+
+        sortedKeys.forEach { lockKey ->
+            keyChains[lockKey] = newChain.future()
+        }
+
+        allPrior.onComplete {
+            val future = try {
+                block()
+            } catch (e: Throwable) {
+                Future.failedFuture(e)
+            }
+            future.onComplete { res ->
+                newChain.complete()
+                sortedKeys.forEach { lockKey ->
+                    if (keyChains[lockKey] == newChain.future()) {
+                        keyChains.remove(lockKey)
+                    }
+                }
+                if (res.succeeded()) {
+                    resultPromise.complete(res.result())
+                } else {
+                    resultPromise.fail(res.cause())
+                }
+            }
+        }
+        return resultPromise.future()
     }
 
     override fun start(startPromise: Promise<Void>) {
@@ -69,12 +112,15 @@ class RedisServer(
         }
     }
 
+    private data class SubKey(val isPattern: Boolean, val name: String)
+
     private inner class RedisConnection(
         private val id: Long,
         private val socket: NetSocket
     ) {
         private val parser = RespParser()
-        private val listenerIds = mutableSetOf<String>()
+        private val subscriptions = mutableMapOf<SubKey, String>()
+        private val subscriptionSequence = AtomicLong()
         private var closed = false
         private var username: String? = null
         private var authenticated = !requireAuth || !userManager.isUserManagementEnabled()
@@ -98,7 +144,7 @@ class RedisServer(
             val command = commandQueue.poll() ?: return
             processingCommand = true
 
-            val promise = io.vertx.core.Promise.promise<Void>()
+            val promise = Promise.promise<Void>()
             promise.future().onComplete {
                 processingCommand = false
                 processQueue()
@@ -144,9 +190,19 @@ class RedisServer(
         fun start() {
             socket.handler { buffer ->
                 parser.append(buffer)
-                while (!closed) {
-                    val command = parser.next() ?: break
-                    queueCommand(command)
+                try {
+                    while (!closed) {
+                        val command = parser.next() ?: break
+                        queueCommand(command)
+                    }
+                } catch (e: RedisProtocolException) {
+                    writeError(e.message ?: "ERR Protocol error").onComplete {
+                        close()
+                    }
+                } catch (e: Exception) {
+                    writeError("ERR Protocol error: ${e.message ?: "unknown"}").onComplete {
+                        close()
+                    }
                 }
             }
             socket.closeHandler { cleanup() }
@@ -169,10 +225,9 @@ class RedisServer(
             }
         }
 
-        private fun handle(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
+        private fun handle(command: RespCommand, promise: Promise<Void>) {
             if (command.args.isEmpty()) {
-                writeError("ERR empty command")
-                promise.complete()
+                writeError("ERR empty command").onComplete { promise.complete() }
                 return
             }
 
@@ -196,88 +251,91 @@ class RedisServer(
 
             val allowedBeforeAuth = setOf("AUTH", "HELLO", "PING", "QUIT", "CLIENT")
             if (!authenticated && name !in allowedBeforeAuth) {
-                writeError("NOAUTH Authentication required.")
-                promise.complete()
+                writeError("NOAUTH Authentication required.").onComplete {
+                    promise.complete()
+                }
+                return
+            }
+
+            if (name == "AUTH") {
+                handleAuth(command, promise)
+                return
+            }
+            if (name == "HELLO") {
+                handleHello(command, promise)
                 return
             }
 
             try {
-                when (name) {
-                    "AUTH" -> handleAuth(command, promise)
-                    "HELLO" -> handleHello(command, promise)
-                    else -> {
-                        when (name) {
-                            "PING" -> handlePing(command)
-                            "ECHO" -> if (command.args.size == 2) writeBulk(command.args[1]) else writeError("ERR wrong number of arguments for 'echo' command")
-                            "QUIT" -> {
-                                writeSimple("OK")
-                                close()
-                            }
-                            "SELECT" -> handleSelect(command)
-                            "CLIENT" -> handleClient(command)
-                            "COMMAND" -> handleCommand(command)
-                            "INFO" -> handleInfo()
-                            "GET" -> handleGet(command)
-                            "GETRANGE", "SUBSTR" -> handleGetRange(command)
-                            "MGET" -> handleMget(command)
-                            "SET" -> handleSet(command)
-                            "MSET" -> handleMset(command)
-                            "HSET" -> handleHset(command)
-                            "HGET" -> handleHget(command)
-                            "HMGET" -> handleHmget(command)
-                            "HGETALL" -> handleHgetall(command)
-                            "HDEL" -> handleHdel(command)
-                            "HEXISTS" -> handleHexists(command)
-                            "HLEN" -> handleHlen(command)
-                            "HKEYS" -> handleHkeys(command)
-                            "HVALS" -> handleHvals(command)
-                            "HSCAN" -> handleHscan(command)
-                            "SADD" -> handleSadd(command)
-                            "SREM" -> handleSrem(command)
-                            "SMEMBERS" -> handleSmembers(command)
-                            "SISMEMBER" -> handleSismember(command)
-                            "SCARD" -> handleScard(command)
-                            "LPUSH" -> handleListPush(command, left = true)
-                            "RPUSH" -> handleListPush(command, left = false)
-                            "LPOP" -> handleListPop(command, left = true)
-                            "RPOP" -> handleListPop(command, left = false)
-                            "LRANGE" -> handleLrange(command)
-                            "LLEN" -> handleLlen(command)
-                            "LINDEX" -> handleLindex(command)
-                            "ZADD" -> handleZadd(command)
-                            "ZRANGE" -> handleZrange(command)
-                            "ZREM" -> handleZrem(command)
-                            "ZSCORE" -> handleZscore(command)
-                            "ZCARD" -> handleZcard(command)
-                            "JSON.SET" -> handleJsonSet(command)
-                            "JSON.GET" -> handleJsonGet(command)
-                            "JSON.DEL" -> handleJsonDel(command)
-                            "JSON.TYPE" -> handleJsonType(command)
-                            "DEL" -> handleDel(command)
-                            "EXISTS" -> handleExists(command)
-                            "TTL" -> handleTtl(command)
-                            "PTTL" -> handleTtl(command)
-                            "SCAN" -> handleScan(command)
-                            "KEYS" -> handleKeys(command)
-                            "PUBLISH" -> handlePublish(command)
-                            "SUBSCRIBE" -> handleSubscribe(command, pattern = false)
-                            "PSUBSCRIBE" -> handleSubscribe(command, pattern = true)
-                            "UNSUBSCRIBE", "PUNSUBSCRIBE" -> handleUnsubscribe(command)
-                            "TYPE" -> handleType(command)
-                            else -> writeError("ERR unknown command '$name'")
-                        }
-                        promise.complete()
-                    }
+                val future: Future<Void> = when (name) {
+                    "PING" -> handlePing(command)
+                    "ECHO" -> handleEcho(command)
+                    "QUIT" -> handleQuit()
+                    "SELECT" -> handleSelect(command)
+                    "CLIENT" -> handleClient(command)
+                    "COMMAND" -> handleCommand(command)
+                    "INFO" -> handleInfo()
+                    "GET" -> handleGet(command)
+                    "GETRANGE", "SUBSTR" -> handleGetRange(command)
+                    "MGET" -> handleMget(command)
+                    "SET" -> handleSet(command)
+                    "MSET" -> handleMset(command)
+                    "HSET" -> handleHset(command)
+                    "HGET" -> handleHget(command)
+                    "HMGET" -> handleHmget(command)
+                    "HGETALL" -> handleHgetall(command)
+                    "HDEL" -> handleHdel(command)
+                    "HEXISTS" -> handleHexists(command)
+                    "HLEN" -> handleHlen(command)
+                    "HKEYS" -> handleHkeys(command)
+                    "HVALS" -> handleHvals(command)
+                    "HSCAN" -> handleHscan(command)
+                    "SADD" -> handleSadd(command)
+                    "SREM" -> handleSrem(command)
+                    "SMEMBERS" -> handleSmembers(command)
+                    "SISMEMBER" -> handleSismember(command)
+                    "SCARD" -> handleScard(command)
+                    "LPUSH" -> handleListPush(command, left = true)
+                    "RPUSH" -> handleListPush(command, left = false)
+                    "LPOP" -> handleListPop(command, left = true)
+                    "RPOP" -> handleListPop(command, left = false)
+                    "LRANGE" -> handleLrange(command)
+                    "LLEN" -> handleLlen(command)
+                    "LINDEX" -> handleLindex(command)
+                    "ZADD" -> handleZadd(command)
+                    "ZRANGE" -> handleZrange(command)
+                    "ZREM" -> handleZrem(command)
+                    "ZSCORE" -> handleZscore(command)
+                    "ZCARD" -> handleZcard(command)
+                    "JSON.SET" -> handleJsonSet(command)
+                    "JSON.GET" -> handleJsonGet(command)
+                    "JSON.DEL" -> handleJsonDel(command)
+                    "JSON.TYPE" -> handleJsonType(command)
+                    "DEL" -> handleDel(command)
+                    "EXISTS" -> handleExists(command)
+                    "TTL", "PTTL" -> handleTtl(command)
+                    "SCAN" -> handleScan(command)
+                    "KEYS" -> handleKeys(command)
+                    "PUBLISH" -> handlePublish(command)
+                    "SUBSCRIBE" -> handleSubscribe(command, pattern = false)
+                    "PSUBSCRIBE" -> handleSubscribe(command, pattern = true)
+                    "UNSUBSCRIBE", "PUNSUBSCRIBE" -> handleUnsubscribe(command)
+                    "TYPE" -> handleType(command)
+                    else -> writeError("ERR unknown command '$name'")
+                }
+                future.onComplete {
+                    promise.complete()
                 }
             } catch (e: Exception) {
                 logger.warning("Redis command [$name] failed: ${e.message}")
-                writeError("ERR ${e.message ?: "command failed"}")
-                promise.complete()
+                writeError("ERR ${e.message ?: "command failed"}").onComplete {
+                    promise.complete()
+                }
             }
         }
 
-        private fun handlePing(command: RespCommand) {
-            if (command.args.size > 2) {
+        private fun handlePing(command: RespCommand): Future<Void> {
+            return if (command.args.size > 2) {
                 writeError("ERR wrong number of arguments for 'ping' command")
             } else if (command.args.size == 2) {
                 writeBulk(command.args[1])
@@ -286,13 +344,26 @@ class RedisServer(
             }
         }
 
-        private fun handleAuth(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
+        private fun handleEcho(command: RespCommand): Future<Void> {
+            return if (command.args.size == 2) {
+                writeBulk(command.args[1])
+            } else {
+                writeError("ERR wrong number of arguments for 'echo' command")
+            }
+        }
+
+        private fun handleQuit(): Future<Void> {
+            val future = writeSimple("OK")
+            close()
+            return future
+        }
+
+        private fun handleAuth(command: RespCommand, promise: Promise<Void>) {
             val credentials = when (command.args.size) {
                 2 -> "default" to command.stringArg(1)
                 3 -> command.stringArg(1) to command.stringArg(2)
                 else -> {
-                    writeError("ERR wrong number of arguments for 'auth' command")
-                    promise.complete()
+                    writeError("ERR wrong number of arguments for 'auth' command").onComplete { promise.complete() }
                     return
                 }
             }
@@ -307,13 +378,11 @@ class RedisServer(
                             logger.info("Redis client [$clientId] successfully authenticated as user [${user.username}]")
                             username = user.username
                             authenticated = true
-                            writeSimple("OK")
                             registerSession()
-                            promise.complete()
+                            writeSimple("OK").onComplete { promise.complete() }
                         } else {
                             logger.warning("Redis client [$clientId] authentication failed: user [${user.username}] is disabled")
-                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                            promise.complete()
+                            writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                         }
                     } else {
                         logger.warning("Redis client [$clientId] authentication failed: invalid credentials for user [${credentials.first}]")
@@ -327,44 +396,37 @@ class RedisServer(
                                             logger.info("Redis client [$clientId] successfully authenticated via fallback as user [${fallbackUser.username}]")
                                             username = fallbackUser.username
                                             authenticated = true
-                                            writeSimple("OK")
                                             registerSession()
-                                            promise.complete()
+                                            writeSimple("OK").onComplete { promise.complete() }
                                         } else {
                                             logger.warning("Redis client [$clientId] fallback authentication failed: user [${fallbackUser.username}] is disabled")
-                                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                            promise.complete()
+                                            writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                         }
                                     } else {
                                         logger.warning("Redis client [$clientId] fallback authentication failed: invalid credentials for user [Admin]")
-                                        writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                        promise.complete()
+                                        writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                     }
                                 } else {
                                     logger.severe("Redis client [$clientId] fallback authentication failed with error: ${fallbackResult.cause()?.message}")
-                                    writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                    promise.complete()
+                                    writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                 }
                             }
                         } else {
-                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                            promise.complete()
+                            writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                         }
                     }
                 } else {
                     logger.severe("Redis client [$clientId] authentication failed with error: ${result.cause()?.message}")
-                    writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                    promise.complete()
+                    writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                 }
             }
         }
 
-        private fun handleHello(command: RespCommand, promise: io.vertx.core.Promise<Void>) {
+        private fun handleHello(command: RespCommand, promise: Promise<Void>) {
             if (command.args.size >= 2) {
                 val proto = command.stringArg(1).toIntOrNull()
                 if (proto != null && proto > 2) {
-                    writeError("NOPROTO sorry, this protocol version is not supported.")
-                    promise.complete()
+                    writeError("NOPROTO sorry, this protocol version is not supported.").onComplete { promise.complete() }
                     return
                 }
             }
@@ -382,13 +444,11 @@ class RedisServer(
                                 logger.info("Redis client [$clientId] HELLO successfully authenticated as user [${user.username}]")
                                 username = user.username
                                 authenticated = true
-                                writeHello()
                                 registerSession()
-                                promise.complete()
+                                writeHello().onComplete { promise.complete() }
                             } else {
                                 logger.warning("Redis client [$clientId] HELLO authentication failed: user [${user.username}] is disabled")
-                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                promise.complete()
+                                writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                             }
                         } else {
                             logger.warning("Redis client [$clientId] HELLO authentication failed: invalid credentials for user [$authUser]")
@@ -402,47 +462,40 @@ class RedisServer(
                                                 logger.info("Redis client [$clientId] HELLO successfully authenticated via fallback as user [${fallbackUser.username}]")
                                                 username = fallbackUser.username
                                                 authenticated = true
-                                                writeHello()
                                                 registerSession()
-                                                promise.complete()
+                                                writeHello().onComplete { promise.complete() }
                                             } else {
                                                 logger.warning("Redis client [$clientId] HELLO fallback authentication failed: user [${fallbackUser.username}] is disabled")
-                                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                                promise.complete()
+                                                writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                             }
                                         } else {
                                             logger.warning("Redis client [$clientId] HELLO fallback authentication failed: invalid credentials for user [Admin]")
-                                            writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                            promise.complete()
+                                            writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                         }
                                     } else {
                                         logger.severe("Redis client [$clientId] HELLO fallback authentication failed with error: ${fallbackResult.cause()?.message}")
-                                        writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                        promise.complete()
+                                        writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                                     }
                                 }
                             } else {
-                                writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                                promise.complete()
+                                writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                             }
                         }
                     } else {
                         logger.severe("Redis client [$clientId] HELLO authentication failed with error: ${result.cause()?.message}")
-                        writeError("WRONGPASS invalid username-password pair or user is disabled.")
-                        promise.complete()
+                        writeError("WRONGPASS invalid username-password pair or user is disabled.").onComplete { promise.complete() }
                     }
                 }
             } else {
-                writeHello()
                 if (authenticated) {
                     registerSession()
                 }
-                promise.complete()
+                writeHello().onComplete { promise.complete() }
             }
         }
 
-        private fun writeHello() {
-            writeArray(
+        private fun writeHello(): Future<Void> {
+            return writeArray(
                 listOf(
                     RespValue.bulk("server"),
                     RespValue.bulk("monstermq"),
@@ -462,35 +515,31 @@ class RedisServer(
             )
         }
 
-        private fun handleSelect(command: RespCommand) {
+        private fun handleSelect(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'select' command")
-                return
+                return writeError("ERR wrong number of arguments for 'select' command")
             }
             val db = command.stringArg(1).toIntOrNull()
             if (db == null || db < 0) {
-                writeError("ERR invalid DB index")
-                return
+                return writeError("ERR invalid DB index")
             }
             if (archiveGroupForDb(db) == null) {
-                writeError("ERR DB index is not mapped to an archive group")
-                return
+                return writeError("ERR DB index is not mapped to an archive group")
             }
             selectedDb = db
-            writeSimple("OK")
             updateSessionInfo()
+            return writeSimple("OK")
         }
 
-        private fun handleClient(command: RespCommand) {
+        private fun handleClient(command: RespCommand): Future<Void> {
             if (command.args.size < 2) {
-                writeError("ERR wrong number of arguments for 'client' command")
-                return
+                return writeError("ERR wrong number of arguments for 'client' command")
             }
-            when (command.stringArg(1).uppercase()) {
+            return when (command.stringArg(1).uppercase()) {
                 "SETNAME" -> {
                     clientName = command.args.getOrNull(2)?.toString(StandardCharsets.UTF_8)
-                    writeSimple("OK")
                     updateSessionInfo()
+                    writeSimple("OK")
                 }
                 "GETNAME" -> writeBulk(clientName?.toByteArray(StandardCharsets.UTF_8))
                 "SETINFO" -> writeSimple("OK")
@@ -499,8 +548,8 @@ class RedisServer(
             }
         }
 
-        private fun handleCommand(command: RespCommand) {
-            if (command.args.size >= 2 && command.stringArg(1).equals("COUNT", ignoreCase = true)) {
+        private fun handleCommand(command: RespCommand): Future<Void> {
+            return if (command.args.size >= 2 && command.stringArg(1).equals("COUNT", ignoreCase = true)) {
                 writeInteger(30)
             } else if (command.args.size >= 2 && command.stringArg(1).equals("INFO", ignoreCase = true)) {
                 writeArray(command.args.drop(2).map { RespValue.nullBulk() })
@@ -509,7 +558,7 @@ class RedisServer(
             }
         }
 
-        private fun handleInfo() {
+        private fun handleInfo(): Future<Void> {
             val groups = archiveHandler.getDeployedArchiveGroups().values.mapNotNull { it.getRedisDbNumber() }.sorted()
             val body = buildString {
                 append("# Server\r\n")
@@ -521,122 +570,160 @@ class RedisServer(
                 append("# Keyspace\r\n")
                 groups.forEach { append("db$it:keys=0,expires=0,avg_ttl=0\r\n") }
             }
-            writeBulk(body.toByteArray(StandardCharsets.UTF_8))
+            return writeBulk(body.toByteArray(StandardCharsets.UTF_8))
         }
 
-        private fun handleGet(command: RespCommand) {
+        private fun handleGet(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'get' command")
-                return
+                return writeError("ERR wrong number of arguments for 'get' command")
             }
             val topic = command.stringArg(1)
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeNullBulk()
-                return
-            }
-            vertx.executeBlocking(Callable { store[topic] }).onComplete {
-                val payload = if (it.succeeded()) it.result()?.payload else null
-                writeBulk(payload)
-            }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeNullBulk()
+            return vertx.executeBlocking(Callable { store[topic] }).compose(
+                { it -> writeBulk(it?.payload) },
+                { err -> writeError("ERR ${err.message ?: "get failed"}") }
+            )
         }
 
-        private fun handleGetRange(command: RespCommand) {
+        private fun handleGetRange(command: RespCommand): Future<Void> {
             if (command.args.size != 4) {
-                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
-                return
+                return writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
             }
             val topic = command.stringArg(1)
             val start = command.stringArg(2).toLongOrNull()
             val end = command.stringArg(3).toLongOrNull()
             if (start == null || end == null) {
-                writeError("ERR value is not an integer or out of range")
-                return
+                return writeError("ERR value is not an integer or out of range")
             }
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeBulk(ByteArray(0))
-                return
-            }
-            vertx.executeBlocking(Callable { store[topic]?.payload }).onComplete { result ->
-                if (result.failed()) {
-                    writeError("ERR ${result.cause()?.message ?: "getrange failed"}")
-                    return@onComplete
-                }
-                writeBulk(sliceRange(result.result(), start, end))
-            }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeBulk(ByteArray(0))
+            return vertx.executeBlocking(Callable { store[topic]?.payload }).compose(
+                { payload -> writeBulk(sliceRange(payload, start, end)) },
+                { err -> writeError("ERR ${err.message ?: "getrange failed"}") }
+            )
         }
 
-        private fun handleMget(command: RespCommand) {
+        private fun handleMget(command: RespCommand): Future<Void> {
             if (command.args.size < 2) {
-                writeError("ERR wrong number of arguments for 'mget' command")
-                return
+                return writeError("ERR wrong number of arguments for 'mget' command")
             }
             val topics = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
             if (topics.any { !canRead(it) }) {
-                writeError("NOPERM no permission to read one or more topics")
-                return
+                return writeError("NOPERM no permission to read one or more topics")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeArray(topics.map { RespValue.nullBulk() })
-                return
-            }
-            vertx.executeBlocking(Callable {
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeArray(topics.map { RespValue.nullBulk() })
+            return vertx.executeBlocking(Callable {
                 topics.map { topic -> store[topic]?.payload }
-            }).onComplete { result ->
-                if (result.succeeded()) {
-                    writeArray(result.result().map { RespValue.bulk(it) })
+            }).compose(
+                { result -> writeArray(result.map { RespValue.bulk(it) }) },
+                { err -> writeError("ERR ${err.message ?: "mget failed"}") }
+            )
+        }
+
+        private fun handleSet(command: RespCommand): Future<Void> {
+            if (command.args.size < 3) {
+                return writeError("ERR wrong number of arguments for 'set' command")
+            }
+            val topic = command.stringArg(1)
+            val payload = command.args[2]
+            val error = validateWrite(topic, isPublish = false)
+            if (error != null) {
+                return writeError(error)
+            }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            return withKeyLocks(group.name, listOf(topic)) {
+                val store = group.lastValStore
+                val updateStoreFuture = if (store != null) {
+                    vertx.executeBlocking(Callable {
+                        val brokerMsg = BrokerMessage(
+                            messageId = 0,
+                            topicName = topic,
+                            payload = payload,
+                            qosLevel = publishQos,
+                            isRetain = setRetained,
+                            isDup = false,
+                            isQueued = false,
+                            clientId = clientId,
+                            senderId = clientId
+                        )
+                        store.addAll(listOf(brokerMsg))
+                    })
                 } else {
-                    writeError("ERR ${result.cause()?.message ?: "mget failed"}")
+                    Future.succeededFuture()
+                }
+                updateStoreFuture.compose {
+                    publishTopicUnchecked(topic, payload)
+                    writeSimple("OK")
+                }.recover { err ->
+                    writeError("ERR ${err.message ?: "set failed"}")
                 }
             }
         }
 
-        private fun handleSet(command: RespCommand) {
-            if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'set' command")
-                return
-            }
-            publishTopic(command.stringArg(1), command.args[2]) {
-                writeSimple("OK")
-            }
-        }
-
-        private fun handleMset(command: RespCommand) {
+        private fun handleMset(command: RespCommand): Future<Void> {
             if (command.args.size < 3 || command.args.size % 2 == 0) {
-                writeError("ERR wrong number of arguments for 'mset' command")
-                return
+                return writeError("ERR wrong number of arguments for 'mset' command")
             }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val pairs = mutableListOf<Pair<String, ByteArray>>()
             var i = 1
             while (i < command.args.size) {
                 val topic = command.stringArg(i)
                 val payload = command.args[i + 1]
-                val error = validateWrite(topic)
+                val error = validateWrite(topic, isPublish = false)
                 if (error != null) {
-                    writeError(error)
-                    return
+                    return writeError(error)
                 }
-                publishTopicUnchecked(topic, payload)
+                pairs.add(topic to payload)
                 i += 2
             }
-            writeSimple("OK")
+            val topics = pairs.map { it.first }
+            return withKeyLocks(group.name, topics) {
+                val store = group.lastValStore
+                val updateStoreFuture = if (store != null) {
+                    vertx.executeBlocking(Callable {
+                        val msgs = pairs.map { (t, p) ->
+                            BrokerMessage(
+                                messageId = 0,
+                                topicName = t,
+                                payload = p,
+                                qosLevel = publishQos,
+                                isRetain = setRetained,
+                                isDup = false,
+                                isQueued = false,
+                                clientId = clientId,
+                                senderId = clientId
+                            )
+                        }
+                        store.addAll(msgs)
+                    })
+                } else {
+                    Future.succeededFuture()
+                }
+                updateStoreFuture.compose {
+                    pairs.forEach { (t, p) ->
+                        publishTopicUnchecked(t, p)
+                    }
+                    writeSimple("OK")
+                }.recover { err ->
+                    writeError("ERR ${err.message ?: "mset failed"}")
+                }
+            }
         }
 
-        private fun handleHset(command: RespCommand) {
+        private fun handleHset(command: RespCommand): Future<Void> {
             if (command.args.size < 4 || command.args.size % 2 != 0) {
-                writeError("ERR wrong number of arguments for 'hset' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hset' command")
             }
-            mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
+            return mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
                 val hash = current as JsonObject
                 var added = 0L
                 var i = 2
@@ -650,23 +737,21 @@ class RedisServer(
             }
         }
 
-        private fun handleHget(command: RespCommand) {
+        private fun handleHget(command: RespCommand): Future<Void> {
             if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'hget' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hget' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 val hash = value as JsonObject
                 writeBulk(hash.getString(command.stringArg(2))?.toByteArray(StandardCharsets.UTF_8))
             }
         }
 
-        private fun handleHmget(command: RespCommand) {
+        private fun handleHmget(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'hmget' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hmget' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 val hash = value as JsonObject
                 writeArray(command.args.drop(2).map { field ->
                     RespValue.bulk(hash.getString(field.toString(StandardCharsets.UTF_8))?.toByteArray(StandardCharsets.UTF_8))
@@ -674,12 +759,11 @@ class RedisServer(
             }
         }
 
-        private fun handleHgetall(command: RespCommand) {
+        private fun handleHgetall(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'hgetall' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hgetall' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 val hash = value as JsonObject
                 writeArray(hash.fieldNames().flatMap { field ->
                     listOf(RespValue.bulk(field), RespValue.bulk(hash.getString(field, "")))
@@ -687,12 +771,11 @@ class RedisServer(
             }
         }
 
-        private fun handleHdel(command: RespCommand) {
+        private fun handleHdel(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'hdel' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hdel' command")
             }
-            mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
+            return mutateTypedValue(command.stringArg(1), "hash", JsonObject()) { current ->
                 val hash = current as JsonObject
                 var removed = 0L
                 command.args.drop(2).forEach { fieldBytes ->
@@ -706,59 +789,53 @@ class RedisServer(
             }
         }
 
-        private fun handleHexists(command: RespCommand) {
+        private fun handleHexists(command: RespCommand): Future<Void> {
             if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'hexists' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hexists' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 writeInteger(if ((value as JsonObject).containsKey(command.stringArg(2))) 1 else 0)
             }
         }
 
-        private fun handleHlen(command: RespCommand) {
+        private fun handleHlen(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'hlen' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hlen' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value -> writeInteger((value as JsonObject).size().toLong()) }
+            return readTypedValue(command.stringArg(1), "hash") { value -> writeInteger((value as JsonObject).size().toLong()) }
         }
 
-        private fun handleHkeys(command: RespCommand) {
+        private fun handleHkeys(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'hkeys' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hkeys' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 writeArray((value as JsonObject).fieldNames().map { RespValue.bulk(it) })
             }
         }
 
-        private fun handleHvals(command: RespCommand) {
+        private fun handleHvals(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'hvals' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hvals' command")
             }
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 val hash = value as JsonObject
                 writeArray(hash.fieldNames().map { RespValue.bulk(hash.getString(it, "")) })
             }
         }
 
-        private fun handleHscan(command: RespCommand) {
+        private fun handleHscan(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'hscan' command")
-                return
+                return writeError("ERR wrong number of arguments for 'hscan' command")
             }
             val cursor = command.stringArg(2).toLongOrNull()
             if (cursor == null || cursor < 0) {
-                writeError("ERR invalid cursor")
-                return
+                return writeError("ERR invalid cursor")
             }
             val match = hashScanOption(command, "MATCH")
             val count = hashScanOption(command, "COUNT")?.toIntOrNull()?.coerceAtLeast(1) ?: Int.MAX_VALUE
 
-            readTypedValue(command.stringArg(1), "hash") { value ->
+            return readTypedValue(command.stringArg(1), "hash") { value ->
                 val hash = value as JsonObject
                 val fields = hash.fieldNames()
                     .asSequence()
@@ -779,12 +856,11 @@ class RedisServer(
             }
         }
 
-        private fun handleSadd(command: RespCommand) {
+        private fun handleSadd(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'sadd' command")
-                return
+                return writeError("ERR wrong number of arguments for 'sadd' command")
             }
-            mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
+            return mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
                 val set = jsonArrayToLinkedSet(current as JsonArray)
                 var added = 0L
                 command.args.drop(2).forEach { memberBytes ->
@@ -794,12 +870,11 @@ class RedisServer(
             }
         }
 
-        private fun handleSrem(command: RespCommand) {
+        private fun handleSrem(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'srem' command")
-                return
+                return writeError("ERR wrong number of arguments for 'srem' command")
             }
-            mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
+            return mutateTypedValue(command.stringArg(1), "set", JsonArray()) { current ->
                 val set = jsonArrayToLinkedSet(current as JsonArray)
                 var removed = 0L
                 command.args.drop(2).forEach { memberBytes ->
@@ -809,40 +884,36 @@ class RedisServer(
             }
         }
 
-        private fun handleSmembers(command: RespCommand) {
+        private fun handleSmembers(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'smembers' command")
-                return
+                return writeError("ERR wrong number of arguments for 'smembers' command")
             }
-            readTypedValue(command.stringArg(1), "set") { value ->
+            return readTypedValue(command.stringArg(1), "set") { value ->
                 writeArray((value as JsonArray).map { RespValue.bulk(it.toString()) })
             }
         }
 
-        private fun handleSismember(command: RespCommand) {
+        private fun handleSismember(command: RespCommand): Future<Void> {
             if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'sismember' command")
-                return
+                return writeError("ERR wrong number of arguments for 'sismember' command")
             }
-            readTypedValue(command.stringArg(1), "set") { value ->
+            return readTypedValue(command.stringArg(1), "set") { value ->
                 writeInteger(if (jsonArrayToLinkedSet(value as JsonArray).contains(command.stringArg(2))) 1 else 0)
             }
         }
 
-        private fun handleScard(command: RespCommand) {
+        private fun handleScard(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'scard' command")
-                return
+                return writeError("ERR wrong number of arguments for 'scard' command")
             }
-            readTypedValue(command.stringArg(1), "set") { value -> writeInteger((value as JsonArray).size().toLong()) }
+            return readTypedValue(command.stringArg(1), "set") { value -> writeInteger((value as JsonArray).size().toLong()) }
         }
 
-        private fun handleListPush(command: RespCommand, left: Boolean) {
+        private fun handleListPush(command: RespCommand, left: Boolean): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
-                return
+                return writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
             }
-            mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
+            return mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
                 val values = (current as JsonArray).map { it.toString() }.toMutableList()
                 val incoming = command.args.drop(2).map { it.toString(StandardCharsets.UTF_8) }
                 if (left) incoming.forEach { values.add(0, it) } else values.addAll(incoming)
@@ -850,74 +921,66 @@ class RedisServer(
             }
         }
 
-        private fun handleListPop(command: RespCommand, left: Boolean) {
+        private fun handleListPop(command: RespCommand, left: Boolean): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
-                return
+                return writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
             }
-            mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
+            return mutateTypedValue(command.stringArg(1), "list", JsonArray()) { current ->
                 val values = (current as JsonArray).map { it.toString() }.toMutableList()
                 val popped = if (values.isEmpty()) null else if (left) values.removeAt(0) else values.removeAt(values.lastIndex)
                 JsonArray(values) to RespValue.bulk(popped?.toByteArray(StandardCharsets.UTF_8))
             }
         }
 
-        private fun handleLrange(command: RespCommand) {
+        private fun handleLrange(command: RespCommand): Future<Void> {
             if (command.args.size != 4) {
-                writeError("ERR wrong number of arguments for 'lrange' command")
-                return
+                return writeError("ERR wrong number of arguments for 'lrange' command")
             }
             val start = command.stringArg(2).toLongOrNull()
             val end = command.stringArg(3).toLongOrNull()
             if (start == null || end == null) {
-                writeError("ERR value is not an integer or out of range")
-                return
+                return writeError("ERR value is not an integer or out of range")
             }
-            readTypedValue(command.stringArg(1), "list") { value ->
+            return readTypedValue(command.stringArg(1), "list") { value ->
                 val values = (value as JsonArray).map { it.toString() }
                 writeArray(sliceList(values, start, end).map { RespValue.bulk(it) })
             }
         }
 
-        private fun handleLlen(command: RespCommand) {
+        private fun handleLlen(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'llen' command")
-                return
+                return writeError("ERR wrong number of arguments for 'llen' command")
             }
-            readTypedValue(command.stringArg(1), "list") { value -> writeInteger((value as JsonArray).size().toLong()) }
+            return readTypedValue(command.stringArg(1), "list") { value -> writeInteger((value as JsonArray).size().toLong()) }
         }
 
-        private fun handleLindex(command: RespCommand) {
+        private fun handleLindex(command: RespCommand): Future<Void> {
             if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'lindex' command")
-                return
+                return writeError("ERR wrong number of arguments for 'lindex' command")
             }
             val index = command.stringArg(2).toLongOrNull()
             if (index == null) {
-                writeError("ERR value is not an integer or out of range")
-                return
+                return writeError("ERR value is not an integer or out of range")
             }
-            readTypedValue(command.stringArg(1), "list") { value ->
+            return readTypedValue(command.stringArg(1), "list") { value ->
                 val values = (value as JsonArray).map { it.toString() }
                 val normalized = if (index < 0) values.size + index else index
                 writeBulk(values.getOrNull(normalized.toInt())?.toByteArray(StandardCharsets.UTF_8))
             }
         }
 
-        private fun handleZadd(command: RespCommand) {
+        private fun handleZadd(command: RespCommand): Future<Void> {
             if (command.args.size < 4 || command.args.size % 2 != 0) {
-                writeError("ERR wrong number of arguments for 'zadd' command")
-                return
+                return writeError("ERR wrong number of arguments for 'zadd' command")
             }
             var validateIndex = 2
             while (validateIndex < command.args.size) {
                 if (command.stringArg(validateIndex).toDoubleOrNull() == null) {
-                    writeError("ERR value is not a valid float")
-                    return
+                    return writeError("ERR value is not a valid float")
                 }
                 validateIndex += 2
             }
-            mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
+            return mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
                 val zset = current as JsonObject
                 var added = 0L
                 var i = 2
@@ -932,19 +995,17 @@ class RedisServer(
             }
         }
 
-        private fun handleZrange(command: RespCommand) {
+        private fun handleZrange(command: RespCommand): Future<Void> {
             if (command.args.size < 4) {
-                writeError("ERR wrong number of arguments for 'zrange' command")
-                return
+                return writeError("ERR wrong number of arguments for 'zrange' command")
             }
             val start = command.stringArg(2).toLongOrNull()
             val end = command.stringArg(3).toLongOrNull()
             if (start == null || end == null) {
-                writeError("ERR value is not an integer or out of range")
-                return
+                return writeError("ERR value is not an integer or out of range")
             }
             val withScores = command.args.drop(4).any { it.toString(StandardCharsets.UTF_8).equals("WITHSCORES", ignoreCase = true) }
-            readTypedValue(command.stringArg(1), "zset") { value ->
+            return readTypedValue(command.stringArg(1), "zset") { value ->
                 val entries = sortedZsetEntries(value as JsonObject)
                 val selected = sliceList(entries, start, end)
                 val response = if (withScores) {
@@ -956,12 +1017,11 @@ class RedisServer(
             }
         }
 
-        private fun handleZrem(command: RespCommand) {
+        private fun handleZrem(command: RespCommand): Future<Void> {
             if (command.args.size < 3) {
-                writeError("ERR wrong number of arguments for 'zrem' command")
-                return
+                return writeError("ERR wrong number of arguments for 'zrem' command")
             }
-            mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
+            return mutateTypedValue(command.stringArg(1), "zset", JsonObject()) { current ->
                 val zset = current as JsonObject
                 var removed = 0L
                 command.args.drop(2).forEach { memberBytes ->
@@ -975,60 +1035,52 @@ class RedisServer(
             }
         }
 
-        private fun handleZscore(command: RespCommand) {
+        private fun handleZscore(command: RespCommand): Future<Void> {
             if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'zscore' command")
-                return
+                return writeError("ERR wrong number of arguments for 'zscore' command")
             }
-            readTypedValue(command.stringArg(1), "zset") { value ->
+            return readTypedValue(command.stringArg(1), "zset") { value ->
                 val score = (value as JsonObject).getDouble(command.stringArg(2))
                 writeBulk(score?.let { formatScore(it).toByteArray(StandardCharsets.UTF_8) })
             }
         }
 
-        private fun handleZcard(command: RespCommand) {
+        private fun handleZcard(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'zcard' command")
-                return
+                return writeError("ERR wrong number of arguments for 'zcard' command")
             }
-            readTypedValue(command.stringArg(1), "zset") { value -> writeInteger((value as JsonObject).size().toLong()) }
+            return readTypedValue(command.stringArg(1), "zset") { value -> writeInteger((value as JsonObject).size().toLong()) }
         }
 
-        private fun handleJsonSet(command: RespCommand) {
+        private fun handleJsonSet(command: RespCommand): Future<Void> {
             if (command.args.size != 4) {
-                writeError("ERR wrong number of arguments for 'json.set' command")
-                return
+                return writeError("ERR wrong number of arguments for 'json.set' command")
             }
             if (!isRootJsonPath(command.stringArg(2))) {
-                writeError("ERR only root JSON path '$' or '.' is supported")
-                return
+                return writeError("ERR only root JSON path '$' or '.' is supported")
             }
             val parsed = try {
                 Json.decodeValue(command.stringArg(3))
             } catch (e: Exception) {
-                writeError("ERR invalid JSON")
-                return
+                return writeError("ERR invalid JSON")
             }
-            mutateTypedValue(command.stringArg(1), "json", JsonObject()) {
+            return mutateTypedValue(command.stringArg(1), "json", JsonObject()) {
                 parsed to RespValue.bulk("OK")
             }
         }
 
-        private fun handleJsonGet(command: RespCommand) {
+        private fun handleJsonGet(command: RespCommand): Future<Void> {
             if (command.args.size !in 2..3) {
-                writeError("ERR wrong number of arguments for 'json.get' command")
-                return
+                return writeError("ERR wrong number of arguments for 'json.get' command")
             }
             if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
-                writeError("ERR only root JSON path '$' or '.' is supported")
-                return
+                return writeError("ERR only root JSON path '$' or '.' is supported")
             }
             val topic = command.stringArg(1)
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            readStored(topic) { stored ->
+            return readStored(topic).compose { stored ->
                 when {
                     stored == null -> writeNullBulk()
                     stored.type != "json" -> writeError(WRONG_TYPE)
@@ -1037,63 +1089,57 @@ class RedisServer(
             }
         }
 
-        private fun handleJsonDel(command: RespCommand) {
+        private fun handleJsonDel(command: RespCommand): Future<Void> {
             if (command.args.size !in 2..3) {
-                writeError("ERR wrong number of arguments for 'json.del' command")
-                return
+                return writeError("ERR wrong number of arguments for 'json.del' command")
             }
             if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
-                writeError("ERR only root JSON path '$' or '.' is supported")
-                return
+                return writeError("ERR only root JSON path '$' or '.' is supported")
             }
             val topic = command.stringArg(1)
             if (!canWrite(topic)) {
-                writeError("NOPERM no permission to delete topic")
-                return
+                return writeError("NOPERM no permission to delete topic")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeInteger(0)
-                return
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            if (group.lastValReadOnly) {
+                return writeError("ERR last value store of archive group [${group.name}] is read-only")
             }
-            vertx.executeBlocking(Callable {
-                val stored = decodeStoredValue(store[topic]?.payload)
-                when {
-                    stored == null -> 0
-                    stored.type != "json" -> -1
-                    else -> {
-                        store.delAll(listOf(topic))
-                        1
+            val store = group.lastValStore ?: return writeInteger(0)
+            return withKeyLocks(group.name, listOf(topic)) {
+                vertx.executeBlocking(Callable {
+                    val stored = decodeStoredValue(store[topic]?.payload)
+                    when {
+                        stored == null -> 0
+                        stored.type != "json" -> -1
+                        else -> {
+                            store.delAll(listOf(topic))
+                            1
+                        }
                     }
-                }
-            }).onComplete { result ->
-                if (result.failed()) {
-                    writeError("ERR ${result.cause()?.message ?: "json.del failed"}")
-                } else {
-                    when (result.result()) {
+                }).compose({ res ->
+                    when (res) {
                         -1 -> writeError(WRONG_TYPE)
                         1 -> writeInteger(1)
                         else -> writeInteger(0)
                     }
-                }
+                }, { err ->
+                    writeError("ERR ${err.message ?: "json.del failed"}")
+                })
             }
         }
 
-        private fun handleJsonType(command: RespCommand) {
+        private fun handleJsonType(command: RespCommand): Future<Void> {
             if (command.args.size !in 2..3) {
-                writeError("ERR wrong number of arguments for 'json.type' command")
-                return
+                return writeError("ERR wrong number of arguments for 'json.type' command")
             }
             if (command.args.size == 3 && !isRootJsonPath(command.stringArg(2))) {
-                writeError("ERR only root JSON path '$' or '.' is supported")
-                return
+                return writeError("ERR only root JSON path '$' or '.' is supported")
             }
             val topic = command.stringArg(1)
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            readStored(topic) { stored ->
+            return readStored(topic).compose { stored ->
                 when {
                     stored == null -> writeNullBulk()
                     stored.type != "json" -> writeError(WRONG_TYPE)
@@ -1102,201 +1148,217 @@ class RedisServer(
             }
         }
 
-        private fun handleDel(command: RespCommand) {
+        private fun handleDel(command: RespCommand): Future<Void> {
             if (command.args.size < 2) {
-                writeError("ERR wrong number of arguments for 'del' command")
-                return
+                return writeError("ERR wrong number of arguments for 'del' command")
             }
             val topics = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
             if (topics.any { !canWrite(it) }) {
-                writeError("NOPERM no permission to delete one or more topics")
-                return
+                return writeError("NOPERM no permission to delete one or more topics")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeInteger(0)
-                return
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            if (group.lastValReadOnly) {
+                return writeError("ERR last value store of archive group [${group.name}] is read-only")
             }
-            vertx.executeBlocking(Callable {
-                val existing = topics.count { store[it] != null }
-                store.delAll(topics)
-                existing
-            }).onComplete {
-                if (it.succeeded()) writeInteger(it.result().toLong()) else writeError("ERR ${it.cause()?.message ?: "del failed"}")
+            val store = group.lastValStore ?: return writeInteger(0)
+            return withKeyLocks(group.name, topics) {
+                vertx.executeBlocking(Callable {
+                    val existing = topics.count { store[it] != null }
+                    store.delAll(topics)
+                    existing
+                }).compose(
+                    { count -> writeInteger(count.toLong()) },
+                    { err -> writeError("ERR ${err.message ?: "del failed"}") }
+                )
             }
         }
 
-        private fun handleExists(command: RespCommand) {
+        private fun handleExists(command: RespCommand): Future<Void> {
             if (command.args.size < 2) {
-                writeError("ERR wrong number of arguments for 'exists' command")
-                return
+                return writeError("ERR wrong number of arguments for 'exists' command")
             }
             val topics = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
             if (topics.any { !canRead(it) }) {
-                writeError("NOPERM no permission to read one or more topics")
-                return
+                return writeError("NOPERM no permission to read one or more topics")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeInteger(0)
-                return
-            }
-            vertx.executeBlocking(Callable { topics.count { store[it] != null } }).onComplete {
-                if (it.succeeded()) writeInteger(it.result().toLong()) else writeError("ERR ${it.cause()?.message ?: "exists failed"}")
-            }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeInteger(0)
+            return vertx.executeBlocking(Callable { topics.count { store[it] != null } }).compose(
+                { count -> writeInteger(count.toLong()) },
+                { err -> writeError("ERR ${err.message ?: "exists failed"}") }
+            )
         }
 
-        private fun handleTtl(command: RespCommand) {
+        private fun handleTtl(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
-                return
+                return writeError("ERR wrong number of arguments for '${command.stringArg(0).lowercase()}' command")
             }
             val topic = command.stringArg(1)
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeInteger(-2)
-                return
-            }
-            vertx.executeBlocking(Callable { store[topic] != null }).onComplete {
-                if (it.succeeded()) {
-                    writeInteger(if (it.result()) -1 else -2)
-                } else {
-                    writeError("ERR ${it.cause()?.message ?: "ttl failed"}")
-                }
-            }
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeInteger(-2)
+            return vertx.executeBlocking(Callable { store[topic] != null }).compose(
+                { exists -> writeInteger(if (exists) -1 else -2) },
+                { err -> writeError("ERR ${err.message ?: "ttl failed"}") }
+            )
         }
 
-        private fun handleScan(command: RespCommand) {
+        private fun handleScan(command: RespCommand): Future<Void> {
             val match = scanMatch(command) ?: "#"
-            val count = scanCount(command) ?: keysLimit
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeArray(listOf(RespValue.bulk("0"), RespValue.array(emptyList())))
-                return
-            }
-            val topicPattern = redisPatternToMqtt(match)
-            vertx.executeBlocking(Callable {
+            // F2: SCAN COUNT is a hint, not a cap. Reply all matches up to KeysLimit, cursor 0.
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeArray(listOf(RespValue.bulk("0"), RespValue.array(emptyList())))
+            val (topicPattern, postFilter) = redisPatternToMqtt(match)
+            return vertx.executeBlocking(Callable {
                 val topics = mutableListOf<String>()
                 store.findMatchingTopics(topicPattern) { topic ->
-                    if (canRead(topic)) topics.add(topic)
-                    topics.size < count.coerceAtMost(keysLimit)
-                }
-                topics
-            }).onComplete { result ->
-                if (result.succeeded()) {
-                    writeArray(listOf(
-                        RespValue.bulk("0"),
-                        RespValue.array(result.result().map { RespValue.bulk(it) })
-                    ))
-                } else {
-                    writeError("ERR ${result.cause()?.message ?: "scan failed"}")
-                }
-            }
-        }
-
-        private fun handleKeys(command: RespCommand) {
-            if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'keys' command")
-                return
-            }
-            val pattern = redisPatternToMqtt(command.stringArg(1))
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                writeArray(emptyList())
-                return
-            }
-            vertx.executeBlocking(Callable {
-                val topics = mutableListOf<String>()
-                store.findMatchingTopics(pattern) { topic ->
-                    if (canRead(topic)) topics.add(topic)
+                    if (postFilter == null || postFilter(topic)) {
+                        if (canRead(topic)) topics.add(topic)
+                    }
                     topics.size < keysLimit
                 }
                 topics
-            }).onComplete { result ->
-                if (result.succeeded()) writeArray(result.result().map { RespValue.bulk(it) })
-                else writeError("ERR ${result.cause()?.message ?: "keys failed"}")
-            }
+            }).compose(
+                { result ->
+                    writeArray(listOf(
+                        RespValue.bulk("0"),
+                        RespValue.array(result.map { RespValue.bulk(it) })
+                    ))
+                },
+                { err -> writeError("ERR ${err.message ?: "scan failed"}") }
+            )
         }
 
-        private fun handlePublish(command: RespCommand) {
-            if (command.args.size != 3) {
-                writeError("ERR wrong number of arguments for 'publish' command")
-                return
+        private fun handleKeys(command: RespCommand): Future<Void> {
+            if (command.args.size != 2) {
+                return writeError("ERR wrong number of arguments for 'keys' command")
             }
-            publishTopic(command.stringArg(1), command.args[2]) {
-                writeInteger(0)
-            }
-        }
-
-        private fun handleSubscribe(command: RespCommand, pattern: Boolean) {
-            if (command.args.size < 2) {
-                writeError("ERR wrong number of arguments for '${if (pattern) "psubscribe" else "subscribe"}' command")
-                return
-            }
-            val filters = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
-            if (filters.any { !canRead(if (pattern) redisPatternToMqtt(it) else it) }) {
-                writeError("NOPERM no permission to subscribe to one or more topics")
-                return
-            }
-            filters.forEach { requested ->
-                val mqttFilter = if (pattern) redisPatternToMqtt(requested) else requested
-                val listenerId = "redis-$id-${listenerIds.size + 1}"
-                listenerIds.add(listenerId)
-                sessionHandler.registerMessageListener(listenerId, listOf(mqttFilter)) { message ->
-                    if (closed) return@registerMessageListener
-                    if (pattern) {
-                        writeArray(listOf(
-                            RespValue.bulk("pmessage"),
-                            RespValue.bulk(requested),
-                            RespValue.bulk(message.topicName),
-                            RespValue.bulk(message.payload)
-                        ))
-                    } else {
-                        writeArray(listOf(
-                            RespValue.bulk("message"),
-                            RespValue.bulk(message.topicName),
-                            RespValue.bulk(message.payload)
-                        ))
+            val (pattern, postFilter) = redisPatternToMqtt(command.stringArg(1))
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            val store = group.lastValStore ?: return writeArray(emptyList())
+            return vertx.executeBlocking(Callable {
+                val topics = mutableListOf<String>()
+                store.findMatchingTopics(pattern) { topic ->
+                    if (postFilter == null || postFilter(topic)) {
+                        if (canRead(topic)) topics.add(topic)
                     }
+                    topics.size < keysLimit
                 }
-                writeArray(listOf(
-                    RespValue.bulk(if (pattern) "psubscribe" else "subscribe"),
-                    RespValue.bulk(requested),
-                    RespValue.integer(listenerIds.size.toLong())
-                ))
-            }
+                topics
+            }).compose(
+                { result -> writeArray(result.map { RespValue.bulk(it) }) },
+                { err -> writeError("ERR ${err.message ?: "keys failed"}") }
+            )
         }
 
-        private fun handleUnsubscribe(command: RespCommand) {
-            val count = listenerIds.size
-            listenerIds.toList().forEach {
-                sessionHandler.unregisterMessageListener(it)
-                listenerIds.remove(it)
+        private fun handlePublish(command: RespCommand): Future<Void> {
+            if (command.args.size != 3) {
+                return writeError("ERR wrong number of arguments for 'publish' command")
             }
-            writeArray(listOf(
-                RespValue.bulk(command.stringArg(0).lowercase()),
-                RespValue.nullBulk(),
-                RespValue.integer(0)
-            ))
-            logger.fine("Redis client [$id] removed $count pub/sub listeners")
-        }
-
-        private fun publishTopic(topic: String, payload: ByteArray, onSuccess: () -> Unit) {
-            val error = validateWrite(topic)
+            val topic = command.stringArg(1)
+            val payload = command.args[2]
+            val error = validateWrite(topic, isPublish = true)
             if (error != null) {
-                writeError(error)
-                return
+                return writeError(error)
             }
             publishTopicUnchecked(topic, payload)
-            onSuccess()
+            return writeInteger(0)
+        }
+
+        private fun handleSubscribe(command: RespCommand, pattern: Boolean): Future<Void> {
+            val cmdName = if (pattern) "psubscribe" else "subscribe"
+            if (command.args.size < 2) {
+                return writeError("ERR wrong number of arguments for '$cmdName' command")
+            }
+            val filters = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
+            if (filters.any { !canRead(if (pattern) redisPatternToMqtt(it).first else it) }) {
+                return writeError("NOPERM no permission to subscribe to one or more topics")
+            }
+            val writeFutures = mutableListOf<Future<Void>>()
+            filters.forEach { requested ->
+                val subKey = SubKey(pattern, requested)
+                val existingListenerId = subscriptions[subKey]
+                if (existingListenerId == null) {
+                    val (mqttFilter, postFilter) = if (pattern) redisPatternToMqtt(requested) else Pair(requested, null)
+                    val listenerId = "redis-$id-${subscriptionSequence.incrementAndGet()}"
+                    subscriptions[subKey] = listenerId
+                    sessionHandler.registerMessageListener(listenerId, listOf(mqttFilter)) { message ->
+                        if (closed) return@registerMessageListener
+                        if (postFilter != null && !postFilter(message.topicName)) return@registerMessageListener
+                        if (!canRead(message.topicName)) return@registerMessageListener
+                        sessionHandler.incrementMessagesOut(clientId)
+                        if (pattern) {
+                            writeArray(listOf(
+                                RespValue.bulk("pmessage"),
+                                RespValue.bulk(requested),
+                                RespValue.bulk(message.topicName),
+                                RespValue.bulk(message.payload)
+                            ))
+                        } else {
+                            writeArray(listOf(
+                                RespValue.bulk("message"),
+                                RespValue.bulk(message.topicName),
+                                RespValue.bulk(message.payload)
+                            ))
+                        }
+                    }
+                }
+                writeFutures.add(writeArray(listOf(
+                    RespValue.bulk(cmdName),
+                    RespValue.bulk(requested),
+                    RespValue.integer(subscriptions.size.toLong())
+                )))
+            }
+            return Future.all(writeFutures as List<Future<*>>).mapEmpty()
+        }
+
+        private fun handleUnsubscribe(command: RespCommand): Future<Void> {
+            val isPattern = command.stringArg(0).uppercase() == "PUNSUBSCRIBE"
+            val cmdName = if (isPattern) "punsubscribe" else "unsubscribe"
+            val writeFutures = mutableListOf<Future<Void>>()
+
+            if (command.args.size > 1) {
+                val targets = command.args.drop(1).map { it.toString(StandardCharsets.UTF_8) }
+                targets.forEach { target ->
+                    val key = SubKey(isPattern, target)
+                    val listenerId = subscriptions.remove(key)
+                    if (listenerId != null) {
+                        sessionHandler.unregisterMessageListener(listenerId)
+                    }
+                    writeFutures.add(writeArray(listOf(
+                        RespValue.bulk(cmdName),
+                        RespValue.bulk(target),
+                        RespValue.integer(subscriptions.size.toLong())
+                    )))
+                }
+            } else {
+                val toRemove = subscriptions.keys.filter { it.isPattern == isPattern }.toList()
+                if (toRemove.isEmpty()) {
+                    writeFutures.add(writeArray(listOf(
+                        RespValue.bulk(cmdName),
+                        RespValue.nullBulk(),
+                        RespValue.integer(subscriptions.size.toLong())
+                    )))
+                } else {
+                    toRemove.forEach { key ->
+                        val listenerId = subscriptions.remove(key)
+                        if (listenerId != null) {
+                            sessionHandler.unregisterMessageListener(listenerId)
+                        }
+                        writeFutures.add(writeArray(listOf(
+                            RespValue.bulk(cmdName),
+                            RespValue.bulk(key.name),
+                            RespValue.integer(subscriptions.size.toLong())
+                        )))
+                    }
+                }
+            }
+            return Future.all(writeFutures as List<Future<*>>).mapEmpty()
         }
 
         private fun publishTopicUnchecked(topic: String, payload: ByteArray) {
-            val clientId = "redis-server-$id"
             val message = BrokerMessage(
                 messageId = 0,
                 topicName = topic,
@@ -1309,13 +1371,17 @@ class RedisServer(
                 senderId = clientId
             )
             sessionHandler.publishMessage(message)
+            sessionHandler.incrementMessagesIn(clientId)
         }
 
-        private fun validateWrite(topic: String): String? {
+        private fun validateWrite(topic: String, isPublish: Boolean = false): String? {
             if (topic.contains('+') || topic.contains('#')) return "ERR topic must not contain wildcard characters"
             val group = archiveGroupForDb(selectedDb) ?: return "ERR selected DB is not mapped to an archive group"
             if (group.topicFilter.isNotEmpty() && !group.filterTree.isTopicNameMatching(topic)) {
                 return "ERR topic is outside selected archive group topic filter"
+            }
+            if (!isPublish && group.lastValReadOnly) {
+                return "ERR last value store of archive group [${group.name}] is read-only"
             }
             if (!canWrite(topic)) return "NOPERM no permission to publish topic"
             return null
@@ -1370,25 +1436,146 @@ class RedisServer(
             return null
         }
 
-        private fun redisPatternToMqtt(pattern: String): String {
-            if (pattern == "*") return "#"
-            if (pattern.contains('+') || pattern.contains('#')) return pattern
-            return pattern.replace("*", "#")
+        private fun redisPatternToMqtt(pattern: String): Pair<String, ((String) -> Boolean)?> {
+            if (pattern == "*") return Pair("#", null)
+            if (pattern.contains('+') || pattern.contains('#')) return Pair(pattern, null)
+
+            if (!hasUnescapedMeta(pattern)) {
+                return Pair(unescape(pattern), null)
+            }
+
+            val segments = pattern.split('/')
+            val segmentsWithMeta = segments.map { hasUnescapedMeta(it) }
+            val allMetaAreExactStar = segments.indices.all { i ->
+                !segmentsWithMeta[i] || segments[i] == "*"
+            }
+
+            if (allMetaAreExactStar) {
+                val newSegments = segments.indices.map { i ->
+                    if (segments[i] == "*") {
+                        if (i == segments.lastIndex) "#" else "+"
+                    } else {
+                        unescape(segments[i])
+                    }
+                }
+                val filter = newSegments.joinToString("/")
+                val postFilter: ((String) -> Boolean)? = if (segments.last() == "*") {
+                    val minLevels = segments.size
+                    { topic -> topic.split('/').size >= minLevels }
+                } else {
+                    null
+                }
+                return Pair(filter, postFilter)
+            }
+
+            val firstMetaIndex = segments.indices.first { segmentsWithMeta[it] }
+            val prefix = segments.subList(0, firstMetaIndex).map { unescape(it) }.joinToString("/")
+            val filter = if (prefix.isEmpty()) "#" else "$prefix/#"
+            val postFilter: (String) -> Boolean = { topic -> globMatches(pattern, topic) }
+            return Pair(filter, postFilter)
+        }
+
+        private fun hasUnescapedMeta(s: String): Boolean {
+            var i = 0
+            while (i < s.length) {
+                if (s[i] == '\\') {
+                    i += 2
+                    continue
+                }
+                if (s[i] == '*' || s[i] == '?' || s[i] == '[') {
+                    return true
+                }
+                i++
+            }
+            return false
+        }
+
+        private fun unescape(s: String): String {
+            val sb = StringBuilder()
+            var i = 0
+            while (i < s.length) {
+                if (s[i] == '\\' && i + 1 < s.length) {
+                    i++
+                    sb.append(s[i])
+                } else {
+                    sb.append(s[i])
+                }
+                i++
+            }
+            return sb.toString()
         }
 
         private fun globMatches(pattern: String, value: String): Boolean {
-            val regex = buildString {
-                append("^")
-                pattern.forEach { ch ->
-                    when (ch) {
-                        '*' -> append(".*")
-                        '?' -> append(".")
-                        else -> append(Regex.escape(ch.toString()))
+            return globToRegex(pattern).matches(value)
+        }
+
+        private fun globToRegex(pattern: String): Regex {
+            val sb = StringBuilder("^")
+            var i = 0
+            val n = pattern.length
+            while (i < n) {
+                val c = pattern[i]
+                when (c) {
+                    '\\' -> {
+                        i++
+                        if (i < n) {
+                            sb.append(Regex.escape(pattern[i].toString()))
+                        } else {
+                            sb.append(Regex.escape("\\"))
+                        }
                     }
+                    '*' -> sb.append(".*")
+                    '?' -> sb.append(".")
+                    '[' -> {
+                        var j = i + 1
+                        if (j < n && pattern[j] == '^') j++
+                        if (j < n && pattern[j] == ']') j++
+                        while (j < n && pattern[j] != ']') {
+                            if (pattern[j] == '\\' && j + 1 < n) j++
+                            j++
+                        }
+                        if (j < n && pattern[j] == ']') {
+                            val inner = pattern.substring(i + 1, j)
+                            if (inner.startsWith("^")) {
+                                sb.append("[^")
+                                escapeCharClass(inner.substring(1), sb)
+                                sb.append("]")
+                            } else {
+                                sb.append("[")
+                                escapeCharClass(inner, sb)
+                                sb.append("]")
+                            }
+                            i = j
+                        } else {
+                            sb.append(Regex.escape("["))
+                        }
+                    }
+                    else -> sb.append(Regex.escape(c.toString()))
                 }
-                append("$")
+                i++
             }
-            return Regex(regex).matches(value)
+            sb.append("$")
+            return Regex(sb.toString(), RegexOption.DOT_MATCHES_ALL)
+        }
+
+        private fun escapeCharClass(inner: String, sb: StringBuilder) {
+            var k = 0
+            while (k < inner.length) {
+                val ch = inner[k]
+                if (ch == '\\' && k + 1 < inner.length) {
+                    sb.append('\\').append(inner[k + 1])
+                    k += 2
+                } else if (ch == '-' && k > 0 && k + 1 < inner.length) {
+                    sb.append('-')
+                    k++
+                } else if (ch == '[' || ch == ']' || ch == '-' || ch == '&') {
+                    sb.append('\\').append(ch)
+                    k++
+                } else {
+                    sb.append(ch)
+                    k++
+                }
+            }
         }
 
         private fun sliceRange(payload: ByteArray?, rawStart: Long, rawEnd: Long): ByteArray {
@@ -1405,32 +1592,31 @@ class RedisServer(
             return payload.copyOfRange(start.toInt(), end.toInt() + 1)
         }
 
-        private fun handleType(command: RespCommand) {
+        private fun handleType(command: RespCommand): Future<Void> {
             if (command.args.size != 2) {
-                writeError("ERR wrong number of arguments for 'type' command")
-                return
+                return writeError("ERR wrong number of arguments for 'type' command")
             }
             val topic = command.stringArg(1)
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            readStored(topic) { stored ->
+            return readStored(topic).compose { stored ->
                 writeSimple(stored?.type ?: "none")
             }
         }
 
-        private fun readTypedValue(topic: String, expectedType: String, onSuccess: (Any?) -> Unit) {
+        private fun readTypedValue(topic: String, expectedType: String, onSuccess: (Any?) -> Future<Void>): Future<Void> {
             if (!canRead(topic)) {
-                writeError("NOPERM no permission to read topic")
-                return
+                return writeError("NOPERM no permission to read topic")
             }
-            readStored(topic) { stored ->
+            return readStored(topic).compose { stored ->
                 when {
                     stored == null -> onSuccess(defaultValueForType(expectedType))
                     stored.type != expectedType -> writeError(WRONG_TYPE)
                     else -> onSuccess(stored.value)
                 }
+            }.recover { err ->
+                writeError("ERR ${err.message ?: "read failed"}")
             }
         }
 
@@ -1439,37 +1625,55 @@ class RedisServer(
             expectedType: String,
             defaultValue: Any,
             mutation: (Any) -> Pair<Any?, RespValue>
-        ) {
-            val error = validateWrite(topic)
+        ): Future<Void> {
+            val error = validateWrite(topic, isPublish = false)
             if (error != null) {
-                writeError(error)
-                return
+                return writeError(error)
             }
-            readStored(topic) { stored ->
-                if (stored != null && stored.type != expectedType) {
-                    writeError(WRONG_TYPE)
-                    return@readStored
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture()
+            return withKeyLocks(group.name, listOf(topic)) {
+                readStored(topic).compose { stored ->
+                    if (stored != null && stored.type != expectedType) {
+                        writeError(WRONG_TYPE)
+                    } else {
+                        val current = stored?.value ?: defaultValue
+                        val (newValue, response) = mutation(current)
+                        val encodedPayload = encodeEnvelope(expectedType, newValue)
+                        val store = group.lastValStore
+                        val updateStoreFuture = if (store != null) {
+                            vertx.executeBlocking(Callable {
+                                val brokerMsg = BrokerMessage(
+                                    messageId = 0,
+                                    topicName = topic,
+                                    payload = encodedPayload,
+                                    qosLevel = publishQos,
+                                    isRetain = setRetained,
+                                    isDup = false,
+                                    isQueued = false,
+                                    clientId = clientId,
+                                    senderId = clientId
+                                )
+                                store.addAll(listOf(brokerMsg))
+                            })
+                        } else {
+                            Future.succeededFuture()
+                        }
+                        updateStoreFuture.compose {
+                            publishTopicUnchecked(topic, encodedPayload)
+                            writeRespValue(response)
+                        }
+                    }
+                }.recover { err ->
+                    writeError("ERR ${err.message ?: "write failed"}")
                 }
-
-                val current = stored?.value ?: defaultValue
-                val (newValue, response) = mutation(current)
-                publishTopicUnchecked(topic, encodeEnvelope(expectedType, newValue))
-                writeRespValue(response)
             }
         }
 
-        private fun readStored(topic: String, onResult: (RedisStoredValue?) -> Unit) {
-            val group = selectedArchiveGroup() ?: return
-            val store = group.lastValStore ?: run {
-                onResult(null)
-                return
-            }
-            vertx.executeBlocking(Callable { store[topic]?.payload }).onComplete { result ->
-                if (result.failed()) {
-                    writeError("ERR ${result.cause()?.message ?: "read failed"}")
-                } else {
-                    onResult(decodeStoredValue(result.result()))
-                }
+        private fun readStored(topic: String): Future<RedisStoredValue?> {
+            val group = selectedArchiveGroup() ?: return Future.succeededFuture(null)
+            val store = group.lastValStore ?: return Future.succeededFuture(null)
+            return vertx.executeBlocking(Callable { store[topic]?.payload }).map { payload ->
+                decodeStoredValue(payload)
             }
         }
 
@@ -1546,10 +1750,11 @@ class RedisServer(
         }
 
         private fun cleanup() {
+            if (closed) return
             closed = true
             commandQueue.clear()
-            listenerIds.toList().forEach { sessionHandler.unregisterMessageListener(it) }
-            listenerIds.clear()
+            subscriptions.values.toList().forEach { sessionHandler.unregisterMessageListener(it) }
+            subscriptions.clear()
             if (sessionRegistered) {
                 sessionHandler.delClient(clientId)
             }
@@ -1561,29 +1766,28 @@ class RedisServer(
             socket.close()
         }
 
-        private fun writeSimple(value: String) = socket.write("+$value\r\n")
-        private fun writeError(value: String) = socket.write("-$value\r\n")
-        private fun writeInteger(value: Long) = socket.write(":$value\r\n")
-        private fun writeNullBulk() = socket.write("${'$'}-1\r\n")
-        private fun writeBulk(value: String) = writeBulk(value.toByteArray(StandardCharsets.UTF_8))
-        private fun writeBulk(value: ByteArray?) {
+        private fun writeSimple(value: String): Future<Void> = socket.write("+$value\r\n")
+        private fun writeError(value: String): Future<Void> = socket.write("-$value\r\n")
+        private fun writeInteger(value: Long): Future<Void> = socket.write(":$value\r\n")
+        private fun writeNullBulk(): Future<Void> = socket.write("${'$'}-1\r\n")
+        private fun writeBulk(value: String): Future<Void> = writeBulk(value.toByteArray(StandardCharsets.UTF_8))
+        private fun writeBulk(value: ByteArray?): Future<Void> {
             if (value == null) {
-                writeNullBulk()
-                return
+                return writeNullBulk()
             }
-            socket.write(Buffer.buffer().appendString("${'$'}${value.size}\r\n").appendBytes(value).appendString("\r\n"))
+            return socket.write(Buffer.buffer().appendString("${'$'}${value.size}\r\n").appendBytes(value).appendString("\r\n"))
         }
 
-        private fun writeArray(values: List<RespValue>) {
+        private fun writeArray(values: List<RespValue>): Future<Void> {
             val buffer = Buffer.buffer().appendString("*${values.size}\r\n")
             values.forEach { appendRespValue(buffer, it) }
-            socket.write(buffer)
+            return socket.write(buffer)
         }
 
-        private fun writeRespValue(value: RespValue) {
+        private fun writeRespValue(value: RespValue): Future<Void> {
             val buffer = Buffer.buffer()
             appendRespValue(buffer, value)
-            socket.write(buffer)
+            return socket.write(buffer)
         }
 
         private fun appendRespValue(buffer: Buffer, value: RespValue) {
@@ -1642,33 +1846,57 @@ class RedisServer(
         }
 
         private fun parseArray(start: Int): Parsed? {
-            val firstLineEnd = findCrlf(start) ?: return null
-            val count = buffer.getString(start + 1, firstLineEnd).toIntOrNull() ?: throw IllegalArgumentException("invalid multibulk length")
+            val firstLineEnd = findCrlf(start) ?: run {
+                if (buffer.length() - start > 65536) {
+                    throw RedisProtocolException("ERR Protocol error: too big inline request")
+                }
+                return null
+            }
+            val count = buffer.getString(start + 1, firstLineEnd).toIntOrNull()
+            if (count == null || count < 0 || count > 1048576) {
+                throw RedisProtocolException("ERR Protocol error: invalid multibulk length")
+            }
             var index = firstLineEnd + 2
             val args = ArrayList<ByteArray>(count)
             repeat(count) {
                 if (index >= buffer.length()) return null
-                if (buffer.getByte(index).toInt().toChar() != '$') throw IllegalArgumentException("expected bulk string")
-                val lenEnd = findCrlf(index) ?: return null
-                val len = buffer.getString(index + 1, lenEnd).toIntOrNull() ?: throw IllegalArgumentException("invalid bulk length")
-                index = lenEnd + 2
-                if (len < 0) {
-                    args.add(ByteArray(0))
-                } else {
-                    if (index + len + 2 > buffer.length()) return null
-                    args.add(buffer.getBytes(index, index + len))
-                    index += len
-                    if (buffer.getByte(index).toInt().toChar() != '\r' || buffer.getByte(index + 1).toInt().toChar() != '\n') {
-                        throw IllegalArgumentException("invalid bulk terminator")
-                    }
-                    index += 2
+                val leadChar = buffer.getByte(index).toInt().toChar()
+                if (leadChar != '$') {
+                    throw RedisProtocolException("ERR Protocol error: expected '$', got '$leadChar'")
                 }
+                val lenEnd = findCrlf(index) ?: run {
+                    if (buffer.length() - index > 65536) {
+                        throw RedisProtocolException("ERR Protocol error: too big inline request")
+                    }
+                    return null
+                }
+                val len = buffer.getString(index + 1, lenEnd).toIntOrNull()
+                if (len == null || len < 0) {
+                    throw RedisProtocolException("ERR Protocol error: invalid bulk length")
+                }
+                index = lenEnd + 2
+                if (index + len + 2 > buffer.length()) return null
+                args.add(buffer.getBytes(index, index + len))
+                index += len
+                if (buffer.getByte(index).toInt().toChar() != '\r' || buffer.getByte(index + 1).toInt().toChar() != '\n') {
+                    throw RedisProtocolException("ERR Protocol error: invalid bulk length")
+                }
+                index += 2
             }
             return Parsed(args, index)
         }
 
         private fun parseInline(start: Int): Parsed? {
-            val end = findCrlf(start) ?: return null
+            val end = findCrlf(start)
+            if (end == null) {
+                if (buffer.length() - start > 65536) {
+                    throw RedisProtocolException("ERR Protocol error: too big inline request")
+                }
+                return null
+            }
+            if (end - start > 65536) {
+                throw RedisProtocolException("ERR Protocol error: too big inline request")
+            }
             val line = buffer.getString(start, end)
             val args = line.trim().split(Regex("\\s+"))
                 .filter { it.isNotEmpty() }

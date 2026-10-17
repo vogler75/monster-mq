@@ -666,6 +666,18 @@ class ArchiveGroupResolver(
                 val payloadFormatStr = input["payloadFormat"] as? String ?: "DEFAULT"
                 val databaseConnectionName = (input["databaseConnectionName"] as? String)?.takeIf { it.isNotBlank() }
                 val redisDbNumber = (input["redisDbNumber"] as? Number)?.toInt()
+                if (redisDbNumber != null) {
+                    val existingUsingDb = archiveHandler.getDeployedArchiveGroups().values.firstOrNull {
+                        it.getRedisDbNumber() == redisDbNumber
+                    }
+                    if (existingUsingDb != null) {
+                        future.complete(mapOf(
+                            "success" to false,
+                            "message" to "RedisDbNumber $redisDbNumber is already used by archive group [${existingUsingDb.name}]"
+                        ))
+                        return@DataFetcher future
+                    }
+                }
 
                 val queueType = input["queueType"] as? String ?: "NONE"
                 val queueSize = (input["queueSize"] as? Number)?.toInt() ?: 100000
@@ -937,6 +949,18 @@ class ArchiveGroupResolver(
                                  (input["redisDbNumber"] as? Number)?.toInt()
                              } else {
                                  existingArchiveGroup.getRedisDbNumber()
+                             }
+                             if (redisDbNumber != null) {
+                                 val existingUsingDb = archiveHandler.getDeployedArchiveGroups().values.firstOrNull {
+                                     it.name != name && it.getRedisDbNumber() == redisDbNumber
+                                 }
+                                 if (existingUsingDb != null) {
+                                     future.complete(mapOf(
+                                         "success" to false,
+                                         "message" to "RedisDbNumber $redisDbNumber is already used by archive group [${existingUsingDb.name}]"
+                                     ))
+                                     return@onComplete
+                                 }
                              }
 
                              val queueType = if (input.containsKey("queueType")) {
