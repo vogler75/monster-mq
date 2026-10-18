@@ -67,6 +67,7 @@ import java.util.logging.Logger
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    System.setProperty("polyglot.engine.WarnInterpreterOnly", "false")
     Monster(args)
 }
 

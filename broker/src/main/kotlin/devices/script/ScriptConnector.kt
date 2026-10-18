@@ -59,31 +59,33 @@ class ScriptConnector(
             scriptConfig = ScriptConfig.fromJsonObject(deviceConfig.config)
             scriptStorage = ScriptStorage(deviceConfig.name, deviceStore, deviceConfig.nodeId)
 
-            // Compile script engine
-            engine = ScriptEngine(
-                scriptName = deviceConfig.name,
-                config = scriptConfig,
-                globalStore = globalStore,
-                scriptStorage = scriptStorage,
-                recentLogs = recentLogs,
-                mqttPublisher = { topic, payload, qos, retain ->
-                    publishToBroker(topic, payload, qos, retain)
-                },
-                scriptInvoker = scriptInvoker
-            )
-
-            // Load persistent storage, then set up subscriptions / timers
-            scriptStorage.load()
-                .compose { setupTriggers() }
-                .onComplete { res ->
-                    if (res.succeeded()) {
-                        logger.info("ScriptConnector started for '${deviceConfig.name}' (${scriptConfig.language}, trigger: ${scriptConfig.triggerType})")
-                        startPromise.complete()
-                    } else {
-                        logger.severe("Failed to start ScriptConnector for '${deviceConfig.name}': ${res.cause()?.message}")
-                        startPromise.fail(res.cause())
-                    }
+            vertx.executeBlocking(java.util.concurrent.Callable {
+                // Compile and validate script engine on a worker thread to avoid blocking the event loop
+                ScriptEngine(
+                    scriptName = deviceConfig.name,
+                    config = scriptConfig,
+                    globalStore = globalStore,
+                    scriptStorage = scriptStorage,
+                    recentLogs = recentLogs,
+                    mqttPublisher = { topic, payload, qos, retain ->
+                        publishToBroker(topic, payload, qos, retain)
+                    },
+                    scriptInvoker = scriptInvoker
+                )
+            }).compose { compiledEngine ->
+                this.engine = compiledEngine
+                scriptStorage.load()
+            }.compose {
+                setupTriggers()
+            }.onComplete { res ->
+                if (res.succeeded()) {
+                    logger.info("ScriptConnector started for '${deviceConfig.name}' (${scriptConfig.language}, trigger: ${scriptConfig.triggerType})")
+                    startPromise.complete()
+                } else {
+                    logger.severe("Failed to start ScriptConnector for '${deviceConfig.name}': ${res.cause()?.message}")
+                    startPromise.fail(res.cause())
                 }
+            }
 
         } catch (e: Exception) {
             logger.severe("Exception initializing ScriptConnector for '${deviceConfig.name}': ${e.message}")
@@ -109,7 +111,9 @@ class ScriptConnector(
         }
 
         // Close engine context
-        engine.close()
+        if (::engine.isInitialized) {
+            engine.close()
+        }
 
         logger.info("ScriptConnector stopped for '${deviceConfig.name}'")
         stopPromise.complete()

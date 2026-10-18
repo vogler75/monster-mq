@@ -218,7 +218,7 @@ else
     JAVA_OPTS=""
 fi
 
-JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED"
+JAVA_OPTS="$JAVA_OPTS --enable-native-access=ALL-UNNAMED -Dpolyglot.engine.WarnInterpreterOnly=false"
 
 # Serve dashboard from filesystem for development
 if [ "$DASHBOARD_DEV" = true ]; then

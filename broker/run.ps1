@@ -212,6 +212,7 @@ try {
 }
 
 $javaOpts.Add("--enable-native-access=ALL-UNNAMED")
+$javaOpts.Add("-Dpolyglot.engine.WarnInterpreterOnly=false")
 
 # Serve dashboard from filesystem for development
 if ($DASHBOARD_DEV) {

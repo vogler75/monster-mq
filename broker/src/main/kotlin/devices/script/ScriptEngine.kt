@@ -4,6 +4,7 @@ import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.devices.ScriptConfig
 import org.graalvm.polyglot.Context
+import org.graalvm.polyglot.Engine
 import org.graalvm.polyglot.HostAccess
 import org.graalvm.polyglot.PolyglotException
 import org.graalvm.polyglot.Source
@@ -39,6 +40,13 @@ class ScriptEngine(
 ) : AutoCloseable {
     companion object {
         private val logger: Logger = Utils.getLogger(ScriptEngine::class.java)
+
+        val sharedEngine: Engine by lazy {
+            Engine.newBuilder()
+                .option("engine.WarnInterpreterOnly", "false")
+                .logHandler(java.io.OutputStream.nullOutputStream())
+                .build()
+        }
 
         fun normalizeLanguage(lang: String): String {
             return when (lang.lowercase().trim()) {
@@ -191,11 +199,19 @@ trigger = None
     private val compiledSource: Source
     private var persistentContext: Context? = null
 
+    private fun createContext(): Context {
+        return Context.newBuilder(targetLanguage)
+            .engine(sharedEngine)
+            .allowAllAccess(true)
+            .allowHostAccess(HostAccess.ALL)
+            .build()
+    }
+
     init {
         // Pre-compile script on creation to catch syntax errors early
         compiledSource = Source.newBuilder(targetLanguage, config.script, scriptName).build()
         // Validate syntax by parsing with an engine context
-        Context.newBuilder(targetLanguage).build().use { ctx ->
+        createContext().use { ctx ->
             ctx.parse(compiledSource)
         }
     }
@@ -223,10 +239,7 @@ trigger = None
         if (existing != null) {
             return existing
         }
-        val ctx = Context.newBuilder(targetLanguage)
-            .allowAllAccess(true)
-            .allowHostAccess(HostAccess.ALL)
-            .build()
+        val ctx = createContext()
         initContext(ctx)
         persistentContext = ctx
         return ctx
@@ -310,10 +323,7 @@ trigger = None
         val jsonProxy = ScriptJsonProxy()
 
         val polyglotContext = if (dryRun) {
-            val ctx = Context.newBuilder(targetLanguage)
-                .allowAllAccess(true)
-                .allowHostAccess(HostAccess.ALL)
-                .build()
+            val ctx = createContext()
             initContext(ctx)
             ctx
         } else {
