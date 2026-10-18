@@ -23,8 +23,9 @@ mvn clean package
 cd broker
 # Run the broker
 java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
-# Or use the convenience script
+# Or use the convenience script (Linux/macOS or Windows PowerShell)
 ./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+.\run.ps1 [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
 ```
 
 #### iX Dashboard (monster-mq-dashboard)
