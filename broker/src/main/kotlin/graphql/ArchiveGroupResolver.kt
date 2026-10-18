@@ -702,6 +702,13 @@ class ArchiveGroupResolver(
                     ))
                     return@DataFetcher future
                 }
+                if (lastValType == MessageStoreType.WINCCOA) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled"
+                    ))
+                    return@DataFetcher future
+                }
 
                 val archiveType = try {
                     MessageArchiveType.valueOf(archiveTypeStr)
@@ -709,6 +716,13 @@ class ArchiveGroupResolver(
                     future.complete(mapOf(
                         "success" to false,
                         "message" to "Invalid input: Invalid archiveType: $archiveTypeStr"
+                    ))
+                    return@DataFetcher future
+                }
+                if (archiveType == MessageArchiveType.WINCCOA) {
+                    future.complete(mapOf(
+                        "success" to false,
+                        "message" to "WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled"
                     ))
                     return@DataFetcher future
                 }
@@ -918,6 +932,13 @@ class ArchiveGroupResolver(
                             } else {
                                 existingArchiveGroup.getLastValType()
                             }
+                            if (lastValType == MessageStoreType.WINCCOA) {
+                                future.complete(mapOf(
+                                    "success" to false,
+                                    "message" to "WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled"
+                                ))
+                                return@onComplete
+                            }
 
                             val archiveTypeStr = input["archiveType"] as? String
                             val archiveType = if (archiveTypeStr != null) {
@@ -930,9 +951,16 @@ class ArchiveGroupResolver(
                                     ))
                                     return@onComplete
                                 }
-                             } else {
-                                 existingArchiveGroup.getArchiveType()
-                             }
+                            } else {
+                                existingArchiveGroup.getArchiveType()
+                            }
+                            if (archiveType == MessageArchiveType.WINCCOA) {
+                                future.complete(mapOf(
+                                    "success" to false,
+                                    "message" to "WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled"
+                                ))
+                                return@onComplete
+                            }
 
                              val payloadFormatStr = input["payloadFormat"] as? String
                              val payloadFormat = if (payloadFormatStr != null) {
@@ -1431,6 +1459,7 @@ class ArchiveGroupResolver(
                     dbPath
                 )
             }
+            MessageStoreType.WINCCOA -> null
         }
     }
 
@@ -1480,6 +1509,7 @@ class ArchiveGroupResolver(
                     dbPath
                 )
             }
+            MessageArchiveType.WINCCOA -> null
         }
     }
 

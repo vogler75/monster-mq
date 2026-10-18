@@ -368,6 +368,10 @@ class ArchiveGroup(
                     callback(success)
                 }
             }
+            MessageStoreType.WINCCOA -> {
+                logger.severe("WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled")
+                callback(false)
+            }
         }
     }
 
@@ -496,6 +500,10 @@ class ArchiveGroup(
                 createDatabaseMessageArchive(archiveType, archiveName) { success ->
                     callback(success)
                 }
+            }
+            MessageArchiveType.WINCCOA -> {
+                logger.severe("WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled")
+                callback(false)
             }
         }
     }
@@ -809,7 +817,7 @@ class ArchiveGroup(
                         // Cannot log here as this is a companion object function
                     }
                 }
-                MessageStoreType.MEMORY, MessageStoreType.NONE -> {
+                MessageStoreType.MEMORY, MessageStoreType.NONE, MessageStoreType.WINCCOA -> {
                     // No validation needed for memory/none stores
                 }
             }
@@ -847,7 +855,7 @@ class ArchiveGroup(
                         throw IllegalArgumentException("Archive group '$archiveName' cannot use SQLITE $storeTypeName: SQLite configuration (Path) not found or empty")
                     }
                 }
-                MessageArchiveType.NONE -> {
+                MessageArchiveType.NONE, MessageArchiveType.WINCCOA -> {
                     // No validation needed for none archive
                 }
             }

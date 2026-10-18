@@ -11,7 +11,8 @@ enum class MessageStoreType {
     POSTGRES,
     CRATEDB,
     MONGODB,
-    SQLITE
+    SQLITE,
+    WINCCOA
 }
 
 interface IMessageStore {

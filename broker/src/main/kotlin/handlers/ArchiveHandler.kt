@@ -692,6 +692,10 @@ class ArchiveHandler(
                 vertx.deployVerticle(store, options).onComplete { promise.complete() }
                 store
             }
+            MessageArchiveType.WINCCOA -> {
+                promise.fail("WINCCOA stores need MonsterMQ Edge embedded in the WinCC OA manager (WCCOAmmq) with WinCCOaNative.Namespace enabled")
+                null
+            }
         }
 
         return archive to promise.future()

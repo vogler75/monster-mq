@@ -2067,6 +2067,10 @@ MORE INFO:
                 }.onSuccess { promise.complete() }.onFailure { promise.fail(it) }
                 store
             }
+            MessageStoreType.WINCCOA -> {
+                promise.fail("WINCCOA is not supported for this store")
+                null
+            }
         }
         return store to promise.future()
     }

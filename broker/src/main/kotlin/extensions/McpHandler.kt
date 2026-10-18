@@ -71,7 +71,7 @@ class McpHandler(
         val defaultArchiveGroup = getArchiveGroup() ?: return false
         return when (defaultArchiveGroup.getArchiveType()) {
             MessageArchiveType.POSTGRES, MessageArchiveType.CRATEDB, MessageArchiveType.QUESTDB, MessageArchiveType.SQLITE -> true
-            MessageArchiveType.MONGODB, MessageArchiveType.NONE -> false
+            MessageArchiveType.MONGODB, MessageArchiveType.NONE, MessageArchiveType.WINCCOA -> false
         }
     }
 

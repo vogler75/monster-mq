@@ -14,7 +14,8 @@ enum class MessageArchiveType {
     CRATEDB,
     QUESTDB,
     MONGODB,
-    SQLITE
+    SQLITE,
+    WINCCOA
 }
 
 enum class PayloadFormat {

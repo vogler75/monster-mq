@@ -32,6 +32,7 @@ enum MessageStoreType {
     CRATEDB
     MONGODB
     SQLITE
+    WINCCOA
 }
 
 enum MessageArchiveType {
@@ -41,6 +42,7 @@ enum MessageArchiveType {
     QUESTDB
     MONGODB
     SQLITE
+    WINCCOA
 }
 
 enum PayloadFormat {
