@@ -147,8 +147,8 @@ if (-not $DockerOnly) {
         Write-Host "Running mvn package in Docker volume (GraalVM 21)..." -ForegroundColor Yellow
         $brokerDir = (Resolve-Path (Join-Path $PSScriptRoot "..\broker")).Path
         $mavenBuilderImage = "monstermq-maven-builder:graalvm21"
-        $inspectOut = (& docker image inspect $mavenBuilderImage 2>&1)
-        if ($LASTEXITCODE -ne 0) {
+        $imageExists = (& docker image ls -q $mavenBuilderImage)
+        if (-not $imageExists) {
             Write-Host "Building Maven builder image (first time only)..." -ForegroundColor Yellow
             & docker build -t $mavenBuilderImage -f (Join-Path $PSScriptRoot "Dockerfile.maven-builder") $PSScriptRoot
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
