@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 class RedisProtocolException(message: String) : Exception(message)
 
+class RedisClient
+
 class RedisServer(
     private val config: JsonObject,
     private val archiveHandler: ArchiveHandler,
@@ -127,6 +129,8 @@ class RedisServer(
         private var selectedDb = defaultDb
         private var clientName: String? = null
 
+        private val clientLogger = Utils.getLogger(RedisClient::class.java)
+        private fun clientDisplayId(): String = if (clientName != null) "$clientId ($clientName)" else clientId
         private val clientId = "redis-$id"
         private var sessionRegistered = false
         private var commandConsumer: io.vertx.core.eventbus.MessageConsumer<JsonObject>? = null
@@ -188,6 +192,7 @@ class RedisServer(
         }
 
         fun start() {
+            clientLogger.info("Client [${clientDisplayId()}] Request to connect. Clean session [true] protocol [REDIS] [startEndpoint]")
             socket.handler { buffer ->
                 parser.append(buffer)
                 try {
@@ -1213,7 +1218,8 @@ class RedisServer(
             val (topicPattern, postFilter) = redisPatternToMqtt(match)
             return vertx.executeBlocking(Callable {
                 val topics = mutableListOf<String>()
-                store.findMatchingTopics(topicPattern) { topic ->
+                store.findMatchingMessages(topicPattern) { msg ->
+                    val topic = msg.topicName
                     if (postFilter == null || postFilter(topic)) {
                         if (canRead(topic)) topics.add(topic)
                     }
@@ -1240,7 +1246,8 @@ class RedisServer(
             val store = group.lastValStore ?: return writeArray(emptyList())
             return vertx.executeBlocking(Callable {
                 val topics = mutableListOf<String>()
-                store.findMatchingTopics(pattern) { topic ->
+                store.findMatchingMessages(pattern) { msg ->
+                    val topic = msg.topicName
                     if (postFilter == null || postFilter(topic)) {
                         if (canRead(topic)) topics.add(topic)
                     }
@@ -1376,12 +1383,16 @@ class RedisServer(
 
         private fun validateWrite(topic: String, isPublish: Boolean = false): String? {
             if (topic.contains('+') || topic.contains('#')) return "ERR topic must not contain wildcard characters"
-            val group = archiveGroupForDb(selectedDb) ?: return "ERR selected DB is not mapped to an archive group"
-            if (group.topicFilter.isNotEmpty() && !group.filterTree.isTopicNameMatching(topic)) {
-                return "ERR topic is outside selected archive group topic filter"
-            }
-            if (!isPublish && group.lastValReadOnly) {
-                return "ERR last value store of archive group [${group.name}] is read-only"
+            val group = archiveGroupForDb(selectedDb)
+            if (group == null) {
+                if (!isPublish) return "ERR selected DB is not mapped to an archive group"
+            } else {
+                if (group.topicFilter.isNotEmpty() && !group.filterTree.isTopicNameMatching(topic)) {
+                    return "ERR topic is outside selected archive group topic filter"
+                }
+                if (!isPublish && group.lastValReadOnly) {
+                    return "ERR last value store of archive group [${group.name}] is read-only"
+                }
             }
             if (!canWrite(topic)) return "NOPERM no permission to publish topic"
             return null
@@ -1752,6 +1763,7 @@ class RedisServer(
         private fun cleanup() {
             if (closed) return
             closed = true
+            clientLogger.info("Client [${clientDisplayId()}] Close connection [false] [closeConnection]")
             commandQueue.clear()
             subscriptions.values.toList().forEach { sessionHandler.unregisterMessageListener(it) }
             subscriptions.clear()

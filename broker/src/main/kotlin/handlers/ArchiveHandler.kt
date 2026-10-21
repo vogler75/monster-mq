@@ -321,8 +321,8 @@ class ArchiveHandler(
                 val databaseConfig = createDatabaseConfig()
 
                 // Check if "Default" archive group exists, create if not
-                configStore.getArchiveGroup("Default").onComplete { getDefaultResult ->
-                    if (getDefaultResult.succeeded() && getDefaultResult.result() == null) {
+                val ensureDefaultFuture: Future<Void> = configStore.getArchiveGroup("Default").compose { existingDefault ->
+                    if (existingDefault == null) {
                         logger.fine("Default archive group not found, creating it")
                         val defaultArchiveGroup = ArchiveGroup(
                             name = "Default",
@@ -339,18 +339,24 @@ class ArchiveHandler(
                             purgeIntervalStr = null,
                             databaseConfig = databaseConfig
                         )
-                        configStore.saveArchiveGroup(defaultArchiveGroup, enabled = false).onComplete { saveResult ->
-                            if (saveResult.succeeded() && saveResult.result()) {
+                        configStore.saveArchiveGroup(defaultArchiveGroup, enabled = true).map { saved ->
+                            if (saved) {
                                 logger.fine("Default archive group created successfully")
                             } else {
                                 logger.warning("Failed to create default archive group")
                             }
+                            null
                         }
+                    } else {
+                        Future.succeededFuture<Void>()
                     }
+                }.recover { err ->
+                    logger.warning("Failed to check/create default archive group: ${err.message}")
+                    Future.succeededFuture<Void>()
                 }
 
                 // Load archive groups from database
-                configStore.getAllArchiveGroups().onComplete { getAllResult ->
+                ensureDefaultFuture.compose { configStore.getAllArchiveGroups() }.onComplete { getAllResult ->
                     if (getAllResult.succeeded()) {
                         val archiveGroupConfigs = getAllResult.result().filter { it.enabled }
                         val resolveFutures = archiveGroupConfigs.map { config ->

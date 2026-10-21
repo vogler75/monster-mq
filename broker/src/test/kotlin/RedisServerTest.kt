@@ -535,4 +535,51 @@ class RedisServerTest {
             }
         }
     }
+
+    @Test
+    fun testPublishWithoutMappedArchiveGroup() {
+        deployedGroups.clear()
+        startRedisServer()
+
+        RedisClient().use { subClient ->
+            subClient.sendCommand("SUBSCRIBE", "Test/n0/n0")
+            assertEquals(listOf("subscribe", "Test/n0/n0", 1L), subClient.readResp())
+
+            RedisClient().use { pubClient ->
+                pubClient.sendCommand("PUBLISH", "Test/n0/n0", "42.5")
+                assertEquals(0L, pubClient.readResp())
+
+                // KV write still requires mapped archive group
+                pubClient.sendCommand("SET", "Test/n0/n0", "42.5")
+                assertEquals("ERR:ERR selected DB is not mapped to an archive group", pubClient.readResp())
+            }
+
+            val delivered = subClient.readResp() as List<*>
+            assertEquals(listOf("message", "Test/n0/n0", "42.5"), delivered)
+        }
+    }
+
+    @Test
+    fun testKeysAndScanExcludeIntermediateNodes() {
+        startRedisServer()
+
+        RedisClient().use { client ->
+            client.sendCommand("SET", "Test/n0/n0/n0/n0/n0", "v0")
+            assertEquals("OK", client.readResp())
+            client.sendCommand("SET", "Test/n0/n0/n0/n0/n1", "v1")
+            assertEquals("OK", client.readResp())
+
+            // KEYS Test/* should only return actual stored keys, not intermediate directory paths
+            client.sendCommand("KEYS", "Test/*")
+            val keysRes = (client.readResp() as List<*>).map { it.toString() }.toSet()
+            assertEquals(setOf("Test/n0/n0/n0/n0/n0", "Test/n0/n0/n0/n0/n1"), keysRes)
+
+            // SCAN 0 MATCH Test/* should also only return actual stored keys
+            client.sendCommand("SCAN", "0", "MATCH", "Test/*")
+            val scanRes = client.readResp() as List<*>
+            assertEquals("0", scanRes[0])
+            val scanKeys = (scanRes[1] as List<*>).map { it.toString() }.toSet()
+            assertEquals(setOf("Test/n0/n0/n0/n0/n0", "Test/n0/n0/n0/n0/n1"), scanKeys)
+        }
+    }
 }

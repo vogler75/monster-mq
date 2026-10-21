@@ -1303,7 +1303,8 @@ class ArchiveGroupResolver(
                                             "archiveGroup" to mapOf(
                                                 "name" to name,
                                                 "enabled" to true,
-                                                "deployed" to true
+                                                "deployed" to true,
+                                                "redisDbNumber" to existingGroup.archiveGroup.getRedisDbNumber()
                                             )
                                         ))
                                     } else {
@@ -1388,7 +1389,8 @@ class ArchiveGroupResolver(
                                         "archiveGroup" to mapOf(
                                             "name" to name,
                                             "enabled" to false,
-                                            "deployed" to false
+                                            "deployed" to false,
+                                            "redisDbNumber" to existingGroup.archiveGroup.getRedisDbNumber()
                                         )
                                     ))
                                 } else {

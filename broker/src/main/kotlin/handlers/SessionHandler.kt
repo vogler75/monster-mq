@@ -2313,7 +2313,7 @@ open class SessionHandler(
      * Called when the internal client is being shut down.
      */
     fun unregisterInternalClient(clientId: String) {
-        logger.info("Unregistering internal client '$clientId'")
+        logger.fine { "Unregistering internal client '$clientId'" }
         // No special cleanup needed - internal clients are treated like regular MQTT clients
     }
 

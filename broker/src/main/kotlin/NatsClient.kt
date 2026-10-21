@@ -22,6 +22,8 @@ class NatsClient(
     private val logger = Utils.getLogger(this::class.java)
 
     private val clientId = "nats-${UUID.randomUUID()}"
+    private var clientName: String? = null
+    private fun displayId(): String = if (clientName != null) "$clientId ($clientName)" else clientId
     private var authenticated = false
     private var username: String? = null
     private var verbose = false
@@ -63,6 +65,7 @@ class NatsClient(
     }
 
     override fun start() {
+        logger.info("Client [${displayId()}] Request to connect. Clean session [true] protocol [NATS] [startEndpoint]")
         logger.fine { "NATS client [$clientId] connected from ${socket.remoteAddress()}" }
 
         // Send INFO
@@ -170,6 +173,8 @@ class NatsClient(
         information.put("LocalAddress", socket.localAddress().toString())
         information.put("ProtocolVersion", "NATS")
         information.put("SSL", false)
+        clientName?.let { information.put("ClientName", it) }
+        username?.let { information.put("User", it) }
         sessionHandler.setClient(clientId, true, information).onComplete { ar ->
             if (ar.succeeded()) {
                 sessionHandler.onlineClient(clientId)
@@ -187,6 +192,10 @@ class NatsClient(
 
         verbose = json.getBoolean("verbose", false)
         headersEnabled = json.getBoolean("headers", false)
+        val name = json.getString("name", "")
+        if (name.isNotEmpty()) {
+            clientName = name
+        }
 
         if (!userManager.isUserManagementEnabled()) {
             authenticated = true
@@ -515,6 +524,7 @@ class NatsClient(
     private fun cleanup() {
         if (closed) return
         closed = true
+        logger.info("Client [${displayId()}] Close connection [false] [closeConnection]")
 
         jetStreamKv.close()
 
@@ -527,7 +537,6 @@ class NatsClient(
         topicToSids.clear()
         kvTopicRefs.clear()
 
-        sessionHandler.unregisterInternalClient(clientId)
         sessionHandler.delClient(clientId)
 
         // Undeploy this verticle
