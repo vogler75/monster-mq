@@ -40,7 +40,9 @@ class MqttServer(
     private val useIdentityAsUsername: Boolean = false,
     // When true, a certificate Common Name without an existing user account gets one created
     // automatically with default, non-admin permissions. Defaults to false.
-    private val autoCreateUser: Boolean = false
+    private val autoCreateUser: Boolean = false,
+    // Number of verticle instances deployed for this port; only used for the startup log line
+    private val instances: Int = 1
 ) : AbstractVerticle() {
     private val logger = Utils.getLogger(this::class.java)
 
@@ -104,7 +106,9 @@ class MqttServer(
                     clientAuth.uppercase() != "NONE" && trustStorePath.isNotBlank() -> "mTLS"
                     else -> "TLS"
                 }
-                logger.info("MQTT Server is listening on port [${server.actualPort()}] [${if (useWebSocket) "WS " else "TCP"}][$tlsLabel]")
+                // Every instance listens on the same port, announce it only once
+                val message = "MQTT Server is listening on port [${server.actualPort()}] [${if (useWebSocket) "WS " else "TCP"}][$tlsLabel] [$instances instances]"
+                if (announcedPorts.add(server.actualPort())) logger.info(message) else logger.fine(message)
                 startPromise.complete()
             }
             .onFailure { error ->
@@ -114,6 +118,8 @@ class MqttServer(
     }
 
     companion object {
+        private val announcedPorts: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
         fun buildKeyCertOptions(path: String, password: String, type: String, keyPath: String = ""): KeyCertOptions =
             when (type.uppercase()) {
                 "PKCS12", "PFX", "P12" -> PfxOptions().setPath(path).setPassword(password)

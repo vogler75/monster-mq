@@ -1518,16 +1518,18 @@ MORE INFO:
                 // MQTT Servers: deployed with multiple instances so Vert.x spreads the
                 // connections over several event loops instead of pinning all of them to one
                 val mqttServerFactories = listOfNotNull<() -> MqttServer>(
-                    if (useTcp>0) { { MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) } } else null,
-                    if (useWs>0) { { MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) } } else null,
+                    if (useTcp>0) { { MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, instances = mqttServerInstances) } } else null,
+                    if (useWs>0) { { MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager, instances = mqttServerInstances) } } else null,
                     if (useTcpSsl>0) { { MqttServer(
                         useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
                         keyStorePath, keyStorePassword, keyStoreType, keyPath,
-                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername, autoCreateUser
+                        clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername, autoCreateUser,
+                        instances = mqttServerInstances
                     ) } } else null,
                     if (useWsSsl>0) { { MqttServer(
                         useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
-                        wssKeyStorePath, wssKeyStorePassword, wssKeyStoreType, wssKeyPath
+                        wssKeyStorePath, wssKeyStorePassword, wssKeyStoreType, wssKeyPath,
+                        instances = mqttServerInstances
                     ) } } else null
                 )
                 val servers = listOfNotNull(
