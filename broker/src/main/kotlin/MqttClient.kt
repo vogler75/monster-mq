@@ -144,8 +144,28 @@ class MqttClient(
         private val logger = Utils.getLogger(this::class.java)
 
 
+        // Vert.x writes every PUBLISH with writeAndFlush (one socket syscall per message) when the
+        // write is not triggered by a read on the same channel. FlushConsolidationHandler coalesces
+        // the flushes of one event loop task into a single syscall.
+        private val endpointConnField by lazy {
+            io.vertx.mqtt.impl.MqttEndpointImpl::class.java.getDeclaredField("conn").apply { isAccessible = true }
+        }
+
+        private fun installFlushConsolidation(endpoint: MqttEndpoint) {
+            try {
+                val conn = endpointConnField.get(endpoint) as io.vertx.core.internal.net.StreamChannelInternal
+                val pipeline = conn.channelHandlerContext().pipeline()
+                if (pipeline.get("flushConsolidation") == null) {
+                    pipeline.addFirst("flushConsolidation", io.netty.handler.flush.FlushConsolidationHandler(256, true))
+                }
+            } catch (e: Exception) {
+                logger.fine { "Flush consolidation not installed: ${e.message}" }
+            }
+        }
+
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false, autoCreateUser: Boolean = false) {
             val clientId = endpoint.clientIdentifier()
+            installFlushConsolidation(endpoint)
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
 
             fun doDeploy() {

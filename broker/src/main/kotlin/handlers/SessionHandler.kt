@@ -1640,6 +1640,12 @@ open class SessionHandler(
      * Used when bulk processing is disabled or as fallback.
      */
     private fun processMessageImmediately(message: BrokerMessage) {
+        // Single node: every subscription is local, skip the scan over all topic filters
+        if (!Monster.isClustered()) {
+            processMessageForLocalClients(message)
+            return
+        }
+
         // Determine which nodes need this message based on topic subscriptions
         val targetNodes = getTargetNodesForTopic(message.topicName)
         val localNodeId = Monster.getClusterNodeId(vertx)

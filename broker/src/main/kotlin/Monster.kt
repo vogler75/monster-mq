@@ -1070,6 +1070,7 @@ MORE INFO:
         val tcpNoDelay = tcpServerConfig.getBoolean("NoDelay", true)
         val receiveBufferSize = tcpServerConfig.getInteger("ReceiveBufferSizeKb", 512) * 1024
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024
+        val mqttServerInstances = tcpServerConfig.getInteger("Instances", Runtime.getRuntime().availableProcessors()).coerceAtLeast(1)
 
         val queuedMessagesEnabled = configJson.getBoolean("QueuedMessagesEnabled", true)
 
@@ -1502,19 +1503,22 @@ MORE INFO:
                 this.hmiSyncService = hmiSyncService
 
 
-                // MQTT Servers
-                val servers = listOfNotNull(
-                    if (useTcp>0) MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useWs>0) MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) else null,
-                    if (useTcpSsl>0) MqttServer(
+                // MQTT Servers: deployed with multiple instances so Vert.x spreads the
+                // connections over several event loops instead of pinning all of them to one
+                val mqttServerFactories = listOfNotNull<() -> MqttServer>(
+                    if (useTcp>0) { { MqttServer(useTcp, false, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) } } else null,
+                    if (useWs>0) { { MqttServer(useWs, false, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager) } } else null,
+                    if (useTcpSsl>0) { { MqttServer(
                         useTcpSsl, true, false, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
                         keyStorePath, keyStorePassword, keyStoreType, keyPath,
                         clientAuth, trustStorePath, trustStorePassword, trustStoreType, useIdentityAsUsername, autoCreateUser
-                    ) else null,
-                    if (useWsSsl>0) MqttServer(
+                    ) } } else null,
+                    if (useWsSsl>0) { { MqttServer(
                         useWsSsl, true, true, maxMessageSize, tcpNoDelay, receiveBufferSize, sendBufferSize, sessionHandler, userManager,
                         wssKeyStorePath, wssKeyStorePassword, wssKeyStoreType, wssKeyPath
-                    ) else null,
+                    ) } } else null
+                )
+                val servers = listOfNotNull(
                     if (useNats>0) NatsServer(useNats, sessionHandler, userManager) else null,
                     mcpServer,
                     prometheusServer,
@@ -1802,7 +1806,13 @@ MORE INFO:
                             Future.succeededFuture<String>()
                         }
                     }
-                    .compose { Future.all(servers.map { vertx.deployVerticle(it) }) }
+                    .compose {
+                        val mqttServerOptions = DeploymentOptions().setInstances(mqttServerInstances)
+                        Future.all(
+                            servers.map { vertx.deployVerticle(it) } +
+                            mqttServerFactories.map { factory -> vertx.deployVerticle(java.util.function.Supplier<Deployable> { factory() }, mqttServerOptions) }
+                        )
+                    }
                     .compose {
                         // Agent Extension (must start AFTER MCP server and other servers are ready)
                         if (Monster.isFeatureEnabled(Features.Agents)) {
