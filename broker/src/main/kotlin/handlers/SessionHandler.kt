@@ -1313,22 +1313,13 @@ open class SessionHandler(
     }
 
 
-    private fun sendMessageToClient(clientId: String, message: BrokerMessage): Future<Boolean> {
+    private fun sendMessageToClient(clientId: String, message: BrokerMessage) {
         // All clients (internal and external) use eventBus with optional bulk messaging
         logger.finest { "Sending message to client '$clientId' on topic '${message.topicName}'" }
         if (!bulkMessagingEnabled) {
-            // Original non-bulk behavior
-            if (message.qosLevel == 0) {
-                vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
-                return Future.succeededFuture(true)
-            } else {
-                val promise = Promise.promise<Boolean>()
-                vertx.eventBus().request<Boolean>(MqttClient.getMessagesAddress(clientId), message)
-                    .onComplete { ar ->
-                        promise.complete(!ar.failed() && ar.result().body())
-                    }
-                return promise.future()
-            }
+            // Fire-and-forget for all QoS levels: the client tracks QoS 1/2 delivery itself, and a
+            // request() would schedule a reply timeout timer for every message
+            vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
         } else {
             // Bulk messaging: buffer the message
             val buffer = clientBulkBuffer.getOrPut(clientId) {
@@ -1364,8 +1355,6 @@ open class SessionHandler(
                 logger.warning("Bulk buffer overflow for client [$clientId], sending immediately: ${e.message}")
                 vertx.eventBus().send(MqttClient.getMessagesAddress(clientId), message)
             }
-
-            return Future.succeededFuture(true)
         }
     }
 

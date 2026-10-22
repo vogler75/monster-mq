@@ -413,6 +413,11 @@ class Monster(args: Array<String>) {
         fun getMaxInFlightMessages(): Int = maxInFlightMessages
 
         @Volatile
+        private var maxQueuedMessages: Int = 100_000
+        @JvmStatic
+        fun getMaxQueuedMessages(): Int = maxQueuedMessages
+
+        @Volatile
         private var serverReceiveMaximum: Int = 100
         @JvmStatic
         fun getServerReceiveMaximum(): Int = serverReceiveMaximum
@@ -1081,6 +1086,13 @@ MORE INFO:
             10_000
         }
 
+        maxQueuedMessages = try {
+            tcpServerConfig.getInteger("MaxQueuedMessages", 100_000)
+        } catch (e: Exception) {
+            logger.warning("Config: MqttTcpServer.MaxQueuedMessages read failed: ${e.message}")
+            100_000
+        }
+
         serverReceiveMaximum = try {
             tcpServerConfig.getInteger("ServerReceiveMaximum", 100)
         } catch (e: Exception) {
@@ -1089,7 +1101,7 @@ MORE INFO:
         }
 
         logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] NATS [$useNats] QME [$queuedMessagesEnabled]")
-        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB] MaxInFlightMessages [$maxInFlightMessages] ServerReceiveMaximum [$serverReceiveMaximum]")
+        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB] MaxInFlightMessages [$maxInFlightMessages] MaxQueuedMessages [$maxQueuedMessages] ServerReceiveMaximum [$serverReceiveMaximum]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.fine("RetainedMessageStoreType [${retainedStoreType}]")
