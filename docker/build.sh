@@ -76,11 +76,16 @@ for arg in "$@"; do
     esac
 done
 
+# Read version from version.txt
+if [ -f "../version.txt" ]; then
+    version=$(head -n 1 ../version.txt | tr -d '\r' | tr -d '\n' | cut -d'+' -f1)
+else
+    version="testing"
+fi
+
 if [ "$TESTING" = true ]; then
     echo -e "${YELLOW}Building Docker image for MonsterMQ (testing)...${NC}"
 else
-    # Read version from version.txt
-    version=`cat ../version.txt | cut -d'+' -f1`
     echo -e "${YELLOW}Building Docker image for MonsterMQ v${version}...${NC}"
 fi
 
