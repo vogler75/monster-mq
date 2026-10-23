@@ -1,0 +1,28 @@
+Release v1.8.35
+Built from commit: 07933fba
+Date: 2026-10-23 17:25:36
+
+Changes since v1.8.35-dev:
+---
+07933fba Log the MQTT listening port once instead of once per server instance
+37c2a356 Make QoS 1/2 outbound delivery O(1) and stop dropping messages on a full window
+78de8cc3 Spread MQTT connections over event loops and coalesce socket flushes
+ffe861bb Improve NATS/Redis logging and Redis key handling
+018899df fix(build): avoid NativeCommandError when checking maven builder image in PowerShell
+681d2f2a Add PowerShell build scripts (build.ps1, docker/build.ps1, setup/build.ps1)
+08938c16 Offload script engine creation to worker thread and share Polyglot engine
+ac8264a6 Replace run.bat with PowerShell run.ps1 script
+d88d5ecf feat(archive): add WINCCOA store and archive type support (fixes #205)
+124bd324 fix(bridge): honour protocolVersion 5 with MQTT 5 client and 3.1.1 fallback (fixes #201)
+045bd445 fix(redis): pattern, SCAN, UNSUBSCRIBE, reply order, locking, read-only and ACL fixes (fixes #203)
+bc7b0f9f fix(nats): protocol and ACL fixes (fixes #202)
+a9bc1589 fix(prometheus): fix over_time, history truncation, HTTP methods, /series and read ACL (fixes #204)
+dab14b78 Merge branch 'main' of github.com:vogler75/monster-mq
+834ffc1f fix(peerlink): exclude archive groups with both stores read-only from static interest (fixes #206)
+3aa6e482 Merge branch 'fix/sqlite-local-consumer': keep SQLite event-bus requests node-local in cluster mode
+7fee3891 fix(sqlite): store byte[] parameters as real BLOBs
+359d2f2d fix(archive): count only plain JSON numbers in field "" aggregation
+d44d0574 fix(sqlite): register SQLiteVerticle handlers as node-local consumers
+5a8a40ac feat(winccua): add TAG_WRITE address fields to GraphQL schema and config
+d5bdbf29 feat(release): decouple dev version bump from publish.sh into bump-dev.sh
+8587f942 chore(version): prepare next version 1.8.35-dev
