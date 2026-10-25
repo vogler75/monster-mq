@@ -80,7 +80,7 @@ MCP:
 #    kafka-topics --create --topic datalake --bootstrap-server localhost:9092
 #
 # 3. Start MonsterMQ:
-#    ./run.sh -config config-kafka.yaml
+#    python make.py run -config config-kafka.yaml
 #
 # 4. Consume from Kafka:
 #    kafka-console-consumer --topic sensors --from-beginning --bootstrap-server localhost:9092

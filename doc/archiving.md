@@ -323,10 +323,10 @@ These two arguments cannot be used together.
 
 ```bash
 # Full sync: import archive groups, delete any not in the file
-./run.sh -- -archiveConfigs archive-setup.json
+python make.py run -- -archiveConfigs archive-setup.json
 
 # Merge: import/update archive groups, keep existing ones
-./run.sh -- -archiveConfigsMerge archive-setup.json
+python make.py run -- -archiveConfigsMerge archive-setup.json
 ```
 
 **archive-setup.json example:**

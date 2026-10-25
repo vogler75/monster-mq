@@ -1,0 +1,112 @@
+name: Release
+
+# A pushed release tag (created by 'python make.py release') builds the broker bundle and the
+# setup executables, publishes them as GitHub release, and pushes the multi-arch Docker images
+# rocworks/monstermq:<version>, :latest, :<version>-jdk21 and :latest-jdk21.
+#
+# "Run workflow" (Actions tab, or: gh workflow run release.yml --ref main) builds the selected
+# branch and pushes rocworks/monstermq:testing.
+#
+# The dashboard embedded in the broker is always built from the dashboard repository's main branch.
+#
+# Required repository secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (Docker Hub access token with
+# write access to rocworks/monstermq).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Docker image to build from the selected branch and push'
+        type: choice
+        options: [testing]
+        default: testing
+
+permissions:
+  contents: write  # create the GitHub release and upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: ${{ github.event_name == 'push' && format('Release {0}', github.ref_name) || 'Testing image' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}  # used by make.py publish (gh)
+    defaults:
+      run:
+        working-directory: main
+
+    steps:
+      # Same layout as a local checkout: make.py finds the dashboard in ../dashboard
+      - name: Check out MonsterMQ
+        uses: actions/checkout@v4
+        with:
+          path: main
+
+      - name: Check out dashboard (main branch)
+        uses: actions/checkout@v4
+        with:
+          repository: vogler75/monster-mq-dashboard
+          ref: main
+          path: dashboard
+
+      - name: Set up Python (make.py)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: main/broker/pom.xml
+
+      - name: Set up Go (setup executables)
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: main/setup/go.mod
+          cache-dependency-path: main/setup/go.sum
+
+      - name: Set up Node.js (dashboard)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      # Log in first, so missing or wrong credentials fail before the long build.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU (multi-arch images)
+        uses: docker/setup-qemu-action@v3
+
+      # --- Release (tag push) ---------------------------------------------------------------
+      - name: Build broker bundle and setup executables
+        if: github.event_name == 'push'
+        run: python make.py build --broker --setup
+
+      # Checks that the tag points at this commit and the bundle was built from it, then uploads
+      # the GitHub release assets and pushes the Docker images.
+      - name: Publish GitHub release and Docker Hub images
+        if: github.event_name == 'push'
+        run: python make.py publish --all -y
+
+      # --- Testing image (manual run) -------------------------------------------------------
+      - name: Build broker
+        if: github.event_name == 'workflow_dispatch'
+        run: python make.py build --broker
+
+      - name: Publish rocworks/monstermq:testing
+        if: github.event_name == 'workflow_dispatch'
+        run: python make.py publish --testing -y

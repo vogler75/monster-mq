@@ -7,10 +7,10 @@ stores do not become shared simply by enabling clustering.
 
 ## Start a Node
 
-From the `broker` directory:
+From the repository root (relative paths are resolved in `broker/`):
 
 ```bash
-./run.sh -- -cluster -config config.yaml
+python make.py run -- -cluster -config config.yaml
 ```
 
 Give each node a unique, stable name:
@@ -35,13 +35,13 @@ fails. Standalone brokers expose the node ID `local`.
 multicast discovery:
 
 ```bash
-HAZELCAST_MEMBERS=node-a:5701,node-b:5701 ./run.sh -- -cluster
+HAZELCAST_MEMBERS=node-a:5701,node-b:5701 python make.py run -- -cluster
 ```
 
 `HAZELCAST_CONFIG` loads a Hazelcast **XML** file through `XmlConfigBuilder`:
 
 ```bash
-HAZELCAST_CONFIG=/etc/monstermq/hazelcast.xml ./run.sh -- -cluster
+HAZELCAST_CONFIG=/etc/monstermq/hazelcast.xml python make.py run -- -cluster
 ```
 
 If the file is missing the broker logs a warning and falls back to the default

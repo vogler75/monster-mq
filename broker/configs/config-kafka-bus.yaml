@@ -76,7 +76,7 @@ MCP:
 #      --partitions 10 --replication-factor 1
 #
 # 3. Start MonsterMQ:
-#    ./run.sh -config config-kafka-bus.yaml
+#    python make.py run -config config-kafka-bus.yaml
 #
 # 4. Monitor the stream:
 #    kafka-console-consumer --topic monstermq-stream \

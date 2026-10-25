@@ -51,21 +51,29 @@ docker run \
 ```bash
 git clone git@github.com:vogler75/monster-mq.git
 cd monster-mq
-cd broker
 
 # Build everything (dashboard + broker) and run
-./run.sh -build
+python make.py run -build
 
-# Or run with a custom config
-./run.sh -build -config configs/config-postgres.yaml
+# Or run with a custom config (relative paths are resolved in broker/)
+python make.py run -build -config configs/config-postgres.yaml
 
 # Or run in cluster mode
-./run.sh -build -cluster -config configs/config-hazelcast.yaml
+python make.py run -build -cluster -config configs/config-hazelcast.yaml
 ```
 
-The `./run.sh -build` flag builds the dashboard (`npm install && npm run build` in `dashboard/`), copies the output to `broker/src/main/resources/dashboard/`, then runs `mvn package` to compile the broker with the dashboard embedded.
+The `-build` flag builds the dashboard (`npm install && npm run build` in `dashboard/`), copies the output to `broker/src/main/resources/dashboard/`, then runs `mvn package` to compile the broker with the dashboard embedded. `make.py` needs only Python 3.9+ and works the same on Windows, macOS and Linux; `python make.py help` lists the other commands (build, docker, release, publish).
 
 For dashboard development, use `npm run dev` in the `dashboard/` directory to start a Vite dev server with hot reload on port 5173.
+
+### Releasing
+
+```bash
+python make.py release   # finalize X.Y.Z-dev -> X.Y.Z, tag vX.Y.Z and push (rolls back on failure)
+python make.py dev       # afterwards: advance to the next -dev version
+```
+
+Pushing the tag starts the GitHub **Release** workflow (`.github/workflows/release.yml`). It builds the broker bundle and setup executables (with the dashboard from the dashboard repository's `main` branch), creates the GitHub release, and pushes the multi-arch Docker images `rocworks/monstermq:<version>`, `:latest`, `:<version>-jdk21` and `:latest-jdk21`. To push `rocworks/monstermq:testing` from a branch, use **Run workflow** on the Actions tab, or `gh workflow run release.yml --ref main`. The workflow needs the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. `python make.py publish` remains available as a local fallback.
 
 ### Configuration
 

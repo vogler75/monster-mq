@@ -135,9 +135,9 @@ java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -co
 # Run with clustering
 java -classpath "target/classes:target/dependencies/*" at.rocworks.MonsterKt -cluster -config config-hazelcast.yaml
 
-# Or use the convenience script
-./run.sh -- -config config.yaml
-./run.sh -- -cluster -config config-hazelcast.yaml
+# Or use the convenience command (from the repository root)
+python make.py run -- -config config.yaml
+python make.py run -- -cluster -config config-hazelcast.yaml
 ```
 
 The configuration filenames below are examples to create; they are not all shipped in the broker working directory. Start from [example-config.yaml](../broker/example-config.yaml). TLS listeners require configured certificates; see [Security](security.md). The source starter uses WebSocket port 1884 and MCP port 3000; the Docker defaults currently use WebSocket port 9000 and MCP port 4001.
@@ -292,7 +292,7 @@ The default logging configuration writes to the console. For a local diagnostic
 run, capture console output explicitly:
 
 ```bash
-./run.sh -- -log FINE > broker-debug.log 2>&1
+python make.py run -- -log FINE > broker-debug.log 2>&1
 ```
 
 In another terminal:

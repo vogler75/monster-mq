@@ -8,8 +8,10 @@ object Version {
 
     /**
      * Get the MonsterMQ version from the version.txt file in resources.
-     * This file is copied by the release.sh script during the release process.
-     * @return Version string (e.g., "1.6.5+9945c5a") or "unknown" if not available
+     * version.txt is committed and kept in sync with the top-level version.txt by make.py release/dev,
+     * so a plain Maven build from a fresh clone has it. The build scripts additionally write
+     * git-sha.txt (gitignored); when present, the commit is appended as build metadata.
+     * @return Version string (e.g., "1.6.5+9945c5a", or "1.6.5" without git-sha.txt) or "unknown"
      */
     fun getVersion(): String {
         if (cachedVersion != null) {
@@ -17,16 +19,13 @@ object Version {
         }
 
         try {
-            val versionStream = Version::class.java.classLoader.getResourceAsStream("version.txt")
-            if (versionStream != null) {
-                versionStream.use { stream ->
-                    val version = stream.bufferedReader().use { it.readText().trim() }
-                    if (version.isNotEmpty()) {
-                        cachedVersion = version
-                        logger.info("MonsterMQ version: $version")
-                        return version
-                    }
-                }
+            val version = readResource("version.txt")?.substringBefore('+')
+            if (!version.isNullOrEmpty()) {
+                val sha = readResource("git-sha.txt")
+                val full = if (sha.isNullOrEmpty()) version else "$version+$sha"
+                cachedVersion = full
+                logger.info("MonsterMQ version: $full")
+                return full
             }
         } catch (e: Exception) {
             logger.warning("Failed to read version from resources: ${e.message}")
@@ -38,4 +37,9 @@ object Version {
         logger.warning("Version information not available, using: $unknownVersion")
         return unknownVersion
     }
+
+    private fun readResource(name: String): String? =
+        Version::class.java.classLoader.getResourceAsStream(name)?.use { stream ->
+            stream.bufferedReader().use { it.readText().trim() }
+        }
 }

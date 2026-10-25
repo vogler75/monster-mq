@@ -1,6 +1,7 @@
 # MonsterMQ Core Docker Images
 
-Build and publication scripts for `rocworks/monstermq` Docker images.
+Build and publication commands for `rocworks/monstermq` Docker images. All commands run from the
+repository root with Python 3.9+ (Windows, macOS and Linux).
 
 ---
 
@@ -11,35 +12,36 @@ Build and publication scripts for `rocworks/monstermq` Docker images.
 Builds the local image for the current host architecture without pushing to Docker Hub:
 
 ```bash
-cd docker
-./build.sh -n
+python make.py docker -n
 ```
 
 If the broker bundle is already built in `dist/` or `broker/target/`, pass `-d` to skip rebuilding Maven:
 
 ```bash
-./build.sh -d -n
+python make.py docker -d -n
 ```
 
 ### 2. Multi-Arch Build & Publish to Docker Hub
 
-Builds multi-architecture images (`linux/amd64` and `linux/arm64`) using `docker-buildx` and pushes directly to Docker Hub:
+Builds multi-architecture images (`linux/amd64` and `linux/arm64`) using `docker buildx` and pushes directly to Docker Hub:
 
 ```bash
-cd docker
-./build.sh -d -y
+python make.py docker -d -y
 ```
 
 This publishes:
 - `rocworks/monstermq:<version>` & `:latest`
 - `rocworks/monstermq:<version>-jdk21` & `:latest-jdk21`
 
+For releases prefer `python make.py publish --docker`: it does the same, but first checks that the
+release tag is on HEAD and that the broker was built from that commit.
+
 ---
 
 ## Command-Line Options
 
 ```text
-Usage: ./build.sh [options]
+Usage: python make.py docker [options]
 
   -d                 Docker only (skip Maven/dashboard build, uses existing target or dist zip)
   -c, --container    Build Maven inside Docker container (GraalVM 21 builder)
@@ -51,8 +53,7 @@ Usage: ./build.sh [options]
 
 ---
 
-## Helper Scripts
+## Former Helper Scripts
 
-- **`./build-testing.sh`**: Convenience wrapper running `./build.sh -c -t -n` (builds `rocworks/monstermq:testing` locally in container).
-- **`./build-version.sh`**: Convenience wrapper running `./build.sh -c -y --clean` (clean, multi-arch build and publish to Docker Hub).
-
+- `build-testing.sh` is now `python make.py docker -c -t -n` (builds `rocworks/monstermq:testing` locally in a container).
+- `build-version.sh` is now `python make.py docker -c -y --clean` (clean, multi-arch build and publish to Docker Hub).

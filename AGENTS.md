@@ -23,9 +23,21 @@ mvn clean package
 cd broker
 # Run the broker
 java -classpath target/classes:target/dependencies/* at.rocworks.MonsterKt [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
-# Or use the convenience script (Linux/macOS or Windows PowerShell)
-./run.sh [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
-.\run.ps1 [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]
+# Or use the convenience command from the repo root (Windows/macOS/Linux; -b builds first)
+python make.py run [-b] [-- -cluster -log INFO|FINE|FINER|FINEST|ALL]
+```
+
+### Build, Release and Publish (`make.py`)
+All developer tasks run through one cross-platform entry point in the repo root
+(Python 3.9+, standard library only; on Windows `py make.py ...` also works):
+```bash
+python make.py help                 # list commands
+python make.py build --broker       # dashboard + broker -> dist/monstermq-broker-<version>.zip
+python make.py build --setup        # Go installer cross-builds -> dist/setup*
+python make.py build --docker       # local Docker image (never pushed)
+python make.py docker -n            # local Docker image (docker -y builds multi-arch and pushes)
+python make.py release / dev        # tag a release / start the next dev version
+python make.py publish --all        # GitHub release assets + Docker Hub images
 ```
 
 #### iX Dashboard (monster-mq-dashboard)
@@ -75,9 +87,8 @@ GRAPHQL_URL=http://localhost:4000/graphql
 
 ### Docker Commands
 ```bash
-# Build Docker image
-cd docker
-./build.sh
+# Build Docker image (local, native platform; -y builds multi-arch and pushes)
+python make.py docker -n
 
 # Run with Docker
 docker run -v ./log:/app/log -v ./config.yaml:/app/config.yaml rocworks/monstermq [-cluster] [-log INFO|FINE|FINER|FINEST|ALL]

@@ -1,7 +1,7 @@
 # MonsterMQ Configuration - Hazelcast Clustering with PostgreSQL
 # This configuration uses Hazelcast for distributed in-memory storage
 # and PostgreSQL for persistent session storage (required for clustering)
-# Run with: ./run.sh -cluster -config config-hazelcast.yaml
+# Run with: python make.py run -cluster -config config-hazelcast.yaml
 
 # Network Configuration
 TCP: 1883

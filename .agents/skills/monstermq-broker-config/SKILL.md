@@ -165,14 +165,14 @@ GenAI:
 ## Command-Line Arguments
 
 ```bash
-cd broker
-./run.sh [options]
+# from the repository root (relative paths are resolved in broker/)
+python make.py run [options]
 
 # Run options:
 -cluster              Enable Hazelcast clustering mode
 -log LEVEL            Set logging verbosity: INFO | FINE | FINER | FINEST | ALL
 -config FILE          Path to custom YAML config file (default: config.yaml)
--build                Rebuild Vite dashboard + package JAR before running
+-build                Rebuild Vite dashboard + package JAR before running (make.py option)
 ```
 
 ---
@@ -181,8 +181,7 @@ cd broker
 
 ### Build Image
 ```bash
-cd docker
-./build.sh
+python make.py docker -n    # local image; -y builds multi-arch and pushes
 ```
 
 ### Run Container
@@ -246,7 +245,7 @@ volumes:
 
 ## Clustering & High Availability
 
-- Enable clustering using `./run.sh -cluster`.
+- Enable clustering using `python make.py run -cluster`.
 - Uses Hazelcast for distributed coordination and message routing.
 - Sessions and Retained Messages live in the shared database store.
 - **HA Scope**: MQTT client connections can reconnect to any surviving node. Device connectors (OPC UA, PLC4X, bridges) are pinned to their assigned `nodeId` and recover when their node restarts or when reassigned via GraphQL.

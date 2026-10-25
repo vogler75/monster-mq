@@ -162,7 +162,7 @@ disabled global permission.
 For authentication failures, check the username, password, enabled state, and
 user-store connectivity. For authorization failures, follow [ACL resolution](acl.md).
 Use the dashboard log viewer or [GraphQL logs](graphql-system-logs.md); a temporary
-`./run.sh -- -log FINE` enables more verbose broker logging.
+`python make.py run -- -log FINE` enables more verbose broker logging.
 
 The broker creates its own database tables and indexes. Their definitions vary
 by backend; use [UserFactory.kt](../broker/src/main/kotlin/stores/UserFactory.kt)

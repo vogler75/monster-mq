@@ -18,7 +18,7 @@ query. For live logs, use the [GraphQL system logs subscription](graphql-system-
 Log events travel over a dedicated internal event-bus address; they do not require
 MQTT subscriptions or an archive group.
 
-Logger levels control which records are emitted. Use `./run.sh -- -log FINE`
+Logger levels control which records are emitted. Use `python make.py run -- -log FINE`
 for a temporary debug override, or manage logger settings through the dashboard.
 The in-memory buffer is bounded and is lost when the process stops.
 
