@@ -44,24 +44,24 @@ jobs:
     steps:
       # Same layout as a local checkout: make.py finds the dashboard in ../dashboard
       - name: Check out MonsterMQ
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: main
 
       - name: Check out dashboard (main branch)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: vogler75/monster-mq-dashboard
           ref: main
           path: dashboard
 
       - name: Set up Python (make.py)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
@@ -69,27 +69,27 @@ jobs:
           cache-dependency-path: main/broker/pom.xml
 
       - name: Set up Go (setup executables)
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: main/setup/go.mod
           cache-dependency-path: main/setup/go.sum
 
       - name: Set up Node.js (dashboard)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
       # Log in first, so missing or wrong credentials fail before the long build.
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU (multi-arch images)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       # --- Release (tag push) ---------------------------------------------------------------
       - name: Build broker bundle and setup executables
