@@ -215,7 +215,9 @@ def test_mqtt5_flow_control():
         connect_properties2.SessionExpiryInterval = 300
         connect_properties2.ReceiveMaximum = RECEIVE_MAX
         
-        subscriber2.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE, properties=connect_properties2)
+        # clean_start=False: a new client object would otherwise send Clean Start = 1
+        # and the broker would discard the persistent session with its queued messages
+        subscriber2.connect(BROKER_HOST, BROKER_PORT, KEEPALIVE, clean_start=False, properties=connect_properties2)
         subscriber2.loop_start()
         
         # Wait for messages

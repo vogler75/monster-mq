@@ -223,9 +223,21 @@ class BrokerMessage(
         peer, peerSource, isWill, username
     )
 
-    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage = copy(qosLevel = qosLevel)
+    // The clone functions return this instance when nothing changes, BrokerMessage is immutable
+    // (messageUuid is only assigned at construction), so it can be shared between subscribers.
 
-    fun cloneWithNewMessageId(messageId: Int): BrokerMessage = copy(messageId = messageId)
+    fun cloneWithNewQoS(qosLevel: Int): BrokerMessage =
+        if (qosLevel == this.qosLevel) this else copy(qosLevel = qosLevel)
+
+    fun cloneWithNewMessageId(messageId: Int): BrokerMessage =
+        if (messageId == this.messageId) this else copy(messageId = messageId)
+
+    /**
+     * Clone message with the QoS and retain flag for a subscriber in one copy.
+     */
+    fun cloneForSubscriber(qosLevel: Int, retainFlag: Boolean): BrokerMessage =
+        if (qosLevel == this.qosLevel && retainFlag == this.isRetain) this
+        else copy(qosLevel = qosLevel, isRetain = retainFlag)
 
     /**
      * Clone message with a different retain flag.
@@ -234,9 +246,11 @@ class BrokerMessage(
      * @param retainFlag The new retain flag value
      * @return Cloned message with updated retain flag
      */
-    fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage = copy(isRetain = retainFlag)
+    fun cloneWithRetainFlag(retainFlag: Boolean): BrokerMessage =
+        if (retainFlag == this.isRetain) this else copy(isRetain = retainFlag)
 
-    fun cloneWithOriginNodeId(originNodeId: String?): BrokerMessage = copy(originNodeId = originNodeId)
+    fun cloneWithOriginNodeId(originNodeId: String?): BrokerMessage =
+        if (originNodeId == this.originNodeId) this else copy(originNodeId = originNodeId)
 
     private fun getPayloadAsBuffer(): Buffer = Buffer.buffer(payload)
 
@@ -302,7 +316,7 @@ class BrokerMessage(
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
-    fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS(), subscriptionIdentifiers: List<Int> = emptyList()): Future<Int> {
+    fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS(), subscriptionIdentifiers: List<Int> = emptyList(), dup: Boolean = isDup): Future<Int> {
         if (isExpired()) {
             return Future.succeededFuture(0)
         }
@@ -366,10 +380,10 @@ class BrokerMessage(
                 properties.add(io.netty.handler.codec.mqtt.MqttProperties.IntegerProperty(11, it))
             }
 
-            return endpoint.publish(topicName, getPayloadAsBuffer(), qos, isDup, isRetain, messageId, properties)
+            return endpoint.publish(topicName, getPayloadAsBuffer(), qos, dup, isRetain, messageId, properties)
         } else {
             // MQTT v3.1.1 clients - no properties
-            return endpoint.publish(topicName, getPayloadAsBuffer(), qos, isDup, isRetain, messageId)
+            return endpoint.publish(topicName, getPayloadAsBuffer(), qos, dup, isRetain, messageId)
         }
     }
 }

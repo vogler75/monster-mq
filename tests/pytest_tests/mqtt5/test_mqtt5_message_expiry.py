@@ -25,8 +25,11 @@ received_messages = []
 connack_props = None
 
 
-def _connect_and_wait(client, host, port, timeout=5.0, properties=None):
-    """Connect client, start loop, poll-wait for CONNACK."""
+def _connect_and_wait(client, host, port, timeout=5.0, properties=None, clean_start=mqtt.MQTT_CLEAN_START_FIRST_ONLY):
+    """Connect client, start loop, poll-wait for CONNACK.
+
+    Pass clean_start=False to resume a persistent session with a new client object.
+    """
     connected = [False]
 
     orig_on_connect = client.on_connect
@@ -39,9 +42,9 @@ def _connect_and_wait(client, host, port, timeout=5.0, properties=None):
 
     client.on_connect = _on_connect
     if properties:
-        client.connect(host, port, properties=properties)
+        client.connect(host, port, clean_start=clean_start, properties=properties)
     else:
-        client.connect(host, port)
+        client.connect(host, port, clean_start=clean_start)
     client.loop_start()
     start = time.time()
     while not connected[0] and (time.time() - start) < timeout:
@@ -146,7 +149,7 @@ def test_message_expiry_basic():
     conn_props2 = Properties(PacketTypes.CONNECT)
     conn_props2.SessionExpiryInterval = 300
     
-    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2), \
+    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2, clean_start=False), \
         "Subscriber2 failed to connect"
     
     time.sleep(2)  # Wait for potential message delivery
@@ -219,7 +222,7 @@ def test_message_expiry_delivered():
     conn_props2 = Properties(PacketTypes.CONNECT)
     conn_props2.SessionExpiryInterval = 300
     
-    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2), \
+    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2, clean_start=False), \
         "Subscriber2 failed to connect"
     
     time.sleep(2)  # Wait for message delivery
@@ -292,7 +295,7 @@ def test_expiry_interval_update():
     conn_props2 = Properties(PacketTypes.CONNECT)
     conn_props2.SessionExpiryInterval = 300
     
-    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2), \
+    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2, clean_start=False), \
         "Subscriber2 failed to connect"
     
     time.sleep(2)  # Wait for message delivery
@@ -376,7 +379,7 @@ def test_no_expiry():
     conn_props2 = Properties(PacketTypes.CONNECT)
     conn_props2.SessionExpiryInterval = 300
     
-    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2), \
+    assert _connect_and_wait(subscriber2, BROKER_HOST, BROKER_PORT, properties=conn_props2, clean_start=False), \
         "Subscriber2 failed to connect"
     
     time.sleep(2)  # Wait for message delivery

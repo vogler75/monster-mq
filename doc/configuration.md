@@ -32,6 +32,12 @@ MqttTcpServer:
   NoDelay: true                  # TCP_NODELAY - disable Nagle's algorithm for immediate packet transmission
   ReceiveBufferSizeKb: 512       # Socket receive buffer size (default: 512KB)
   SendBufferSizeKb: 512          # Socket send buffer size (default: 512KB)
+  Instances: 8                   # MQTT server verticle instances per listener (default: number of CPU cores)
+  MaxInFlightMessages: 10000     # Outbound QoS 1/2 in-flight window per client (default: 10000)
+  MaxQueuedMessages: 100000      # Pending QoS 1/2 messages per client when the in-flight window is full (default: 100000)
+  ServerReceiveMaximum: 100      # Inbound QoS 1/2 limit advertised in CONNACK (default: 100)
+  MaxQueuedQoS0Messages: 10000   # QoS 0 messages buffered per slow client (default: 10000, 0 = unbounded)
+  QoS0OverflowPolicy: DROP_OLDEST  # DROP_OLDEST or DROP_NEWEST (default: DROP_OLDEST)
 ```
 
 The `MqttTcpServer` section controls low-level TCP socket behavior for MQTT connections:
@@ -40,6 +46,23 @@ The `MqttTcpServer` section controls low-level TCP socket behavior for MQTT conn
 - **NoDelay**: When `true`, disables TCP's Nagle algorithm (`TCP_NODELAY`), ensuring packets are sent immediately without waiting for coalescing. This can reduce transmission latency; it does not change TCP stream integrity. Default is `true`.
 - **ReceiveBufferSizeKb**: Kernel-level socket receive buffer size. Larger buffers can absorb bursts at the cost of memory. Default is 512 KB.
 - **SendBufferSizeKb**: Kernel-level socket send buffer size. Default is 512 KB.
+- **Instances**: Number of MQTT server verticle instances deployed per listener (TCP, WS, TCPS, WSS). Incoming connections are spread over this many event loops. Default is the number of CPU cores.
+- **MaxInFlightMessages**: Maximum number of unacknowledged outbound QoS 1/2 messages per client. MQTT 5 clients use the Receive Maximum they send in CONNECT instead. Default is 10000.
+- **MaxQueuedMessages**: Maximum number of QoS 1/2 messages queued per connected client while its in-flight window is full. When the limit is exceeded, further messages for that client are dropped and a rate-limited warning is logged. Default is 100000.
+- **ServerReceiveMaximum**: Inbound QoS 1/2 limit advertised to MQTT 5 clients in CONNACK. Default is 100.
+- **MaxQueuedQoS0Messages**: Maximum number of QoS 0 messages buffered per client while its socket write queue is full (a slow subscriber). When the buffer is full, a message is dropped according to `QoS0OverflowPolicy`, the drop is counted in the session metrics (`messagesDropped`) and a rate-limited warning is logged. `0` disables the limit (unbounded buffering). Default is 10000.
+- **QoS0OverflowPolicy**: `DROP_OLDEST` drops the oldest buffered message to make room for the new one, `DROP_NEWEST` drops the new message. Default is `DROP_OLDEST`.
+
+## Backpressure
+
+```yaml
+Backpressure:
+  Enabled: true            # default: true
+  MaxEventLoopLagMs: 500   # default: 500
+  MaxPauseMs: 1000         # default: 1000
+```
+
+When the broker is overloaded, it stops reading from publishing MQTT clients, so TCP flow control slows the publishers down instead of letting backlogs and latency grow without limit. The broker counts as overloaded when one of its event loops runs a probe task more than `MaxEventLoopLagMs` late (its task queue has a backlog), or when a bulk processing worker queue is above its high watermark. Reading from a publisher resumes as soon as the broker has recovered, or after `MaxPauseMs` at the latest, so keep-alive and acknowledgements are not held back for long. With bulk processing enabled, batches are no longer dropped when a worker queue is full.
 
 Tune socket buffers using measured throughput, latency, and operating-system limits.
 There is no universal buffer size based only on messages per second; payload size,

@@ -52,9 +52,8 @@ class SubscriptionManager {
     // Track noLocal subscriptions: clientId → Set<topicPattern>
     private val noLocalSubscriptions = ConcurrentHashMap<String, MutableSet<String>>()
     
-    // Track retainAsPublished subscriptions: clientId + topic → retainAsPublished flag
-    // Key format: "$clientId|$topic"
-    private val retainAsPublishedMap = ConcurrentHashMap<String, Boolean>()
+    // Track retainAsPublished subscriptions: clientId → (topicPattern → retainAsPublished flag)
+    private val retainAsPublishedMap = ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>()
 
     // Track MQTT v5 Subscription Identifiers: clientId → (topicPattern → identifier)
     // Only subscriptions with an identifier are stored, so clients without any cost one map miss
@@ -89,8 +88,7 @@ class SubscriptionManager {
         }
         
         // Track retainAsPublished subscriptions
-        val key = "$clientId|$topicOrPattern"
-        retainAsPublishedMap[key] = retainAsPublished
+        retainAsPublishedMap.getOrPut(clientId) { ConcurrentHashMap() }[topicOrPattern] = retainAsPublished
 
         setSubscriptionIdentifier(clientId, topicOrPattern, subscriptionId)
         observer?.added(clientId, topicOrPattern)
@@ -165,8 +163,10 @@ class SubscriptionManager {
         }
         
         // Remove from retainAsPublished tracking
-        val key = "$clientId|$topicOrPattern"
-        retainAsPublishedMap.remove(key)
+        retainAsPublishedMap[clientId]?.let { flags ->
+            flags.remove(topicOrPattern)
+            if (flags.isEmpty()) retainAsPublishedMap.remove(clientId, flags)
+        }
 
         removeSubscriptionIdentifier(clientId, topicOrPattern)
 
@@ -243,19 +243,16 @@ class SubscriptionManager {
      * @return true if RAP is enabled for this subscription, false otherwise (default)
      */
     fun getRetainAsPublished(clientId: String, publishedTopic: String): Boolean {
+        val flags = retainAsPublishedMap[clientId] ?: return false
+
         // Check for exact match first (most common case)
-        val exactKey = "$clientId|$publishedTopic"
-        retainAsPublishedMap[exactKey]?.let { return it }
-        
-        // Check wildcard subscriptions - iterate through client's patterns
-        retainAsPublishedMap.entries.forEach { (key, value) ->
-            if (key.startsWith("$clientId|")) {
-                val pattern = key.substringAfter('|')
-                if (pattern.contains('+') || pattern.contains('#')) {
-                    // Use the wildcard index to check if pattern matches
-                    if (wildcardIndex.matchesPattern(publishedTopic, pattern)) {
-                        return value
-                    }
+        flags[publishedTopic]?.let { return it }
+
+        // Check the client's wildcard subscriptions
+        flags.forEach { (pattern, value) ->
+            if (pattern.contains('+') || pattern.contains('#')) {
+                if (wildcardIndex.matchesPattern(publishedTopic, pattern)) {
+                    return value
                 }
             }
         }
@@ -337,7 +334,7 @@ class SubscriptionManager {
         noLocalSubscriptions.remove(clientId)
         
         // Remove from retainAsPublished tracking
-        retainAsPublishedMap.keys.removeIf { it.startsWith("$clientId|") }
+        retainAsPublishedMap.remove(clientId)
 
         // Remove from Subscription Identifier tracking
         subscriptionIdentifiers.remove(clientId)

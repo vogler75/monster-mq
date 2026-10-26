@@ -5,6 +5,7 @@ import at.rocworks.auth.UserManager
 import at.rocworks.data.BrokerMessage
 import at.rocworks.data.BulkClientMessage
 import at.rocworks.schema.TopicSchemaPolicyCache
+import at.rocworks.handlers.Backpressure
 import at.rocworks.handlers.SessionHandler
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode
 import io.netty.handler.codec.mqtt.MqttProperties
@@ -57,7 +58,7 @@ class MqttClient(
     private data class InFlightMessage(
         val message: BrokerMessage,
         var stage: Int = 1,
-        var lastTryTime: Instant = Instant.now(),
+        var lastTryTime: Long = System.currentTimeMillis(), // epoch millis, avoids an Instant per message
         var retryCount: Int = 0
     )
 
@@ -96,6 +97,23 @@ class MqttClient(
     private val messageCacheSize = Monster.getMessageCacheSize()
 
     private val busConsumers = mutableListOf<MessageConsumer<*>>()
+
+    // Underlying socket, for write queue state and pausing reads (null if not accessible)
+    private val socket: io.vertx.core.net.NetSocket? = try {
+        endpointConnField.get(endpoint) as? io.vertx.core.net.NetSocket
+    } catch (e: Exception) {
+        null
+    }
+
+    // QoS 0 messages waiting while the socket write queue is full, bounded by
+    // MqttTcpServer.MaxQueuedQoS0Messages. Guarded by outboundLock; only one thread sends from it.
+    private val pendingQoS0 = ArrayDeque<BrokerMessage>()
+    private var flushingQoS0 = false
+    private var qos0DroppedSinceWarning = 0L
+    private var qos0LastDropWarning = 0L
+
+    // Reading from the socket is paused because of broker backpressure (connection context only)
+    private var readPaused = false
     
     // Authenticated user (null if not authenticated or auth disabled)
     private var authenticatedUser: at.rocworks.data.User? = null
@@ -153,6 +171,8 @@ class MqttClient(
 
     companion object {
         private val logger = Utils.getLogger(this::class.java)
+
+        private const val RETRY_INTERVAL_MS = Const.QOS2_RETRY_INTERVAL * 1000
 
 
         // Vert.x writes every PUBLISH with writeAndFlush (one socket syscall per message) when the
@@ -416,6 +436,7 @@ class MqttClient(
 
         run {
             endpoint.exceptionHandler(::exceptionHandler)
+            socket?.drainHandler { flushQoS0() }
             endpoint.pingHandler { pingHandler() }
             endpoint.subscribeHandler(::subscribeHandler)
             endpoint.unsubscribeHandler(::unsubscribeHandler)
@@ -733,7 +754,10 @@ class MqttClient(
         triggerPending = false
         isFetchingQueueMessage = false
         clearMessageCache()
-        synchronized(outboundLock) { pendingMessagesSnd.clear() }
+        synchronized(outboundLock) {
+            pendingMessagesSnd.clear()
+            pendingQoS0.clear()
+        }
 
         if (receiveMaximumWarningActive) {
             val since = receiveMaximumWarningSince
@@ -1063,6 +1087,7 @@ class MqttClient(
     // -----------------------------------------------------------------------------------------------------------------
 
     private fun publishHandler(message: MqttPublishMessage) {
+        if (Backpressure.isSaturated()) pauseReading()
         var topicName = message.topicName()
         
         // MQTT v5.0: Handle Topic Alias (Phase 4)
@@ -1244,11 +1269,15 @@ class MqttClient(
     private fun receivingInFlightMessagesPeriodicCheck() {
         inFlightMessagesRcv.forEach { (id, inFlightMessage) ->
             if (inFlightMessage.retryCount < Const.QOS2_RETRY_COUNT) {
-                if (inFlightMessage.lastTryTime.plusSeconds(Const.QOS2_RETRY_INTERVAL).isBefore(Instant.now())) {
-                    logger.finest { "Client [$clientId] Publish: retry message [${id}] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    inFlightMessage.lastTryTime = Instant.now()
+                val now = System.currentTimeMillis()
+                if (inFlightMessage.lastTryTime + RETRY_INTERVAL_MS < now) {
+                    inFlightMessage.lastTryTime = now
                     inFlightMessage.retryCount++
-                    endpoint.publishReceived(id)
+                    // MQTT 5 §4.4: no in-session retransmission
+                    if (endpoint.protocolVersion() != 5) {
+                        logger.finest { "Client [$clientId] Publish: retry message [${id}] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
+                        endpoint.publishReceived(id)
+                    }
                 }
             } else {
                 logger.warning { "Client [$clientId] Publish: Message [${id}] for topic [${inFlightMessage.message.topicName}] not delivered  [${Utils.getCurrentFunctionName()}]" }
@@ -1355,8 +1384,7 @@ class MqttClient(
 
             // Increment messages sent to client ONLY when actually publishing to endpoint
             if (message.qosLevel == 0) {
-                sessionHandler.incrementMessagesOut(clientId)
-                publishToEndpoint(message)
+                publishQoS0(message)
             } else {
                 // MQTT v5.0 Flow Control (Phase 8): Enforce client's Receive Maximum.
                 // Messages beyond the window wait in the pending queue (keeping their order)
@@ -1389,7 +1417,7 @@ class MqttClient(
                 messageToSend?.let { msg ->
                     updateSessionHandlerInFlight()
                     sessionHandler.incrementMessagesOut(clientId)
-                    publishToEndpoint(msg)
+                    publishInFlightToEndpoint(msg)
                     logger.finest { "Client [$clientId] QoS [${msg.qosLevel}] message [${msg.messageId}] for topic [${msg.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
                 }
             }
@@ -1403,13 +1431,123 @@ class MqttClient(
         return msg
     }
 
-    private fun publishToEndpoint(message: BrokerMessage) {
+    // The DUP flag of the incoming PUBLISH is not propagated to subscribers (MQTT 3.1.1/5 §3.3.1.1),
+    // it is only set when the broker re-sends a QoS 1/2 message itself.
+    private fun publishToEndpoint(message: BrokerMessage, dup: Boolean = false): Future<Int> {
         val subscriptionIds = if (endpoint.protocolVersion() == 5) {
             sessionHandler.getSubscriptionIdentifiers(clientId, message.topicName)
         } else {
             emptyList()
         }
-        message.publishToEndpoint(endpoint, subscriptionIdentifiers = subscriptionIds)
+        return message.publishToEndpoint(endpoint, subscriptionIdentifiers = subscriptionIds, dup = dup)
+    }
+
+    /**
+     * Send an in-flight QoS 1/2 message. The retry timer starts when the packet has actually been
+     * written to the socket, not when it was queued for writing, so a backlogged write queue does
+     * not trigger premature retries.
+     */
+    private fun publishInFlightToEndpoint(message: BrokerMessage, dup: Boolean = false) {
+        publishToEndpoint(message, dup).onSuccess {
+            synchronized(outboundLock) {
+                inFlightMessagesSnd[message.messageId]?.let { if (it.message === message) it.lastTryTime = System.currentTimeMillis() }
+            }
+        }
+    }
+
+    /**
+     * Send a QoS 0 message. While the socket write queue is full, messages are buffered up to
+     * MaxQueuedQoS0Messages and then dropped (oldest or newest, MqttTcpServer.QoS0OverflowPolicy),
+     * so a slow subscriber cannot make the broker buffer without limit.
+     */
+    private fun publishQoS0(message: BrokerMessage) {
+        val limit = Monster.getMaxQueuedQoS0Messages()
+        val s = socket
+        if (limit <= 0 || s == null) {
+            sessionHandler.incrementMessagesOut(clientId)
+            publishToEndpoint(message)
+            return
+        }
+        var sendDirectly = false
+        var dropped = false
+        synchronized(outboundLock) {
+            if (pendingQoS0.isEmpty() && !flushingQoS0 && !s.writeQueueFull()) {
+                sendDirectly = true
+            } else if (pendingQoS0.size < limit) {
+                pendingQoS0.addLast(message)
+            } else {
+                dropped = true
+                if (Monster.isQoS0DropOldest()) {
+                    pendingQoS0.removeFirst()
+                    pendingQoS0.addLast(message)
+                }
+            }
+        }
+        when {
+            sendDirectly -> {
+                sessionHandler.incrementMessagesOut(clientId)
+                publishToEndpoint(message)
+            }
+            dropped -> qos0MessageDropped()
+            // The write queue may have drained between the check and the enqueue
+            !s.writeQueueFull() -> flushQoS0()
+        }
+    }
+
+    private fun qos0MessageDropped() {
+        sessionHandler.incrementMessagesDropped(clientId)
+        val now = System.currentTimeMillis()
+        val count = synchronized(outboundLock) {
+            qos0DroppedSinceWarning++
+            if (now - qos0LastDropWarning < 10_000) return
+            qos0LastDropWarning = now
+            qos0DroppedSinceWarning.also { qos0DroppedSinceWarning = 0 }
+        }
+        logger.warning { "Client [$clientId] slow subscriber, [$count] QoS 0 message(s) dropped, QoS 0 queue full (${Monster.getMaxQueuedQoS0Messages()}) [${Utils.getCurrentFunctionName()}]" }
+    }
+
+    /**
+     * Send buffered QoS 0 messages while the socket accepts writes. Called by the socket's
+     * drain handler and the periodic check.
+     */
+    private fun flushQoS0() {
+        val s = socket ?: return
+        synchronized(outboundLock) {
+            if (flushingQoS0 || pendingQoS0.isEmpty()) return
+            flushingQoS0 = true
+        }
+        try {
+            while (endpoint.isConnected && !s.writeQueueFull()) {
+                val message = synchronized(outboundLock) { pendingQoS0.removeFirstOrNull() } ?: break
+                sessionHandler.incrementMessagesOut(clientId)
+                publishToEndpoint(message)
+            }
+        } finally {
+            synchronized(outboundLock) { flushingQoS0 = false }
+        }
+    }
+
+    /**
+     * Stop reading from this client while the broker is saturated, so TCP flow control slows
+     * the publisher down. Reading resumes when the broker recovers, or after MaxPauseMs at the
+     * latest so that keep-alive and acknowledgements are not held back for too long.
+     */
+    private fun pauseReading() {
+        val s = socket ?: return
+        if (readPaused) return
+        readPaused = true
+        Backpressure.pauseCount.incrementAndGet()
+        s.pause()
+        val start = System.currentTimeMillis()
+        fun check() {
+            if (endpoint.isConnected && Backpressure.isSaturated() && System.currentTimeMillis() - start < Backpressure.maxPauseMs) {
+                vertx.setTimer(20) { check() }
+            } else {
+                readPaused = false
+                s.resume()
+            }
+        }
+        vertx.setTimer(20) { check() }
     }
 
     /**
@@ -1430,7 +1568,7 @@ class MqttClient(
             updateSessionHandlerInFlight()
             messages.forEach { msg ->
                 sessionHandler.incrementMessagesOut(clientId)
-                publishToEndpoint(msg)
+                publishInFlightToEndpoint(msg)
                 logger.finest { "Client [$clientId] Subscribe: pending message [${msg.messageId}] delivered [${Utils.getCurrentFunctionName()}]" }
             }
         }
@@ -1541,24 +1679,30 @@ class MqttClient(
     }
 
     private fun sendingInFlightMessagesPeriodicCheck() {
+        flushQoS0() // fallback in case a drain was missed
         val messagesToRetry = mutableListOf<Pair<InFlightMessage, Int>>()
         var removed = false
-        val now = Instant.now()
+        val now = System.currentTimeMillis()
+        val mqtt5 = endpoint.protocolVersion() == 5
 
         synchronized(outboundLock) {
             val iterator = inFlightMessagesSnd.values.iterator()
             while (iterator.hasNext()) {
                 val inFlightMessage = iterator.next()
                 if (inFlightMessage.retryCount < Const.QOS2_RETRY_COUNT) {
-                    if (inFlightMessage.lastTryTime.plusSeconds(Const.QOS2_RETRY_INTERVAL).isBefore(now)) {
+                    if (inFlightMessage.lastTryTime + RETRY_INTERVAL_MS < now) {
                         inFlightMessage.lastTryTime = now
                         inFlightMessage.retryCount++
-                        val action = when (inFlightMessage.stage) {
-                            1 -> 1
-                            2 -> 2
-                            else -> 3
+                        // MQTT 5 §4.4: PUBLISH/PUBREL are re-sent only on reconnect, never while the
+                        // connection is alive. The retry count still expires unacknowledged messages.
+                        if (!mqtt5) {
+                            val action = when (inFlightMessage.stage) {
+                                1 -> 1
+                                2 -> 2
+                                else -> 3
+                            }
+                            messagesToRetry.add(Pair(inFlightMessage, action))
                         }
-                        messagesToRetry.add(Pair(inFlightMessage, action))
                     }
                 } else {
                     // Max retries reached: remove it
@@ -1574,7 +1718,7 @@ class MqttClient(
             when (retryAction) {
                 1 -> {
                     logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [1] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                    publishToEndpoint(inFlightMessage.message)
+                    publishInFlightToEndpoint(inFlightMessage.message, dup = true)
                 }
                 2 -> {
                     logger.finest { "Client [$clientId] PUBACK/PUBREC: retry message [${inFlightMessage.message.messageId}] stage [2] for topic [${inFlightMessage.message.topicName}] [${Utils.getCurrentFunctionName()}]" }

@@ -418,6 +418,16 @@ class Monster(args: Array<String>) {
         fun getMaxQueuedMessages(): Int = maxQueuedMessages
 
         @Volatile
+        private var maxQueuedQoS0Messages: Int = 10_000
+        @JvmStatic
+        fun getMaxQueuedQoS0Messages(): Int = maxQueuedQoS0Messages
+
+        @Volatile
+        private var qos0DropOldest: Boolean = true
+        @JvmStatic
+        fun isQoS0DropOldest(): Boolean = qos0DropOldest
+
+        @Volatile
         private var serverReceiveMaximum: Int = 100
         @JvmStatic
         fun getServerReceiveMaximum(): Int = serverReceiveMaximum
@@ -1093,6 +1103,30 @@ MORE INFO:
             100_000
         }
 
+        maxQueuedQoS0Messages = try {
+            tcpServerConfig.getInteger("MaxQueuedQoS0Messages", 10_000)
+        } catch (e: Exception) {
+            logger.warning("Config: MqttTcpServer.MaxQueuedQoS0Messages read failed: ${e.message}")
+            10_000
+        }
+
+        qos0DropOldest = when (val policy = tcpServerConfig.getString("QoS0OverflowPolicy", "DROP_OLDEST").uppercase()) {
+            "DROP_OLDEST" -> true
+            "DROP_NEWEST" -> false
+            else -> {
+                logger.warning("Config: MqttTcpServer.QoS0OverflowPolicy [$policy] unknown, using DROP_OLDEST")
+                true
+            }
+        }
+
+        val backpressureConfig = configJson.getJsonObject("Backpressure", JsonObject())
+        at.rocworks.handlers.Backpressure.start(
+            vertx,
+            backpressureConfig.getBoolean("Enabled", true),
+            backpressureConfig.getLong("MaxEventLoopLagMs", 500L),
+            backpressureConfig.getLong("MaxPauseMs", 1000L)
+        )
+
         serverReceiveMaximum = try {
             tcpServerConfig.getInteger("ServerReceiveMaximum", 100)
         } catch (e: Exception) {
@@ -1101,7 +1135,7 @@ MORE INFO:
         }
 
         logger.fine("TCP [$useTcp] WS [$useWs] TCPS [$useTcpSsl] WSS [$useWsSsl] NATS [$useNats] QME [$queuedMessagesEnabled]")
-        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB] MaxInFlightMessages [$maxInFlightMessages] MaxQueuedMessages [$maxQueuedMessages] ServerReceiveMaximum [$serverReceiveMaximum]")
+        logger.fine("TCP Server Config: MaxMessageSize [${maxMessageSize / 1024}KB] NoDelay [$tcpNoDelay] ReceiveBufferSize [${receiveBufferSize / 1024}KB] SendBufferSize [${sendBufferSize / 1024}KB] MaxInFlightMessages [$maxInFlightMessages] MaxQueuedMessages [$maxQueuedMessages] MaxQueuedQoS0Messages [$maxQueuedQoS0Messages] QoS0DropOldest [$qos0DropOldest] ServerReceiveMaximum [$serverReceiveMaximum]")
 
         val retainedStoreType = MessageStoreType.valueOf(Monster.getRetainedStoreType(configJson))
         logger.fine("RetainedMessageStoreType [${retainedStoreType}]")

@@ -3,7 +3,7 @@ package at.rocworks.handlers
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import io.vertx.core.Vertx
-import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -27,25 +27,26 @@ class PublishWorker(
     private val sessionHandler: SessionHandler
 ) {
     private val logger: Logger = Utils.getLogger(this::class.java)
-    private val batchQueue = ArrayBlockingQueue<PublishBatch>(1000)
+    // Not bounded, so batches are never dropped. Above QUEUE_HIGH_WATERMARK the pool reports
+    // backpressure, which pauses the publishers and keeps the queue length in practice bounded.
+    private val batchQueue = LinkedBlockingQueue<PublishBatch>()
 
     // Metrics
     val batchesProcessed = AtomicLong(0)
     val messagesProcessed = AtomicLong(0)
     val totalProcessingTimeMs = AtomicLong(0)
 
+    companion object {
+        const val QUEUE_HIGH_WATERMARK = 1000
+    }
+
     /**
      * Enqueue a batch for processing.
-     * Returns immediately (non-blocking).
+     * Returns immediately (non-blocking), false if the queue is above its high watermark.
      */
     fun enqueueBatch(batch: PublishBatch): Boolean {
-        return try {
-            batchQueue.add(batch)
-            true
-        } catch (e: IllegalStateException) {
-            logger.warning("PublishWorker[$id] queue overflow, batch with ${batch.messages.size} messages dropped")
-            false
-        }
+        batchQueue.add(batch)
+        return batchQueue.size < QUEUE_HIGH_WATERMARK
     }
 
     /**
@@ -166,7 +167,7 @@ data class PublishBatch(
 
 /**
  * Pool of PublishWorker threads.
- * Manages worker lifecycle and round-robin batch distribution.
+ * Manages worker lifecycle and batch distribution by topic hash.
  *
  * Uses a dedicated ExecutorService (not Vert.x worker threads) to avoid
  * blocked thread checker warnings, since workers do blocking poll() indefinitely.
@@ -191,7 +192,6 @@ class PublishWorkerPool(
         }
     )
 
-    private var roundRobinIndex = 0
     private val lock = java.util.concurrent.locks.ReentrantLock()
 
     // For per-second rate calculations
@@ -201,22 +201,41 @@ class PublishWorkerPool(
     private val lastWorkerMessagesProcessed = LongArray(numWorkers)
 
     /**
-     * Distribute a batch to the next available worker (round-robin).
+     * Worker for a topic. All messages of one topic always go through the same worker, so
+     * messages of one publisher on one topic keep their order (MQTT 3.1.1/5 §4.6).
+     */
+    private fun workerIndexFor(topicName: String): Int = Math.floorMod(topicName.hashCode(), workers.size)
+
+    /**
+     * Split a batch by topic hash and hand each part to its worker.
+     * Workers process their queue in FIFO order on a single thread, which keeps per-topic order.
      */
     fun sendBatch(batch: PublishBatch): Boolean {
         lock.lock()
         try {
-            val workerIndex = roundRobinIndex % workers.size
-            roundRobinIndex = (roundRobinIndex + 1) % workers.size
+            if (workers.size == 1) return enqueue(0, batch)
 
-            val success = workers[workerIndex].enqueueBatch(batch)
-            if (!success) {
-                logger.warning("Worker[$workerIndex] queue full, batch with ${batch.messages.size} messages dropped")
+            val parts = arrayOfNulls<ArrayList<BrokerMessage>>(workers.size)
+            batch.messages.forEach { message ->
+                val index = workerIndexFor(message.topicName)
+                (parts[index] ?: ArrayList<BrokerMessage>().also { parts[index] = it }).add(message)
+            }
+            var success = true
+            parts.forEachIndexed { index, messages ->
+                if (messages != null && !enqueue(index, PublishBatch(messages, batch.createdAt))) success = false
             }
             return success
         } finally {
             lock.unlock()
         }
+    }
+
+    // Returns false when the worker queue is above its high watermark; the batch is queued anyway
+    // and backpressure is signalled, so the publishers are slowed down instead of losing messages.
+    private fun enqueue(workerIndex: Int, batch: PublishBatch): Boolean {
+        val belowWatermark = workers[workerIndex].enqueueBatch(batch)
+        if (!belowWatermark) Backpressure.signal()
+        return belowWatermark
     }
 
     /**

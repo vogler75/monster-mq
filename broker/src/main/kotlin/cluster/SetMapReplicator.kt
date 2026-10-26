@@ -1,6 +1,7 @@
 package at.rocworks.cluster
 
 import at.rocworks.Utils
+import at.rocworks.data.TopicTree
 import io.vertx.core.Vertx
 import io.vertx.core.eventbus.Message
 import io.vertx.core.json.JsonObject
@@ -17,6 +18,10 @@ class SetMapReplicator(
 ) {
     private val logger: Logger = Utils.getLogger(SetMapReplicator::class.java)
     private val localData = ConcurrentHashMap<String, MutableSet<String>>()
+
+    // Keys with wildcards are also kept in a topic tree (key -> values), so finding the keys
+    // matching a topic does not need a scan over all keys. Exact keys are looked up in localData.
+    private val wildcardIndex = TopicTree<String, Boolean>()
 
     enum class EventType {
         ADD_TO_SET,      // Add value to set
@@ -38,7 +43,7 @@ class SetMapReplicator(
      * Add a value to the set for a given key
      */
     fun addToSet(key: String, value: String) {
-        localData.getOrPut(key) { ConcurrentHashMap.newKeySet() }.add(value)
+        localAdd(key, value)
 
         // Broadcast to other nodes
         val event = JsonObject()
@@ -54,12 +59,8 @@ class SetMapReplicator(
      * Remove a value from the set for a given key
      */
     fun removeFromSet(key: String, value: String) {
-        val set = localData[key]
-        if (set != null) {
-            set.remove(value)
-            if (set.isEmpty()) {
-                localData.remove(key)
-            }
+        if (localData.containsKey(key)) {
+            localRemove(key, value)
 
             // Broadcast to other nodes
             val event = JsonObject()
@@ -76,7 +77,7 @@ class SetMapReplicator(
      * Remove an entire key
      */
     fun removeKey(key: String) {
-        localData.remove(key)
+        localRemoveKey(key)
 
         // Broadcast to other nodes
         val event = JsonObject()
@@ -95,6 +96,7 @@ class SetMapReplicator(
 
         localData.forEach { (key, set) ->
             if (set.remove(value)) {
+                if (Utils.isWildCardTopic(key)) wildcardIndex.del(key, value)
                 if (set.isEmpty()) {
                     keysToRemove.add(key)
                 }
@@ -128,10 +130,22 @@ class SetMapReplicator(
     fun keys(): Set<String> = localData.keys.toSet()
 
     /**
+     * Get the values of all keys whose topic filter matches the given topic name.
+     * Uses a hash lookup for the exact key and the topic tree for wildcard keys.
+     */
+    fun findValuesMatchingTopic(topicName: String): Set<String> {
+        val result = HashSet<String>()
+        localData[topicName]?.let { result.addAll(it) }
+        wildcardIndex.findDataOfTopicName(topicName).forEach { (value, _) -> result.add(value) }
+        return result
+    }
+
+    /**
      * Clear all data
      */
     fun clear() {
         localData.clear()
+        wildcardIndex.clear()
 
         // Broadcast to other nodes
         val event = JsonObject()
@@ -153,7 +167,7 @@ class SetMapReplicator(
                 val key = event.getString("key")
                 val value = event.getString("value")
                 if (key != null && value != null) {
-                    localData.getOrPut(key) { ConcurrentHashMap.newKeySet() }.add(value)
+                    localAdd(key, value)
                     logger.finest { "Received ADD_TO_SET event for key [$key], value [$value]" }
                 }
             }
@@ -162,13 +176,7 @@ class SetMapReplicator(
                 val key = event.getString("key")
                 val value = event.getString("value")
                 if (key != null && value != null) {
-                    val set = localData[key]
-                    if (set != null) {
-                        set.remove(value)
-                        if (set.isEmpty()) {
-                            localData.remove(key)
-                        }
-                    }
+                    localRemove(key, value)
                     logger.finest { "Received REMOVE_FROM_SET event for key [$key], value [$value]" }
                 }
             }
@@ -176,16 +184,36 @@ class SetMapReplicator(
             EventType.REMOVE_KEY -> {
                 val key = event.getString("key")
                 if (key != null) {
-                    localData.remove(key)
+                    localRemoveKey(key)
                     logger.finest { "Received REMOVE_KEY event for key [$key]" }
                 }
             }
 
             EventType.CLEAR -> {
                 localData.clear()
+                wildcardIndex.clear()
                 logger.fine { "Received CLEAR event" }
             }
         }
+    }
+
+    private fun localAdd(key: String, value: String) {
+        localData.getOrPut(key) { ConcurrentHashMap.newKeySet() }.add(value)
+        if (Utils.isWildCardTopic(key)) wildcardIndex.add(key, value, true)
+    }
+
+    private fun localRemove(key: String, value: String) {
+        val set = localData[key] ?: return
+        set.remove(value)
+        if (set.isEmpty()) {
+            localData.remove(key)
+        }
+        if (Utils.isWildCardTopic(key)) wildcardIndex.del(key, value)
+    }
+
+    private fun localRemoveKey(key: String) {
+        val set = localData.remove(key) ?: return
+        if (Utils.isWildCardTopic(key)) set.forEach { wildcardIndex.del(key, it) }
     }
 
     /**

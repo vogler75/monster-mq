@@ -188,7 +188,8 @@ open class SessionHandler(
         val messagesOut: AtomicLong = AtomicLong(0),
         var lastResetTime: Long = System.currentTimeMillis(),
         val inFlightMessagesRcv: AtomicLong = AtomicLong(0),
-        val inFlightMessagesSnd: AtomicLong = AtomicLong(0)
+        val inFlightMessagesSnd: AtomicLong = AtomicLong(0),
+        val messagesDropped: AtomicLong = AtomicLong(0)
     )
 
     data class ClientDetails(
@@ -282,15 +283,19 @@ open class SessionHandler(
             val metrics = JsonObject()
             var totalMessagesIn = 0L
             var totalMessagesOut = 0L
+            var totalMessagesDropped = 0L
 
             clientMetrics.values.forEach { sessionMetrics ->
                 totalMessagesIn += sessionMetrics.messagesIn.get()
                 totalMessagesOut += sessionMetrics.messagesOut.get()
+                totalMessagesDropped += sessionMetrics.messagesDropped.get()
             }
 
             val subStats = subscriptionManager.getStats()
             metrics.put("messagesIn", totalMessagesIn)
                    .put("messagesOut", totalMessagesOut)
+                   .put("messagesDropped", totalMessagesDropped)
+                   .put("publisherPauses", Backpressure.pauseCount.get())
                    .put("nodeSessionCount", clientMetrics.size)
                    .put("messageBusIn", messageBusIn.get())
                    .put("messageBusOut", messageBusOut.get())
@@ -310,6 +315,7 @@ open class SessionHandler(
             val metrics = JsonObject()
             var totalMessagesIn = 0L
             var totalMessagesOut = 0L
+            var totalMessagesDropped = 0L
             var totalMessagesInRate = 0.0
             var totalMessagesOutRate = 0.0
             val sessionMetricsArray = io.vertx.core.json.JsonArray()
@@ -320,6 +326,7 @@ open class SessionHandler(
             clientMetrics.forEach { (clientId, sessionMetrics) ->
                 val inCount = sessionMetrics.messagesIn.getAndSet(0)
                 val outCount = sessionMetrics.messagesOut.getAndSet(0)
+                val droppedCount = sessionMetrics.messagesDropped.getAndSet(0)
 
                 // Calculate duration since last reset for this client
                 val duration = (currentTime - sessionMetrics.lastResetTime) / 1000.0 // seconds
@@ -331,6 +338,7 @@ open class SessionHandler(
 
                 totalMessagesIn += inCount
                 totalMessagesOut += outCount
+                totalMessagesDropped += droppedCount
                 totalMessagesInRate += inRate
                 totalMessagesOutRate += outRate
 
@@ -339,6 +347,7 @@ open class SessionHandler(
                     .put("clientId", clientId)
                     .put("messagesIn", inCount)
                     .put("messagesOut", outCount)
+                    .put("messagesDropped", droppedCount)
                     .put("messagesInRate", inRate)
                     .put("messagesOutRate", outRate)
 
@@ -381,6 +390,7 @@ open class SessionHandler(
                        .put("messagesOut", totalMessagesOut)
                        .put("messagesInRate", totalMessagesInRate)
                        .put("messagesOutRate", totalMessagesOutRate)
+                       .put("messagesDropped", totalMessagesDropped)
                        .put("nodeSessionCount", clientMetrics.size)
                        .put("messageBusIn", messageBusInCount)
                        .put("messageBusOut", messageBusOutCount)
@@ -728,6 +738,10 @@ open class SessionHandler(
 
     fun incrementMessagesOut(clientId: String) {
         clientMetrics[clientId]?.messagesOut?.incrementAndGet()
+    }
+
+    fun incrementMessagesDropped(clientId: String) {
+        clientMetrics[clientId]?.messagesDropped?.incrementAndGet()
     }
 
     fun updateInFlightCounts(clientId: String, sndSize: Int, rcvSize: Int) {
@@ -1826,6 +1840,20 @@ open class SessionHandler(
      * - RAP=true: Preserve original message's retain flag
      * - RAP=false (default): Clear retain flag (set to false)
      */
+    /**
+     * Retain flag for live delivery (MQTT 3.1.1/5 §3.3.1.3): cleared unless the subscription has
+     * Retain As Published set. Only looked up when the message actually carries the retain flag.
+     */
+    private fun effectiveRetain(clientId: String, msg: BrokerMessage): Boolean {
+        if (!msg.isRetain) return false
+        return try {
+            subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
+        } catch (e: Exception) {
+            logger.warning("Error getting RAP for client $clientId: ${e.message}")
+            false
+        }
+    }
+
     private fun forwardBulkToOnlineClients(
         messages: List<BrokerMessage>,
         clients: List<Pair<String, Int>>,
@@ -1845,36 +1873,13 @@ open class SessionHandler(
                 messages.forEach { msg ->
                     try {
                         val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
-                        
-                        // Apply RAP (Retain As Published) logic
-                        val retainAsPublished = try {
-                            subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
-                        } catch (e: Exception) {
-                            logger.warning("Error getting RAP for client $clientId: ${e.message}")
-                            false
-                        }
-                        val effectiveRetain = if (retainAsPublished) msg.isRetain else false
-                        
+                        val messageForClient = msg.cloneForSubscriber(effectiveQos, effectiveRetain(clientId, msg))
                         if (effectiveQos > 0) {
                             // Queue-first for QoS 1+
-                            var messageToQueue = if (effectiveQos < msg.qosLevel) {
-                                msg.cloneWithNewQoS(effectiveQos)
-                            } else {
-                                msg
-                            }
-                            // Apply RAP: clone message with adjusted retain flag if needed
-                            if (messageToQueue.isRetain != effectiveRetain) {
-                                messageToQueue = messageToQueue.cloneWithRetainFlag(effectiveRetain)
-                            }
-                            enqueueMessage(messageToQueue, listOf(clientId))
+                            enqueueMessage(messageForClient, listOf(clientId))
                         } else {
                             // QoS 0: send directly
-                            var messageToSend = msg.cloneWithNewQoS(0)
-                            // Apply RAP: adjust retain flag if needed
-                            if (messageToSend.isRetain != effectiveRetain) {
-                                messageToSend = messageToSend.cloneWithRetainFlag(effectiveRetain)
-                            }
-                            sendMessageToClient(clientId, messageToSend)
+                            sendMessageToClient(clientId, messageForClient)
                         }
                     } catch (e: Exception) {
                         logger.warning("Error forwarding message to persistent client $clientId: ${e.message}")
@@ -1888,26 +1893,7 @@ open class SessionHandler(
             messages.forEach { msg ->
                 try {
                     val effectiveQos = if (subscriptionQos < msg.qosLevel) subscriptionQos else msg.qosLevel
-                    
-                    // Apply RAP (Retain As Published) logic
-                    val retainAsPublished = try {
-                        subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
-                    } catch (e: Exception) {
-                        logger.warning("Error getting RAP for client $clientId: ${e.message}")
-                        false
-                    }
-                    val effectiveRetain = if (retainAsPublished) msg.isRetain else false
-                    
-                    var messageToSend = if (effectiveQos < msg.qosLevel) {
-                        msg.cloneWithNewQoS(effectiveQos)
-                    } else {
-                        msg
-                    }
-                    // Apply RAP: adjust retain flag if needed
-                    if (messageToSend.isRetain != effectiveRetain) {
-                        messageToSend = messageToSend.cloneWithRetainFlag(effectiveRetain)
-                    }
-                    sendMessageToClient(clientId, messageToSend)
+                    sendMessageToClient(clientId, msg.cloneForSubscriber(effectiveQos, effectiveRetain(clientId, msg)))
                 } catch (e: Exception) {
                     logger.severe("Error forwarding message to clean session client $clientId: ${e.message}")
                     e.printStackTrace()
@@ -2220,20 +2206,8 @@ open class SessionHandler(
     }
 
     // Helper function to determine target nodes for a topic
-    private fun getTargetNodesForTopic(topicName: String): Set<String> {
-        val targetNodes = mutableSetOf<String>()
-
-        // Check all topic filters to see which nodes have matching subscriptions
-        topicNodeMapping.keys().forEach { topicFilter ->
-            if (matchesTopicFilter(topicName, topicFilter)) {
-                topicNodeMapping.getSet(topicFilter)?.let { nodes ->
-                    targetNodes.addAll(nodes)
-                }
-            }
-        }
-
-        return targetNodes
-    }
+    private fun getTargetNodesForTopic(topicName: String): Set<String> =
+        topicNodeMapping.findValuesMatchingTopic(topicName)
 
     // Simple topic filter matching using unified matcher
     private fun matchesTopicFilter(topicName: String, topicFilter: String): Boolean =

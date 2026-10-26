@@ -83,12 +83,8 @@ class TopicIndexWildcard {
      * @param pattern The wildcard pattern to check (e.g., "sensor/+/temp")
      * @return true if the topic matches the pattern
      */
-    fun matchesPattern(publishedTopic: String, pattern: String): Boolean {
-        // Use existing tree logic: create temporary tree with just this pattern
-        val tempTree = TopicTree<String, Int>()
-        tempTree.add(pattern, "temp", 0)
-        return tempTree.isTopicNameMatching(publishedTopic)
-    }
+    fun matchesPattern(publishedTopic: String, pattern: String): Boolean =
+        TopicTree.matches(pattern, publishedTopic)
 
     /**
      * Check if a specific client has a subscription to a wildcard pattern.

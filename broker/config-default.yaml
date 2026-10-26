@@ -12,6 +12,25 @@ HMI:
 QueuedMessagesEnabled: true
 AllowRootWildcardSubscription: true
 
+# MQTT listener tuning (applies to TCP, WS, TCPS and WSS listeners). Defaults shown.
+# MqttTcpServer:
+#   MaxMessageSizeKb: 512          # Maximum accepted MQTT message size
+#   NoDelay: true                  # TCP_NODELAY (disable Nagle's algorithm)
+#   ReceiveBufferSizeKb: 512       # Socket receive buffer size
+#   SendBufferSizeKb: 512          # Socket send buffer size
+#   Instances: <CPU cores>         # MQTT server verticle instances per listener; connections are spread over this many event loops
+#   MaxInFlightMessages: 10000     # Outbound QoS 1/2 in-flight window per client (MQTT 5 clients use their Receive Maximum)
+#   MaxQueuedMessages: 100000      # QoS 1/2 messages queued per client while its in-flight window is full; beyond this, messages are dropped with a rate-limited warning
+#   ServerReceiveMaximum: 100      # Inbound QoS 1/2 limit advertised to MQTT 5 clients in CONNACK
+#   MaxQueuedQoS0Messages: 10000   # QoS 0 messages buffered per client while its socket write queue is full; 0 = unbounded
+#   QoS0OverflowPolicy: DROP_OLDEST  # DROP_OLDEST | DROP_NEWEST, which QoS 0 message to drop when that buffer is full
+
+# Backpressure: when the broker is overloaded, stop reading from publishers so TCP flow control slows them down
+# Backpressure:
+#   Enabled: true
+#   MaxEventLoopLagMs: 500         # an event loop running this late counts as overloaded
+#   MaxPauseMs: 1000               # maximum time a publisher is paused at once
+
 SQLite:
   Path: "sqlite"
   EnableWAL: true
