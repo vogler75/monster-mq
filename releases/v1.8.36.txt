@@ -1,0 +1,11 @@
+Release v1.8.36
+Built from commit: 742f725f
+Date: 2026-10-26 14:40:49
+
+Changes since v1.8.35:
+---
+742f725f Fix QoS retries, bulk ordering, backpressure and per-message overhead
+28d33598 Update release.yml
+122e76d5 Replace shell/PowerShell scripts with cross-platform make.py
+7eaa0710 feat(publish): allow publishing dev docker images with testing tag
+04018ff2 chore(version): prepare next version 1.8.36-dev
