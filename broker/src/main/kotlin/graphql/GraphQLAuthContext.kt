@@ -3,6 +3,7 @@ package at.rocworks.extensions.graphql
 import at.rocworks.Utils
 import at.rocworks.auth.UserManager
 import graphql.schema.DataFetchingEnvironment
+import io.vertx.core.json.JsonObject
 import io.vertx.ext.web.RoutingContext
 import java.util.logging.Logger
 
@@ -74,6 +75,18 @@ class GraphQLAuthContext(
         val token = JwtService.extractTokenFromHeader(authHeader)
             ?: throw InvalidTokenException("Invalid Authorization header format")
         return extractAuthContextFromToken(token)
+    }
+
+    fun extractAuthContextFromConnectionParams(connectionParams: Any?): AuthContext? {
+        val credentialKeys = listOf("Authorization", "authorization", "authToken", "token")
+        val credential = when (connectionParams) {
+            is Map<*, *> -> credentialKeys.firstNotNullOfOrNull { connectionParams[it] as? String }
+            is JsonObject -> credentialKeys.firstNotNullOfOrNull { connectionParams.getString(it) }
+            else -> null
+        } ?: return null
+
+        return if (credential.startsWith("Bearer ")) extractAuthContextFromHeader(credential)
+        else extractAuthContextFromToken(credential)
     }
 
     fun extractAuthContextFromToken(token: String?): AuthContext? {

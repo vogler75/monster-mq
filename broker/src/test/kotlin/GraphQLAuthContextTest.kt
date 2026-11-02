@@ -280,6 +280,31 @@ class GraphQLAuthContextTest {
     }
 
     @Test
+    fun testLowercaseAuthorizationConnectionParamAuthenticatesSubscription() {
+        val userManager = createUserManager(enabled = true)
+        val authContext = GraphQLAuthContext(userManager)
+        val created = CompletableFuture<Boolean>()
+        userManager.createUser("subscription_admin", "pass123", enabled = true, canSubscribe = true, canPublish = true, isAdmin = true)
+            .onComplete { created.complete(it.result() ?: false) }
+        assertTrue(created.get(10, TimeUnit.SECONDS))
+        val token = JwtService.generateToken("subscription_admin", isAdmin = true)
+
+        val jsonParams = JsonObject().put("authorization", "Bearer $token")
+        val mapParams = mapOf("authorization" to "Bearer $token")
+
+        for (params in listOf(jsonParams, mapParams)) {
+            val authCtx = authContext.extractAuthContextFromConnectionParams(params)
+            assertNotNull("connection_init authorization should produce an auth context", authCtx)
+            assertEquals("subscription_admin", authCtx!!.username)
+            assertTrue("Authenticated user should be allowed to subscribe", authContext.canSubscribeToTopic(authCtx, "#"))
+        }
+
+        val rawTokenCtx = authContext.extractAuthContextFromConnectionParams(JsonObject().put("token", token))
+        assertEquals("subscription_admin", rawTokenCtx?.username)
+        assertNull(authContext.extractAuthContextFromConnectionParams(null))
+    }
+
+    @Test
     fun testInvalidOrMalformedHeaderThrowsInvalidTokenException() {
         val userManager = createUserManager(enabled = true)
         val authContext = GraphQLAuthContext(userManager)

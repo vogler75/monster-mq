@@ -192,32 +192,18 @@ class GraphQLServer(
 
         // Create WebSocket handler for subscriptions
         val wsHandler = GraphQLWSHandler.builder(graphQL)
+            // Without this handler Vert.x discards the connection_init payload (connectionParams() stays null)
+            .onConnectionInit { event ->
+                event.complete(event.message().message().getValue("payload"))
+            }
             .beforeExecute { builderWithContext ->
                 val msg = builderWithContext.context()
                 val socket = msg.socket()
                 var authCtx: AuthContext? = null
 
-                val params = msg.connectionParams()
-                if (params is Map<*, *>) {
-                    val tokenHeader = params["Authorization"] as? String
-                        ?: params["authToken"] as? String
-                        ?: params["token"] as? String
-                    if (tokenHeader != null) {
-                        try {
-                            authCtx = authContext.extractAuthContextFromHeader(tokenHeader)
-                                ?: authContext.extractAuthContextFromToken(tokenHeader)
-                        } catch (_: Exception) {}
-                    }
-                } else if (params is JsonObject) {
-                    val tokenHeader = params.getString("Authorization")
-                        ?: params.getString("authToken")
-                        ?: params.getString("token")
-                    if (tokenHeader != null) {
-                        try {
-                            authCtx = authContext.extractAuthContextFromHeader(tokenHeader)
-                                ?: authContext.extractAuthContextFromToken(tokenHeader)
-                        } catch (_: Exception) {}
-                    }
+                try {
+                    authCtx = authContext.extractAuthContextFromConnectionParams(msg.connectionParams())
+                } catch (_: Exception) {
                 }
 
                 if (authCtx == null) {
