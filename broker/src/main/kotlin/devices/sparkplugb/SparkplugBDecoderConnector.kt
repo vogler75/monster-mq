@@ -12,8 +12,54 @@ import io.vertx.core.Future
 import io.vertx.core.Promise
 import io.vertx.core.json.JsonObject
 import org.eclipse.tahu.message.SparkplugBPayloadDecoder
+import org.eclipse.tahu.message.model.Metric
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Logger
+
+internal data class SparkplugMetricDefinition(val name: String, val dataType: String)
+
+internal class SparkplugMetricAliasRegistry {
+    private data class Scope(val groupId: String, val nodeId: String, val deviceId: String?)
+
+    private val aliasesByScope = ConcurrentHashMap<Scope, Map<Long, SparkplugMetricDefinition>>()
+
+    fun replaceNode(groupId: String, nodeId: String, aliases: Map<Long, SparkplugMetricDefinition>) {
+        clearNode(groupId, nodeId)
+        replace(groupId, nodeId, null, aliases)
+    }
+
+    fun replace(
+        groupId: String,
+        nodeId: String,
+        deviceId: String?,
+        aliases: Map<Long, SparkplugMetricDefinition>
+    ) {
+        aliasesByScope[Scope(groupId, nodeId, deviceId)] = aliases.toMap()
+    }
+
+    fun resolve(groupId: String, nodeId: String, deviceId: String?, alias: Long): SparkplugMetricDefinition? =
+        aliasesByScope[Scope(groupId, nodeId, deviceId)]?.get(alias)
+
+    fun clearDevice(groupId: String, nodeId: String, deviceId: String) {
+        aliasesByScope.remove(Scope(groupId, nodeId, deviceId))
+    }
+
+    fun clearNode(groupId: String, nodeId: String) {
+        aliasesByScope.keys.removeIf { it.groupId == groupId && it.nodeId == nodeId }
+    }
+}
+
+internal fun resolveSparkplugMetricName(name: String?, alias: Long?, resolvedAlias: String?): String =
+    name ?: resolvedAlias ?: "alias/$alias"
+
+internal fun resolveSparkplugMetricDataType(dataType: String?, resolvedDataType: String?): String =
+    if (dataType == null || dataType == "Unknown") resolvedDataType ?: dataType ?: "null" else dataType
+
+internal fun sparkplugMetricAliases(metrics: List<Metric>): Map<Long, SparkplugMetricDefinition> =
+    metrics
+        .filter { it.hasAlias() && it.hasName() }
+        .associate { it.alias to SparkplugMetricDefinition(it.name, it.dataType.toString()) }
 
 /**
  * SparkplugB Decoder Connector - Handles SparkplugB message decoding with regex-based routing
@@ -41,6 +87,7 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
 
     // SparkplugB decoder
     private val sparkplugDecoder = SparkplugBPayloadDecoder()
+    private val metricAliases = SparkplugMetricAliasRegistry()
 
     // Internal MQTT client ID
     private var internalClientId: String? = null
@@ -259,7 +306,7 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             // Decode and publish based on message type
             if (messageType in PROTOBUF_MESSAGE_TYPES) {
                 // Decode protobuf message and publish each metric
-                decodeAndPublishMetrics(rule, edgeNodeId, deviceId, messageType, message.payload)
+                decodeAndPublishMetrics(rule, groupId, edgeNodeId, deviceId, messageType, message.payload)
             } else {
                 logger.warning("Unknown SparkplugB message type: $messageType")
                 messagesSkippedCounter.incrementAndGet()
@@ -277,6 +324,7 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
      */
     private fun decodeAndPublishMetrics(
         rule: SparkplugBDecoderRule,
+        groupId: String,
         nodeId: String,
         deviceId: String,
         messageType: String,
@@ -286,13 +334,33 @@ class SparkplugBDecoderConnector : AbstractVerticle() {
             val spbPayload = sparkplugDecoder.buildFromByteArray(payload, null)
             logger.finest { "Decoded SparkplugB payload with ${spbPayload.metrics.size} metrics" }
 
+            when (messageType) {
+                "NBIRTH" -> metricAliases.replaceNode(groupId, nodeId, sparkplugMetricAliases(spbPayload.metrics))
+                "DBIRTH" -> metricAliases.replace(groupId, nodeId, deviceId, sparkplugMetricAliases(spbPayload.metrics))
+                "NDEATH" -> metricAliases.clearNode(groupId, nodeId)
+                "DDEATH" -> metricAliases.clearDevice(groupId, nodeId, deviceId)
+            }
+
             spbPayload.metrics.forEach { metric ->
-                val metricName = if (metric.hasName()) metric.name else "alias/${metric.alias}"
+                val resolvedMetric = if (!metric.hasName() && metric.hasAlias()) {
+                    metricAliases.resolve(groupId, nodeId, deviceId.takeIf { it.isNotEmpty() }, metric.alias)
+                } else {
+                    null
+                }
+                val metricName = resolveSparkplugMetricName(
+                    metric.name.takeIf { metric.hasName() },
+                    metric.alias,
+                    resolvedMetric?.name
+                )
+                val dataType = resolveSparkplugMetricDataType(
+                    metric.dataType?.toString(),
+                    resolvedMetric?.dataType
+                )
 
                 // Build metric payload as JSON
                 val metricPayload = JsonObject()
                     .put("Timestamp", metric.timestamp)
-                    .put("DataType", metric.dataType.toString())
+                    .put("DataType", dataType)
 
                 try {
                     metricPayload.put("Value", metric.value)
