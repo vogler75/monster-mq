@@ -37,7 +37,11 @@ object DeviceConfigStoreFactory {
     fun create(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {
         // Return shared instance if available
         sharedInstance?.let { return it }
-        return createRaw(storeType, config, vertx)?.let { at.rocworks.virtualtrees.GuardedDeviceConfigStore(it) }
+        val raw = createRaw(storeType, config, vertx) ?: return null
+        // Only guard tree rows when the (opt-in) feature is enabled; otherwise no extra store queries
+        val vtEnabled = config.getJsonObject("Features", io.vertx.core.json.JsonObject())
+            .getBoolean(at.rocworks.Features.VirtualTopicTrees, false)
+        return if (vtEnabled) at.rocworks.virtualtrees.GuardedDeviceConfigStore(raw) else raw
     }
 
     private fun createRaw(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {

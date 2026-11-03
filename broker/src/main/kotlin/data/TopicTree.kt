@@ -72,6 +72,12 @@ class TopicTree<K, V> : ITopicTree<K, V> {
     private fun parentMatches(node: Node<K, V>): List<Pair<K, V>> =
         node.children["#"]?.dataset?.toList() ?: emptyList()
 
+    /** Dataset of [node] plus its "#" parent matches; avoids an extra list when there is no "#" child. */
+    private fun datasetWithParent(node: Node<K, V>): List<Pair<K, V>> {
+        val hash = node.children["#"]?.dataset
+        return if (hash.isNullOrEmpty()) node.dataset.toList() else node.dataset.toList() + hash.toList()
+    }
+
     override fun add(topicName: String) = add(topicName, null, null)
     override fun add(topicName: String, key: K?, value: V?) {
         logger.finest { "Add topic [$topicName] key [$key] value [$value]" }
@@ -192,13 +198,13 @@ class TopicTree<K, V> : ITopicTree<K, V> {
                         if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
                             listOf()
                         } else {
-                            (if (rest.isEmpty()) child.value.dataset.toList() + parentMatches(child.value) else listOf()) +
+                            (if (rest.isEmpty()) datasetWithParent(child.value) else listOf()) +
                                     (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
                                     else listOf())
                         }
                     }
                     current -> {
-                        (if (rest.isEmpty()) child.value.dataset.toList() + parentMatches(child.value) else listOf()) +
+                        (if (rest.isEmpty()) datasetWithParent(child.value) else listOf()) +
                                 (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
                                 else listOf())
                     }

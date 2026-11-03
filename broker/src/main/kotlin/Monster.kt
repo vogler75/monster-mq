@@ -1267,7 +1267,7 @@ MORE INFO:
                 // Device Config Store for OPC UA Server Extension
                 val configStoreType = getConfigStoreType(configJson)
                 val virtualTopicTreesEnabled = configJson.getJsonObject("Features", JsonObject())
-                    .getBoolean(Features.VirtualTopicTrees, true)
+                    .getBoolean(Features.VirtualTopicTrees, false)
                 val deviceConfigStore = if (configStoreType != "NONE") {
                     try {
                         val store = at.rocworks.stores.DeviceConfigStoreFactory.create(configStoreType, configJson, vertx)
@@ -1629,7 +1629,7 @@ MORE INFO:
                     .compose {
                         // Resolve feature flags from top-level Features config block
                         val featuresConfig = configJson.getJsonObject("Features", JsonObject())
-                        val enabled = Features.all.filter { featuresConfig.getBoolean(it, true) }.toSet()
+                        val enabled = Features.all.filter { featuresConfig.getBoolean(it, it != Features.VirtualTopicTrees) }.toSet() // VirtualTopicTrees is opt-in
                         logger.info("Enabled features: $enabled")
                         publishEnabledFeatures(vertx, enabled)
                     }

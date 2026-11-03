@@ -677,6 +677,8 @@ class SubscriptionResolver(
 /** Delivered topic is readable if allowed and, for a virtual presentation, its canonical source is allowed too. */
 private fun canReadTopic(authContext: GraphQLAuthContext, user: AuthContext?, topic: String): Boolean {
     if (!authContext.canSubscribeToTopic(user, topic)) return false
-    val canonical = VirtualTopicTreeManager.resolver().readResolve(topic) ?: return false
+    val resolver = VirtualTopicTreeManager.resolver()
+    if (resolver.isEmpty) return true
+    val canonical = resolver.readResolve(topic) ?: return false
     return canonical == topic || authContext.canSubscribeToTopic(user, canonical)
 }

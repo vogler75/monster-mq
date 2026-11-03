@@ -1163,13 +1163,18 @@ class MqttClient(
         }
 
         // Virtual topic trees: resolve a virtual publish to its canonical (physical) topic
-        val resolution = VirtualTopicTreeManager.resolver().publish(topicName)
-        if (resolution.reject != null) {
-            logger.fine { "Client [$clientId] Publish to virtual topic [$topicName] rejected: ${resolution.reject}" }
-            rejectPublish(msg, MqttPubAckReasonCode.TOPIC_NAME_INVALID, MqttPubRecReasonCode.TOPIC_NAME_INVALID)
-            return
+        // (skipped entirely when no tree is configured, so the feature costs nothing when off)
+        val vtResolver = VirtualTopicTreeManager.resolver()
+        var canonicalTopic = topicName
+        if (!vtResolver.isEmpty) {
+            val resolution = vtResolver.publish(topicName)
+            if (resolution.reject != null) {
+                logger.fine { "Client [$clientId] Publish to virtual topic [$topicName] rejected: ${resolution.reject}" }
+                rejectPublish(msg, MqttPubAckReasonCode.TOPIC_NAME_INVALID, MqttPubRecReasonCode.TOPIC_NAME_INVALID)
+                return
+            }
+            canonicalTopic = resolution.canonical ?: topicName
         }
-        val canonicalTopic = resolution.canonical ?: topicName
         val isVirtual = canonicalTopic != topicName
         
         // Check ACL permissions (a virtual publish needs permission on both the virtual and the canonical topic)
@@ -1816,12 +1821,16 @@ class MqttClient(
                 }
 
                 // Virtual topic trees: a will to a virtual path is written through like a normal publish
-                val resolution = VirtualTopicTreeManager.resolver().publish(topicName)
-                if (resolution.reject != null) {
-                    logger.warning("Client [$clientId] Last Will to virtual topic [$topicName] rejected: ${resolution.reject}")
-                    return
+                val vtResolver = VirtualTopicTreeManager.resolver()
+                var canonicalTopic = topicName
+                if (!vtResolver.isEmpty) {
+                    val resolution = vtResolver.publish(topicName)
+                    if (resolution.reject != null) {
+                        logger.warning("Client [$clientId] Last Will to virtual topic [$topicName] rejected: ${resolution.reject}")
+                        return
+                    }
+                    canonicalTopic = resolution.canonical ?: topicName
                 }
-                val canonicalTopic = resolution.canonical ?: topicName
                 val msg = if (canonicalTopic != topicName) willMsg.copy(topicName = canonicalTopic) else willMsg
 
                 // ACL check
