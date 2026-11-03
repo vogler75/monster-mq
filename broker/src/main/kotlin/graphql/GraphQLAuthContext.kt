@@ -56,7 +56,9 @@ class GraphQLAuthContext(
             "dataCatalog",
             "saveRedfishMapping",
             "deleteRedfishMapping",
-            "toggleRedfishMapping"
+            "toggleRedfishMapping",
+            "saveVirtualTopicTree",
+            "deleteVirtualTopicTree"
         )
     }
 
@@ -151,6 +153,7 @@ class GraphQLAuthContext(
             "agent", "mcpServer", "genAiProvider",
             "hmi", "kafkaServer", "i3xClient", "dataCatalog",
             "saveRedfishMapping", "deleteRedfishMapping", "toggleRedfishMapping",
+            "saveVirtualTopicTree", "deleteVirtualTopicTree",
             "opcUaDevices" -> true
             else -> false
         }

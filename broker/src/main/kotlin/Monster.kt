@@ -1266,6 +1266,8 @@ MORE INFO:
 
                 // Device Config Store for OPC UA Server Extension
                 val configStoreType = getConfigStoreType(configJson)
+                val virtualTopicTreesEnabled = configJson.getJsonObject("Features", JsonObject())
+                    .getBoolean(Features.VirtualTopicTrees, true)
                 val deviceConfigStore = if (configStoreType != "NONE") {
                     try {
                         val store = at.rocworks.stores.DeviceConfigStoreFactory.create(configStoreType, configJson, vertx)
@@ -1278,6 +1280,10 @@ MORE INFO:
                             } else {
                                 // Start Topic Schema Policy Cache after store is ready
                                 at.rocworks.schema.TopicSchemaPolicyCache(vertx, store).start()
+
+                                if (virtualTopicTreesEnabled) {
+                                    at.rocworks.virtualtrees.VirtualTopicTreeManager(vertx, store).start()
+                                }
 
                                 // Load device configs from file if specified
                                 val deviceConfigFile = deviceConfigsFile ?: deviceConfigsMergeFile
@@ -1295,6 +1301,9 @@ MORE INFO:
                 } else {
                     if (deviceConfigsFile != null || deviceConfigsMergeFile != null) {
                         logger.warning("-deviceConfigs/-deviceConfigsMerge requires ConfigStoreType to be set (not NONE)")
+                    }
+                    if (virtualTopicTreesEnabled) {
+                        at.rocworks.virtualtrees.VirtualTopicTreeManager(vertx, null).start()
                     }
                     null
                 }

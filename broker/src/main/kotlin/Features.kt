@@ -31,12 +31,13 @@ object Features {
     const val I3xClient = "I3xClient"
     const val Redfish = "Redfish"
     const val PythonScripts = "PythonScripts"
+    const val VirtualTopicTrees = "VirtualTopicTrees"
 
     val all: List<String> = listOf(
         OpcUa, OpcUaServer, MqttClient, Kafka, Nats, Redis, RedisServer, Telegram,
         WinCCOa, WinCCUa, Plc4x, Neo4j, JdbcLogger, InfluxDBLogger, TimeBaseLogger,
         SparkplugB, FlowEngine, Agents,
         GenAi, Mcp, KafkaServer, SchemaPolicy, TopicNamespace, DataCatalog, DeviceImportExport,
-        Zenoh, Hmi, I3xClient, Redfish, PythonScripts
+        Zenoh, Hmi, I3xClient, Redfish, PythonScripts, VirtualTopicTrees
     )
 }

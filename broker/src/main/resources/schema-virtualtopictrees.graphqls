@@ -1,0 +1,32 @@
+# Virtual MQTT topic trees with subtree mounts (issue #217)
+# Shared contract with MonsterMQ Edge - keep both schemas identical.
+
+enum VirtualTopicBindingKind { EXACT SUBTREE }
+enum VirtualTopicAccess { READ_ONLY READ_WRITE }
+enum VirtualTopicOperation { PUBLISH SUBSCRIBE PROJECT }
+
+type VirtualTopicBinding { kind: VirtualTopicBindingKind! target: String! access: VirtualTopicAccess! }
+type VirtualTopicNode { id: ID! parentId: ID segment: String! description: String binding: VirtualTopicBinding }
+type VirtualTopicTree { schemaVersion: Int! id: ID! name: String! rootPath: String! description: String enabled: Boolean! revision: String! nodes: [VirtualTopicNode!]! }
+
+input VirtualTopicBindingInput { kind: VirtualTopicBindingKind! target: String! access: VirtualTopicAccess = READ_ONLY }
+input VirtualTopicNodeInput { id: ID! parentId: ID segment: String! description: String binding: VirtualTopicBindingInput }
+input VirtualTopicTreeInput { schemaVersion: Int! id: ID! name: String! rootPath: String! description: String enabled: Boolean = true nodes: [VirtualTopicNodeInput!]! }
+
+type VirtualTopicIssue { code: String! nodeId: ID path: String message: String! }
+type VirtualTopicValidationResult { valid: Boolean! errors: [VirtualTopicIssue!]! warnings: [VirtualTopicIssue!]! }
+type VirtualTopicRoute { nodeId: ID! virtualPath: String! canonicalPath: String! access: VirtualTopicAccess! }
+type VirtualTopicPreviewResult { routes: [VirtualTopicRoute!]! errors: [VirtualTopicIssue!]! }
+type VirtualTopicTreeMutationResult { success: Boolean! tree: VirtualTopicTree appliedRevision: String errors: [VirtualTopicIssue!]! }
+
+extend type Query {
+  virtualTopicTrees: [VirtualTopicTree!]!
+  virtualTopicTree(id: ID!): VirtualTopicTree
+  validateVirtualTopicTree(input: VirtualTopicTreeInput!): VirtualTopicValidationResult!
+  previewVirtualTopicTree(input: VirtualTopicTreeInput!, topicOrFilter: String!, operation: VirtualTopicOperation!): VirtualTopicPreviewResult!
+}
+
+extend type Mutation {
+  saveVirtualTopicTree(input: VirtualTopicTreeInput!, expectedRevision: String): VirtualTopicTreeMutationResult!
+  deleteVirtualTopicTree(id: ID!, expectedRevision: String!): VirtualTopicTreeMutationResult!
+}

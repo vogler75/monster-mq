@@ -68,6 +68,10 @@ class TopicTree<K, V> : ITopicTree<K, V> {
 
     override fun getType(): TopicTreeType = TopicTreeType.LOCAL
 
+    /** MQTT §4.7.1.2: a trailing "#" also matches its parent level, so "a/+/#" matches "a/b". */
+    private fun parentMatches(node: Node<K, V>): List<Pair<K, V>> =
+        node.children["#"]?.dataset?.toList() ?: emptyList()
+
     override fun add(topicName: String) = add(topicName, null, null)
     override fun add(topicName: String, key: K?, value: V?) {
         logger.finest { "Add topic [$topicName] key [$key] value [$value]" }
@@ -143,13 +147,13 @@ class TopicTree<K, V> : ITopicTree<K, V> {
                         if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
                             false
                         } else {
-                            (rest.isEmpty() && child.value.dataset.isNotEmpty())
+                            (rest.isEmpty() && (child.value.dataset.isNotEmpty() || parentMatches(child.value).isNotEmpty()))
                                     || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar))
                         }
                     }
                     current -> {
                         // Exact match
-                        (rest.isEmpty() && child.value.dataset.isNotEmpty())
+                        (rest.isEmpty() && (child.value.dataset.isNotEmpty() || parentMatches(child.value).isNotEmpty()))
                                 || (rest.isNotEmpty() && find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar))
                     }
                     else -> false
@@ -188,15 +192,15 @@ class TopicTree<K, V> : ITopicTree<K, V> {
                         if (isFirstLevel && topicStartsWithDollar && !childFilterStartsWithDollar) {
                             listOf()
                         } else {
-                            (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                            (if (rest.isEmpty()) child.value.dataset.toList() + parentMatches(child.value) else listOf()) +
                                     (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
                                     else listOf())
                         }
                     }
                     current -> {
-                        (if (rest.isEmpty()) child.value.dataset.toList() else listOf()) +
+                        (if (rest.isEmpty()) child.value.dataset.toList() + parentMatches(child.value) else listOf()) +
                                 (if (rest.isNotEmpty()) find(child.value, rest.first(), rest.drop(1), level + 1, childFilterStartsWithDollar)
-                                else find(child.value, "", listOf(), level + 1, childFilterStartsWithDollar))
+                                else listOf())
                     }
                     else -> listOf()
                 }

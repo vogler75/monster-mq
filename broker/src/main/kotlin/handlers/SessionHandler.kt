@@ -14,6 +14,8 @@ import at.rocworks.cluster.SetMapReplicator
 import at.rocworks.data.*
 import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
+import at.rocworks.virtualtrees.VtResolver
 import java.util.concurrent.locks.ReentrantLock
 import io.netty.handler.codec.mqtt.MqttQoS
 import io.vertx.core.AbstractVerticle
@@ -1775,6 +1777,28 @@ open class SessionHandler(
      * Made internal so PublishWorker can call it.
      */
     internal fun processTopic(topicName: String, messages: List<BrokerMessage>) {
+        val resolver = VirtualTopicTreeManager.resolver()
+        if (resolver.isEmpty) {
+            processTopicLocal(topicName, messages)
+        } else {
+            resolver.presentations(topicName).forEach { topic ->
+                processTopicLocal(topic, if (topic == topicName) messages else messages.map { VtResolver.virtualCopy(it, topic) })
+            }
+        }
+
+        // Handle remote nodes (they project the canonical message themselves)
+        if (Monster.isClustered()) {
+            val localNodeId = Monster.getClusterNodeId(vertx)
+            val targetNodes = getTargetNodesForTopic(topicName)
+            val remoteNodes = targetNodes.filter { it != localNodeId }
+
+            remoteNodes.forEach { nodeId ->
+                forwardToRemoteNode(messages, nodeId)
+            }
+        }
+    }
+
+    private fun processTopicLocal(topicName: String, messages: List<BrokerMessage>) {
         notifyMessageListeners(topicName, messages)
 
         // Group messages by sender for noLocal filtering
@@ -1815,16 +1839,6 @@ open class SessionHandler(
 
                 // Handle created and offline clients
                 handleCreatedAndOfflineClients(msgsWithQos, otherClients, msgQos)
-            }
-        }
-
-        // Handle remote nodes
-        if (Monster.isClustered()) {
-            val targetNodes = getTargetNodesForTopic(topicName)
-            val remoteNodes = targetNodes.filter { it != localNodeId }
-
-            remoteNodes.forEach { nodeId ->
-                forwardToRemoteNode(messages, nodeId)
             }
         }
     }
@@ -2072,8 +2086,23 @@ open class SessionHandler(
         }
     }
 
-    // Process messages for local clients only (used for both external and targeted internal messages)
+    // Process messages for local clients only (used for both external and targeted internal messages).
+    // Virtual topic trees: the canonical message is delivered once per presented topic name
+    // (physical name and every virtual projection).
     private fun processMessageForLocalClients(message: BrokerMessage) {
+        val resolver = VirtualTopicTreeManager.resolver()
+        if (resolver.isEmpty) {
+            processPresentationForLocalClients(message)
+            return
+        }
+        resolver.presentations(message.topicName).forEach { topic ->
+            processPresentationForLocalClients(
+                if (topic == message.topicName) message else VtResolver.virtualCopy(message, topic)
+            )
+        }
+    }
+
+    private fun processPresentationForLocalClients(message: BrokerMessage) {
         val localNodeId = Monster.getClusterNodeId(vertx)
 
         notifyMessageListeners(message.topicName, listOf(message))
@@ -2205,9 +2234,14 @@ open class SessionHandler(
         processBatch()
     }
 
-    // Helper function to determine target nodes for a topic
-    private fun getTargetNodesForTopic(topicName: String): Set<String> =
-        topicNodeMapping.findValuesMatchingTopic(topicName)
+    // Helper function to determine target nodes for a topic (including nodes subscribed to its virtual presentations)
+    private fun getTargetNodesForTopic(topicName: String): Set<String> {
+        val resolver = VirtualTopicTreeManager.resolver()
+        if (resolver.isEmpty) return topicNodeMapping.findValuesMatchingTopic(topicName)
+        val out = HashSet<String>()
+        resolver.presentations(topicName).forEach { out.addAll(topicNodeMapping.findValuesMatchingTopic(it)) }
+        return out
+    }
 
     // Simple topic filter matching using unified matcher
     private fun matchesTopicFilter(topicName: String, topicFilter: String): Boolean =

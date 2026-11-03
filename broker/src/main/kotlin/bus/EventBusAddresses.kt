@@ -218,6 +218,12 @@ object EventBusAddresses {
         const val RELOAD = "$NS.reload"
     }
 
+    // Virtual Topic Trees
+    object VirtualTopicTrees {
+        private const val NS = "$BASE.virtualtopictrees"
+        const val RELOAD = "$NS.reload"
+    }
+
     // System Operations
     object System {
         // Can be used for system-wide broadcasts, health checks, etc.

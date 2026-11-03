@@ -23,6 +23,8 @@ import io.vertx.mqtt.messages.MqttSubscribeMessage
 import io.vertx.mqtt.messages.MqttUnsubscribeMessage
 import io.vertx.mqtt.messages.codes.MqttPubAckReasonCode
 import io.vertx.mqtt.messages.codes.MqttPubCompReasonCode
+import io.vertx.mqtt.messages.codes.MqttPubRecReasonCode
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
 import io.vertx.mqtt.messages.codes.MqttDisconnectReasonCode
 import io.vertx.mqtt.messages.codes.MqttSubAckReasonCode
 import io.vertx.mqtt.messages.codes.MqttUnsubAckReasonCode
@@ -1138,7 +1140,8 @@ class MqttClient(
         processPublishMessage(msg)
     }
 
-    private fun processPublishMessage(msg: BrokerMessage) {
+    private fun processPublishMessage(original: BrokerMessage) {
+        var msg = original
         logger.finest { "Client [$clientId] Publish: message [${msg.messageId}] for [${msg.topicName}] with QoS ${msg.qosLevel} [${Utils.getCurrentFunctionName()}]" }
 
         // Increment messages received from client
@@ -1158,11 +1161,22 @@ class MqttClient(
             sessionHandler.disconnectClient(clientId, "Publish topic contains wildcard characters")
             return
         }
+
+        // Virtual topic trees: resolve a virtual publish to its canonical (physical) topic
+        val resolution = VirtualTopicTreeManager.resolver().publish(topicName)
+        if (resolution.reject != null) {
+            logger.fine { "Client [$clientId] Publish to virtual topic [$topicName] rejected: ${resolution.reject}" }
+            rejectPublish(msg, MqttPubAckReasonCode.TOPIC_NAME_INVALID, MqttPubRecReasonCode.TOPIC_NAME_INVALID)
+            return
+        }
+        val canonicalTopic = resolution.canonical ?: topicName
+        val isVirtual = canonicalTopic != topicName
         
-        // Check ACL permissions
+        // Check ACL permissions (a virtual publish needs permission on both the virtual and the canonical topic)
         val username = authenticatedUser?.username ?: at.rocworks.Const.ANONYMOUS_USER
         val canPublish = if (userManager.isUserManagementEnabled()) {
-            userManager.canPublish(username, topicName, clientId)
+            userManager.canPublish(username, topicName, clientId) &&
+                (!isVirtual || userManager.canPublish(username, canonicalTopic, clientId))
         } else {
             true // Allow all if user management is disabled
         }
@@ -1176,18 +1190,25 @@ class MqttClient(
                 sessionHandler.disconnectClient(clientId, "Unauthorized publish to $topicName")
                 return
             }
-            
+
+            if (isVirtual) {
+                rejectPublish(msg, MqttPubAckReasonCode.NOT_AUTHORIZED, MqttPubRecReasonCode.NOT_AUTHORIZED)
+            }
             // Otherwise, just ignore the message (silent drop)
             return
         }
         
         logger.finest { "Client [$clientId] Publish ALLOWED for [$topicName] - user [$username]" }
 
+        if (isVirtual) {
+            msg = msg.copy(topicName = canonicalTopic)
+        }
+
         // Validate against Topic Schema Namespace (if any)
         val schemaPolicyCache = TopicSchemaPolicyCache.getInstance()
         if (schemaPolicyCache != null) {
-            val nsEntry = schemaPolicyCache.matchNamespace(topicName)
-            logger.finer { "Client [$clientId] Schema check for [$topicName]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
+            val nsEntry = schemaPolicyCache.matchNamespace(canonicalTopic)
+            logger.finer { "Client [$clientId] Schema check for [$canonicalTopic]: ${if (nsEntry != null) "matched namespace '${nsEntry.namespaceName}'" else "no matching namespace"}" }
             if (nsEntry != null) {
                 val payload = msg.getPayloadAsString()
                 val result = nsEntry.validator.validate(payload)
@@ -1197,7 +1218,7 @@ class MqttClient(
                         "SCHEMA_ERROR" -> schemaPolicyCache.schemaErrorCount.incrementAndGet()
                     }
                     schemaPolicyCache.rejectedCount.incrementAndGet()
-                    logger.warning("Client [$clientId] Publish REJECTED by namespace '${nsEntry.namespaceName}' (schema '${nsEntry.schemaPolicyName}') for [$topicName]: ${result.errorDetail}")
+                    logger.warning("Client [$clientId] Publish REJECTED by namespace '${nsEntry.namespaceName}' (schema '${nsEntry.schemaPolicyName}') for [$canonicalTopic]: ${result.errorDetail}")
                     // For MQTT v5, send PUBACK with error reason code
                     if (endpoint.protocolVersion() == 5 && msg.qosLevel == 1) {
                         endpoint.publishAcknowledge(msg.messageId, MqttPubAckReasonCode.PAYLOAD_FORMAT_INVALID, MqttProperties.NO_PROPERTIES)
@@ -1235,6 +1256,20 @@ class MqttClient(
             else -> {
                 logger.warning { "Client [$clientId] Publish: unknown QoS level [${msg.qosLevel}] [${Utils.getCurrentFunctionName()}]" }
             }
+        }
+    }
+
+    /**
+     * Rejects a publish that was not routed: MQTT 5 gets an error reason code, MQTT 3.1.1 gets a
+     * plain acknowledgement (the protocol has no negative PUBACK) and the message is discarded.
+     */
+    private fun rejectPublish(msg: BrokerMessage, ackCode: MqttPubAckReasonCode, recCode: MqttPubRecReasonCode) {
+        val v5 = endpoint.protocolVersion() == 5
+        when (msg.qosLevel) {
+            1 -> if (v5) endpoint.publishAcknowledge(msg.messageId, ackCode, MqttProperties.NO_PROPERTIES)
+                 else endpoint.publishAcknowledge(msg.messageId)
+            2 -> if (v5) endpoint.publishReceived(msg.messageId, recCode, MqttProperties.NO_PROPERTIES)
+                 else endpoint.publishReceived(msg.messageId)
         }
     }
 
@@ -1379,6 +1414,15 @@ class MqttClient(
                 if (!userManager.canSubscribe(username, message.topicName, clientId)) {
                     logger.finest { "Client [$clientId] Message for topic [${message.topicName}] dropped by delivery-time ACL filter for user [$username]" }
                     return
+                }
+                // A virtual presentation also requires read permission on the canonical topic
+                val resolver = VirtualTopicTreeManager.resolver()
+                if (!resolver.isEmpty && resolver.inVirtualNamespace(message.topicName)) {
+                    val canonical = resolver.readResolve(message.topicName)
+                    if (canonical == null || !userManager.canSubscribe(username, canonical, clientId)) {
+                        logger.finest { "Client [$clientId] Virtual message [${message.topicName}] dropped: no read permission on canonical topic [$canonical]" }
+                        return
+                    }
                 }
             }
 
@@ -1756,8 +1800,8 @@ class MqttClient(
         }
         endpoint.will()?.let { will ->
             if (will.isWillFlag) {
-                val msg = BrokerMessage(clientId, will)
-                val topicName = msg.topicName
+                val willMsg = BrokerMessage(clientId, will)
+                val topicName = willMsg.topicName
 
                 // System topic restriction
                 if (topicName.startsWith(Const.SYS_TOPIC_NAME)) {
@@ -1771,10 +1815,20 @@ class MqttClient(
                     return
                 }
 
+                // Virtual topic trees: a will to a virtual path is written through like a normal publish
+                val resolution = VirtualTopicTreeManager.resolver().publish(topicName)
+                if (resolution.reject != null) {
+                    logger.warning("Client [$clientId] Last Will to virtual topic [$topicName] rejected: ${resolution.reject}")
+                    return
+                }
+                val canonicalTopic = resolution.canonical ?: topicName
+                val msg = if (canonicalTopic != topicName) willMsg.copy(topicName = canonicalTopic) else willMsg
+
                 // ACL check
                 val username = authenticatedUser?.username ?: Const.ANONYMOUS_USER
                 val canPublish = if (userManager.isUserManagementEnabled()) {
-                    userManager.canPublish(username, topicName, clientId)
+                    userManager.canPublish(username, topicName, clientId) &&
+                        (canonicalTopic == topicName || userManager.canPublish(username, canonicalTopic, clientId))
                 } else {
                     true
                 }
@@ -1786,7 +1840,7 @@ class MqttClient(
                 // Topic schema policy validation
                 val schemaPolicyCache = TopicSchemaPolicyCache.getInstance()
                 if (schemaPolicyCache != null) {
-                    val nsEntry = schemaPolicyCache.matchNamespace(topicName)
+                    val nsEntry = schemaPolicyCache.matchNamespace(canonicalTopic)
                     if (nsEntry != null) {
                         val result = nsEntry.validator.validate(msg.getPayloadAsString())
                         if (!result.valid) {

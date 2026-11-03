@@ -1200,7 +1200,8 @@
         "Hmi": { "type": "boolean", "title": "Embedded HMI Hosting", "default": true, "description": "Host custom HTML5 / SVG / JavaScript HMI dashboard views directly from the broker" },
         "I3xClient": { "type": "boolean", "title": "i3X Manufacturing Client", "default": true, "description": "CESMII i3X standardized manufacturing client bridge" },
         "Redfish": { "type": "boolean", "title": "DMTF Redfish REST Server", "default": false, "description": "DMTF Redfish hypermedia REST API server and MQTT sensor mapping engine" },
-        "PythonScripts": { "type": "boolean", "title": "Python/Starlark Script Engine", "default": true, "description": "Standalone Python and Starlark script execution engine" }
+        "PythonScripts": { "type": "boolean", "title": "Python/Starlark Script Engine", "default": true, "description": "Standalone Python and Starlark script execution engine" },
+        "VirtualTopicTrees": { "type": "boolean", "title": "Virtual Topic Trees", "default": true, "description": "Virtual MQTT topic trees that present physical topics under additional virtual names (subtree mounts and exact bindings)" }
       },
       "additionalProperties": false
     },

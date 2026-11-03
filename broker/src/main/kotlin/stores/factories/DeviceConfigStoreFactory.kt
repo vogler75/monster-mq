@@ -37,6 +37,10 @@ object DeviceConfigStoreFactory {
     fun create(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {
         // Return shared instance if available
         sharedInstance?.let { return it }
+        return createRaw(storeType, config, vertx)?.let { at.rocworks.virtualtrees.GuardedDeviceConfigStore(it) }
+    }
+
+    private fun createRaw(storeType: String?, config: JsonObject, vertx: Vertx): IDeviceConfigStore? {
         return when (storeType?.uppercase()) {
             "POSTGRES" -> {
                 val postgresConfig = config.getJsonObject("Postgres")

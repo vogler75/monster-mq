@@ -405,14 +405,30 @@ class MessageHandler(
         vertx.executeBlocking(Callable {
             var counter = 0
             try {
-                retainedStore.findMatchingMessages(topicName) { message ->
-                    logger.finest { "Found matching message [${message.topicName}] for [$topicName] [${Utils.getCurrentFunctionName()}]" }
-                    counter++
-                    callback(message)
-                    if (max > 0 && counter > max) {
-                        logger.warning("Maximum messages sent [${Utils.getCurrentFunctionName()}]")
-                        false
-                    } else true
+                val resolver = at.rocworks.virtualtrees.VirtualTopicTreeManager.resolver()
+                if (resolver.isEmpty) {
+                    retainedStore.findMatchingMessages(topicName) { message ->
+                        logger.finest { "Found matching message [${message.topicName}] for [$topicName] [${Utils.getCurrentFunctionName()}]" }
+                        counter++
+                        callback(message)
+                        if (max > 0 && counter > max) {
+                            logger.warning("Maximum messages sent [${Utils.getCurrentFunctionName()}]")
+                            false
+                        } else true
+                    }
+                } else {
+                    // Virtual topic trees: retained values are stored canonically and presented per subscription filter
+                    resolver.findPresented<BrokerMessage>(topicName,
+                        { filter, cb -> retainedStore.findMatchingMessages(filter) { cb(it) } },
+                        { it.topicName }
+                    ) { presented, message ->
+                        counter++
+                        callback(if (presented == message.topicName) message else at.rocworks.virtualtrees.VtResolver.virtualCopy(message, presented))
+                        if (max > 0 && counter > max) {
+                            logger.warning("Maximum messages sent [${Utils.getCurrentFunctionName()}]")
+                            false
+                        } else true
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()

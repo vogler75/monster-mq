@@ -356,7 +356,8 @@ class GraphQLServer(
             "schema-datacatalog.graphqls",  // Data Catalog
             "schema-redfish.graphqls",      // Redfish Gateway
             "schema-scripts.graphqls",      // Standalone Python/Starlark Scripts
-            "schema-peerlink.graphqls"      // PeerLink configuration and link state
+            "schema-peerlink.graphqls",     // PeerLink configuration and link state
+            "schema-virtualtopictrees.graphqls" // Virtual MQTT topic trees (shared with MonsterMQ Edge)
         )
 
         return schemaFiles.joinToString("\n") { filename ->
@@ -514,6 +515,8 @@ class GraphQLServer(
             TopicSchemaMutations(deviceStore, topicSchemaPolicyCache)
         } else null
 
+        val virtualTopicTreeResolver = VirtualTopicTreeResolver(authContext)
+
         // Initialize AI Agent resolvers
         val agentQueries = deviceStore?.let { AgentQueries(vertx, it, config) }
         val agentMutations = deviceStore?.let { AgentMutations(vertx, it) }
@@ -558,6 +561,9 @@ class GraphQLServer(
             .type("SecurityPolicy") { builder ->
                 builder.enumValues { name -> name }
             }
+            .type("VirtualTopicBindingKind") { builder -> builder.enumValues { name -> name } }
+            .type("VirtualTopicAccess") { builder -> builder.enumValues { name -> name } }
+            .type("VirtualTopicOperation") { builder -> builder.enumValues { name -> name } }
             // Register query resolvers
             .type("Query") { builder ->
                 builder
@@ -771,6 +777,11 @@ class GraphQLServer(
                             dataFetcher("genai", resolver.genai())
                         }
                     }
+                    // Virtual topic trees
+                    .dataFetcher("virtualTopicTrees", virtualTopicTreeResolver.virtualTopicTrees())
+                    .dataFetcher("virtualTopicTree", virtualTopicTreeResolver.virtualTopicTree())
+                    .dataFetcher("validateVirtualTopicTree", virtualTopicTreeResolver.validateVirtualTopicTree())
+                    .dataFetcher("previewVirtualTopicTree", virtualTopicTreeResolver.previewVirtualTopicTree())
                     // Topic Schema Governance queries
                     .apply {
                         topicSchemaQueries?.let { resolver ->
@@ -913,6 +924,8 @@ class GraphQLServer(
                     // Publishing (requires token + ACL check)
                     .dataFetcher("publish", mutationResolver.publish())
                     .dataFetcher("publishBatch", mutationResolver.publishBatch())
+                    .dataFetcher("saveVirtualTopicTree", virtualTopicTreeResolver.saveVirtualTopicTree())
+                    .dataFetcher("deleteVirtualTopicTree", virtualTopicTreeResolver.deleteVirtualTopicTree())
                      // User management mutations - grouped under user
                     .dataFetcher("user") { env ->
                         val result = authContext.validateFieldAccess(env)

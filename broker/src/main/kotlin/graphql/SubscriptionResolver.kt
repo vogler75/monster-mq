@@ -4,6 +4,7 @@ import at.rocworks.Monster
 import at.rocworks.Utils
 import at.rocworks.bus.EventBusAddresses
 import at.rocworks.data.BrokerMessage
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
 import graphql.schema.DataFetcher
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -251,7 +252,7 @@ class SubscriptionResolver(
         private fun handleMessage(message: BrokerMessage) {
             vertx.runOnContext {
                 if (cancelled.get()) return@runOnContext
-                if (authContext != null && !authContext.canSubscribeToTopic(userAuthContext, message.topicName)) {
+                if (authContext != null && !canReadTopic(authContext, userAuthContext, message.topicName)) {
                     return@runOnContext
                 }
 
@@ -369,7 +370,7 @@ class SubscriptionResolver(
         private fun handleMessage(message: BrokerMessage) {
             vertx.runOnContext {
                 if (cancelled.get()) return@runOnContext
-                if (authContext != null && !authContext.canSubscribeToTopic(userAuthContext, message.topicName)) {
+                if (authContext != null && !canReadTopic(authContext, userAuthContext, message.topicName)) {
                     return@runOnContext
                 }
 
@@ -671,4 +672,11 @@ class SubscriptionResolver(
             }
         }
     }
+}
+
+/** Delivered topic is readable if allowed and, for a virtual presentation, its canonical source is allowed too. */
+private fun canReadTopic(authContext: GraphQLAuthContext, user: AuthContext?, topic: String): Boolean {
+    if (!authContext.canSubscribeToTopic(user, topic)) return false
+    val canonical = VirtualTopicTreeManager.resolver().readResolve(topic) ?: return false
+    return canonical == topic || authContext.canSubscribeToTopic(user, canonical)
 }

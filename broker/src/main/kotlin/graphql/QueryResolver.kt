@@ -4,6 +4,10 @@ import at.rocworks.Const
 import at.rocworks.Monster
 import at.rocworks.Features
 import at.rocworks.Utils
+import at.rocworks.data.BrokerMessage
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
+import at.rocworks.virtualtrees.VtRules
+import at.rocworks.virtualtrees.VtTree
 import at.rocworks.handlers.ArchiveGroup
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.stores.IMessageArchiveExtended
@@ -41,6 +45,27 @@ class QueryResolver(
         return archiveHandler?.getDeployedArchiveGroups() ?: emptyMap()
     }
 
+    /** A presented topic is readable if the user may subscribe to it and, if virtual, to its canonical source. */
+    private fun canReadPresented(user: AuthContext?, presented: String, canonical: String): Boolean =
+        authContext.canSubscribeToTopic(user, presented) &&
+            (presented == canonical || authContext.canSubscribeToTopic(user, canonical))
+
+    private fun toTopicValue(message: BrokerMessage, topic: String, format: DataFormat): TopicValue {
+        val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(message.payload, format)
+        return TopicValue(
+            topic = topic,
+            payload = payload,
+            format = actualFormat,
+            timestamp = message.time.toEpochMilli(),
+            qos = message.qosLevel,
+            messageExpiryInterval = message.messageExpiryInterval,
+            contentType = message.contentType,
+            responseTopic = message.responseTopic,
+            payloadFormatIndicator = message.payloadFormatIndicator,
+            userProperties = message.userProperties?.map { UserProperty(it.key, it.value) }
+        )
+    }
+
     fun currentValue(): DataFetcher<CompletableFuture<TopicValue?>> {
         return DataFetcher { env ->
             val future = CompletableFuture<TopicValue?>()
@@ -58,6 +83,13 @@ class QueryResolver(
             val format = env.getArgument<DataFormat>("format") ?: DataFormat.JSON
             val archiveGroupName = env.getArgument<String>("archiveGroup") ?: "Default"
 
+            // Virtual topic trees: read the canonical value, present it under the requested name
+            val canonical = VirtualTopicTreeManager.resolver().readResolve(topic)
+            if (canonical == null || !canReadPresented(userAuthContext, topic, canonical)) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+
             // Find the specified archive group with a LastValueStore
             val lastValueStore = getCurrentArchiveGroups()[archiveGroupName]?.lastValStore
 
@@ -68,7 +100,7 @@ class QueryResolver(
             }
 
             // Use getAsync for all stores (now available in all implementations)
-            lastValueStore.getAsync(topic) { message ->
+            lastValueStore.getAsync(canonical) { message ->
                 if (message != null) {
                     val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
                         message.payload, 
@@ -76,7 +108,7 @@ class QueryResolver(
                     )
                     future.complete(
                         TopicValue(
-                            topic = message.topicName,
+                            topic = topic,
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
@@ -121,6 +153,22 @@ class QueryResolver(
             if (lastValueStore == null) {
                 logger.warning("No LastValueStore configured for archive group '$archiveGroupName'")
                 future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val resolver = VirtualTopicTreeManager.resolver()
+            if (!resolver.isEmpty) {
+                // Virtual topic trees: physical values outside reserved roots plus virtual presentations
+                vertx.executeBlocking<List<TopicValue>>(Callable {
+                    val out = ArrayList<TopicValue>()
+                    resolver.findPresented<BrokerMessage>(topicFilter,
+                        { f, cb -> lastValueStore.findMatchingMessages(f) { cb(it) } }, { it.topicName }
+                    ) { presented, message ->
+                        if (canReadPresented(userAuthContext, presented, message.topicName)) out.add(toTopicValue(message, presented, format))
+                        out.size < limit
+                    }
+                    out
+                }).onSuccess { future.complete(it) }.onFailure { future.completeExceptionally(it) }
                 return@DataFetcher future
             }
 
@@ -193,7 +241,14 @@ class QueryResolver(
                 return@DataFetcher future
             }
 
-            retainedStore.getAsync(topic) { message ->
+            // Virtual topic trees: read the canonical retained message, present it under the requested name
+            val canonical = VirtualTopicTreeManager.resolver().readResolve(topic)
+            if (canonical == null || !canReadPresented(userAuthContext, topic, canonical)) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+
+            retainedStore.getAsync(canonical) { message ->
                 if (message == null) {
                     future.complete(null)
                     return@getAsync
@@ -205,7 +260,7 @@ class QueryResolver(
                 )
                 future.complete(
                     RetainedMessage(
-                        topic = message.topicName,
+                        topic = topic,
                         payload = payload,
                         format = actualFormat,
                         timestamp = message.time.toEpochMilli(),
@@ -242,6 +297,26 @@ class QueryResolver(
             if (retainedStore == null) {
                 logger.warning("No RetainedStore configured")
                 future.complete(emptyList())
+                return@DataFetcher future
+            }
+
+            val resolver = VirtualTopicTreeManager.resolver()
+            if (!resolver.isEmpty) {
+                // Virtual topic trees: physical retained messages outside reserved roots plus virtual presentations
+                vertx.executeBlocking<List<RetainedMessage>>(Callable {
+                    val out = ArrayList<RetainedMessage>()
+                    resolver.findPresented<BrokerMessage>(topicFilter,
+                        { f, cb -> retainedStore.findMatchingMessages(f) { cb(it) } }, { it.topicName }
+                    ) { presented, message ->
+                        if (canReadPresented(userAuthContext, presented, message.topicName)) {
+                            val v = toTopicValue(message, presented, format)
+                            out.add(RetainedMessage(v.topic, v.payload, v.format, v.timestamp, v.qos, v.messageExpiryInterval,
+                                v.contentType, v.responseTopic, v.payloadFormatIndicator, v.userProperties))
+                        }
+                        out.size < limit
+                    }
+                    out
+                }).onSuccess { future.complete(it) }.onFailure { future.completeExceptionally(it) }
                 return@DataFetcher future
             }
 
@@ -345,16 +420,39 @@ class QueryResolver(
             }
             
             vertx.executeBlocking<MutableList<ArchivedMessage>>(Callable {
-                val jsonArray = archiveStore.getHistory(
-                    topic = topicFilter,
+                val history = { filter: String -> archiveStore.getHistory(
+                    topic = filter,
                     startTime = startTimeStr?.let { Instant.parse(it) },
                     endTime = endTimeStr?.let { Instant.parse(it) },
                     limit = limit
-                )
+                ) }
+                // Rows as (presented topic, row); virtual trees present history under the current mapping
+                val rows = ArrayList<Pair<String, JsonObject>>()
+                val resolver = VirtualTopicTreeManager.resolver()
+                if (resolver.isEmpty) {
+                    val a = history(topicFilter)
+                    for (i in 0 until a.size()) a.getJsonObject(i).let { rows.add((it.getString("topic") ?: "") to it) }
+                } else {
+                    val a = history(topicFilter)
+                    for (i in 0 until a.size()) a.getJsonObject(i).let {
+                        val t = it.getString("topic") ?: ""
+                        if (!resolver.inVirtualNamespace(t) && canReadPresented(userAuthContext, t, t)) rows.add(t to it)
+                    }
+                    for (q in resolver.canonicalQueries(topicFilter)) {
+                        val b = history(q)
+                        for (i in 0 until b.size()) b.getJsonObject(i).let { row ->
+                            val c = row.getString("topic") ?: ""
+                            resolver.project(c).forEach { p ->
+                                if (VtRules.match(topicFilter, p.virtual) && canReadPresented(userAuthContext, p.virtual, c)) rows.add(p.virtual to row)
+                            }
+                        }
+                    }
+                    rows.sortByDescending { it.second.getLong("timestamp", 0L) }
+                    if (rows.size > limit) rows.subList(limit, rows.size).clear()
+                }
 
                 val archived = mutableListOf<ArchivedMessage>()
-                for (i in 0 until jsonArray.size()) {
-                    val obj = jsonArray.getJsonObject(i)
+                for ((presented, obj) in rows) {
                     val payloadBytes = when (val p = obj.getValue("payload")) {
                         is io.vertx.core.json.JsonObject -> p.encode().toByteArray(Charsets.UTF_8)
                         is io.vertx.core.json.JsonArray -> p.encode().toByteArray(Charsets.UTF_8)
@@ -372,7 +470,7 @@ class QueryResolver(
 
                     archived.add(
                         ArchivedMessage(
-                            topic = if (includeTopic) obj.getString("topic") ?: "" else "",
+                            topic = if (includeTopic) presented else "",
                             payload = payload,
                             format = actualFormat,
                             timestamp = obj.getLong("timestamp", 0L),
@@ -795,6 +893,39 @@ class QueryResolver(
             val topicLevels = topicPattern.split("/")
             val hasWildcard = topicPattern.contains("+") || topicPattern.contains("#")
 
+            val resolver = VirtualTopicTreeManager.resolver()
+            if (!resolver.isEmpty) {
+                // Virtual topic trees: physical topics outside reserved roots, virtual folders and observed mount descendants
+                vertx.executeBlocking<List<Topic>>(Callable {
+                    val names = java.util.TreeSet<String>()
+                    if (hasWildcard) {
+                        lastValueStore.findMatchingTopics(topicPattern) { t ->
+                            if (!resolver.inVirtualNamespace(t)) names.add(t); true
+                        }
+                        resolver.structuralPaths().forEach { if (VtRules.match(topicPattern, it)) names.add(it) }
+                        for (q in resolver.canonicalQueries(topicPattern)) {
+                            lastValueStore.findMatchingTopics(q) { c ->
+                                resolver.project(c).forEach { p -> if (VtRules.match(topicPattern, p.virtual)) names.add(p.virtual) }
+                                true
+                            }
+                        }
+                    } else {
+                        val canonical = resolver.readResolve(topicPattern)
+                        if (topicPattern in resolver.structuralPaths()) names.add(topicPattern)
+                        else if (canonical != null) {
+                            var found = false
+                            lastValueStore.findMatchingTopics(canonical) { found = true; false }
+                            if (found) names.add(topicPattern)
+                        }
+                    }
+                    names.filter { t ->
+                        val c = resolver.readResolve(t)
+                        c == null || canReadPresented(userAuthContext, t, c)
+                    }.map { Topic(it) }
+                }).onSuccess { future.complete(it) }.onFailure { future.completeExceptionally(it) }
+                return@DataFetcher future
+            }
+
             if (!hasWildcard) {
                 // Exact topic - just return it if it exists
                 lastValueStore.getAsync(topicPattern) { message ->
@@ -868,7 +999,12 @@ class QueryResolver(
             }
 
             // Use getAsync for all stores (now available in all implementations)
-            lastValueStore.getAsync(source.name) { message ->
+            val canonicalName = VirtualTopicTreeManager.resolver().readResolve(source.name)
+            if (canonicalName == null || !canReadPresented(userAuthContext, source.name, canonicalName)) {
+                future.complete(null)
+                return@DataFetcher future
+            }
+            lastValueStore.getAsync(canonicalName) { message ->
                 if (message != null) {
                     val (payload, actualFormat) = PayloadConverter.autoDetectAndEncode(
                         message.payload,
@@ -876,7 +1012,7 @@ class QueryResolver(
                     )
                     future.complete(
                         TopicValue(
-                            topic = message.topicName,
+                            topic = source.name,
                             payload = payload,
                             format = actualFormat,
                             timestamp = message.time.toEpochMilli(),
@@ -981,7 +1117,7 @@ class QueryResolver(
 
             deviceStore.exportConfigs(names).onComplete { result ->
                 if (result.succeeded()) {
-                    future.complete(result.result().map(::redactTlsClientKeyPassword))
+                    future.complete(result.result().map(::redactTlsClientKeyPassword).map(::portableVirtualTopicTree))
                 } else {
                     logger.severe("Failed to get devices: ${result.cause()?.message}")
                     future.completeExceptionally(GraphQLException("Failed to get devices: ${result.cause()?.message}"))
@@ -992,6 +1128,22 @@ class QueryResolver(
         }
     }
 
+}
+
+/** Virtual topic trees are exported as their portable JSON document (without the store revision). */
+internal fun portableVirtualTopicTree(device: Map<String, Any?>): Map<String, Any?> {
+    if (device["type"] != VirtualTopicTreeManager.DEVICE_TYPE) return device
+    val json = when (val raw = device["config"]) {
+        is Map<*, *> -> JsonObject(raw.entries.associate { it.key.toString() to it.value })
+        is JsonObject -> raw
+        is String -> try { JsonObject(raw) } catch (_: Exception) { return device }
+        else -> return device
+    }
+    return try {
+        device + ("config" to VtTree.fromJson(json).toDocument().map)
+    } catch (_: Exception) {
+        device
+    }
 }
 
 /** Exported configurations can be imported later, but the TLS key passphrase is write-only. */

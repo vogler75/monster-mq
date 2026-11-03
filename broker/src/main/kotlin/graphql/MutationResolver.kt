@@ -8,6 +8,7 @@ import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.IQueueStoreAsync
 import at.rocworks.stores.ISessionStoreAsync
 import at.rocworks.stores.IDeviceConfigStore
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
 import graphql.schema.DataFetcher
 import graphql.GraphQLException
 import io.vertx.core.Vertx
@@ -51,9 +52,19 @@ class MutationResolver(
             
             // Get auth context from thread-local service (may be null for anonymous users)
             val userAuthContext: AuthContext? = AuthContextService.getAuthContext()
+
+            // Virtual topic trees: resolve a virtual publish to its canonical topic
+            val resolution = VirtualTopicTreeManager.resolver().publish(topic)
+            if (resolution.reject != null) {
+                future.complete(PublishResult(success = false, topic = topic, timestamp = System.currentTimeMillis(),
+                    error = "Publish to virtual topic rejected: ${resolution.reject}"))
+                return@DataFetcher future
+            }
+            val canonicalTopic = resolution.canonical ?: topic
             
             // Check publish permission for this specific topic
-            if (!authContext.canPublishToTopic(userAuthContext, topic)) {
+            if (!authContext.canPublishToTopic(userAuthContext, topic) ||
+                (canonicalTopic != topic && !authContext.canPublishToTopic(userAuthContext, canonicalTopic))) {
                 future.complete(
                     PublishResult(
                         success = false,
@@ -77,7 +88,7 @@ class MutationResolver(
                 val message = BrokerMessage(
                     messageUuid = at.rocworks.Utils.getUuid(),
                     messageId = 0,
-                    topicName = topic,
+                    topicName = canonicalTopic,
                     payload = payloadBytes,
                     qosLevel = qos,
                     isRetain = retained,
@@ -145,8 +156,18 @@ class MutationResolver(
                     return@forEach
                 }
 
+                // Virtual topic trees: resolve a virtual publish to its canonical topic
+                val resolution = VirtualTopicTreeManager.resolver().publish(topic)
+                if (resolution.reject != null) {
+                    itemFuture.complete(PublishResult(success = false, topic = topic, timestamp = System.currentTimeMillis(),
+                        error = "Publish to virtual topic rejected: ${resolution.reject}"))
+                    return@forEach
+                }
+                val canonicalTopic = resolution.canonical ?: topic
+
                 // Check publish permission for this specific topic
-                if (!authContext.canPublishToTopic(userAuthContext, topic)) {
+                if (!authContext.canPublishToTopic(userAuthContext, topic) ||
+                    (canonicalTopic != topic && !authContext.canPublishToTopic(userAuthContext, canonicalTopic))) {
                     itemFuture.complete(
                         PublishResult(
                             success = false,
@@ -166,7 +187,7 @@ class MutationResolver(
                     val message = BrokerMessage(
                         messageUuid = at.rocworks.Utils.getUuid(),
                         messageId = 0,
-                        topicName = topic,
+                        topicName = canonicalTopic,
                         payload = payloadBytes,
                         qosLevel = qos,
                         isRetain = retained,
@@ -328,20 +349,36 @@ class MutationResolver(
                 return@DataFetcher future
             }
 
+            // Virtual topic trees are validated and stored disabled by their manager, not by the generic device import
+            val (treeConfigs, deviceConfigs) = configs.partition { it["type"] == VirtualTopicTreeManager.DEVICE_TYPE }
+            val treeManager = if (Monster.isFeatureEnabled(Features.VirtualTopicTrees)) VirtualTopicTreeManager.getInstance() else null
+            val treeImport: io.vertx.core.Future<VirtualTopicTreeManager.ImportResult> = when {
+                treeConfigs.isEmpty() -> io.vertx.core.Future.succeededFuture(VirtualTopicTreeManager.ImportResult(0, 0, emptyList()))
+                treeManager == null -> io.vertx.core.Future.succeededFuture(VirtualTopicTreeManager.ImportResult(0, treeConfigs.size,
+                    listOf("VirtualTopicTrees feature is not enabled on this node")))
+                else -> treeManager.importTrees(treeConfigs.map { (it["name"] as? String) to it["config"] })
+            }
+
             // Force enabled=false for all imported devices (safety: prevent accidental activation)
-            val configsWithDisabled = configs.map { config ->
+            val configsWithDisabled = deviceConfigs.map { config ->
                 config.toMutableMap().apply { put("enabled", false) }
             }
 
-            deviceStore.importConfigs(configsWithDisabled).onComplete { result ->
+            val deviceImport: io.vertx.core.Future<at.rocworks.stores.ImportDeviceConfigResult> =
+                if (configsWithDisabled.isEmpty()) io.vertx.core.Future.succeededFuture(at.rocworks.stores.ImportDeviceConfigResult(true))
+                else deviceStore.importConfigs(configsWithDisabled)
+
+            io.vertx.core.Future.all(treeImport, deviceImport).onComplete { result ->
                 if (result.succeeded()) {
-                    val importResult = result.result()
+                    val trees = treeImport.result()
+                    val importResult = deviceImport.result()
+                    val imported = importResult.imported + trees.imported
                     val resultMap = mapOf(
-                        "success" to (importResult.imported > 0),
-                        "imported" to importResult.imported,
-                        "failed" to importResult.failed,
+                        "success" to (imported > 0),
+                        "imported" to imported,
+                        "failed" to importResult.failed + trees.failed,
                         "total" to configs.size,
-                        "errors" to importResult.errors
+                        "errors" to importResult.errors + trees.errors
                     )
                     future.complete(resultMap)
                 } else {
