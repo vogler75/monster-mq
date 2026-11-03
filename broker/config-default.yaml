@@ -82,6 +82,7 @@ Features:
   TopicNamespace: true
   DataCatalog: true
   DeviceImportExport: true
+  VirtualTopicTrees: false
   Zenoh: true
   Hmi: true
   I3xClient: true

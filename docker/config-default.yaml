@@ -106,6 +106,7 @@ RedisServer:
 
 # Features
 Features:
+  VirtualTopicTrees: false
   OpcUa: true
   OpcUaServer: true
   MqttClient: true
