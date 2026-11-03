@@ -1423,10 +1423,18 @@ A table with:
             val sessionHandler = Monster.getSessionHandler()
                 ?: return Future.failedFuture(McpException(JSONRPC_INTERNAL_ERROR, "Session handler not available"))
 
+            val resolver = at.rocworks.virtualtrees.VirtualTopicTreeManager.resolver()
+            val resolution = resolver.publish(topic)
+            if (resolution.reject != null) {
+                promise.fail(McpException(JSONRPC_INVALID_ARGUMENT, "Publish to virtual topic '$topic' rejected: ${resolution.reject}"))
+                return promise.future()
+            }
+            val canonicalTopic = resolution.canonical ?: topic
+
             val message = BrokerMessage(
                 messageUuid = at.rocworks.Utils.getUuid(),
                 messageId = 0,
-                topicName = topic,
+                topicName = canonicalTopic,
                 payload = payload.toByteArray(),
                 qosLevel = qos,
                 isRetain = retained,

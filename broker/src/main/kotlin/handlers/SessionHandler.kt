@@ -1597,7 +1597,18 @@ open class SessionHandler(
         return messageHandler.saveMessage(message)
     }
 
-    private fun publishMessage(message: BrokerMessage, forwardToExternalBus: Boolean) {
+    private fun publishMessage(original: BrokerMessage, forwardToExternalBus: Boolean) {
+        val resolver = VirtualTopicTreeManager.resolver()
+        val message = if (!resolver.isEmpty && resolver.inVirtualNamespace(original.topicName)) {
+            val res = resolver.publish(original.topicName)
+            if (res.reject != null) {
+                logger.fine { "Publish to virtual topic [${original.topicName}] rejected: ${res.reject}" }
+                return
+            }
+            val canonical = res.canonical ?: original.topicName
+            if (canonical != original.topicName) original.copy(topicName = canonical) else original
+        } else original
+
         if (message.peer == null && message.peerSource == null) {
             peerLinkManager?.capture(message)
         }

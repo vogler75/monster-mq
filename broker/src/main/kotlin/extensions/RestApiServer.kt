@@ -10,6 +10,9 @@ import at.rocworks.data.BulkClientMessage
 import at.rocworks.extensions.graphql.JwtService
 import at.rocworks.handlers.ArchiveHandler
 import at.rocworks.handlers.SessionHandler
+import at.rocworks.virtualtrees.VirtualTopicTreeManager
+import at.rocworks.virtualtrees.VtResolver
+import at.rocworks.virtualtrees.VtRules
 import at.rocworks.stores.IMessageArchiveExtended
 import at.rocworks.stores.IMessageStore
 
@@ -249,6 +252,21 @@ class RestApiServer(
 
     // ========== Publish Handlers ==========
 
+    private fun resolvePublishTopic(topic: String, username: String): Pair<String?, String?> {
+        val resolver = VirtualTopicTreeManager.resolver()
+        val resolution = resolver.publish(topic)
+        if (resolution.reject != null) {
+            return null to "Publish to virtual topic rejected: ${resolution.reject}"
+        }
+        val canonical = resolution.canonical ?: topic
+        if (userManager.isUserManagementEnabled()) {
+            if (!userManager.canPublish(username, topic) || (canonical != topic && !userManager.canPublish(username, canonical))) {
+                return null to "Publish not allowed on topic: $topic"
+            }
+        }
+        return canonical to null
+    }
+
     private fun handlePublishRawBody(ctx: RoutingContext) {
         val topic = extractTopicFromPath(ctx)
         if (topic == null) {
@@ -260,11 +278,12 @@ class RestApiServer(
 
         val username = ctx.get<String>("username") ?: "anonymous"
 
-        // ACL check
-        if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
-            ctx.response().setStatusCode(403)
+        val (canonicalTopic, err) = resolvePublishTopic(topic, username)
+        if (canonicalTopic == null) {
+            val status = if (err?.startsWith("Publish not allowed") == true) 403 else 400
+            ctx.response().setStatusCode(status)
                 .putHeader("Content-Type", "application/json")
-                .end(errorJson("Publish not allowed on topic: $topic"))
+                .end(errorJson(err ?: "Invalid topic"))
             return
         }
 
@@ -275,7 +294,7 @@ class RestApiServer(
         val message = BrokerMessage(
             messageUuid = Utils.getUuid(),
             messageId = 0,
-            topicName = topic,
+            topicName = canonicalTopic,
             payload = payload,
             qosLevel = qos.coerceIn(0, 2),
             isRetain = retain,
@@ -317,11 +336,12 @@ class RestApiServer(
 
         val username = ctx.get<String>("username") ?: "anonymous"
 
-        // ACL check
-        if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
-            ctx.response().setStatusCode(403)
+        val (canonicalTopic, err) = resolvePublishTopic(topic, username)
+        if (canonicalTopic == null) {
+            val status = if (err?.startsWith("Publish not allowed") == true) 403 else 400
+            ctx.response().setStatusCode(status)
                 .putHeader("Content-Type", "application/json")
-                .end(errorJson("Publish not allowed on topic: $topic"))
+                .end(errorJson(err ?: "Invalid topic"))
             return
         }
 
@@ -331,7 +351,7 @@ class RestApiServer(
         val message = BrokerMessage(
             messageUuid = Utils.getUuid(),
             messageId = 0,
-            topicName = topic,
+            topicName = canonicalTopic,
             payload = payload.toByteArray(),
             qosLevel = qos.coerceIn(0, 2),
             isRetain = retain,
@@ -392,9 +412,9 @@ class RestApiServer(
                     continue
                 }
     
-                // ACL check per message
-                if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
-                    errors.add(JsonObject().put("index", i).put("error", "Publish not allowed on topic: $topic"))
+                val (canonicalTopic, err) = resolvePublishTopic(topic, username)
+                if (canonicalTopic == null) {
+                    errors.add(JsonObject().put("index", i).put("error", err ?: "Invalid topic"))
                     continue
                 }
     
@@ -404,7 +424,7 @@ class RestApiServer(
                 val brokerMessage = BrokerMessage(
                     messageUuid = Utils.getUuid(),
                     messageId = 0,
-                    topicName = topic,
+                    topicName = canonicalTopic,
                     payload = value.toByteArray(),
                     qosLevel = qos.coerceIn(0, 2),
                     isRetain = retain,
@@ -435,9 +455,9 @@ class RestApiServer(
                     continue
                 }
 
-                // ACL check per message
-                if (userManager.isUserManagementEnabled() && !userManager.canPublish(username, topic)) {
-                    errors.add(JsonObject().put("index", i).put("error", "Publish not allowed on topic: $topic"))
+                val (canonicalTopic, err) = resolvePublishTopic(topic, username)
+                if (canonicalTopic == null) {
+                    errors.add(JsonObject().put("index", i).put("error", err ?: "Invalid topic"))
                     continue
                 }
 
@@ -447,7 +467,7 @@ class RestApiServer(
                 val brokerMessage = BrokerMessage(
                     messageUuid = Utils.getUuid(),
                     messageId = 0,
-                    topicName = topic,
+                    topicName = canonicalTopic,
                     payload = value.toByteArray(),
                     qosLevel = qos.coerceIn(0, 2),
                     isRetain = retain,
@@ -694,9 +714,21 @@ class RestApiServer(
         }
 
         val messages = JsonArray()
-        retainedStore.findMatchingMessages(topic) { msg ->
-            messages.add(brokerMessageToJson(msg))
-            messages.size() < 10000 // safety limit
+        val resolver = VirtualTopicTreeManager.resolver()
+        if (resolver.isEmpty) {
+            retainedStore.findMatchingMessages(topic) { msg ->
+                messages.add(brokerMessageToJson(msg))
+                messages.size() < 10000 // safety limit
+            }
+        } else {
+            resolver.findPresented<BrokerMessage>(topic,
+                { filter, cb -> retainedStore.findMatchingMessages(filter) { cb(it) } },
+                { it.topicName }
+            ) { presented, msg ->
+                val copy = if (presented == msg.topicName) msg else VtResolver.virtualCopy(msg, presented)
+                messages.add(brokerMessageToJson(copy))
+                messages.size() < 10000 // safety limit
+            }
         }
 
         ctx.response().setStatusCode(200)
@@ -729,9 +761,21 @@ class RestApiServer(
         }
 
         val messages = JsonArray()
-        lastValStore.findMatchingMessages(topic) { msg ->
-            messages.add(brokerMessageToJson(msg))
-            messages.size() < 10000 // safety limit
+        val resolver = VirtualTopicTreeManager.resolver()
+        if (resolver.isEmpty) {
+            lastValStore.findMatchingMessages(topic) { msg ->
+                messages.add(brokerMessageToJson(msg))
+                messages.size() < 10000 // safety limit
+            }
+        } else {
+            resolver.findPresented<BrokerMessage>(topic,
+                { filter, cb -> lastValStore.findMatchingMessages(filter) { cb(it) } },
+                { it.topicName }
+            ) { presented, msg ->
+                val copy = if (presented == msg.topicName) msg else VtResolver.virtualCopy(msg, presented)
+                messages.add(brokerMessageToJson(copy))
+                messages.size() < 10000 // safety limit
+            }
         }
 
         ctx.response().setStatusCode(200)
