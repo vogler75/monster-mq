@@ -339,6 +339,21 @@ MonsterMQ includes a built-in AI agent framework powered by LangChain4j. Agents 
 | MCP Server | 3000 |
 | I3X API (v1, mounted at /i3x/v1) | 3002 |
 
+## User Management & Default Credentials
+
+When `UserManagement.Enabled` is `true`, the broker automatically ensures a default administrator account exists during startup:
+
+```text
+username: Admin
+password: Admin
+```
+
+Change this password immediately after first login (via the web dashboard or GraphQL mutation). If the user already exists, startup leaves it unchanged.
+
+An `Anonymous` user account (no password) is also provisioned for unauthenticated guest access when user management is enabled.
+
+For detailed information on user management, password changes, and topic ACL rules, see [doc/users.md](doc/users.md) and [doc/acl.md](doc/acl.md).
+
 ## Example Usage
 
 ### MQTT
