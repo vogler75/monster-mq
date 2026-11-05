@@ -1709,7 +1709,7 @@ class MqttClient(
                 messageToSend?.let { msg ->
                     updateSessionHandlerInFlight()
                     sessionHandler.incrementMessagesOut(clientId)
-                    publishInFlightToEndpoint(msg)
+                    sendInFlight(msg)
                     logger.finest { "Client [$clientId] QoS [${msg.qosLevel}] message [${msg.messageId}] for topic [${msg.topicName}] delivered [${Utils.getCurrentFunctionName()}]" }
                 }
             }
@@ -1718,9 +1718,37 @@ class MqttClient(
 
     // Caller holds outboundLock
     private fun addInFlightMessage(message: BrokerMessage): BrokerMessage {
-        val msg = message.cloneWithNewMessageId(nextFreeMessageId())
-        inFlightMessagesSnd[msg.messageId] = InFlightMessage(msg)
+        // A queued message sent before (persistent session, previous connection) keeps its packet id
+        // and stage ([MQTT-4.4.0-1]). Falls back to a new id if this connection already uses it.
+        val id = message.messageId
+        val msg = if (message.isQueued && message.deliveryStage >= 1 && id in 1..65535 && !inFlightMessagesSnd.containsKey(id)) {
+            message
+        } else if (message.isQueued && message.deliveryStage >= 1) {
+            logger.fine { "Client [$clientId] Packet id [$id] of re-delivered message [${message.messageUuid}] in use, sending with a new id" }
+            message.copy(messageId = nextFreeMessageId(), deliveryStage = 0)
+        } else {
+            message.cloneWithNewMessageId(nextFreeMessageId())
+        }
+        inFlightMessagesSnd[msg.messageId] = InFlightMessage(msg, stage = if (msg.deliveryStage == 2) 2 else 1)
         return msg
+    }
+
+    /**
+     * Send a message that was added to the in-flight window. A queued message is re-delivered with
+     * DUP=1 if it was sent before, or only the PUBREL is re-sent if its PUBREC was already received
+     * ([MQTT-3.3.1-1], [MQTT-4.3.3-1], 5.0 [MQTT-4.3.3-6]). The first send of a queued message
+     * stores its packet id, so a later session resume can re-deliver it.
+     */
+    private fun sendInFlight(msg: BrokerMessage) {
+        if (msg.isQueued && msg.deliveryStage == 2) {
+            logger.finest { "Client [$clientId] Re-sending PUBREL for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
+            endpoint.publishRelease(msg.messageId)
+            return
+        }
+        if (msg.isQueued && msg.deliveryStage == 0 && !effectiveCleanSession) {
+            sessionHandler.updateDeliveryState(clientId, msg.messageUuid, msg.messageId, 1)
+        }
+        publishInFlightToEndpoint(msg, dup = msg.isQueued && msg.deliveryStage >= 1)
     }
 
     // The DUP flag of the incoming PUBLISH is not propagated to subscribers (MQTT 3.1.1/5 §3.3.1.1),
@@ -1860,7 +1888,7 @@ class MqttClient(
             updateSessionHandlerInFlight()
             messages.forEach { msg ->
                 sessionHandler.incrementMessagesOut(clientId)
-                publishInFlightToEndpoint(msg)
+                sendInFlight(msg)
                 logger.finest { "Client [$clientId] Subscribe: pending message [${msg.messageId}] delivered [${Utils.getCurrentFunctionName()}]" }
             }
         }
@@ -1957,11 +1985,16 @@ class MqttClient(
             return
         }
 
-        val found = synchronized(outboundLock) {
-            inFlightMessagesSnd[id]?.let { it.stage = 2; true } ?: false
+        val inFlight = synchronized(outboundLock) {
+            inFlightMessagesSnd[id]?.also { it.stage = 2 }
         }
 
-        if (found) {
+        if (inFlight != null) {
+            // Keep "PUBREL pending" in the queue store, so a resumed session re-sends the PUBREL
+            // instead of the PUBLISH ([MQTT-4.3.3-1], 5.0 [MQTT-4.3.3-6])
+            if (inFlight.message.isQueued && !effectiveCleanSession) {
+                sessionHandler.updateDeliveryState(clientId, inFlight.message.messageUuid, id, 2)
+            }
             logger.finest { "Client [$clientId] PUBREC: got received id [$id], now sending release to client [${Utils.getCurrentFunctionName()}]" }
             endpoint.publishRelease(id)
         } else {

@@ -1319,6 +1319,8 @@ open class SessionHandler(
     // Status-based message tracking methods
     fun markMessageDelivered(clientId: String, messageUuid: String) = queueStore.markMessageDelivered(clientId, messageUuid)
     fun resetInFlightMessages(clientId: String) = queueStore.resetInFlightMessages(clientId)
+    fun updateDeliveryState(clientId: String, messageUuid: String, packetId: Int, stage: Int) =
+        queueStore.updateDeliveryState(at.rocworks.stores.DeliveryState(clientId, messageUuid, packetId, stage))
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>) = queueStore.markMessagesInFlight(clientId, messageUuids)
     fun markMessageInFlight(clientId: String, messageUuid: String) = queueStore.markMessageInFlight(clientId, messageUuid)
     fun fetchNextPendingMessage(clientId: String) = queueStore.fetchNextPendingMessage(clientId)

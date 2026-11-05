@@ -2,6 +2,7 @@ package at.rocworks.stores.mongodb
 
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
+import at.rocworks.stores.DeliveryState
 import at.rocworks.stores.IQueueStoreSync
 import at.rocworks.stores.QueueStoreType
 import com.mongodb.client.MongoClient
@@ -311,8 +312,22 @@ class QueueStoreMongoDB(
         }
     }
 
+    override fun updateDeliveryStates(states: List<DeliveryState>) {
+        if (states.isEmpty()) return
+        try {
+            collection.bulkWrite(states.map { state ->
+                UpdateOneModel<Document>(
+                    and(eq("client_id", state.clientId), eq("message_uuid", state.messageUuid)),
+                    Document("\$set", Document("packet_id", state.packetId).append("stage", state.stage))
+                )
+            }, BulkWriteOptions().ordered(false))
+        } catch (e: Exception) {
+            logger.warning("Error updating delivery states: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // Reset: make in-flight messages visible again
+    // Reset: make in-flight messages visible again (keeps packet id and stage)
     // -------------------------------------------------------------------------
 
     override fun resetInFlightMessages(clientId: String) {
@@ -415,18 +430,21 @@ class QueueStoreMongoDB(
     private fun documentToBrokerMessage(doc: Document): BrokerMessage {
         val currentTimeMillis = System.currentTimeMillis()
         val creationTime = doc.getLong("creation_time") ?: currentTimeMillis
+        val packetId = (doc.get("packet_id") as? Number)?.toInt()
+        val stage = if (packetId == null) 0 else ((doc.get("stage") as? Number)?.toInt() ?: 0)
         return BrokerMessage(
             messageUuid = doc.getString("message_uuid"),
-            messageId = 0,
+            messageId = packetId ?: 0,
             topicName = doc.getString("topic"),
             payload = doc.get("payload", Binary::class.java).data,
             qosLevel = doc.getInteger("qos"),
             isRetain = doc.getBoolean("retained"),
-            isDup = false,
+            isDup = stage >= 1, // sent before: re-delivery with DUP=1 ([MQTT-3.3.1-1])
             isQueued = true,
             clientId = doc.getString("publisher_id"),
             time = java.time.Instant.ofEpochMilli(creationTime),
-            messageExpiryInterval = doc.getLong("message_expiry_interval")
+            messageExpiryInterval = doc.getLong("message_expiry_interval"),
+            deliveryStage = stage
         )
     }
 }

@@ -2,6 +2,7 @@ package at.rocworks.stores.memory
 
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
+import at.rocworks.stores.DeliveryState
 import at.rocworks.stores.IQueueStoreSync
 import at.rocworks.stores.QueueStoreType
 import io.vertx.core.AbstractVerticle
@@ -28,8 +29,15 @@ class QueueStoreMemory(
     class MemoryQueuedMessage(
         val message: BrokerMessage,
         @Volatile var vt: Long,
-        @Volatile var readCt: Int = 0
-    )
+        @Volatile var readCt: Int = 0,
+        // Outbound delivery state: packet id and stage (0 = not sent, 1 = PUBLISH sent, 2 = PUBREL pending)
+        @Volatile var packetId: Int = 0,
+        @Volatile var stage: Int = 0
+    ) {
+        fun toMessage(): BrokerMessage =
+            if (stage == 0) message
+            else message.copy(messageId = packetId, isDup = true, deliveryStage = stage)
+    }
 
     override fun getType(): QueueStoreType = QueueStoreType.MEMORY
 
@@ -90,7 +98,7 @@ class QueueStoreMemory(
             queue.messages.values
                 .asSequence()
                 .filter { it.vt <= now && !isExpired(it.message, currentTimeMillis) }
-                .map { it.message }
+                .map { it.toMessage() }
                 .toList()
         }
         for (message in readyMessages) {
@@ -124,7 +132,7 @@ class QueueStoreMemory(
             val result = ArrayList<BrokerMessage>(limit)
             for (qm in queue.messages.values) {
                 if (qm.vt <= now && !isExpired(qm.message, currentTimeMillis)) {
-                    result.add(qm.message)
+                    result.add(qm.toMessage())
                     if (result.size >= limit) break
                 }
             }
@@ -143,7 +151,7 @@ class QueueStoreMemory(
                 if (qm.vt <= now && !isExpired(qm.message, currentTimeMillis)) {
                     qm.vt = vtFuture
                     qm.readCt++
-                    result.add(qm.message)
+                    result.add(qm.toMessage())
                     if (result.size >= limit) break
                 }
             }
@@ -190,6 +198,19 @@ class QueueStoreMemory(
         }
     }
 
+    override fun updateDeliveryStates(states: List<DeliveryState>) {
+        states.forEach { state ->
+            val queue = queues[state.clientId] ?: return@forEach
+            synchronized(queue) {
+                queue.messages[state.messageUuid]?.let { qm ->
+                    qm.packetId = state.packetId
+                    qm.stage = state.stage
+                }
+            }
+        }
+    }
+
+    // Keeps the delivery state (packet id, stage)
     override fun resetInFlightMessages(clientId: String) {
         val queue = queues[clientId] ?: return
         val now = System.currentTimeMillis() / 1000

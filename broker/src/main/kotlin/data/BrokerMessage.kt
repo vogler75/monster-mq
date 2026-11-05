@@ -49,7 +49,10 @@ class BrokerMessage(
     val peer: PeerForward? = null,
     val peerSource: String? = null,
     val isWill: Boolean = false,
-    val username: String? = null
+    val username: String? = null,
+    // Outbound QoS 1/2 state of a queued message, read from the queue store: 0 = not sent yet,
+    // 1 = PUBLISH sent with packet id messageId, 2 = PUBREC received (PUBREL pending)
+    val deliveryStage: Int = 0
 ): Serializable {
     
     init {
@@ -246,11 +249,12 @@ class BrokerMessage(
         peer: PeerForward? = this.peer,
         peerSource: String? = this.peerSource,
         isWill: Boolean = this.isWill,
-        username: String? = this.username
+        username: String? = this.username,
+        deliveryStage: Int = this.deliveryStage
     ): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
         messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId,
-        peer, peerSource, isWill, username
+        peer, peerSource, isWill, username, deliveryStage
     )
 
     // The clone functions return this instance when nothing changes, BrokerMessage is immutable

@@ -2,6 +2,7 @@ package at.rocworks.stores.sqlite
 
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
+import at.rocworks.stores.DeliveryState
 import at.rocworks.stores.IQueueStoreSync
 import at.rocworks.stores.QueueStoreType
 import io.vertx.core.AbstractVerticle
@@ -49,13 +50,28 @@ class QueueStoreSQLite(
                 creation_time INTEGER NOT NULL,
                 message_expiry_interval INTEGER,
                 vt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                read_ct INTEGER NOT NULL DEFAULT 0
+                read_ct INTEGER NOT NULL DEFAULT 0,
+                packet_id INTEGER,
+                stage INTEGER NOT NULL DEFAULT 0
             );
             """.trimIndent())
             .add("CREATE INDEX IF NOT EXISTS ${tableName}_fetch_idx ON $tableName (client_id, vt);")
             .add("CREATE INDEX IF NOT EXISTS ${tableName}_client_uuid_idx ON $tableName (client_id, message_uuid);")
 
-        sqlClient.initDatabase(createTableSQL).onComplete { result ->
+        sqlClient.initDatabase(createTableSQL).compose {
+            // Migration: outbound delivery state columns (packet id, stage)
+            sqlClient.executeQuery("PRAGMA table_info($tableName)", JsonArray()).compose { rows ->
+                val existing = rows.map { (it as JsonObject).getString("name") }.toSet()
+                val migrations = JsonArray()
+                if ("packet_id" !in existing) migrations.add("ALTER TABLE $tableName ADD COLUMN packet_id INTEGER")
+                if ("stage" !in existing) migrations.add("ALTER TABLE $tableName ADD COLUMN stage INTEGER NOT NULL DEFAULT 0")
+                if (migrations.isEmpty) io.vertx.core.Future.succeededFuture()
+                else {
+                    logger.info("Adding delivery state columns to queue table '$tableName'")
+                    sqlClient.initDatabase(migrations).mapEmpty<Void>()
+                }
+            }
+        }.onComplete { result ->
             if (result.succeeded()) {
                 logger.info("SQLite queue table '$tableName' is ready")
                 startPromise.complete()
@@ -106,7 +122,7 @@ class QueueStoreSQLite(
     override fun dequeueMessages(clientId: String, callback: (BrokerMessage) -> Boolean) {
         val now = System.currentTimeMillis() / 1000
         val sql = """SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                            creation_time, message_expiry_interval
+                            creation_time, message_expiry_interval, packet_id, stage
                      FROM $tableName
                      WHERE client_id = ? AND vt <= ?
                        AND (message_expiry_interval IS NULL
@@ -155,7 +171,7 @@ class QueueStoreSQLite(
         val now = System.currentTimeMillis() / 1000
         val currentTimeMillis = System.currentTimeMillis()
         val sql = """SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                            creation_time, message_expiry_interval
+                            creation_time, message_expiry_interval, packet_id, stage
                      FROM $tableName
                      WHERE client_id = ? AND vt <= ?
                        AND (message_expiry_interval IS NULL
@@ -184,7 +200,7 @@ class QueueStoreSQLite(
         val vtFuture = now + visibilityTimeoutSeconds
 
         val fetchSql = """SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
-                                 creation_time, message_expiry_interval
+                                 creation_time, message_expiry_interval, packet_id, stage
                           FROM $tableName
                           WHERE client_id = ? AND vt <= ?
                             AND (message_expiry_interval IS NULL
@@ -261,8 +277,20 @@ class QueueStoreSQLite(
         }
     }
 
+    override fun updateDeliveryStates(states: List<DeliveryState>) {
+        if (states.isEmpty()) return
+        val sql = "UPDATE $tableName SET packet_id = ?, stage = ? WHERE client_id = ? AND message_uuid = ?"
+        val batch = JsonArray()
+        states.forEach { batch.add(JsonArray().add(it.packetId).add(it.stage).add(it.clientId).add(it.messageUuid)) }
+        try {
+            sqlClient.executeBatchSync(sql, batch)
+        } catch (e: Exception) {
+            logger.warning("Error updating delivery states: ${e.message} [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // Reset: make in-flight messages visible again
+    // Reset: make in-flight messages visible again (keeps packet id and stage)
     // -------------------------------------------------------------------------
 
     override fun resetInFlightMessages(clientId: String) {
@@ -357,18 +385,21 @@ class QueueStoreSQLite(
         val messageExpiryIntervalRaw = row.getLong("message_expiry_interval")
         val messageExpiryInterval = if (messageExpiryIntervalRaw == null || messageExpiryIntervalRaw == -1L) null else messageExpiryIntervalRaw
         val creationTime = row.getLong("creation_time") ?: currentTimeMillis
+        val packetId = row.getInteger("packet_id")
+        val stage = if (packetId == null) 0 else (row.getInteger("stage") ?: 0)
         return BrokerMessage(
             messageUuid = row.getString("message_uuid"),
-            messageId = 0,
+            messageId = packetId ?: 0,
             topicName = row.getString("topic"),
             payload = row.getBinary("payload") ?: ByteArray(0),
             qosLevel = row.getInteger("qos"),
             isRetain = row.getInteger("retained", 0) == 1,
-            isDup = false,
+            isDup = stage >= 1, // sent before: re-delivery with DUP=1 ([MQTT-3.3.1-1])
             isQueued = true,
             clientId = row.getString("publisher_id"),
             time = java.time.Instant.ofEpochMilli(creationTime),
-            messageExpiryInterval = messageExpiryInterval
+            messageExpiryInterval = messageExpiryInterval,
+            deliveryStage = stage
         )
     }
 }
