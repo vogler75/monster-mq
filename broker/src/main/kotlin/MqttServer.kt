@@ -58,6 +58,9 @@ class MqttServer(
             }
         }
         it.isUseWebSocket = this.useWebSocket
+        // An empty client id is assigned by MqttClient.deployEndpoint, which needs to know that it
+        // was assigned to send the Assigned Client Identifier in CONNACK (MQTT 5.0 [MQTT-3.2.2-16])
+        it.isAutoClientId = false
         it.maxMessageSize = this.maxMessageSize
         it.isTcpNoDelay = this.tcpNoDelay      // Disable Nagle's algorithm - send packets immediately, don't coalesce
         it.receiveBufferSize = this.receiveBufferSize  // Receive buffer for burst traffic

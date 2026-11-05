@@ -149,6 +149,9 @@ class MqttClient(
 
     private var connectionAccepted: Boolean = false
 
+    // True if the client connected with an empty client id and the broker assigned one
+    var clientIdAssigned: Boolean = false
+
     // Outbound Receive Maximum saturation tracking
     private var receiveMaximumWarningActive: Boolean = false
     private var receiveMaximumWarningSince: Instant? = null
@@ -200,6 +203,11 @@ class MqttClient(
         }
 
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false, autoCreateUser: Boolean = false) {
+            // Empty client id: assign one (vert.x autoClientId is off, so the assignment is known)
+            val clientIdAssigned = endpoint.clientIdentifier().isNullOrEmpty()
+            if (clientIdAssigned) {
+                endpoint.setClientIdentifier(java.util.UUID.randomUUID().toString())
+            }
             val clientId = endpoint.clientIdentifier()
             installFlushConsolidation(endpoint)
             // A client may send packets right after CONNECT without waiting for CONNACK (§3.1.4).
@@ -214,6 +222,7 @@ class MqttClient(
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
 
             val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
+            client.clientIdAssigned = clientIdAssigned
 
             fun doDeploy() {
                 vertx.deployVerticle(client).onComplete {
@@ -810,9 +819,9 @@ class MqttClient(
                 // Session Expiry Interval (17) - Echo back or override if needed
                 connackProps.add(MqttProperties.IntegerProperty(17, sessionExpiryInterval.toInt()))
                 
-                // Assigned Client Identifier (18) - Only if client provided empty ID
-                // Note: Vert.x automatically assigns an ID, so we check if it was auto-generated
-                if (clientId.startsWith("auto-")) {
+                // Assigned Client Identifier (18): required if the client sent an empty client id
+                // (MQTT 5.0 [MQTT-3.2.2-16]), the id is assigned in deployEndpoint
+                if (clientIdAssigned) {
                     connackProps.add(MqttProperties.StringProperty(18, clientId))
                 }
                 
