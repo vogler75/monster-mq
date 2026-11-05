@@ -924,6 +924,13 @@ class MqttClient(
     }
 
     private fun stopEndpoint(): Future<Void> {
+        // Unregister the client's bus consumers now, not at undeploy: the verticle is undeployed
+        // only after the session cleanup, and a new connection with the same client id registers
+        // its consumers meanwhile. Point-to-point sends (queue trigger, messages) would otherwise
+        // be load-balanced to this closed instance and get lost.
+        busConsumers.forEach { it.unregister() }
+        busConsumers.clear()
+
         // Reset queue processing state
         isProcessingQueue = false
         triggerPending = false
