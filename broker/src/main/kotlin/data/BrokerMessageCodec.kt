@@ -127,7 +127,7 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
         var contentType: String? = null
         var responseTopic: String? = null
         var correlationData: ByteArray? = null
-        var userProperties: Map<String, String>? = null
+        var userProperties: List<Pair<String, String>>? = null
         var isWill = false
         var username: String? = null
         var peerSource: String? = null
@@ -157,13 +157,14 @@ class BrokerMessageCodec : MessageCodec<BrokerMessage, BrokerMessage> {
             val uPropsSize = buffer.getInt(position)
             position += 4
             if (uPropsSize != -1) {
-                val map = mutableMapOf<String, String>()
+                // Ordered list, duplicate keys allowed (same wire format as before)
+                val list = ArrayList<Pair<String, String>>(uPropsSize)
                 for (i in 0 until uPropsSize) {
                     val k = readString()
                     val v = readString()
-                    map[k] = v
+                    list.add(k to v)
                 }
-                userProperties = map
+                userProperties = list
             }
 
             isWill = buffer.getByte(position).toInt() == 1

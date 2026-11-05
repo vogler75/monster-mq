@@ -62,7 +62,7 @@ class QueryResolver(
             contentType = message.contentType,
             responseTopic = message.responseTopic,
             payloadFormatIndicator = message.payloadFormatIndicator,
-            userProperties = message.userProperties?.map { UserProperty(it.key, it.value) }
+            userProperties = message.userProperties?.map { UserProperty(it.first, it.second) }
         )
     }
 
@@ -117,7 +117,7 @@ class QueryResolver(
                             contentType = message.contentType,
                             responseTopic = message.responseTopic,
                             payloadFormatIndicator = message.payloadFormatIndicator,
-                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                         )
                     )
                 } else {
@@ -192,7 +192,7 @@ class QueryResolver(
                             contentType = message.contentType,
                             responseTopic = message.responseTopic,
                             payloadFormatIndicator = message.payloadFormatIndicator,
-                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                         )
                     )
                     count++
@@ -269,7 +269,7 @@ class QueryResolver(
                         contentType = message.contentType,
                         responseTopic = message.responseTopic,
                         payloadFormatIndicator = message.payloadFormatIndicator,
-                        userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                        userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                     )
                 )
             }
@@ -340,7 +340,7 @@ class QueryResolver(
                             contentType = message.contentType,
                             responseTopic = message.responseTopic,
                             payloadFormatIndicator = message.payloadFormatIndicator,
-                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                         )
                     )
                     count++
@@ -1021,7 +1021,7 @@ class QueryResolver(
                             contentType = message.contentType,
                             responseTopic = message.responseTopic,
                             payloadFormatIndicator = message.payloadFormatIndicator,
-                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                            userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                         )
                     )
                 } else {

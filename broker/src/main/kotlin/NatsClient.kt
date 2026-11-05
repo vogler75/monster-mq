@@ -383,7 +383,7 @@ class NatsClient(
             isQueued = false,
             clientId = clientId,
             responseTopic = pending.replyTo?.let { natsSubjectToMqttTopic(it) },
-            userProperties = headers.ifEmpty { null }
+            userProperties = headers.ifEmpty { null }?.toList()
         )
         sessionHandler.publishMessage(message)
         sessionHandler.incrementMessagesIn(clientId)
@@ -609,7 +609,10 @@ class NatsClient(
 }
 
 /** Format a NATS header block; [status] is e.g. `100 Idle Heartbeat` or `404 Message Not Found`. */
-internal fun formatHeaders(status: String?, headers: Map<String, String>): String {
+internal fun formatHeaders(status: String?, headers: Map<String, String>): String =
+    formatHeaders(status, headers.toList())
+
+internal fun formatHeaders(status: String?, headers: List<Pair<String, String>>): String {
     val sb = StringBuilder("NATS/1.0")
     if (status != null) sb.append(' ').append(status)
     sb.append("\r\n")

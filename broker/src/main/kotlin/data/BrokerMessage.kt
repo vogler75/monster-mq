@@ -42,7 +42,8 @@ class BrokerMessage(
     val contentType: String? = null,
     val responseTopic: String? = null,
     val correlationData: ByteArray? = null,
-    val userProperties: Map<String, String>? = null,
+    // Ordered, duplicate keys allowed: forwarded unaltered and in order ([MQTT-3.3.2-17], [MQTT-3.3.2-18])
+    val userProperties: List<Pair<String, String>>? = null,
     val originNodeId: String? = null,
     // PeerLink extensions
     val peer: PeerForward? = null,
@@ -74,6 +75,29 @@ class BrokerMessage(
     
     companion object {
         fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
+
+        /** User properties as a JSON array of [key, value] pairs, keeping order and duplicate keys. */
+        fun userPropertiesToJson(props: List<Pair<String, String>>?): String? =
+            props?.let { list ->
+                io.vertx.core.json.JsonArray(list.map { io.vertx.core.json.JsonArray().add(it.first).add(it.second) }).encode()
+            }
+
+        /** Reads userPropertiesToJson output, and the JSON object format used by older versions. */
+        fun userPropertiesFromJson(json: String?): List<Pair<String, String>>? {
+            if (json.isNullOrBlank()) return null
+            return try {
+                when (val value = Json.decodeValue(json)) {
+                    is io.vertx.core.json.JsonArray -> value.mapNotNull { pair ->
+                        (pair as? io.vertx.core.json.JsonArray)?.takeIf { it.size() == 2 }
+                            ?.let { it.getValue(0).toString() to (it.getValue(1)?.toString() ?: "") }
+                    }
+                    is io.vertx.core.json.JsonObject -> value.map.mapNotNull { (k, v) -> if (v != null) k to v.toString() else null }
+                    else -> null
+                }?.ifEmpty { null }
+            } catch (e: Exception) {
+                null
+            }
+        }
         
         // Helper function to extract MQTT v5 properties from MqttPublishMessage
         private fun extractProperties(message: MqttPublishMessage): MqttV5Properties =
@@ -88,26 +112,26 @@ class BrokerMessage(
                 responseTopic = props?.getProperty(8)?.value() as? String,
                 correlationData = props?.getProperty(9)?.value() as? ByteArray,
                 userProperties = run {
-                    val userProps = mutableMapOf<String, String>()
+                    val userProps = mutableListOf<Pair<String, String>>()
                     props?.listAll()?.forEach { p ->
                         if (p.propertyId() == 38) {
                             val value = p.value()
                             when (value) {
                                 is io.netty.handler.codec.mqtt.MqttProperties.StringPair -> {
-                                    userProps[value.key] = value.value
+                                    userProps.add(value.key to value.value)
                                 }
                                 is java.util.ArrayList<*> -> {
                                     // User Properties can be returned as ArrayList of StringPairs
                                     value.forEach { item ->
                                         if (item is io.netty.handler.codec.mqtt.MqttProperties.StringPair) {
-                                            userProps[item.key] = item.value
+                                            userProps.add(item.key to item.value)
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    if (userProps.isEmpty()) null else userProps.toMap()
+                    if (userProps.isEmpty()) null else userProps.toList()
                 }
             )
         }
@@ -120,7 +144,7 @@ class BrokerMessage(
         val contentType: String?,
         val responseTopic: String?,
         val correlationData: ByteArray?,
-        val userProperties: Map<String, String>?
+        val userProperties: List<Pair<String, String>>?
     )
     
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -217,7 +241,7 @@ class BrokerMessage(
         contentType: String? = this.contentType,
         responseTopic: String? = this.responseTopic,
         correlationData: ByteArray? = this.correlationData,
-        userProperties: Map<String, String>? = this.userProperties,
+        userProperties: List<Pair<String, String>>? = this.userProperties,
         originNodeId: String? = this.originNodeId,
         peer: PeerForward? = this.peer,
         peerSource: String? = this.peerSource,

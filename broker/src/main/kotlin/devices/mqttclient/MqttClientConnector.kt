@@ -868,11 +868,7 @@ class MqttClientConnector : AbstractVerticle() {
             val localTopic = MqttTopicTransformer.remoteToLocal(topic, address)
             val clientId = "mqttclient-${deviceConfig.name}"
             val props = message.properties
-            val userProps = props?.userProperties?.takeIf { it.isNotEmpty() }?.let { list ->
-                val map = LinkedHashMap<String, String>()
-                list.forEach { prop -> map[prop.key] = prop.value }
-                map
-            }
+            val userProps = props?.userProperties?.takeIf { it.isNotEmpty() }?.map { prop -> prop.key to prop.value }
 
             val localMessage = BrokerMessage(
                 messageId = 0,

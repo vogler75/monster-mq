@@ -138,8 +138,7 @@ class QueueStorePostgres(
                                 ps.setNull(13, Types.INTEGER)
                             }
                             if (message.userProperties != null) {
-                                val json = io.vertx.core.json.JsonObject(message.userProperties as Map<String, Any>)
-                                ps.setString(14, json.encode())
+                                ps.setString(14, BrokerMessage.userPropertiesToJson(message.userProperties))
                             } else {
                                 ps.setNull(14, Types.VARCHAR)
                             }
@@ -493,14 +492,8 @@ class QueueStorePostgres(
         val payloadFormatIndicator = if (rs.wasNull()) null else payloadFormatIndicatorRaw
 
         val userPropsJson = rs.getString("user_properties")
-        val userProperties = if (!userPropsJson.isNullOrBlank()) {
-            try {
-                val json = io.vertx.core.json.JsonObject(userPropsJson)
-                json.map.mapNotNull { (k, v) -> if (v != null) k to v.toString() else null }.toMap()
-            } catch (e: Exception) {
-                null
-            }
-        } else null
+        // Ordered [key, value] array; rows written by older versions hold a JSON object
+        val userProperties = BrokerMessage.userPropertiesFromJson(userPropsJson)
 
         return BrokerMessage(
             messageUuid = rs.getString("message_uuid"),
