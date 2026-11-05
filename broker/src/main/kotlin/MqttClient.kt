@@ -1469,8 +1469,11 @@ class MqttClient(
                 logger.finest { "Client [$clientId] Publish: sending acknowledge for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
                 sessionHandler.publishMessage(msg)
                 
-                // Send PUBACK with MQTT v5 reason code if protocol version is 5
-                if (endpoint.protocolVersion() == 5) {
+                // Send PUBACK with MQTT v5 reason code if protocol version is 5. Not when the connection is
+                // already gone (queued PUBLISH drained while closing): the message is still published.
+                if (!endpoint.isConnected) {
+                    logger.fine { "Client [$clientId] Connection closed, no PUBACK for id [${msg.messageId}]" }
+                } else if (endpoint.protocolVersion() == 5) {
                     endpoint.publishAcknowledge(msg.messageId, MqttPubAckReasonCode.SUCCESS, MqttProperties.NO_PROPERTIES)
                 } else {
                     endpoint.publishAcknowledge(msg.messageId)
@@ -1478,7 +1481,7 @@ class MqttClient(
             }
             2 -> { // Level 2
                 logger.finest { "Client [$clientId] Publish: sending received for id [${msg.messageId}] [${Utils.getCurrentFunctionName()}]" }
-                endpoint.publishReceived(msg.messageId)
+                if (endpoint.isConnected) endpoint.publishReceived(msg.messageId)
                 inFlightMessagesRcv[msg.messageId] = InFlightMessage(msg)
                 sessionHandler.addIncomingQos2Message(clientId, msg.messageId, msg)
                 updateSessionHandlerInFlight()
