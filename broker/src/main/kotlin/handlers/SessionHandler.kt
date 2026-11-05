@@ -1292,6 +1292,9 @@ open class SessionHandler(
     }
 
     private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
+        if (retainedDeliveryWindows.isNotEmpty()) {
+            clientIds.forEach { clientId -> withLiveTopic(clientId, message.topicName) {} }
+        }
         if (enqueueMessages) {
             try {
                 msgAddQueue.add(QueuedMessage(message, clientIds, queueSeq.incrementAndGet()))
@@ -1413,7 +1416,52 @@ open class SessionHandler(
     }
 
 
-    private fun sendMessageToClient(clientId: String, message: BrokerMessage) {
+    /**
+     * Open while retained messages are delivered after a SUBSCRIBE: live messages delivered to the
+     * client in the meantime record their topic, and a retained message for such a topic is skipped.
+     * It would be a duplicate or an older value than the live one the client already got (#232).
+     */
+    private class RetainedDeliveryWindow {
+        var open = 0
+        val liveTopics = HashSet<String>()
+    }
+    private val retainedDeliveryWindows = ConcurrentHashMap<String, RetainedDeliveryWindow>()
+
+    private fun openRetainedDeliveryWindow(clientId: String): RetainedDeliveryWindow =
+        retainedDeliveryWindows.compute(clientId) { _, w -> (w ?: RetainedDeliveryWindow()).also { synchronized(it) { it.open++ } } }!!
+
+    private fun closeRetainedDeliveryWindow(clientId: String) {
+        retainedDeliveryWindows.computeIfPresent(clientId) { _, w ->
+            synchronized(w) { if (--w.open <= 0) null else w }
+        }
+    }
+
+    /** Record a live message for an open retained delivery window; [deliver] runs under its lock to keep the order. */
+    private inline fun withLiveTopic(clientId: String, topicName: String, deliver: () -> Unit) {
+        val window = retainedDeliveryWindows[clientId]
+        if (window == null) {
+            deliver()
+        } else synchronized(window) {
+            window.liveTopics.add(topicName)
+            deliver()
+        }
+    }
+
+    /** Deliver a retained message unless a live message for its topic was already delivered. */
+    private fun sendRetainedMessageToClient(clientId: String, window: RetainedDeliveryWindow, message: BrokerMessage) {
+        synchronized(window) {
+            if (message.topicName in window.liveTopics) {
+                logger.finest { "Client [$clientId] Retained message [${message.topicName}] skipped, live message already delivered" }
+            } else {
+                deliverMessageToClient(clientId, message)
+            }
+        }
+    }
+
+    private fun sendMessageToClient(clientId: String, message: BrokerMessage) =
+        withLiveTopic(clientId, message.topicName) { deliverMessageToClient(clientId, message) }
+
+    private fun deliverMessageToClient(clientId: String, message: BrokerMessage) {
         // All clients (internal and external) use eventBus with optional bulk messaging
         logger.finest { "Sending message to client '$clientId' on topic '${message.topicName}'" }
         if (!bulkMessagingEnabled) {
@@ -1629,22 +1677,24 @@ open class SessionHandler(
         }
 
         if (shouldSendRetained) {
-            // Retained messages are sent before the subscription is added, but must already
-            // carry its Subscription Identifier (MQTT 5.0 §3.3.4), which MqttClient looks up
-            subscriptionManager.setSubscriptionIdentifier(clientId, topicName, subscriptionId)
+            // The subscription is active (and SUBACK sent) before the retained lookup, which can take
+            // a while on a database store, so no live message published meanwhile is lost (#232).
+            // Retained messages may follow the SUBACK (MQTT 3.1.1 §3.8.4, 5.0 §3.8.4).
+            val window = openRetainedDeliveryWindow(clientId)
+            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
+            command.reply(true)
             messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
                 logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                var effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+                val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
                 
                 // MQTT 3.1.1 §3.3.1.3 / MQTT 5.0 §3.3.1.3: retain flag MUST be 1 on retained messages
                 // delivered at subscription time. The stored message already has isRetain=true, so no
                 // adjustment is needed here. RAP only affects the live-message forwarding path.
                 
-                sendMessageToClient(clientId, effectiveMessage)
+                sendRetainedMessageToClient(clientId, window, effectiveMessage)
             }.onComplete {
+                closeRetainedDeliveryWindow(clientId)
                 logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
-                command.reply(true)
             }
         } else {
             // Skip retained messages, just add subscription
