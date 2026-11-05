@@ -128,6 +128,9 @@ class MqttClient(
     // MQTT v5.0 Flow Control (Phase 8)
     // Client's Receive Maximum - limit for outstanding QoS 1/2 messages
     private var clientReceiveMaximum = 65535  // Default per MQTT v5 spec
+
+    // Client's Maximum Packet Size (MQTT 5.0 §3.1.2.11.4), null = no limit
+    private var clientMaximumPacketSize: Long? = null
     
     // MQTT v5.0 Will Delay Interval: a Will Property (24), not a CONNECT property (MQTT 5.0 §3.1.3.2.2).
     // The delayed will is kept by the SessionHandler, it must survive this connection's verticle.
@@ -199,6 +202,15 @@ class MqttClient(
         fun deployEndpoint(vertx: Vertx, endpoint: MqttEndpoint, sessionHandler: SessionHandler, userManager: UserManager, useIdentityAsUsername: Boolean = false, autoCreateUser: Boolean = false) {
             val clientId = endpoint.clientIdentifier()
             installFlushConsolidation(endpoint)
+            // A client may send packets right after CONNECT without waiting for CONNACK (§3.1.4).
+            // vert.x closes the connection for any packet received before accept(), and the
+            // connection is accepted asynchronously, so reading is paused until CONNACK is sent.
+            // Packets already decoded from the same read are held in the socket's inbound queue.
+            try {
+                (endpointConnField.get(endpoint) as? io.vertx.core.net.NetSocket)?.pause()
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Could not pause socket before CONNACK: ${e.message}" }
+            }
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
 
             fun doDeploy() {
@@ -430,6 +442,9 @@ class MqttClient(
 
             // Store client's Receive Maximum for flow control (Phase 8)
             clientReceiveMaximum = mqtt5ReceiveMaximum
+            if (endpoint.connectProperties().getProperty(39) != null) {
+                clientMaximumPacketSize = mqtt5MaximumPacketSize
+            }
         }
 
         if (!validateConnect(props = if (isMqtt5) endpoint.connectProperties() else null, authMethod = mqtt5AuthMethod)) {
@@ -760,8 +775,9 @@ class MqttClient(
                 // Retain Available (37) - Server supports retained messages
                 connackProps.add(MqttProperties.IntegerProperty(37, 1))  // 1 = available
                 
-                // Maximum Packet Size (39) - Server's maximum packet size
-                connackProps.add(MqttProperties.IntegerProperty(39, 268435455))  // Max allowed by MQTT v5
+                // Maximum Packet Size (39) - the size the server really accepts (MqttTcpServer.MaxMessageSizeKb),
+                // a client may send anything up to the announced size (MQTT 5.0 §3.2.2.3.6)
+                connackProps.add(MqttProperties.IntegerProperty(39, Monster.getMaxMessageSize()))
                 
                 // Topic Alias Maximum (34) - Server's limit for topic aliases (Phase 4)
                 connackProps.add(MqttProperties.IntegerProperty(34, 10))
@@ -783,6 +799,8 @@ class MqttClient(
                 connectionAccepted = true
                 endpoint.accept(present)
             }
+            // Reading was paused in deployEndpoint until the connection is accepted
+            socket?.resume()
 
             // Set client to connected
             val information = JsonObject()
@@ -1571,6 +1589,21 @@ class MqttClient(
                         logger.finest { "Client [$clientId] Virtual message [${message.topicName}] dropped: no read permission on canonical topic [$canonical]" }
                         return
                     }
+                }
+            }
+
+            // The server must not send a packet larger than the client's Maximum Packet Size; it is
+            // discarded as if delivery completed (MQTT 5.0 [MQTT-3.1.2-24], [MQTT-3.1.2-25])
+            val maxPacketSize = clientMaximumPacketSize
+            if (maxPacketSize != null) {
+                val size = message.encodedPublishSize(true, sessionHandler.getSubscriptionIdentifiers(clientId, message.topicName))
+                if (size > maxPacketSize) {
+                    logger.fine { "Client [$clientId] Message for topic [${message.topicName}] dropped, packet size $size exceeds client Maximum Packet Size $maxPacketSize" }
+                    sessionHandler.incrementMessagesDropped(clientId)
+                    if (message.isQueued) {
+                        sessionHandler.removeMessage(clientId, message.messageUuid)
+                    }
+                    return
                 }
             }
 

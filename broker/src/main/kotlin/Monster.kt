@@ -432,6 +432,12 @@ class Monster(args: Array<String>) {
         @JvmStatic
         fun getServerReceiveMaximum(): Int = serverReceiveMaximum
 
+        // MqttTcpServer.MaxMessageSizeKb in bytes, announced as Maximum Packet Size in the MQTT 5 CONNACK
+        @Volatile
+        private var maxMessageSizeBytes: Int = 512 * 1024
+        @JvmStatic
+        fun getMaxMessageSize(): Int = maxMessageSizeBytes
+
         private fun ensureSQLiteVerticleDeployed(vertx: Vertx): Future<String> {
             return if (sqliteVerticleDeploymentId == null) {
                 val promise = Promise.promise<String>()
@@ -1082,6 +1088,7 @@ MORE INFO:
         // Load TCP server configuration
         val tcpServerConfig = configJson.getJsonObject("MqttTcpServer", JsonObject())
         val maxMessageSize = tcpServerConfig.getInteger("MaxMessageSizeKb", 512) * 1024
+        maxMessageSizeBytes = maxMessageSize
         val tcpNoDelay = tcpServerConfig.getBoolean("NoDelay", true)
         val receiveBufferSize = tcpServerConfig.getInteger("ReceiveBufferSizeKb", 512) * 1024
         val sendBufferSize = tcpServerConfig.getInteger("SendBufferSizeKb", 512) * 1024

@@ -322,6 +322,34 @@ class BrokerMessage(
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
 
+    /**
+     * Size in bytes of the PUBLISH packet this message is encoded to for a subscriber, used to
+     * respect the client's Maximum Packet Size (MQTT 5.0 [MQTT-3.1.2-24]).
+     */
+    fun encodedPublishSize(mqtt5: Boolean, subscriptionIdentifiers: List<Int> = emptyList()): Long {
+        fun varIntSize(value: Long): Int = when {
+            value < 128 -> 1
+            value < 16_384 -> 2
+            value < 2_097_152 -> 3
+            else -> 4
+        }
+        fun utf8(s: String): Int = 2 + s.toByteArray(Charsets.UTF_8).size
+
+        var remaining = utf8(topicName).toLong() + (if (qosLevel > 0) 2 else 0) + payload.size
+        if (mqtt5) {
+            var props = 0L
+            if (messageExpiryInterval != null) props += 5
+            if (payloadFormatIndicator != null) props += 2
+            contentType?.let { props += 1 + utf8(it) }
+            responseTopic?.let { props += 1 + utf8(it) }
+            correlationData?.let { props += 3 + it.size }
+            userProperties?.forEach { (k, v) -> props += 1 + utf8(k) + utf8(v) }
+            subscriptionIdentifiers.forEach { props += 1 + varIntSize(it.toLong()) }
+            remaining += varIntSize(props) + props
+        }
+        return 1 + varIntSize(remaining) + remaining
+    }
+
     fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS(), subscriptionIdentifiers: List<Int> = emptyList(), dup: Boolean = isDup): Future<Int> {
         if (isExpired()) {
             return Future.succeededFuture(0)
