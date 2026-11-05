@@ -73,7 +73,16 @@ open class SessionHandler(
     private val subAddQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
     private val subDelQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
 
-    private val msgAddQueue: BlockingQueue<Pair<BrokerMessage, List<String>>> = createMessageQueue()
+    // Messages to write to the queue store. seq orders them against session deletion (delClient),
+    // see sessionDeletedSeq.
+    private data class QueuedMessage(val message: BrokerMessage, val clientIds: List<String>, val seq: Long)
+    private val msgAddQueue: BlockingQueue<QueuedMessage> = createMessageQueue()
+    private val queueSeq = AtomicLong(0)
+    // clientId -> (queueSeq at the time its session was deleted, wall clock time). The batch writer
+    // drops messages enqueued for a session before it was deleted (e.g. by Clean Start), otherwise
+    // they would land in the queue after the delete and be delivered to the new session
+    // (3.1.1 [MQTT-3.1.2-6], 5.0 [MQTT-3.1.2-4]). Entries are pruned after a minute.
+    private val sessionDeletedSeq = ConcurrentHashMap<String, Pair<Long, Long>>()
     private val msgDelQueue: BlockingQueue<Pair<String, String>> = createMessageQueue()
 
     // Use unified EventBus addresses
@@ -478,7 +487,13 @@ open class SessionHandler(
         queueWorkerThread("SubAddQueue", subAddQueue, databaseBatchSize, sessionStore::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, databaseBatchSize, sessionStore::delSubscriptions)
 
-        queueWorkerThread("MsgAddQueue", msgAddQueue, databaseBatchSize) { block ->
+        queueWorkerThread("MsgAddQueue", msgAddQueue, databaseBatchSize) { queued ->
+            val block = queued.mapNotNull { item ->
+                val clientIds = if (sessionDeletedSeq.isEmpty()) item.clientIds
+                    else item.clientIds.filter { (sessionDeletedSeq[it]?.first ?: 0L) < item.seq }
+                if (clientIds.isEmpty()) null else Pair(item.message, clientIds)
+            }
+            if (block.isEmpty()) return@queueWorkerThread Future.succeededFuture<Void>()
             val future = queueStore.enqueueMessages(block)
             future.onComplete {
                 // After DB write completes, send triggers to all affected clients
@@ -1189,6 +1204,13 @@ open class SessionHandler(
     }
 
     fun delClient(clientId: String): Future<Void> {
+        // Messages still waiting for the batch writer belong to the deleted session
+        val now = System.currentTimeMillis()
+        sessionDeletedSeq[clientId] = Pair(queueSeq.incrementAndGet(), now)
+        if (sessionDeletedSeq.size > 1000) {
+            sessionDeletedSeq.entries.removeIf { now - it.value.second > 60_000 }
+        }
+
         // Clean up session expiry timers, QoS 2 state, and active client instances
         cancelSessionExpiry(clientId)
         clearIncomingQos2State(clientId)
@@ -1272,7 +1294,7 @@ open class SessionHandler(
     private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
         if (enqueueMessages) {
             try {
-                msgAddQueue.add(Pair(message, clientIds))
+                msgAddQueue.add(QueuedMessage(message, clientIds, queueSeq.incrementAndGet()))
             } catch (e: IllegalStateException) {
                 logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${queueCapacityLabel(msgAddQueue)}). Message [${message.topicName}] to ${clientIds.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml or set it to 0 for an unbounded queue")
             }

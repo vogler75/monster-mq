@@ -313,8 +313,11 @@ class SessionStorePostgres(
         return false
     }
 
+    // Only a persistent session (clean_session = false) is "present": rows of clean sessions are
+    // removed asynchronously on disconnect and must not make CONNACK report Session Present=1
+    // (3.1.1 [MQTT-3.1.2-6], 5.0 §3.1.2.11.2). A row created only by setLastWill has no clean_session.
     override fun isPresent(clientId: String): Boolean {
-        val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ?"
+        val sql = "SELECT client_id FROM $sessionsTableName WHERE client_id = ? AND clean_session = FALSE"
         try {
             db.connection?.let { connection ->
                 val resultVal = connection.prepareStatement(sql).use { preparedStatement ->

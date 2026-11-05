@@ -213,14 +213,28 @@ class MqttClient(
             }
             logger.fine { "Client [${clientId}] Deploy a new session for [${endpoint.remoteAddress()}] [${Utils.getCurrentFunctionName()}]" }
 
+            val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
+
             fun doDeploy() {
-                val client = MqttClient(endpoint, sessionHandler, userManager, useIdentityAsUsername, autoCreateUser)
                 vertx.deployVerticle(client).onComplete {
                     client.startEndpoint()
                 }
             }
 
-            if (clientId.isNotEmpty() && sessionHandler.isConnected(clientId)) {
+            // Client takeover [MQTT-3.1.4-2] / 5.0 [MQTT-3.1.4-3]: the existing connection with the same
+            // client id must be closed. The local registry is updated synchronously here, so a second
+            // CONNECT always finds the first connection, even while that one is still starting up
+            // (the ONLINE client status is only set asynchronously after CONNACK).
+            val previous = if (clientId.isNotEmpty()) liveClients.put(clientId, client) else null
+            if (previous != null) {
+                logger.info("Client [$clientId] Already connected on this node - closing existing connection before deploying new connection")
+                // takeOver completes on the previous connection's context, which is being undeployed.
+                // Deploying from there would make the new verticle a child of that deployment, so
+                // the new connection is deployed from this (the accepting connection's) context.
+                val callerContext = vertx.orCreateContext
+                previous.takeOver().onComplete { callerContext.runOnContext { doDeploy() } }
+            } else if (clientId.isNotEmpty() && sessionHandler.isConnected(clientId)) {
+                // Connected on another cluster node
                 logger.info("Client [$clientId] Already connected - disconnecting existing session before deploying new connection")
                 val payload = JsonObject().put(Const.COMMAND_KEY, Const.COMMAND_DISCONNECT).put("Reason", "Duplicate client ID connected")
                 vertx.eventBus().request<JsonObject>(getCommandAddress(clientId), payload).onComplete { _ ->
@@ -232,6 +246,9 @@ class MqttClient(
                 doDeploy()
             }
         }
+
+        // Live connections on this node by client id, see deployEndpoint
+        private val liveClients = ConcurrentHashMap<String, MqttClient>()
 
         fun undeployEndpoint(vertx: Vertx, deploymentID: String) {
             logger.fine { "DeploymentID [$deploymentID] undeploy [${Utils.getCurrentFunctionName()}]" }
@@ -255,6 +272,40 @@ class MqttClient(
     override fun stop() {
         logger.fine { "Client [${clientId}] Stop [${Utils.getCurrentFunctionName()}] " }
         busConsumers.forEach { it.unregister() }
+        liveClients.remove(clientId, this)
+    }
+
+    /**
+     * Close this connection because a new connection with the same client id arrived. MQTT 5
+     * clients get DISCONNECT 0x8E (Session taken over); the will is published as for any close
+     * without DISCONNECT (MQTT 5.0 §3.1.4). Completes when the session cleanup of this connection
+     * is done, so the new connection does not race with it.
+     */
+    fun takeOver(): Future<Void> {
+        val promise = Promise.promise<Void>()
+        val ctx = context
+        if (ctx == null) {
+            // Not deployed (yet): nothing to clean up, just close the socket
+            try {
+                endpoint.close()
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Close failed: ${e.message}" }
+            }
+            liveClients.remove(clientId, this)
+            return Future.succeededFuture()
+        }
+        val action = {
+            try {
+                if (isMqtt5 && endpoint.isConnected) {
+                    endpoint.disconnect(MqttDisconnectReasonCode.SESSION_TAKEN_OVER, MqttProperties.NO_PROPERTIES)
+                }
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Could not send DISCONNECT 0x8E: ${e.message}" }
+            }
+            closeConnection().onComplete { promise.complete() }
+        }
+        ctx.runOnContext { action() }
+        return promise.future()
     }
 
     /**
@@ -264,6 +315,12 @@ class MqttClient(
     private fun onMessageAvailable() {
         if (!ready || !endpoint.isConnected) {
             logger.finest { "Client [$clientId] Trigger received but not ready or not connected [${Utils.getCurrentFunctionName()}]" }
+            return
+        }
+        if (effectiveCleanSession) {
+            // Queued messages only belong to persistent sessions; a trigger for a clean session comes
+            // from a previous session of the same client id and must not be delivered [MQTT-3.1.2-6]
+            logger.finest { "Client [$clientId] Trigger ignored, clean session [${Utils.getCurrentFunctionName()}]" }
             return
         }
 
@@ -857,7 +914,7 @@ class MqttClient(
         undeployEndpoint(vertx, this.deploymentID())
     }
 
-    private fun stopEndpoint() {
+    private fun stopEndpoint(): Future<Void> {
         // Reset queue processing state
         isProcessingQueue = false
         triggerPending = false
@@ -886,24 +943,31 @@ class MqttClient(
             topicAliases.clear()
         }
 
+        liveClients.remove(clientId, this)
+        val cleanup: Future<Void>
         val isCurrent = sessionHandler.isActiveClientInstance(clientId, instanceId)
         if (isCurrent) {
             sessionHandler.clearActiveClientInstance(clientId, instanceId)
             val isPersistent = if (isMqtt5) sessionExpiryInterval > 0L else !cleanStartRequested
             if (!isPersistent || sessionExpiryInterval == 0L) {
                 logger.fine { "Client [$clientId] Remove client, non-persistent session or session expiry 0 [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.delClient(clientId)
+                cleanup = sessionHandler.delClient(clientId)
             } else {
                 logger.fine { "Client [$clientId] Pause client, persistent session [${Utils.getCurrentFunctionName()}]" }
-                sessionHandler.pauseClient(clientId)
+                cleanup = sessionHandler.pauseClient(clientId)
                 if (isMqtt5 && sessionExpiryInterval > 0L && sessionExpiryInterval < 0xFFFFFFFFL) {
                     sessionHandler.scheduleSessionExpiry(clientId, sessionExpiryInterval)
                 }
             }
         } else {
             logger.info("Client [$clientId] Superseded by newer connection instance - skipping session cleanup")
+            cleanup = Future.succeededFuture()
         }
-        undeployEndpoint(vertx, this.deploymentID())
+        // Undeploy only after the cleanup: undeploying unregisters this verticle's event bus reply
+        // handlers, so the replies to the session status requests would otherwise get lost
+        val done = cleanup.recover { Future.succeededFuture() }
+        done.onComplete { undeployEndpoint(vertx, this.deploymentID()) }
+        return done
     }
 
     private fun exceptionHandler(throwable: Throwable) {
@@ -2087,7 +2151,14 @@ class MqttClient(
     // Close connection
     // -----------------------------------------------------------------------------------------------------------------
 
-    private fun closeConnection() {
+    // Set by the first closeConnection, later calls (e.g. takeover followed by the close handler) return it
+    private var closeFuture: Future<Void>? = null
+
+    private fun closeConnection(): Future<Void> {
+        closeFuture?.let { return it }
+        // Set before anything else, endpoint.close() below can re-enter through the close handler
+        val closed = Promise.promise<Void>()
+        closeFuture = closed.future()
         logger.info("Client [$clientId] Close connection [${endpoint.isConnected}] [${Utils.getCurrentFunctionName()}]")
         if (!gracefulDisconnected) { // if there was no disconnect before
             sendLastWill()
@@ -2098,11 +2169,17 @@ class MqttClient(
             pendingEvents.clear()
             events.forEach { it.invoke() }
         }
-        if (endpoint.isConnected) {
+        if (endpoint.isConnected || !connectionAccepted) {
+            // Before accept() isConnected is false, but the socket is open (e.g. takeover during startup)
             logger.fine { "Client [$clientId] Send close  [${Utils.getCurrentFunctionName()}]" }
-            endpoint.close()
+            try {
+                endpoint.close()
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Close failed: ${e.message}" }
+            }
         }
-        stopEndpoint()
+        stopEndpoint().onComplete { closed.complete() }
         sessionHandler.updateInFlightCounts(clientId, 0, 0)
+        return closed.future()
     }
 }
