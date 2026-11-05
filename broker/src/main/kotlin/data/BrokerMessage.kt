@@ -76,16 +76,13 @@ class BrokerMessage(
         fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
         
         // Helper function to extract MQTT v5 properties from MqttPublishMessage
-        private fun extractProperties(message: MqttPublishMessage): MqttV5Properties {
-            val props = message.properties()
+        private fun extractProperties(message: MqttPublishMessage): MqttV5Properties =
+            extractProperties(message.properties())
+
+        // Shared by PUBLISH properties and Will Properties (MQTT 5.0 §3.1.3.2 uses the same ids)
+        private fun extractProperties(props: io.netty.handler.codec.mqtt.MqttProperties?): MqttV5Properties {
             return MqttV5Properties(
-                messageExpiryInterval = props?.getProperty(2)?.let {
-                    when (val value = it.value()) {
-                        is Int -> value.toLong()
-                        is Long -> value
-                        else -> null
-                    }
-                },
+                messageExpiryInterval = props?.getProperty(2)?.let { Utils.mqttUInt32(it.value()) },
                 payloadFormatIndicator = props?.getProperty(1)?.value() as? Int,
                 contentType = props?.getProperty(3)?.value() as? String,
                 responseTopic = props?.getProperty(8)?.value() as? String,
@@ -169,7 +166,10 @@ class BrokerMessage(
         userProperties = extractProperties(message).userProperties
     )
 
-    constructor(clientId: String, message: MqttWill): this(
+    constructor(clientId: String, message: MqttWill): this(clientId, message, extractProperties(message.willProperties))
+
+    // Will message with its Will Properties (MQTT 5.0 §3.1.3.2: forwarded with the published will)
+    private constructor(clientId: String, message: MqttWill, props: MqttV5Properties): this(
         Utils.getUuid(),
         0,
         message.willTopic,
@@ -179,6 +179,12 @@ class BrokerMessage(
         false,
         false,
         clientId,
+        messageExpiryInterval = props.messageExpiryInterval,
+        payloadFormatIndicator = props.payloadFormatIndicator,
+        contentType = props.contentType,
+        responseTopic = props.responseTopic,
+        correlationData = props.correlationData,
+        userProperties = props.userProperties,
         isWill = true
     )
 

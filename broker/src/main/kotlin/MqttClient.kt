@@ -129,11 +129,11 @@ class MqttClient(
     // Client's Receive Maximum - limit for outstanding QoS 1/2 messages
     private var clientReceiveMaximum = 65535  // Default per MQTT v5 spec
     
-    // MQTT v5.0 Will Delay Interval (Phase 8)
-    // Delay in seconds before publishing Last Will message
-    private var willDelayInterval: Long = 0L  // Default: no delay
-    private var willDelayTimerId: Long? = null  // Timer ID for cancellation
-    
+    // MQTT v5.0 Will Delay Interval: a Will Property (24), not a CONNECT property (MQTT 5.0 §3.1.3.2.2).
+    // The delayed will is kept by the SessionHandler, it must survive this connection's verticle.
+    private val willDelayInterval: Long
+        get() = if (!isMqtt5) 0L else Utils.mqttUInt32(endpoint.will()?.willProperties?.getProperty(24)?.value()) ?: 0L
+
     private val instanceId: String = java.util.UUID.randomUUID().toString()
     private val isMqtt5: Boolean get() = endpoint.protocolVersion() == 5
 
@@ -414,12 +414,11 @@ class MqttClient(
                 }
                 logger.fine("Client [$clientId] CONNECT $name: $valueStr")
                 when (p.propertyId()) {
-                    17 -> sessionExpiryInterval = (value as? Number)?.toLong() ?: 0L
+                    17 -> sessionExpiryInterval = Utils.mqttUInt32(value) ?: 0L
                     21 -> mqtt5AuthMethod = value as? String
                     22 -> mqtt5AuthData = value as? ByteArray
-                    24 -> willDelayInterval = (value as? Number)?.toLong() ?: 0L
                     33 -> mqtt5ReceiveMaximum = (value as? Number)?.toInt() ?: 65535
-                    39 -> mqtt5MaximumPacketSize = (value as? Number)?.toLong() ?: 268435456L
+                    39 -> mqtt5MaximumPacketSize = Utils.mqttUInt32(value) ?: 268435456L
                     34 -> mqtt5TopicAliasMaximum = (value as? Number)?.toInt() ?: 0
                 }
             }
@@ -433,7 +432,18 @@ class MqttClient(
             clientReceiveMaximum = mqtt5ReceiveMaximum
         }
 
+        if (!validateConnect(props = if (isMqtt5) endpoint.connectProperties() else null, authMethod = mqtt5AuthMethod)) {
+            return
+        }
+
         sessionHandler.cancelSessionExpiry(clientId)
+        if (cleanStartRequested) {
+            // Clean Start ends the existing session, a will still waiting for its delay is published
+            sessionHandler.publishPendingWill(clientId)
+        } else {
+            // New connection to the session before the Will Delay passed: the will is not sent [MQTT-3.1.3-9]
+            sessionHandler.cancelPendingWill(clientId)
+        }
         sessionHandler.setActiveClientInstance(clientId, instanceId)
 
         run {
@@ -446,7 +456,11 @@ class MqttClient(
             endpoint.publishReleaseHandler(::publishReleaseHandler)
 
             endpoint.publishAcknowledgeHandler(::publishAcknowledgeHandler)
-            endpoint.publishReceivedHandler(::publishedReceivedHandler)
+            // Message variant: the PUBREC reason code is needed (MQTT 5 §4.3.3, a code >= 0x80 ends the flow)
+            endpoint.publishReceivedMessageHandler { pubrec ->
+                // value() is a signed byte, mask it so 0x80.. compare as unsigned
+                publishedReceivedHandler(pubrec.messageId(), (pubrec.code()?.value()?.toInt() ?: 0) and 0xFF)
+            }
             endpoint.publishCompletionHandler(::publishCompletionHandler)
 
             endpoint.disconnectMessageHandler { disconnectMsg ->
@@ -454,15 +468,28 @@ class MqttClient(
                     val props = disconnectMsg.properties()
                     val prop = props.getProperty(17)
                     if (prop != null) {
-                        val newInterval = (prop.value() as? Number)?.toLong() ?: 0L
+                        val newInterval = Utils.mqttUInt32(prop.value()) ?: 0L
                         sessionExpiryInterval = newInterval
                         logger.info("Client [$clientId] Updated sessionExpiryInterval from DISCONNECT packet: $sessionExpiryInterval")
                     }
                 }
                 disconnectHandler()
+                // Only a DISCONNECT with reason 0x00 (Normal disconnection) removes the will
+                // [MQTT-3.1.2-10]; 0x04 "Disconnect with Will Message" and errors publish it.
+                if (isMqtt5 && disconnectMsg.code() != null && disconnectMsg.code() != MqttDisconnectReasonCode.NORMAL) {
+                    logger.info("Client [$clientId] DISCONNECT with reason [${disconnectMsg.code()}] - will message is published")
+                    gracefulDisconnected = false
+                }
             }
             endpoint.disconnectHandler { disconnectHandler() }
             endpoint.closeHandler { closeHandler() }
+
+            // Without a handler vert.x silently drops AUTH packets. Enhanced authentication is not
+            // supported (CONNECT with an Authentication Method is refused), so an AUTH packet is
+            // always a Protocol Error (MQTT 5.0 §4.12, §3.15.2.2.2).
+            endpoint.authenticationExchangeHandler {
+                protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "AUTH packet without an Authentication Method in CONNECT")
+            }
 
             // Message bus consumers
             if (!deployed) {
@@ -543,19 +570,8 @@ class MqttClient(
                     }
                 }
 
-                // Check for MQTT v5.0 enhanced authentication first
-                if (isMqtt5 && mqtt5AuthMethod != null) {
-                    // Enhanced authentication requested
-                    logger.info("Client [$clientId] MQTT v5.0 enhanced authentication: method=$mqtt5AuthMethod")
-                    
-                    // TODO: Implement enhanced authentication flow when Vert.x MQTT adds AUTH packet support
-                    // For now, log the attempt and fall back to basic authentication
-                    logger.warning("Client [$clientId] Enhanced authentication ($mqtt5AuthMethod) not yet supported - AUTH packet handling requires Vert.x MQTT API enhancement")
-                    logger.info("Client [$clientId] Falling back to basic username/password authentication")
-                    
-                    // Fall through to basic authentication
-                }
-                
+                // MQTT v5.0 enhanced authentication is not supported, a CONNECT with an
+                // Authentication Method was already refused in validateConnect()
                 val username = endpoint.auth()?.username
                 val password = endpoint.auth()?.password
                 
@@ -609,6 +625,86 @@ class MqttClient(
         }
     }
 
+    /**
+     * Checks the CONNECT packet for violations that neither netty nor vert.x detect. On a
+     * violation the connection is refused (MQTT 5: CONNACK with reason code, MQTT 3.1.1: close
+     * without CONNACK) and false is returned.
+     */
+    private fun validateConnect(props: MqttProperties?, authMethod: String?): Boolean {
+        val will = endpoint.will()
+        if (will != null && will.isWillFlag) {
+            // Will QoS 3 is a Malformed Packet: 3.1.1 [MQTT-3.1.2-14], 5.0 [MQTT-3.1.2-12]
+            if (will.willQos > 2) {
+                logger.warning("Client [$clientId] CONNECT with Will QoS ${will.willQos} - malformed packet, refusing connection")
+                refuseConnect(MqttConnectReturnCode.CONNECTION_REFUSED_MALFORMED_PACKET)
+                return false
+            }
+            // The Will Topic is a Topic Name, it must not be empty or contain wildcards [MQTT-4.7.1-1]
+            if (!MqttValidation.isValidTopicName(will.willTopic ?: "")) {
+                logger.warning("Client [$clientId] CONNECT with invalid Will Topic [${will.willTopic}] - refusing connection")
+                refuseConnect(MqttConnectReturnCode.CONNECTION_REFUSED_TOPIC_NAME_INVALID)
+                return false
+            }
+        }
+
+        if (props != null) {
+            // Receive Maximum / Maximum Packet Size of 0 are a Protocol Error (MQTT 5.0 §3.1.2.11.3, §3.1.2.11.4)
+            for (id in listOf(33, 39)) {
+                val prop = props.getProperty(id) ?: continue
+                if (Utils.mqttUInt32(prop.value()) == 0L) {
+                    logger.warning("Client [$clientId] CONNECT with property [$id] = 0 - protocol error, refusing connection")
+                    refuseConnect(MqttConnectReturnCode.CONNECTION_REFUSED_PROTOCOL_ERROR)
+                    return false
+                }
+            }
+        }
+
+        // Enhanced authentication (AUTH packet exchange) is not supported: an Authentication Method
+        // in CONNECT is refused with Bad Authentication Method (MQTT 5.0 §4.12 [MQTT-4.12.0-1])
+        if (isMqtt5 && authMethod != null) {
+            logger.warning("Client [$clientId] CONNECT with unsupported Authentication Method [$authMethod] - refusing connection")
+            refuseConnect(MqttConnectReturnCode.CONNECTION_REFUSED_BAD_AUTHENTICATION_METHOD)
+            return false
+        }
+        return true
+    }
+
+    /**
+     * Refuse a CONNECT. MQTT 5 gets a CONNACK with the reason code. MQTT 3.1.1 has no return code
+     * for malformed or invalid packets, the server closes the connection without CONNACK
+     * (3.1.1 [MQTT-4.8.0-1]).
+     */
+    private fun refuseConnect(v5Code: MqttConnectReturnCode) {
+        if (isMqtt5) {
+            rejectAndCloseEndpoint(v5Code)
+        } else {
+            // isConnected is false before accept(), but the socket is open and must be closed
+            try {
+                endpoint.close()
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Close failed: ${e.message}" }
+            }
+            undeployEndpoint(vertx, this.deploymentID())
+        }
+    }
+
+    /**
+     * Close the connection because of a protocol violation. MQTT 5 clients receive a DISCONNECT
+     * with the reason code first (§4.13), MQTT 3.1.1 connections are just closed (§4.8).
+     * The Will Message is published, as for every close without a normal DISCONNECT.
+     */
+    private fun protocolViolation(code: MqttDisconnectReasonCode, reason: String) {
+        logger.warning("Client [$clientId] $reason - closing connection with [$code]")
+        if (isMqtt5 && endpoint.isConnected) {
+            try {
+                endpoint.disconnect(code, MqttProperties.NO_PROPERTIES)
+            } catch (e: Exception) {
+                logger.fine { "Client [$clientId] Could not send DISCONNECT: ${e.message}" }
+            }
+        }
+        closeConnection()
+    }
+
     // Extracts the Common Name from the client's TLS certificate, if one was presented.
     // Returns null (rather than throwing) whenever no usable client certificate is
     // available - e.g. ClientAuth is REQUEST and the client didn't offer one, or the
@@ -634,13 +730,6 @@ class MqttClient(
         val cleanSession = !isPersistent
 
         fun finishClientStartup(present: Boolean) {
-            // Cancel any pending Will Delay timer (client reconnected before will was published)
-            willDelayTimerId?.let { timerId ->
-                vertx.cancelTimer(timerId)
-                willDelayTimerId = null
-                logger.info("Client [$clientId] Reconnected - canceling pending Will Delay timer")
-            }
-
             // Accept connection
             if (isMqtt5) {
                 // MQTT v5.0: Send CONNACK with properties (Phase 7)
@@ -826,6 +915,11 @@ class MqttClient(
     }
 
     private fun subscribeHandler(subscribe: MqttSubscribeMessage) {
+        // A SUBSCRIBE without any Topic Filter is a Protocol Error: 3.1.1 [MQTT-3.8.3-3], 5.0 [MQTT-3.8.3-2]
+        if (subscribe.topicSubscriptions().isEmpty()) {
+            protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "SUBSCRIBE without any topic filter")
+            return
+        }
         if (!ready) {
             logger.info("Client [$clientId] Connection not ready, queuing SUBSCRIBE for message id [${subscribe.messageId()}]")
             pendingEvents.add { subscribeHandler(subscribe) }
@@ -863,8 +957,19 @@ class MqttClient(
                 val retainHandling = subOption?.retainHandling()?.value() ?: 0  // 0=send retained, 1=send if new, 2=never send
                 val retainAsPublished = subOption?.isRetainAsPublished ?: false  // Preserve original retain flag
 
-                // Root wildcard policy
-                if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                if (MqttValidation.isSharedSubscription(topic)) {
+                    // Shared subscriptions are not supported (CONNACK Shared Subscription Available = 0),
+                    // MQTT 5.0 §3.2.2.3.13 / §4.8: answer with 0x9E
+                    allowed = false
+                    reasonCode = MqttSubAckReasonCode.SHARED_SUBSCRIPTIONS_NOT_SUPPORTED
+                    logger.fine { "Client [$clientId] Shared subscription [$topic] rejected, shared subscriptions are not supported" }
+                } else if (!MqttValidation.isValidTopicFilter(topic)) {
+                    // [MQTT-4.7.1-1], [MQTT-4.7.1-2], [MQTT-4.7.3-1]
+                    allowed = false
+                    reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
+                    logger.warning("Client [$clientId] Subscription rejected, invalid topic filter [$topic]")
+                } else if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                    // Root wildcard policy
                     allowed = false
                     reasonCode = MqttSubAckReasonCode.TOPIC_FILTER_INVALID
                     logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
@@ -927,8 +1032,12 @@ class MqttClient(
                 val topic = subscription.topicName()
                 var allowed = true
 
-                // Root wildcard policy
-                if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                if (!MqttValidation.isValidTopicFilter(topic)) {
+                    // [MQTT-4.7.1-2], [MQTT-4.7.1-3], [MQTT-4.7.3-1]: return code 0x80 for the filter
+                    allowed = false
+                    logger.warning("Client [$clientId] Subscription rejected, invalid topic filter [$topic]")
+                } else if (topic == "#" && !Monster.allowRootWildcardSubscription()) {
+                    // Root wildcard policy
                     allowed = false
                     logger.warning("Client [$clientId] Root wildcard subscription '#' rejected (AllowRootWildcardSubscription=false)")
                 }
@@ -1002,6 +1111,11 @@ class MqttClient(
     }
 
     private fun unsubscribeHandler(unsubscribe: MqttUnsubscribeMessage) {
+        // An UNSUBSCRIBE without any Topic Filter is a Protocol Error [MQTT-3.10.3-2]
+        if (unsubscribe.topics().isEmpty()) {
+            protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "UNSUBSCRIBE without any topic filter")
+            return
+        }
         if (!ready) {
             logger.info("Client [$clientId] Connection not ready, queuing UNSUBSCRIBE for message id [${unsubscribe.messageId()}]")
             pendingEvents.add { unsubscribeHandler(unsubscribe) }
@@ -1014,6 +1128,11 @@ class MqttClient(
             val reasonCodes = mutableListOf<MqttUnsubAckReasonCode>()
 
             unsubscribe.topics().forEach { topicName ->
+                if (!MqttValidation.isValidTopicFilter(topicName)) {
+                    logger.fine { "Client [$clientId] Unsubscribe for invalid topic filter [${topicName}] [${Utils.getCurrentFunctionName()}]" }
+                    reasonCodes.add(MqttUnsubAckReasonCode.TOPIC_FILTER_INVALID)
+                    return@forEach
+                }
                 logger.fine { "Client [$clientId] Unsubscribe for [${topicName}] [${Utils.getCurrentFunctionName()}]" }
                 sessionHandler.unsubscribeRequest(this, topicName)
                 // Assuming unsubscribe is always successful (no validation in current impl)
@@ -1091,41 +1210,72 @@ class MqttClient(
     private fun publishHandler(message: MqttPublishMessage) {
         if (Backpressure.isSaturated()) pauseReading()
         var topicName = message.topicName()
-        
-        // MQTT v5.0: Handle Topic Alias (Phase 4)
+
+        // DUP must be 0 for QoS 0 messages [MQTT-3.3.1-2]
+        if (message.isDup && message.qosLevel() == MqttQoS.AT_MOST_ONCE) {
+            protocolViolation(MqttDisconnectReasonCode.MALFORMED_PACKET, "PUBLISH with QoS 0 and DUP=1")
+            return
+        }
+
+        // MQTT v5.0: check properties and handle Topic Alias (Phase 4)
         if (endpoint.protocolVersion() == 5) {
             val props = message.properties()
-            val topicAliasProperty = props?.getProperty(35)  // Property ID 35 = Topic Alias
-            
-            if (topicAliasProperty != null) {
-                val topicAlias = (topicAliasProperty.value() as? Number)?.toInt()
-                
-                if (topicAlias != null && topicAlias > 0) {
-                    if (topicName.isEmpty()) {
-                        // Client is using existing alias - resolve topic name
-                        val resolvedTopic = topicAliases[topicAlias]
-                        if (resolvedTopic != null) {
-                            topicName = resolvedTopic
-                            logger.fine { "Client [$clientId] Resolved Topic Alias $topicAlias → $topicName" }
-                        } else {
-                            logger.warning("Client [$clientId] Topic Alias $topicAlias not found - ignoring message")
-                            return
-                        }
-                    } else {
-                        // Client is establishing new alias mapping
-                        // Validate alias is within limit (server's limit is 10)
-                        if (topicAlias > 10) {
-                            logger.warning("Client [$clientId] Topic Alias $topicAlias exceeds maximum (10) - disconnecting")
-                            sessionHandler.disconnectClient(clientId, "Topic Alias exceeds maximum")
-                            return
-                        }
-                        
-                        // Store alias mapping
-                        topicAliases[topicAlias] = topicName
-                        logger.fine { "Client [$clientId] Registered Topic Alias $topicAlias ← $topicName" }
-                    }
+            props?.listAll()?.forEach { p ->
+                val id = p.propertyId()
+                if (id == 11) {
+                    // A client PUBLISH must not contain a Subscription Identifier [MQTT-3.3.4-6]
+                    protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "PUBLISH from client contains a Subscription Identifier")
+                    return
+                }
+                if (id !in MqttValidation.ALLOWED_CLIENT_PUBLISH_PROPERTIES) {
+                    // A property not valid for the packet type makes it a Malformed Packet (§2.2.2.2)
+                    protocolViolation(MqttDisconnectReasonCode.MALFORMED_PACKET, "PUBLISH contains property [$id] which is not allowed in PUBLISH")
+                    return
                 }
             }
+            (props?.getProperty(8)?.value() as? String)?.let { responseTopic ->
+                // The Response Topic is a Topic Name, it must not contain wildcards [MQTT-3.3.2-14]
+                if (!MqttValidation.isValidTopicName(responseTopic)) {
+                    protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "PUBLISH with invalid Response Topic [$responseTopic]")
+                    return
+                }
+            }
+
+            val topicAliasProperty = props?.getProperty(35)  // Property ID 35 = Topic Alias
+            if (topicAliasProperty != null) {
+                val topicAlias = (topicAliasProperty.value() as? Number)?.toInt() ?: 0
+                // Alias 0 or above the server's Topic Alias Maximum (10) is invalid (§3.3.2.3.4)
+                if (topicAlias <= 0 || topicAlias > 10) {
+                    protocolViolation(MqttDisconnectReasonCode.TOPIC_ALIAS_INVALID, "Topic Alias $topicAlias is outside 1..10")
+                    return
+                }
+                if (topicName.isEmpty()) {
+                    // Client is using an existing alias - resolve the topic name
+                    val resolvedTopic = topicAliases[topicAlias]
+                    if (resolvedTopic == null) {
+                        // An alias that was not set on this connection is a Protocol Error (§3.3.2.3.4)
+                        protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "Topic Alias $topicAlias is not known on this connection")
+                        return
+                    }
+                    topicName = resolvedTopic
+                    logger.fine { "Client [$clientId] Resolved Topic Alias $topicAlias → $topicName" }
+                } else if (MqttValidation.isValidTopicName(topicName)) {
+                    // Client is establishing a new alias mapping
+                    topicAliases[topicAlias] = topicName
+                    logger.fine { "Client [$clientId] Registered Topic Alias $topicAlias ← $topicName" }
+                }
+            }
+        }
+
+        // Topic Name: not empty (unless resolved from an alias above) [MQTT-4.7.3-1] / 5.0 §3.3.2.3.4,
+        // no U+0000 [MQTT-1.5.3-2]. netty already rejects wildcards in a PUBLISH topic.
+        if (topicName.isEmpty()) {
+            protocolViolation(MqttDisconnectReasonCode.PROTOCOL_ERROR, "PUBLISH with empty topic name and no Topic Alias")
+            return
+        }
+        if (!MqttValidation.isValidTopicName(topicName)) {
+            protocolViolation(MqttDisconnectReasonCode.MALFORMED_PACKET, "PUBLISH with invalid topic name")
+            return
         }
 
         // Construct BrokerMessage immediately (copies payload bytes synchronously on Event Loop thread)
@@ -1152,13 +1302,6 @@ class MqttClient(
         // Check system topic restrictions
         if (topicName.startsWith(Const.SYS_TOPIC_NAME)) {
             logger.warning { "Client [$clientId] Publish: message for system topic [$topicName] not allowed! [${Utils.getCurrentFunctionName()}]" }
-            return
-        }
-
-        // MQTT spec §3.3.2.1: Topic Name in PUBLISH MUST NOT contain wildcard characters '+' or '#'
-        if (topicName.contains('+') || topicName.contains('#')) {
-            logger.warning { "Client [$clientId] Publish: topic [$topicName] contains wildcard characters - protocol violation [${Utils.getCurrentFunctionName()}]" }
-            sessionHandler.disconnectClient(clientId, "Publish topic contains wildcard characters")
             return
         }
 
@@ -1699,10 +1842,18 @@ class MqttClient(
         }
     }
 
-    private fun publishedReceivedHandler(id: Int) { // QoS 2
+    private fun publishedReceivedHandler(id: Int, reasonCode: Int = 0) { // QoS 2
         if (!ready) {
             logger.info("Client [$clientId] Connection not ready, queuing PUBREC id [$id]")
-            pendingEvents.add { publishedReceivedHandler(id) }
+            pendingEvents.add { publishedReceivedHandler(id, reasonCode) }
+            return
+        }
+
+        if (reasonCode >= 0x80) {
+            // MQTT 5 §4.3.3 [MQTT-4.3.3-4] and §4.9: a PUBREC with a reason code >= 0x80 ends the
+            // QoS 2 flow. No PUBREL is sent, the packet id is freed and the message is not redelivered.
+            logger.fine { "Client [$clientId] PUBREC: id [$id] rejected by client with reason code [0x${reasonCode.toString(16)}], completing without PUBREL [${Utils.getCurrentFunctionName()}]" }
+            publishMessageCompleted(id, "PUBREC(0x${reasonCode.toString(16)})")
             return
         }
 
@@ -1859,14 +2010,13 @@ class MqttClient(
                     }
                 }
 
-                // MQTT v5: Honor Will Delay Interval (Property 24)
-                if (willDelayInterval > 0 && endpoint.protocolVersion() == 5) {
-                    logger.info("Client [$clientId] Will Delay Interval: ${willDelayInterval}s - scheduling Last Will")
-                    willDelayTimerId = vertx.setTimer(willDelayInterval * 1000) {
-                        logger.fine { "Client [$clientId] Will Delay expired - publishing Last Will [${Utils.getCurrentFunctionName()}]" }
-                        sessionHandler.publishMessage(msg)
-                        willDelayTimerId = null
-                    }
+                // MQTT v5: the will is published when the Will Delay Interval has passed or the
+                // session ends, whichever happens first (MQTT 5.0 §3.1.3.2.2). With a Session
+                // Expiry of 0 the session ends now, so the will is published immediately.
+                val delay = if (isMqtt5) minOf(willDelayInterval, sessionExpiryInterval) else 0L
+                if (delay > 0) {
+                    logger.info("Client [$clientId] Will Delay Interval: ${delay}s - scheduling Last Will")
+                    sessionHandler.scheduleWill(clientId, msg, delay)
                 } else {
                     // No delay - publish immediately
                     logger.fine { "Client [$clientId] Sending Last-Will message [${Utils.getCurrentFunctionName()}]" }

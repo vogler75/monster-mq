@@ -105,6 +105,13 @@ object Utils {
     fun getCurrentFunctionName(): String = Thread.currentThread().stackTrace[2].methodName
     fun getUuid(): String = UuidCreator.getTimeOrdered().toString()
 
+    /**
+     * MQTT 5 Four Byte Integer properties (Session Expiry, Message Expiry, Will Delay, Maximum
+     * Packet Size) are unsigned, but netty decodes them into a signed Java int, so 0xFFFFFFFF
+     * arrives as -1. Returns the unsigned value, or null if the property value is not a number.
+     */
+    fun mqttUInt32(value: Any?): Long? = (value as? Number)?.toLong()?.and(0xFFFFFFFFL)
+
     fun <K,V> getMap(vertx: Vertx, name: String): Future<AsyncMap<K, V>> {
         val sharedData = vertx.sharedData()
         return if (vertx.isClustered) {

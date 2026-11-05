@@ -753,20 +753,80 @@ open class SessionHandler(
         }
     }
 
+    // Timers that must outlive the connection are created on this verticle's context. A timer
+    // created on the MqttClient verticle's context is cancelled by Vert.x when that verticle is
+    // undeployed, which happens right after the connection is closed.
+    private fun onSessionContext(action: () -> Unit) {
+        val ctx = context
+        if (ctx == null || io.vertx.core.Vertx.currentContext() == ctx) action() else ctx.runOnContext { action() }
+    }
+
     fun scheduleSessionExpiry(clientId: String, expirySeconds: Long) {
-        cancelSessionExpiry(clientId)
-        val timerId = vertx.setTimer(expirySeconds * 1000) {
-            logger.info("Session expired for client [$clientId] after ${expirySeconds}s")
-            sessionExpiryTimers.remove(clientId)
-            delClient(clientId)
+        onSessionContext {
+            cancelSessionExpiryTimer(clientId)
+            val timerId = vertx.setTimer(expirySeconds * 1000) {
+                logger.info("Session expired for client [$clientId] after ${expirySeconds}s")
+                sessionExpiryTimers.remove(clientId)
+                // The session ends: a will still waiting for its Will Delay is published now (MQTT 5.0 §3.1.3.2.2)
+                publishPendingWill(clientId)
+                delClient(clientId)
+            }
+            sessionExpiryTimers[clientId] = timerId
         }
-        sessionExpiryTimers[clientId] = timerId
     }
 
     fun cancelSessionExpiry(clientId: String) {
+        cancelSessionExpiryTimer(clientId)
+    }
+
+    private fun cancelSessionExpiryTimer(clientId: String) {
         sessionExpiryTimers.remove(clientId)?.let { timerId ->
             vertx.cancelTimer(timerId)
             logger.fine { "Cancelled session expiry timer for client [$clientId]" }
+        }
+    }
+
+    // MQTT v5 Will Delay Interval: wills waiting to be published, by client id (MQTT 5.0 §3.1.3.2.2)
+    private data class PendingWill(val timerId: Long, val message: BrokerMessage)
+    private val pendingWills = ConcurrentHashMap<String, PendingWill>()
+
+    /**
+     * Publish the will message after the delay, unless a new connection for the session cancels it
+     * before (cancelPendingWill) or the session ends earlier (publishPendingWill).
+     */
+    fun scheduleWill(clientId: String, message: BrokerMessage, delaySeconds: Long) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let { vertx.cancelTimer(it.timerId) }
+            val timerId = vertx.setTimer(delaySeconds * 1000) {
+                val pending = pendingWills[clientId]
+                if (pending != null && pending.message === message) {
+                    pendingWills.remove(clientId)
+                    logger.fine { "Will Delay of ${delaySeconds}s expired for client [$clientId] - publishing will message" }
+                    publishMessage(message.copy(time = java.time.Instant.now()))
+                }
+            }
+            pendingWills[clientId] = PendingWill(timerId, message)
+        }
+    }
+
+    /** A new connection for the session was made before the Will Delay passed: the will is not sent [MQTT-3.1.3-9]. */
+    fun cancelPendingWill(clientId: String) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let {
+                vertx.cancelTimer(it.timerId)
+                logger.info("Client [$clientId] Reconnected within the Will Delay Interval - will message discarded")
+            }
+        }
+    }
+
+    /** The session ended before the Will Delay passed: publish the will now. */
+    fun publishPendingWill(clientId: String) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let {
+                vertx.cancelTimer(it.timerId)
+                logger.fine { "Session of client [$clientId] ended - publishing delayed will message" }
+                publishMessage(it.message.copy(time = java.time.Instant.now()))
+            }
         }
     }
 
