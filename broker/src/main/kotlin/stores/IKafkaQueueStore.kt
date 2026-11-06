@@ -11,6 +11,13 @@ interface IKafkaQueueStore {
     fun enqueue(messages: List<BrokerMessage>): Future<Void>
 
     /**
+     * Store records produced through the Kafka protocol to [kafkaTopic].
+     * Multiplexing stores write to the stream named like the Kafka topic plus the stream
+     * the orchestrator would pick for the MQTT topic of each record.
+     */
+    fun enqueueForProduce(kafkaTopic: String, messages: List<BrokerMessage>): Future<Void> = enqueue(messages)
+
+    /**
      * Fetch a batch of messages from the Kafka sequential queue starting from a specific offset.
      * Returns a list of pairs where each pair contains the offset ID and the message.
      */

@@ -18,8 +18,7 @@ import at.rocworks.Monster
 import at.rocworks.stores.DeviceConfig
 import at.rocworks.stores.IDeviceConfigStore
 import io.vertx.core.Future
-import at.rocworks.devices.kafkaserver.KafkaServerConfig
-import at.rocworks.devices.kafkaserver.KafkaStreamMapping
+import at.rocworks.handlers.KafkaProducedMessages
 import at.rocworks.data.TopicTree
 
 class KafkaProtocolServer(
@@ -88,11 +87,6 @@ class KafkaProtocolServer(
                 if (result.succeeded()) {
                     logger.info("Apache Kafka protocol server listening on $host:$port")
                     
-                    // Trigger dynamic topics refresh on Event Bus config changes
-                    vertx.eventBus().consumer<JsonObject>("kafkaserver.device.config.changed") { _ ->
-                        refreshConfiguredTopics()
-                    }
-                    
                     startPromise.complete()
                 } else {
                     logger.severe("Failed to start Kafka protocol server on $host:$port: ${result.cause()?.message}")
@@ -103,9 +97,8 @@ class KafkaProtocolServer(
     }
 
     private fun refreshConfiguredTopics(): Future<Void> {
+        // The streams of this server instance (configuration changes redeploy the server)
         val newStreams = mutableListOf<KafkaStreamConfig>()
-        
-        // 1. Load static streams from config.yaml
         val streamsConfig = kafkaConfig.getJsonArray("streams", io.vertx.core.json.JsonArray())
         streamsConfig.forEach { stream ->
             val streamObj = stream as JsonObject
@@ -116,41 +109,8 @@ class KafkaProtocolServer(
                 newStreams.add(KafkaStreamConfig(streamName, topicFilter, allowWrite))
             }
         }
-
-        if (deviceConfigStore == null) {
-            updateActiveStreams(newStreams)
-            return Future.succeededFuture()
-        }
-
-        val currentNodeId = Monster.getClusterNodeId(vertx)
-        return deviceConfigStore.getEnabledDevicesByNode(currentNodeId).map { list ->
-            // 2. Dynamic streams from KafkaServer devices
-            list.filter { it.type == DeviceConfig.DEVICE_TYPE_KAFKA_SERVER }.forEach { dev ->
-                try {
-                    val serverConfig = KafkaServerConfig.fromJsonObject(dev.config)
-                    serverConfig.streams.forEach { mapping ->
-                        if (mapping.streamName.isNotBlank() && mapping.topicFilter.isNotBlank()) {
-                            newStreams.add(KafkaStreamConfig(mapping.streamName, mapping.topicFilter, mapping.allowWrite))
-                        }
-                    }
-                } catch (e: Exception) {
-                    logger.severe("Failed to parse KafkaServerConfig streams: ${e.message}")
-                }
-            }
-
-            // 3. Standalone streams from Kafka-Stream devices
-            list.filter { it.type == DeviceConfig.DEVICE_TYPE_KAFKA_STREAM }.forEach { dev ->
-                val streamName = dev.name
-                val topicFilter = dev.namespace
-                val allowWrite = dev.config.getBoolean("allowWrite") ?: dev.config.getBoolean("AllowWrite") ?: true
-                if (streamName.isNotBlank() && topicFilter.isNotBlank()) {
-                    newStreams.add(KafkaStreamConfig(streamName, topicFilter, allowWrite))
-                }
-            }
-
-            updateActiveStreams(newStreams)
-            null
-        }
+        updateActiveStreams(newStreams)
+        return Future.succeededFuture()
     }
 
     private fun updateActiveStreams(newStreams: List<KafkaStreamConfig>) {
@@ -186,6 +146,7 @@ class KafkaProtocolServer(
         private var authenticated = !userManager.isUserManagementEnabled()
         private var username: String? = null
         private var saslHandshakeReceived = false
+        private var saslHandshakeVersion = 0
         private var authenticating = false
 
         private val pendingResponseQueue = java.util.ArrayDeque<PendingResponse>()
@@ -230,15 +191,9 @@ class KafkaProtocolServer(
                 }
 
                 try {
-                    if (saslHandshakeReceived && !authenticated) {
-                        // Check if standard SaslAuthenticate request (apiKey == 36) or raw token payload
-                        val tempReader = KafkaBufferReader(packet)
-                        val tempApiKey = if (packet.length() >= 2) tempReader.readShort().toInt() else -1
-                        if (tempApiKey == 36) {
-                            handleRequest(packet)
-                        } else {
-                            handleRawSaslPlainToken(packet)
-                        }
+                    if (saslHandshakeReceived && saslHandshakeVersion == 0 && !authenticated) {
+                        // SaslHandshake v0: the client sends raw PLAIN tokens (no Kafka request framing)
+                        handleRawSaslPlainToken(packet)
                     } else {
                         handleRequest(packet)
                     }
@@ -277,7 +232,7 @@ class KafkaProtocolServer(
             response.writeInt(correlationId) // First field in response is always correlationId
 
             when (apiKey.toInt()) {
-                0 -> handleProduce(apiVersion, reader, response, clientId)
+                0 -> handleProduce(apiVersion, reader, response, clientId, correlationId)
                 18 -> handleApiVersions(apiVersion, response)
                 3 -> handleMetadata(apiVersion, reader, response)
                 10 -> handleFindCoordinator(apiVersion, reader, response)
@@ -300,7 +255,9 @@ class KafkaProtocolServer(
         }
 
         private fun handleApiVersions(apiVersion: Short, response: KafkaBufferWriter) {
-            response.writeShort(0) // No error (0)
+            // A version above 0 is answered with UNSUPPORTED_VERSION (35) and the v0-shaped
+            // key list (KIP-511), so clients fall back to ApiVersions v0
+            response.writeShort(if (apiVersion.toInt() > 0) 35 else 0)
 
             // API Keys Array
             response.writeInt(15) // We support 15 APIs
@@ -379,10 +336,6 @@ class KafkaProtocolServer(
             response.writeShort(32) // key
             response.writeShort(0)  // min version
             response.writeShort(1)  // max version
-
-            if (apiVersion.toInt() >= 1) {
-                response.writeInt(0) // Throttle time ms
-            }
 
             writeResponse(response)
         }
@@ -546,6 +499,9 @@ class KafkaProtocolServer(
                 response.writeInt(0) // throttleTimeMs
             }
             response.writeShort(0) // No error
+            if (apiVersion.toInt() >= 1) {
+                response.writeString(null) // error_message
+            }
 
             // Coordinator Broker
             response.writeInt(0) // Broker ID: 0
@@ -662,15 +618,15 @@ class KafkaProtocolServer(
 
         private fun handleListOffsets(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
             val replicaId = reader.readInt()
-            
+
             var isolationLevel: Byte = 0
             if (apiVersion.toInt() >= 2) {
                 isolationLevel = reader.readByte()
             }
-            
+
             val topicCount = reader.readInt()
 
-            val futures = mutableListOf<FutureOffsetResult>()
+            val entries = mutableListOf<ListOffsetsEntry>()
 
             for (i in 0 until topicCount) {
                 val topic = reader.readString() ?: ""
@@ -678,64 +634,57 @@ class KafkaProtocolServer(
                 for (j in 0 until partitionCount) {
                     val partition = reader.readInt()
                     val timestamp = reader.readLong()
-                    
+
                     // maxNumOffsets is ONLY present in version 0
                     if (apiVersion.toInt() == 0) {
                         val maxNumOffsets = reader.readInt()
                     }
 
-                    val promise = Promise.promise<Pair<String, Long>>()
-                    futures.add(FutureOffsetResult(topic, partition, promise.future()))
-
-                    if (timestamp == -1L) {
-                        // Requesting high watermark (latest offset)
-                        kafkaStore.getLatestOffset(topic).onComplete { ar ->
-                            if (ar.succeeded()) {
-                                promise.complete(Pair(topic, ar.result() + 1)) // Next offset is max + 1
-                            } else {
-                                promise.complete(Pair(topic, 0L))
-                            }
-                        }
+                    if (partition != 0) {
+                        // UNKNOWN_TOPIC_OR_PARTITION
+                        entries.add(ListOffsetsEntry(topic, partition, 3, io.vertx.core.Future.succeededFuture(-1L)))
+                    } else if (timestamp == -1L) {
+                        // Requesting high watermark (latest offset): the next offset
+                        entries.add(ListOffsetsEntry(topic, partition, 0,
+                            kafkaStore.getLatestOffset(topic).map { it + 1 }.recover { io.vertx.core.Future.succeededFuture(0L) }))
                     } else {
                         // Requesting low watermark (earliest offset)
-                        kafkaStore.getEarliestOffset(topic).onComplete { ar ->
-                            if (ar.succeeded()) {
-                                promise.complete(Pair(topic, ar.result()))
-                            } else {
-                                promise.complete(Pair(topic, 0L))
-                            }
-                        }
+                        entries.add(ListOffsetsEntry(topic, partition, 0,
+                            kafkaStore.getEarliestOffset(topic).recover { io.vertx.core.Future.succeededFuture(0L) }))
                     }
                 }
             }
 
             // Wait for all database offsets to resolve
-            io.vertx.core.Future.all(futures.map { it.future }).onComplete { ar ->
+            io.vertx.core.Future.join(entries.map { it.future }).onComplete { _ ->
                 if (apiVersion.toInt() >= 2) {
                     response.writeInt(0) // throttleTimeMs = 0
                 }
 
-                response.writeInt(topicCount)
-                futures.forEach { result ->
-                    response.writeString(result.topic)
-                    response.writeInt(1) // 1 partition
+                val byTopic = entries.groupBy { it.topic }
+                response.writeInt(byTopic.size)
+                byTopic.forEach { (topic, partitions) ->
+                    response.writeString(topic)
+                    response.writeInt(partitions.size)
+                    partitions.forEach { entry ->
+                        response.writeInt(entry.partition)
+                        response.writeShort(entry.error)
 
-                    response.writeInt(result.partition)
-                    response.writeShort(0) // No error
+                        val offsetVal = if (entry.error.toInt() == 0) (entry.future.result() ?: 0L) else -1L
 
-                    val offsetVal = if (ar.succeeded()) {
-                        val matchingResult = futures.find { it.topic == result.topic && it.partition == result.partition }
-                        matchingResult?.future?.result()?.second ?: 0L
-                    } else 0L
-
-                    if (apiVersion.toInt() == 0) {
-                        // Offsets array (V0)
-                        response.writeInt(1)
-                        response.writeLong(offsetVal)
-                    } else {
-                        // Timestamp and offset (V1+)
-                        response.writeLong(-1L) // Timestamp
-                        response.writeLong(offsetVal)
+                        if (apiVersion.toInt() == 0) {
+                            // Offsets array (V0)
+                            if (entry.error.toInt() == 0) {
+                                response.writeInt(1)
+                                response.writeLong(offsetVal)
+                            } else {
+                                response.writeInt(0)
+                            }
+                        } else {
+                            // Timestamp and offset (V1+)
+                            response.writeLong(-1L) // Timestamp
+                            response.writeLong(offsetVal)
+                        }
                     }
                 }
                 writeResponse(response)
@@ -765,13 +714,11 @@ class KafkaProtocolServer(
 
             val topicCount = reader.readInt()
 
-            val commitFutures = mutableListOf<io.vertx.core.Future<Void>>()
-            val topics = mutableListOf<Pair<String, List<Int>>>()
+            val results = mutableListOf<OffsetCommitEntry>()
 
             for (i in 0 until topicCount) {
                 val topic = reader.readString() ?: ""
                 val partitionCount = reader.readInt()
-                val partitions = mutableListOf<Int>()
                 for (j in 0 until partitionCount) {
                     val partition = reader.readInt()
                     val offset = reader.readLong()
@@ -780,37 +727,45 @@ class KafkaProtocolServer(
                         val committedLeaderEpoch = reader.readInt()
                     }
 
+                    if (apiVersion.toInt() == 1) {
+                        val commitTimestamp = reader.readLong() // only present in v1
+                    }
+
                     val metadata = reader.readString()
 
-                    partitions.add(partition)
-                    commitFutures.add(kafkaStore.commitOffset(groupId, topic, partition, offset))
+                    if (partition != 0 || !isKnownTopic(topic)) {
+                        // UNKNOWN_TOPIC_OR_PARTITION
+                        results.add(OffsetCommitEntry(topic, partition, 3, io.vertx.core.Future.succeededFuture()))
+                    } else {
+                        results.add(OffsetCommitEntry(topic, partition, 0, kafkaStore.commitOffset(groupId, topic, partition, offset)))
+                    }
                 }
-                topics.add(Pair(topic, partitions))
             }
 
-            io.vertx.core.Future.all(commitFutures).onComplete { ar ->
+            io.vertx.core.Future.join(results.map { it.future }).onComplete { _ ->
                 if (apiVersion.toInt() >= 3) {
                     response.writeInt(0) // throttleTimeMs = 0
                 }
-                response.writeInt(topics.size)
-                for (topicPair in topics) {
-                    val topic = topicPair.first
-                    val partitions = topicPair.second
-
+                val byTopic = results.groupBy { it.topic }
+                response.writeInt(byTopic.size)
+                byTopic.forEach { (topic, partitions) ->
                     response.writeString(topic)
                     response.writeInt(partitions.size)
-                    for (partition in partitions) {
-                        response.writeInt(partition)
-                        if (ar.succeeded()) {
-                            response.writeShort(0) // Success error code
-                        } else {
-                            response.writeShort(1) // Unknown error code
+                    partitions.forEach { entry ->
+                        response.writeInt(entry.partition)
+                        val code: Short = when {
+                            entry.error.toInt() != 0 -> entry.error
+                            entry.future.failed() -> -1 // UNKNOWN_SERVER_ERROR
+                            else -> 0
                         }
+                        response.writeShort(code)
                     }
                 }
                 writeResponse(response)
             }
         }
+
+        private fun isKnownTopic(topic: String): Boolean = configuredTopics.contains(topic)
 
         private fun handleOffsetFetch(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
             val groupId = reader.readString() ?: "default-group"
@@ -867,7 +822,7 @@ class KafkaProtocolServer(
             }
         }
 
-        private fun handleProduce(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter, clientId: String?) {
+        private fun handleProduce(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter, clientId: String?, correlationId: Int) {
             var transactionalId: String? = null
             if (apiVersion.toInt() >= 3) {
                 transactionalId = reader.readString()
@@ -876,13 +831,11 @@ class KafkaProtocolServer(
             val timeout = reader.readInt()
             val topicCount = reader.readInt()
 
-            val messagesToEnqueue = mutableListOf<BrokerMessage>()
-            val responseTopics = mutableListOf<Pair<String, List<Pair<Int, Short>>>>()
+            val parts = mutableListOf<ProducePart>()
 
             for (i in 0 until topicCount) {
                 val topic = reader.readString() ?: ""
                 val partitionCount = reader.readInt()
-                val partitionResponses = mutableListOf<Pair<Int, Short>>()
 
                 for (j in 0 until partitionCount) {
                     val partition = reader.readInt()
@@ -890,7 +843,10 @@ class KafkaProtocolServer(
                     var partitionError: Short = 0
                     val partitionMessages = mutableListOf<BrokerMessage>()
 
-                    if (messageSetSize > 0) {
+                    if (partition != 0) {
+                        partitionError = 3 // UNKNOWN_TOPIC_OR_PARTITION (only partition 0 exists)
+                        if (messageSetSize > 0) reader.readRawBytes(messageSetSize)
+                    } else if (messageSetSize > 0) {
                         val messageSetBytes = reader.readRawBytes(messageSetSize)
                         val magic = if (messageSetBytes.size >= 17) messageSetBytes[16] else 0.toByte()
 
@@ -921,7 +877,7 @@ class KafkaProtocolServer(
                                             decompressGzip(compressedBytes)
                                         } catch (e: Exception) {
                                             logger.severe("Failed to decompress GZIP record batch: ${e.message}")
-                                            partitionError = 1 // UnknownServerException
+                                            partitionError = -1 // UNKNOWN_SERVER_ERROR
                                             null
                                         }
                                         
@@ -1020,7 +976,7 @@ class KafkaProtocolServer(
                                     }
                                 } else {
                                     logger.warning("Unsupported Kafka compression codec in RecordBatch: $compression")
-                                    partitionError = 13 // UnsupportedForMessageFormatOnBrokerException
+                                    partitionError = 76 // UNSUPPORTED_COMPRESSION_TYPE
                                 }
                             }
                         } else {
@@ -1030,39 +986,41 @@ class KafkaProtocolServer(
                             }
                         }
                     }
-                    if (partitionError != 0.toShort()) {
-                        partitionResponses.add(Pair(partition, partitionError))
-                    } else {
-                        messagesToEnqueue.addAll(partitionMessages)
-                        partitionResponses.add(Pair(partition, 0.toShort()))
-                    }
+                    parts.add(ProducePart(topic, partition, partitionError, partitionMessages))
                 }
-                responseTopics.add(Pair(topic, partitionResponses))
             }
 
-            // Enqueue all extracted messages to kafkaStore
-            if (messagesToEnqueue.isNotEmpty()) {
-                kafkaStore.enqueue(messagesToEnqueue).onComplete { ar ->
-                    if (ar.failed()) {
-                        logger.warning("Failed to enqueue produced Kafka messages: ${ar.cause()?.message}")
-                    } else {
-                        // Also publish to MQTT sessionHandler so they are distributed to MQTT subscribers
-                        messagesToEnqueue.forEach { msg ->
-                            sessionHandler.publishMessage(msg)
-                        }
-                        // Notify long-polling consumers that new data is available
-                        messagesToEnqueue.map { it.topicName }.distinct().forEach { topicName ->
-                            vertx.eventBus().publish("kafka.stream.updated.$topicName", System.currentTimeMillis())
+            // Store the records, then publish them to MQTT (the orchestrator skips what was stored here)
+            val storeFutures = parts.map { part ->
+                if (part.error.toInt() != 0 || part.messages.isEmpty()) {
+                    io.vertx.core.Future.succeededFuture<Void>()
+                } else {
+                    kafkaStore.enqueueForProduce(part.topic, part.messages).onComplete { ar ->
+                        if (ar.failed()) {
+                            logger.warning("Failed to store produced Kafka messages for topic '${part.topic}': ${ar.cause()?.message}")
+                            part.error = 56 // KAFKA_STORAGE_ERROR
+                        } else {
+                            part.messages.forEach { KafkaProducedMessages.register(it.messageUuid) }
+                            try {
+                                part.messages.forEach { sessionHandler.publishMessage(it) }
+                            } catch (e: Exception) {
+                                logger.warning("Failed to publish produced Kafka messages to MQTT: ${e.message}")
+                                part.error = -1 // UNKNOWN_SERVER_ERROR
+                            }
                         }
                     }
-                    
-                    // Reply to Produce Request
+                }
+            }
+
+            io.vertx.core.Future.join(storeFutures).onComplete { _ ->
+                if (acks.toInt() == 0) {
+                    discardResponse(correlationId) // acks=0: the client expects no response
+                } else {
+                    val responseTopics = parts.groupBy { it.topic }
+                        .map { (topic, list) -> Pair(topic, list.map { Pair(it.partition, it.error) }) }
                     buildProduceResponse(apiVersion, response, responseTopics)
                     writeResponse(response)
                 }
-            } else {
-                buildProduceResponse(apiVersion, response, responseTopics)
-                writeResponse(response)
             }
         }
 
@@ -1106,7 +1064,7 @@ class KafkaProtocolServer(
                                 decompressGzip(valueBytes)
                             } catch (e: Exception) {
                                 logger.severe("Failed to decompress nested GZIP MessageSet: ${e.message}")
-                                partitionError = 1
+                                partitionError = -1
                                 null
                             }
                             if (decompressedBytes != null) {
@@ -1140,7 +1098,7 @@ class KafkaProtocolServer(
                         }
                     } else {
                         logger.warning("Unsupported legacy compression codec: $compression")
-                        partitionError = 13 // UnsupportedForMessageFormatOnBrokerException
+                        partitionError = 76 // UNSUPPORTED_COMPRESSION_TYPE
                     }
                 }
             }
@@ -1243,15 +1201,22 @@ class KafkaProtocolServer(
 
                     val promise = Promise.promise<FetchPartitionResult>()
                     val authenticatedUser = username ?: "Anonymous"
-                    val canSubscribe = !userManager.isUserManagementEnabled() || userManager.canSubscribe(authenticatedUser, topic)
+                    // The ACL is checked against the topic filter of the stream, not the Kafka topic name
+                    val streamFilters = activeStreams.filter { it.streamName == topic }.map { it.topicFilter }
+                    val canSubscribe = !userManager.isUserManagementEnabled() ||
+                        (if (streamFilters.isEmpty()) userManager.canSubscribe(authenticatedUser, topic)
+                         else streamFilters.any { userManager.canSubscribe(authenticatedUser, it) })
 
-                    if (canSubscribe) {
+                    if (partition != 0) {
+                        // UNKNOWN_TOPIC_OR_PARTITION (only partition 0 exists)
+                        promise.complete(FetchPartitionResult(topic, partition, -1L, emptyList(), 3))
+                    } else if (canSubscribe) {
                         val watermarkFuture = kafkaStore.getLatestOffset(topic)
                         val recordsFuture = kafkaStore.fetch(topic, fetchOffset, 100)
 
                         io.vertx.core.Future.all(watermarkFuture, recordsFuture).onComplete { ar ->
                             if (ar.succeeded()) {
-                                val maxOffset = watermarkFuture.result()
+                                val maxOffset = watermarkFuture.result() + 1 // high watermark = next offset
                                 val records = recordsFuture.result()
                                 promise.complete(FetchPartitionResult(topic, partition, maxOffset, records))
                             } else {
@@ -1283,13 +1248,14 @@ class KafkaProtocolServer(
                     response.writeInt(0) // sessionId = 0
                 }
 
-                response.writeInt(topicCount)
-                results.forEach { result ->
-                    response.writeString(result.topic)
-                    response.writeInt(1) // 1 partition
-
+                val byTopic = results.groupBy { it.topic }
+                response.writeInt(byTopic.size)
+                byTopic.forEach { (topicName, topicResults) ->
+                response.writeString(topicName)
+                response.writeInt(topicResults.size)
+                topicResults.forEach { result ->
                     response.writeInt(result.partition)
-                    response.writeShort(0) // No error
+                    response.writeShort(result.error)
                     response.writeLong(result.highWatermark) // High watermark offset
 
                     if (apiVersion.toInt() >= 4) {
@@ -1345,6 +1311,7 @@ class KafkaProtocolServer(
                     val serializedBytes = messageSetWriter.toBuffer()
                     response.writeInt(serializedBytes.length()) // Record set size
                     response.writeRawBytes(serializedBytes.bytes) // MessageSet payload
+                }
                 }
                 writeResponse(response)
             }
@@ -1419,18 +1386,31 @@ class KafkaProtocolServer(
                     return
                 }
 
-                while (pendingResponseQueue.isNotEmpty()) {
-                    val head = pendingResponseQueue.first()
-                    if (head.isCompleted) {
-                        val buf = head.responseBuffer
-                        if (buf != null) {
-                            socket.write(buf)
-                        }
-                        pendingResponseQueue.removeFirst()
-                    } else {
-                        break
+                flushCompletedResponses()
+            }
+        }
+
+        // Must be called while holding the pendingResponseQueue lock
+        private fun flushCompletedResponses() {
+            while (pendingResponseQueue.isNotEmpty()) {
+                val head = pendingResponseQueue.first()
+                if (head.isCompleted) {
+                    val buf = head.responseBuffer
+                    if (buf != null) {
+                        socket.write(buf)
                     }
+                    pendingResponseQueue.removeFirst()
+                } else {
+                    break
                 }
+            }
+        }
+
+        /** No response is sent for this request (Produce with acks=0). */
+        private fun discardResponse(correlationId: Int) {
+            synchronized(pendingResponseQueue) {
+                pendingResponseQueue.removeIf { it.correlationId == correlationId }
+                flushCompletedResponses()
             }
         }
 
@@ -1451,13 +1431,29 @@ class KafkaProtocolServer(
         private fun handleSaslHandshake(apiVersion: Short, reader: KafkaBufferReader, response: KafkaBufferWriter) {
             val mechanism = reader.readString()
             logger.fine { "SaslHandshake: mechanism=$mechanism, version=$apiVersion" }
-            saslHandshakeReceived = true
-            authenticated = false // Reset authenticated since they initiated a SASL handshake
 
-            response.writeShort(0) // No error (0)
-            response.writeInt(1) // Number of mechanisms
+            if (mechanism != "PLAIN") {
+                logger.warning("Unsupported SASL mechanism requested: $mechanism")
+                response.writeShort(33) // UNSUPPORTED_SASL_MECHANISM
+            } else {
+                saslHandshakeReceived = true
+                saslHandshakeVersion = apiVersion.toInt()
+                authenticated = false // Reset authenticated since they initiated a SASL handshake
+                response.writeShort(0) // No error (0)
+            }
+            response.writeInt(1) // Number of enabled mechanisms
             response.writeString("PLAIN")
 
+            writeResponse(response)
+        }
+
+        private fun writeSaslAuthenticateResponse(apiVersion: Short, response: KafkaBufferWriter, errorCode: Short, errorMessage: String?) {
+            response.writeShort(errorCode)
+            response.writeString(errorMessage)
+            response.writeBytes(ByteArray(0))
+            if (apiVersion.toInt() >= 1) {
+                response.writeLong(0L) // session_lifetime_ms
+            }
             writeResponse(response)
         }
 
@@ -1465,20 +1461,16 @@ class KafkaProtocolServer(
             val saslAuthBytes = reader.readBytes()
             if (saslAuthBytes == null) {
                 logger.warning("SaslAuthenticate: Empty auth token received")
-                response.writeShort(58) // SASLAuthenticationFailed (58)
-                response.writeString("Empty auth token")
-                response.writeBytes(ByteArray(0))
-                writeResponse(response)
+                writeSaslAuthenticateResponse(apiVersion, response, 58, "Empty auth token") // SASL_AUTHENTICATION_FAILED
+                close()
                 return
             }
 
             val credentials = parsePlainToken(saslAuthBytes)
             if (credentials == null) {
                 logger.warning("SaslAuthenticate: Failed to parse plain token")
-                response.writeShort(58) // SASLAuthenticationFailed (58)
-                response.writeString("Failed to parse plain token")
-                response.writeBytes(ByteArray(0))
-                writeResponse(response)
+                writeSaslAuthenticateResponse(apiVersion, response, 58, "Failed to parse plain token")
+                close()
                 return
             }
 
@@ -1488,10 +1480,7 @@ class KafkaProtocolServer(
                 logger.info("Kafka SASL PLAIN client authenticated successfully (user: $usernameVal, user-management disabled)")
                 username = usernameVal
                 authenticated = true
-                response.writeShort(0) // Success
-                response.writeString(null) // No error message
-                response.writeBytes(ByteArray(0))
-                writeResponse(response)
+                writeSaslAuthenticateResponse(apiVersion, response, 0, null)
                 processInput() // Resume processing
                 return
             }
@@ -1506,20 +1495,11 @@ class KafkaProtocolServer(
                     logger.info("Kafka SASL PLAIN client authenticated successfully as user: $usernameVal")
                     username = usernameVal
                     authenticated = true
-                    response.writeShort(0) // Success
-                    response.writeString(null) // No error message
-                    response.writeBytes(ByteArray(0))
-                } else {
-                    logger.warning("Kafka SASL PLAIN authentication failed for user: $usernameVal")
-                    response.writeShort(58) // SASLAuthenticationFailed
-                    response.writeString("Authentication failed")
-                    response.writeBytes(ByteArray(0))
-                }
-                writeResponse(response)
-
-                if (authenticated) {
+                    writeSaslAuthenticateResponse(apiVersion, response, 0, null)
                     processInput() // Resume processing
                 } else {
+                    logger.warning("Kafka SASL PLAIN authentication failed for user: $usernameVal")
+                    writeSaslAuthenticateResponse(apiVersion, response, 58, "Authentication failed")
                     close() // Close connection on auth failure
                 }
             }
@@ -1735,17 +1715,33 @@ class KafkaProtocolServer(
     }
 }
 
-private class FutureOffsetResult(
+private class ProducePart(
     val topic: String,
     val partition: Int,
-    val future: io.vertx.core.Future<Pair<String, Long>>
+    @Volatile var error: Short,
+    val messages: List<BrokerMessage>
+)
+
+private class ListOffsetsEntry(
+    val topic: String,
+    val partition: Int,
+    val error: Short,
+    val future: io.vertx.core.Future<Long>
+)
+
+private class OffsetCommitEntry(
+    val topic: String,
+    val partition: Int,
+    val error: Short,
+    val future: io.vertx.core.Future<Void>
 )
 
 private class FetchPartitionResult(
     val topic: String,
     val partition: Int,
     val highWatermark: Long,
-    val records: List<Pair<Long, BrokerMessage>>
+    val records: List<Pair<Long, BrokerMessage>>,
+    val error: Short = 0
 )
 
 data class KafkaStreamConfig(

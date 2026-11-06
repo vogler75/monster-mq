@@ -16,7 +16,8 @@ object KafkaQueueStoreFactory {
 
     fun create(vertx: Vertx, configJson: JsonObject, tableNameSuffix: String = ""): Future<IKafkaQueueStore> {
         val storeType = getStoreType(configJson)
-        val storeTypeUpper = storeType.uppercase()
+        // Store types are matched case-insensitively; POSTGRESQL is an alias of POSTGRES
+        val storeTypeUpper = storeType.uppercase().let { if (it == "POSTGRESQL") "POSTGRES" else it }
         
         logger.info("Initializing Kafka Queue Store of type/connection: $storeType (suffix: $tableNameSuffix)")
 

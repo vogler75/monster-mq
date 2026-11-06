@@ -20,7 +20,9 @@ API_SASL_AUTHENTICATE = 36
 def authenticate_socket(sock, username, password, mode="standard"):
     # Step A: SaslHandshake (API Key 17)
     handshake_payload = pack_string("PLAIN")
-    request = make_request(API_SASL_HANDSHAKE, 0, 9999, "auth-helper", handshake_payload)
+    # Handshake v0 means raw PLAIN tokens, v1 means SaslAuthenticate requests
+    handshake_version = 1 if mode == "standard" else 0
+    request = make_request(API_SASL_HANDSHAKE, handshake_version, 9999, "auth-helper", handshake_payload)
     sock.sendall(request)
     read_response(sock)
 
@@ -595,7 +597,7 @@ def test_kafka_sasl_authentication(broker_config):
     try:
         # Step A: SaslHandshake (API Key 17)
         handshake_payload = pack_string("PLAIN")
-        request = make_request(17, 0, 1001, "test-auth-client", handshake_payload)
+        request = make_request(17, 1, 1001, "test-auth-client", handshake_payload)
         sock.sendall(request)
 
         response = read_response(sock)
@@ -634,7 +636,7 @@ def test_kafka_sasl_authentication(broker_config):
     try:
         # Step A: SaslHandshake
         handshake_payload = pack_string("PLAIN")
-        request = make_request(17, 0, 1003, "test-auth-client", handshake_payload)
+        request = make_request(17, 1, 1003, "test-auth-client", handshake_payload)
         sock.sendall(request)
         read_response(sock)
 
@@ -855,3 +857,366 @@ def test_kafka_metadata_v4(broker_config):
         sock.close()
 
 
+
+
+# ---------------------------------------------------------------------------
+# Protocol behaviour shared with the edge broker (issue #237)
+# ---------------------------------------------------------------------------
+import contextlib
+import threading
+import zlib
+
+API_PRODUCE = 0
+API_LIST_OFFSETS = 2
+
+STREAM_SERVER_NAME = "pytest-kafka-streams"
+STREAM_SERVER_PORT = 9094
+STORE_STREAM = "pytest_store"      # stream name differs from its MQTT filter on purpose
+OTHER_STREAM = "pytest_other"
+
+
+def _graphql_headers(broker_config):
+    import requests
+    graphql_url = os.getenv("GRAPHQL_URL", "http://localhost:4000/graphql")
+    headers = {}
+    try:
+        if broker_config["username"]:
+            login_query = "mutation($username: String!, $password: String!) { login(username: $username, password: $password) { token } }"
+            resp = requests.post(graphql_url, json={"query": login_query, "variables": {"username": broker_config["username"], "password": broker_config["password"]}}, timeout=5)
+            body = resp.json()
+            if body.get("data") and body["data"].get("login"):
+                headers = {"Authorization": f"Bearer {body['data']['login']['token']}"}
+        requests.post(graphql_url, json={"query": "{ __typename }"}, headers=headers, timeout=2)
+    except Exception as e:
+        pytest.skip(f"GraphQL endpoint not reachable at {graphql_url}: {e}")
+    return graphql_url, headers
+
+
+@contextlib.contextmanager
+def kafka_stream_server(broker_config):
+    """Temporary Kafka server with two streams whose names differ from their MQTT filters."""
+    import requests
+    graphql_url, headers = _graphql_headers(broker_config)
+    delete = "mutation($name: String!) { kafkaServer { delete(name: $name) } }"
+    requests.post(graphql_url, json={"query": delete, "variables": {"name": STREAM_SERVER_NAME}}, headers=headers, timeout=5)
+
+    add = """
+    mutation Add($input: KafkaServerInput!) {
+      kafkaServer { add(input: $input) { success errors } }
+    }"""
+    variables = {"input": {
+        "name": STREAM_SERVER_NAME, "namespace": "default", "nodeId": "*", "enabled": True,
+        "host": "0.0.0.0", "port": STREAM_SERVER_PORT,
+        "advertisedHost": "kafka.example.test", "advertisedPort": 19094,
+        "storeType": "SQLITE",
+        "streams": [
+            {"streamName": STORE_STREAM, "topicFilter": "pytest/store/#", "retentionHours": 1, "allowWrite": True},
+            {"streamName": OTHER_STREAM, "topicFilter": "pytest/other/#", "retentionHours": 24, "allowWrite": True},
+        ],
+    }}
+    resp = requests.post(graphql_url, json={"query": add, "variables": variables}, headers=headers, timeout=5)
+    resp.raise_for_status()
+    result = resp.json()
+    assert "errors" not in result, result
+    assert result["data"]["kafkaServer"]["add"]["success"], result
+    time.sleep(1.5)
+    try:
+        yield graphql_url, headers
+    finally:
+        requests.post(graphql_url, json={"query": delete, "variables": {"name": STREAM_SERVER_NAME}}, headers=headers, timeout=5)
+
+
+def connect_stream_server(broker_config):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(10.0)
+    sock.connect((broker_config["host"], STREAM_SERVER_PORT))
+    if broker_config["username"]:
+        authenticate_socket(sock, "Admin", "Admin")
+    return sock
+
+
+def legacy_message(key, value, attributes=0):
+    body = struct.pack('>bb', 0, attributes)
+    body += struct.pack('>i', len(key)) + key + struct.pack('>i', len(value)) + value
+    msg = struct.pack('>i', zlib.crc32(body) & 0xffffffff) + body
+    return struct.pack('>qi', 0, len(msg)) + msg
+
+
+def produce_request(corr, topic, partition, message_set, acks=1):
+    payload = struct.pack('>hii', acks, 5000, 1) + pack_string(topic)
+    payload += struct.pack('>ii', 1, partition) + struct.pack('>i', len(message_set)) + message_set
+    return make_request(API_PRODUCE, 0, corr, "pytest", payload)
+
+
+def produce_error(sock, corr, topic, partition, key, value, attributes=0):
+    sock.sendall(produce_request(corr, topic, partition, legacy_message(key, value, attributes)))
+    resp = read_response(sock)
+    assert struct.unpack_from('>i', resp, 0)[0] == corr
+    offset = 8  # correlation + topic count
+    _, offset = unpack_string(resp, offset)
+    offset += 4  # partition count
+    _, err = struct.unpack_from('>ih', resp, offset)
+    return err
+
+
+def fetch_request(corr, topic, partitions, fetch_offset=0, max_wait=0):
+    payload = struct.pack('>iiii', -1, max_wait, 1, 1) + pack_string(topic) + struct.pack('>i', len(partitions))
+    for p in partitions:
+        payload += struct.pack('>iqi', p, fetch_offset, 1024 * 1024)
+    return make_request(API_FETCH, 0, corr, "pytest", payload)
+
+
+def parse_fetch(resp):
+    """-> {topic: [(partition, error, high_watermark, [(offset, key, value)])]}"""
+    topics = {}
+    count, = struct.unpack_from('>i', resp, 4)
+    offset = 8
+    for _ in range(count):
+        topic, offset = unpack_string(resp, offset)
+        pcount, = struct.unpack_from('>i', resp, offset)
+        offset += 4
+        parts = []
+        for _ in range(pcount):
+            pid, err, hw, size = struct.unpack_from('>ihqi', resp, offset)
+            offset += 4 + 2 + 8 + 4
+            data = resp[offset:offset + size]
+            offset += size
+            msgs, pos = [], 0
+            while pos < len(data):
+                moff, msize = struct.unpack_from('>qi', data, pos)
+                pos += 12
+                klen, = struct.unpack_from('>i', data, pos + 6)
+                key = data[pos + 10:pos + 10 + klen]
+                vpos = pos + 10 + klen
+                vlen, = struct.unpack_from('>i', data, vpos)
+                msgs.append((moff, key, data[vpos + 4:vpos + 4 + vlen]))
+                pos += msize
+            parts.append((pid, err, hw, msgs))
+        topics.setdefault(topic, []).extend(parts)
+    return topics
+
+
+def fetch(sock, corr, topic, partitions=(0,), fetch_offset=0, max_wait=0):
+    sock.sendall(fetch_request(corr, topic, list(partitions), fetch_offset, max_wait))
+    return parse_fetch(read_response(sock))
+
+
+def latest_offset(sock, corr, topic, partition=0):
+    payload = struct.pack('>ii', -1, 1) + pack_string(topic) + struct.pack('>iiqi', 1, partition, -1, 1)
+    sock.sendall(make_request(API_LIST_OFFSETS, 0, corr, "pytest", payload))
+    resp = read_response(sock)
+    offset = 8
+    _, offset = unpack_string(resp, offset)
+    offset += 4
+    pid, err, noffsets = struct.unpack_from('>ihi', resp, offset)
+    value = struct.unpack_from('>q', resp, offset + 10)[0] if noffsets else None
+    return err, value
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_api_versions_above_v0_falls_back(broker_config):
+    """ApiVersions v3 answers UNSUPPORTED_VERSION (35) plus the v0-shaped key list (KIP-511)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((broker_config["host"], 9092))
+    except Exception as e:
+        pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
+    try:
+        sock.sendall(make_request(API_API_VERSIONS, 3, 301, "pytest", b""))
+        resp = read_response(sock)
+        corr, err, count = struct.unpack_from('>ihi', resp, 0)
+        assert corr == 301
+        assert err == 35
+        assert count >= 5
+        assert len(resp) == 10 + count * 6  # v0 shape: no throttle time
+    finally:
+        sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_sasl_unsupported_mechanism(broker_config):
+    """An unsupported SASL mechanism returns error 33 (UNSUPPORTED_SASL_MECHANISM)."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((broker_config["host"], 9092))
+    except Exception as e:
+        pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
+    try:
+        sock.sendall(make_request(API_SASL_HANDSHAKE, 1, 302, "pytest", pack_string("SCRAM-SHA-256")))
+        resp = read_response(sock)
+        corr, err = struct.unpack_from('>ih', resp, 0)
+        assert corr == 302
+        assert err == 33
+    finally:
+        sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_sasl_authenticate_v1_layout(broker_config):
+    """SaslAuthenticate v1 responses carry session_lifetime_ms."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.connect((broker_config["host"], 9092))
+    except Exception as e:
+        pytest.skip(f"Kafka protocol server not running on port 9092: {e}")
+    try:
+        sock.sendall(make_request(API_SASL_HANDSHAKE, 1, 303, "pytest", pack_string("PLAIN")))
+        read_response(sock)
+        token = b"\x00Admin\x00Admin"
+        sock.sendall(make_request(API_SASL_AUTHENTICATE, 1, 304, "pytest", struct.pack('>i', len(token)) + token))
+        resp = read_response(sock)
+        corr, err = struct.unpack_from('>ih', resp, 0)
+        assert corr == 304
+        if err == 0:
+            # correlation(4) + error(2) + null message(2) + empty auth bytes(4) + session_lifetime_ms(8)
+            assert len(resp) == 4 + 2 + 2 + 4 + 8
+    finally:
+        sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_partition_not_zero_returns_unknown_topic_or_partition(broker_config):
+    """Partition != 0 returns error 3 on Produce, Fetch, ListOffsets; OffsetCommit of an unknown topic too."""
+    with kafka_stream_server(broker_config):
+        sock = connect_stream_server(broker_config)
+        try:
+            assert produce_error(sock, 401, STORE_STREAM, 1, b"pytest/store/p1", b"x") == 3
+
+            result = fetch(sock, 402, STORE_STREAM, partitions=[1])
+            assert result[STORE_STREAM][0][1] == 3
+
+            err, _ = latest_offset(sock, 403, STORE_STREAM, partition=1)
+            assert err == 3
+
+            # Fetch of an unknown topic stays empty with error 0
+            result = fetch(sock, 404, "pytest_no_such_stream")
+            assert result["pytest_no_such_stream"][0][1] == 0
+            assert result["pytest_no_such_stream"][0][3] == []
+
+            # OffsetCommit v1 (with commit timestamp) for an unknown topic
+            payload = pack_string("pytest-group") + struct.pack('>i', -1) + pack_string("")
+            payload += struct.pack('>i', 1) + pack_string("pytest_no_such_stream") + struct.pack('>i', 1)
+            payload += struct.pack('>iqq', 0, 5, -1) + pack_string("")
+            sock.sendall(make_request(8, 1, 405, "pytest", payload))
+            resp = read_response(sock)
+            offset = 8
+            _, offset = unpack_string(resp, offset)
+            offset += 4
+            pid, err = struct.unpack_from('>ih', resp, offset)
+            assert (pid, err) == (0, 3)
+        finally:
+            sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_produce_is_stored_once_and_routed(broker_config):
+    """Produce stores once (no double storage via the MQTT publish) and respects stream routing."""
+    with kafka_stream_server(broker_config):
+        sock = connect_stream_server(broker_config)
+        try:
+            marker = f"once-{time.time()}".encode()
+            # Topic = stream "pytest_store"; the MQTT topic also matches the filter of that stream
+            assert produce_error(sock, 501, STORE_STREAM, 0, b"pytest/store/a", marker) == 0
+            time.sleep(0.6)  # let the orchestrator's batch flush run
+            msgs = fetch(sock, 502, STORE_STREAM)[STORE_STREAM][0][3]
+            assert len([m for m in msgs if m[2] == marker]) == 1, "record stored zero or several times"
+
+            # Kafka topic "pytest_other" with an MQTT topic of the other stream: stored once in each stream
+            marker2 = f"both-{time.time()}".encode()
+            assert produce_error(sock, 503, OTHER_STREAM, 0, b"pytest/store/b", marker2) == 0
+            time.sleep(0.6)
+            in_other = fetch(sock, 504, OTHER_STREAM)[OTHER_STREAM][0][3]
+            in_store = fetch(sock, 505, STORE_STREAM)[STORE_STREAM][0][3]
+            assert len([m for m in in_other if m[2] == marker2]) == 1
+            assert len([m for m in in_store if m[2] == marker2]) == 1
+        finally:
+            sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_fetch_high_watermark_is_next_offset(broker_config):
+    """The Fetch high watermark equals the ListOffsets latest offset and several partitions share one topic entry."""
+    with kafka_stream_server(broker_config):
+        sock = connect_stream_server(broker_config)
+        try:
+            assert produce_error(sock, 601, STORE_STREAM, 0, b"pytest/store/hw", b"hw") == 0
+            time.sleep(0.3)
+            err, latest = latest_offset(sock, 602, STORE_STREAM)
+            assert err == 0
+
+            result = fetch(sock, 603, STORE_STREAM, partitions=[0, 1])
+            assert list(result.keys()) == [STORE_STREAM]          # one topic entry ...
+            parts = result[STORE_STREAM]
+            assert [p[0] for p in parts] == [0, 1]                # ... with both partitions
+            assert parts[0][2] == latest
+            assert parts[0][3][-1][0] == latest - 1               # last record is just below the watermark
+            assert parts[1][1] == 3
+        finally:
+            sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_produce_acks_zero_sends_no_response(broker_config):
+    """acks=0 gets no response; the next response on the connection belongs to the next request."""
+    with kafka_stream_server(broker_config):
+        sock = connect_stream_server(broker_config)
+        try:
+            sock.sendall(produce_request(701, STORE_STREAM, 0, legacy_message(b"pytest/store/acks0", b"a0"), acks=0))
+            sock.sendall(make_request(API_API_VERSIONS, 0, 702, "pytest", b""))
+            resp = read_response(sock)
+            assert struct.unpack_from('>i', resp, 0)[0] == 702
+        finally:
+            sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_produce_unsupported_codec(broker_config):
+    """A codec other than none/gzip is rejected with 76 (UNSUPPORTED_COMPRESSION_TYPE)."""
+    with kafka_stream_server(broker_config):
+        sock = connect_stream_server(broker_config)
+        try:
+            assert produce_error(sock, 801, STORE_STREAM, 0, b"pytest/store/snappy", b"x", attributes=2) == 76
+        finally:
+            sock.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_long_poll_wakes_up_when_stream_name_differs_from_filter(broker_config):
+    """A waiting Fetch on the stream is answered right after a Produce, not after max_wait_ms."""
+    with kafka_stream_server(broker_config):
+        consumer = connect_stream_server(broker_config)
+        producer = connect_stream_server(broker_config)
+        try:
+            err, latest = latest_offset(consumer, 901, STORE_STREAM)
+            marker = f"wake-{time.time()}".encode()
+
+            def produce_later():
+                time.sleep(0.5)
+                produce_error(producer, 902, STORE_STREAM, 0, b"pytest/store/wake", marker)
+
+            t = threading.Thread(target=produce_later)
+            t.start()
+            started = time.time()
+            result = fetch(consumer, 903, STORE_STREAM, fetch_offset=latest, max_wait=8000)
+            elapsed = time.time() - started
+            t.join()
+            assert any(m[2] == marker for m in result[STORE_STREAM][0][3])
+            assert elapsed < 4.0, f"consumer waited out max_wait_ms ({elapsed:.1f}s)"
+        finally:
+            consumer.close()
+            producer.close()
+
+
+@pytest.mark.skipif(os.getenv("SKIP_KAFKA_SERVER", "0") == "1", reason="Kafka Server tests skipped")
+def test_kafka_servers_graphql_returns_advertised_address(broker_config):
+    """kafkaServers returns advertisedHost / advertisedPort."""
+    import requests
+    with kafka_stream_server(broker_config) as (graphql_url, headers):
+        query = "{ kafkaServers { name advertisedHost advertisedPort } }"
+        resp = requests.post(graphql_url, json={"query": query}, headers=headers, timeout=5)
+        resp.raise_for_status()
+        result = resp.json()
+        assert "errors" not in result, result
+        server = next(s for s in result["data"]["kafkaServers"] if s["name"] == STREAM_SERVER_NAME)
+        assert server["advertisedHost"] == "kafka.example.test"
+        assert server["advertisedPort"] == 19094

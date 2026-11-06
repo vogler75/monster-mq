@@ -6,7 +6,6 @@ import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
-import java.util.concurrent.ConcurrentHashMap
 
 class KafkaMultiplexingQueueStore(
     private val vertx: Vertx,
@@ -14,12 +13,16 @@ class KafkaMultiplexingQueueStore(
 ) : IKafkaQueueStore {
     private val logger = Utils.getLogger(this::class.java)
     
-    // MQTT Topic Filter -> Store (used for enqueuing publishes)
-    private val streamStoresByFilter = ConcurrentHashMap<String, IKafkaQueueStore>()
-    
-    // Kafka Topic/Stream Name -> Store (used for fetches and offsets)
-    private val streamStoresByName = ConcurrentHashMap<String, IKafkaQueueStore>()
-    
+    private class StreamDef(
+        val name: String,
+        val filter: String,
+        val retentionMs: Long,
+        val store: IKafkaQueueStore
+    )
+
+    // Streams in configuration order (routing is deterministic: first matching filter wins)
+    @Volatile private var streams: List<StreamDef> = emptyList()
+
     private fun sanitizeTableNameSuffix(name: String): String {
         val sanitized = name.lowercase()
             .replace(Regex("[^a-z0-9]"), "_")
@@ -30,53 +33,41 @@ class KafkaMultiplexingQueueStore(
 
     fun initialize(): Future<Void> {
         val kafkaConfig = configJson.getJsonObject("KafkaServer", JsonObject())
-        val streams = kafkaConfig.getJsonArray("Streams") ?: kafkaConfig.getJsonArray("streams") ?: JsonArray()
-        
-        val futures = mutableListOf<Future<Void>>()
-        
-        streams.forEach { stream ->
+        val streamsConfig = kafkaConfig.getJsonArray("Streams") ?: kafkaConfig.getJsonArray("streams") ?: JsonArray()
+
+        val futures = mutableListOf<Future<StreamDef?>>()
+
+        streamsConfig.forEach { stream ->
             val streamObj = stream as JsonObject
             val topicFilter = streamObj.getString("TopicFilter") ?: streamObj.getString("topicFilter")
             val streamName = streamObj.getString("StreamName") ?: streamObj.getString("streamName") ?: topicFilter
             val storeOverride = streamObj.getString("StoreType") ?: streamObj.getString("storeType")
-            
+            val retentionHours = (streamObj.getInteger("RetentionHours") ?: streamObj.getInteger("retentionHours") ?: 168).toLong()
+
             if (!topicFilter.isNullOrBlank() && !streamName.isNullOrBlank()) {
                 val sanitizedSuffix = sanitizeTableNameSuffix(streamName)
                 val streamConfig = configJson.copy()
                 if (!storeOverride.isNullOrBlank()) {
                     streamConfig.getJsonObject("KafkaServer").put("storeType", storeOverride)
                 }
-                
-                val promise = io.vertx.core.Promise.promise<Void>()
-                futures.add(promise.future())
-                
-                KafkaQueueStoreFactory.create(vertx, streamConfig, sanitizedSuffix).onComplete { ar ->
-                    if (ar.succeeded()) {
-                        val storeInstance = ar.result()
-                        streamStoresByFilter[topicFilter] = storeInstance
-                        streamStoresByName[streamName] = storeInstance
-                        logger.info("Initialized stream storage: '$streamName' (filter: '$topicFilter') -> table suffix: '$sanitizedSuffix'")
-                        promise.complete()
-                    } else {
-                        logger.severe("Failed to initialize stream storage for '$streamName' ($storeOverride): ${ar.cause()?.message}")
-                        promise.fail(ar.cause())
-                    }
-                }
+
+                futures.add(KafkaQueueStoreFactory.create(vertx, streamConfig, sanitizedSuffix).map { store ->
+                    logger.info("Initialized stream storage: '$streamName' (filter: '$topicFilter') -> table suffix: '$sanitizedSuffix'")
+                    StreamDef(streamName, topicFilter, retentionHours * 60 * 60 * 1000L, store) as StreamDef?
+                }.recover { err ->
+                    logger.severe("Failed to initialize stream storage for '$streamName' ($storeOverride): ${err.message}")
+                    Future.failedFuture(err)
+                })
             }
         }
-        
-        return Future.all(futures).map { null }
-    }
-    
-    private fun getStoreForTopic(topic: String): IKafkaQueueStore? {
-        for ((filter, store) in streamStoresByFilter) {
-            if (mqttTopicMatchesFilter(topic, filter)) {
-                return store
-            }
+
+        // Future.all keeps the order of the futures, i.e. the configuration order
+        return Future.all(futures).map { composite ->
+            streams = (0 until futures.size).mapNotNull { composite.resultAt<StreamDef?>(it) }
+            null
         }
-        return null
     }
-    
+
     private fun mqttTopicMatchesFilter(topic: String, filter: String): Boolean {
         if (filter == "#") return true
         val topicParts = topic.split('/')
@@ -93,21 +84,53 @@ class KafkaMultiplexingQueueStore(
         return i == topicParts.size
     }
 
-    override fun enqueue(messages: List<BrokerMessage>): Future<Void> {
-        if (messages.isEmpty()) return Future.succeededFuture()
-        
-        val groups = messages.groupBy { getStoreForTopic(it.topicName) ?: streamStoresByName[it.topicName] }
-        val futures = mutableListOf<Future<Void>>()
-        groups.forEach { (store, msgs) ->
-            if (store != null) {
-                futures.add(store.enqueue(msgs))
+    private fun streamByName(name: String): StreamDef? = streams.firstOrNull { it.name == name }
+
+    private fun streamByTopic(mqttTopic: String): StreamDef? =
+        streams.firstOrNull { mqttTopicMatchesFilter(mqttTopic, it.filter) }
+
+    /** Write grouped messages to their streams and wake up long-polling consumers afterwards. */
+    private fun write(byStream: Map<StreamDef, List<BrokerMessage>>): Future<Void> {
+        val futures = byStream.map { (stream, msgs) ->
+            stream.store.enqueue(msgs).onSuccess {
+                vertx.eventBus().publish("kafka.stream.updated.${stream.name}", System.currentTimeMillis())
             }
         }
         return Future.all(futures).map { null }
     }
 
+    override fun enqueue(messages: List<BrokerMessage>): Future<Void> {
+        if (messages.isEmpty()) return Future.succeededFuture()
+
+        val groups = messages.mapNotNull { msg -> (streamByTopic(msg.topicName) ?: streamByName(msg.topicName))?.let { it to msg } }
+            .groupBy({ it.first }, { it.second })
+        return write(groups)
+    }
+
+    override fun enqueueForProduce(kafkaTopic: String, messages: List<BrokerMessage>): Future<Void> {
+        if (messages.isEmpty()) return Future.succeededFuture()
+
+        val groups = mutableMapOf<StreamDef, MutableList<BrokerMessage>>()
+        val named = streamByName(kafkaTopic)
+        messages.forEach { msg ->
+            // The stream of the Kafka topic plus the stream the orchestrator would pick (deduplicated)
+            listOfNotNull(named, streamByTopic(msg.topicName)).distinct().forEach { stream ->
+                groups.getOrPut(stream) { mutableListOf() }.add(msg)
+            }
+        }
+        return write(groups)
+    }
+
     private fun getStoreForTopicOrName(topic: String): IKafkaQueueStore? {
-        return streamStoresByName[topic] ?: getStoreForTopic(topic)
+        return (streamByName(topic) ?: streamByTopic(topic))?.store
+    }
+
+    /** Prune every stream with its own retention. */
+    fun pruneByRetention(): Future<Int> {
+        val now = System.currentTimeMillis()
+        val futures = streams.map { it.store.pruneExpired(now - it.retentionMs) }
+        if (futures.isEmpty()) return Future.succeededFuture(0)
+        return Future.all(futures).map { results -> results.list<Int>().sum() }
     }
 
     override fun fetch(topic: String, startOffset: Long, limit: Int): Future<List<Pair<Long, BrokerMessage>>> {
@@ -116,7 +139,7 @@ class KafkaMultiplexingQueueStore(
     }
 
     override fun pruneExpired(olderThanMs: Long): Future<Int> {
-        val uniqueStores = streamStoresByName.values.toSet()
+        val uniqueStores = streams.map { it.store }.toSet()
         if (uniqueStores.isEmpty()) return Future.succeededFuture(0)
         
         val futures = uniqueStores.map { store ->
@@ -148,7 +171,7 @@ class KafkaMultiplexingQueueStore(
     }
 
     override fun getConsumerGroups(): Future<List<KafkaConsumerGroup>> {
-        val uniqueStores = streamStoresByName.values.toSet()
+        val uniqueStores = streams.map { it.store }.toSet()
         if (uniqueStores.isEmpty()) return Future.succeededFuture(emptyList())
 
         val futures = uniqueStores.map { it.getConsumerGroups() }
@@ -171,7 +194,7 @@ class KafkaMultiplexingQueueStore(
     }
 
     override fun deleteConsumerGroup(groupId: String): Future<Boolean> {
-        val uniqueStores = streamStoresByName.values.toSet()
+        val uniqueStores = streams.map { it.store }.toSet()
         if (uniqueStores.isEmpty()) return Future.succeededFuture(false)
 
         val futures = uniqueStores.map { it.deleteConsumerGroup(groupId) }

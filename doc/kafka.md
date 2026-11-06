@@ -191,6 +191,28 @@ The API exposes `kafkaServers`, `kafkaServer(name:)`, `kafkaMessages`,
 for inputs and returned fields. This is a compatibility server backed by broker
 storage, not an external Kafka cluster installation.
 
+Protocol behaviour (identical to the MonsterMQ Edge Kafka server):
+
+- Every stream has its own table and its own `retentionHours`; MQTT topics are
+  routed to the first stream (in configuration order) whose filter matches.
+  `Kafka-Stream` devices and a YAML `KafkaServer:` block are not used; configure
+  streams only through `kafkaServer.add`/`update`.
+- Produce stores into the stream named like the Kafka topic plus the stream the
+  MQTT topic maps to (once per stream), then publishes to MQTT; the stream
+  capture skips these records. Errors: 56 storage failure, -1 failed MQTT
+  publish, 76 unsupported codec (only none/gzip), 29 rejected by ACL/`allowWrite`.
+  `acks=0` gets no response.
+- Only partition 0 exists; other partitions return error 3 on Produce, Fetch and
+  ListOffsets, and OffsetCommit for an unknown topic returns 3. Fetch on an
+  unknown topic is empty with error 0. The Fetch high watermark is the next
+  offset (same as ListOffsets "latest"); the Fetch ACL is checked against the
+  stream's topic filter.
+- ApiVersions with a version above 0 answers error 35 plus the v0 key list.
+- SASL: only PLAIN (error 33 otherwise). SaslHandshake v0 expects raw PLAIN
+  tokens, v1 expects SaslAuthenticate requests; a failed authentication returns
+  58 and closes the connection.
+- Store types `SQLITE`, `POSTGRES`/`POSTGRESQL` and `MONGODB` are case-insensitive.
+
 ## Troubleshooting
 
 Check which interface is involved first: bus, client bridge, or server. For an

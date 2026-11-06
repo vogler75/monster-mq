@@ -154,6 +154,8 @@ class KafkaServerConfigQueries(
                 "enabled" to device.enabled,
                 "host" to config.host,
                 "port" to config.port,
+                "advertisedHost" to config.advertisedHost,
+                "advertisedPort" to config.advertisedPort,
                 "storeType" to config.storeType,
                 "streams" to streamsList,
                 "createdAt" to device.createdAt.toString(),
@@ -204,42 +206,40 @@ class KafkaServerConfigQueries(
                 Future.all(groupFutures).onComplete { allAr ->
                     if (allAr.succeeded()) {
                         try {
-                            val allGroups = mutableMapOf<String, Pair<at.rocworks.stores.KafkaConsumerGroup, IKafkaQueueStore>>()
+                            // groupId -> (stores holding commits for the group, with the topics committed in each)
+                            val allGroups = linkedMapOf<String, MutableList<Pair<at.rocworks.stores.KafkaConsumerGroup, IKafkaQueueStore>>>()
                             allAr.result().list<List<at.rocworks.stores.KafkaConsumerGroup>>().forEachIndexed { index, list ->
                                 val store = stores[index]
                                 list.forEach { group ->
-                                    val existing = allGroups[group.groupId]
-                                    if (existing == null) {
-                                        allGroups[group.groupId] = Pair(group, store)
-                                    } else {
-                                        val mergedTopics = (existing.first.topics + group.topics).distinct()
-                                        val maxTime = maxOf(existing.first.lastCommitTime, group.lastCommitTime)
-                                        allGroups[group.groupId] = Pair(at.rocworks.stores.KafkaConsumerGroup(group.groupId, mergedTopics, maxTime), store)
-                                    }
+                                    allGroups.getOrPut(group.groupId) { mutableListOf() }.add(Pair(group, store))
                                 }
                             }
-                            
-                            val lagFutures = allGroups.values.map { (group, store) ->
-                                calculateLag(store, group.groupId, group.topics).map { lagVal ->
+
+                            // The lag of a group is summed across all stream stores
+                            val lagFutures = allGroups.map { (groupId, entries) ->
+                                val topics = entries.flatMap { it.first.topics }.distinct()
+                                val lastCommit = entries.maxOf { it.first.lastCommitTime }
+                                val perStore = entries.map { (group, store) -> calculateLag(store, group.groupId, group.topics) }
+                                Future.all(perStore).map { _ ->
                                     mapOf(
-                                        "groupId" to group.groupId,
-                                        "topics" to group.topics,
-                                        "lastCommitTime" to Instant.ofEpochMilli(group.lastCommitTime).toString(),
-                                        "lag" to lagVal
+                                        "groupId" to groupId,
+                                        "topics" to topics,
+                                        "lastCommitTime" to Instant.ofEpochMilli(lastCommit).toString(),
+                                        "lag" to perStore.sumOf { it.result() ?: 0L }
                                     )
                                 }
                             }
-                            
+
                             Future.all(lagFutures).onComplete { lagAr ->
                                 if (lagAr.succeeded()) {
                                     future.complete(lagFutures.map { it.result() })
                                 } else {
                                     logger.severe("Failed to calculate lag for consumer groups: ${lagAr.cause()?.message}")
-                                    val resultList = allGroups.values.map { (group, _) ->
+                                    val resultList = allGroups.map { (groupId, entries) ->
                                         mapOf(
-                                            "groupId" to group.groupId,
-                                            "topics" to group.topics,
-                                            "lastCommitTime" to Instant.ofEpochMilli(group.lastCommitTime).toString(),
+                                            "groupId" to groupId,
+                                            "topics" to entries.flatMap { it.first.topics }.distinct(),
+                                            "lastCommitTime" to Instant.ofEpochMilli(entries.maxOf { it.first.lastCommitTime }).toString(),
                                             "lag" to 0L
                                         )
                                     }
