@@ -3,6 +3,7 @@ package at.rocworks.stores.postgres
 import at.rocworks.Utils
 import at.rocworks.data.BrokerMessage
 import at.rocworks.stores.DatabaseConnection
+import at.rocworks.stores.DeliveryState
 import at.rocworks.stores.IQueueStoreSync
 import at.rocworks.stores.QueueStoreType
 import io.vertx.core.AbstractVerticle
@@ -66,7 +67,9 @@ class QueueStorePostgres(
                             correlation_data BYTEA,
                             content_type TEXT,
                             payload_format_indicator INT,
-                            user_properties TEXT
+                            user_properties TEXT,
+                            packet_id INT,
+                            stage INT NOT NULL DEFAULT 0
                         )
                     """.trimIndent())
 
@@ -82,6 +85,9 @@ class QueueStorePostgres(
                     statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS content_type TEXT")
                     statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS payload_format_indicator INT")
                     statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS user_properties TEXT")
+                    // Outbound delivery state (packet id, stage)
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS packet_id INT")
+                    statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS stage INT NOT NULL DEFAULT 0")
                 }
 
                 connection.commit()
@@ -138,8 +144,7 @@ class QueueStorePostgres(
                                 ps.setNull(13, Types.INTEGER)
                             }
                             if (message.userProperties != null) {
-                                val json = io.vertx.core.json.JsonObject(message.userProperties as Map<String, Any>)
-                                ps.setString(14, json.encode())
+                                ps.setString(14, BrokerMessage.userPropertiesToJson(message.userProperties))
                             } else {
                                 ps.setNull(14, Types.VARCHAR)
                             }
@@ -165,7 +170,7 @@ class QueueStorePostgres(
         val sql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
                    creation_time, message_expiry_interval, response_topic, correlation_data,
-                   content_type, payload_format_indicator, user_properties
+                   content_type, payload_format_indicator, user_properties, packet_id, stage
             FROM $tableName
             WHERE client_id = ? AND vt <= now()
               AND (message_expiry_interval IS NULL
@@ -226,7 +231,7 @@ class QueueStorePostgres(
         val sql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
                    creation_time, message_expiry_interval, response_topic, correlation_data,
-                   content_type, payload_format_indicator, user_properties
+                   content_type, payload_format_indicator, user_properties, packet_id, stage
             FROM $tableName
             WHERE client_id = ? AND vt <= now()
               AND (message_expiry_interval IS NULL
@@ -264,7 +269,7 @@ class QueueStorePostgres(
         val fetchSql = """
             SELECT msg_id, message_uuid, topic, payload, qos, retained, publisher_id,
                    creation_time, message_expiry_interval, response_topic, correlation_data,
-                   content_type, payload_format_indicator, user_properties
+                   content_type, payload_format_indicator, user_properties, packet_id, stage
             FROM $tableName
             WHERE client_id = ? AND vt <= clock_timestamp()
               AND (message_expiry_interval IS NULL
@@ -372,8 +377,31 @@ class QueueStorePostgres(
         }
     }
 
+    override fun updateDeliveryStates(states: List<DeliveryState>) {
+        if (states.isEmpty()) return
+        val sql = "UPDATE $tableName SET packet_id = ?, stage = ? WHERE client_id = ? AND message_uuid = ?"
+        try {
+            db.connection?.let { connection ->
+                connection.prepareStatement(sql).use { ps ->
+                    states.forEach { state ->
+                        ps.setInt(1, state.packetId)
+                        ps.setInt(2, state.stage)
+                        ps.setString(3, state.clientId)
+                        ps.setString(4, state.messageUuid)
+                        ps.addBatch()
+                    }
+                    ps.executeBatch()
+                }
+                connection.commit()
+            }
+        } catch (e: SQLException) {
+            try { db.connection?.rollback() } catch (_: SQLException) {}
+            logger.warning("Error updating delivery states [${e.message}] [${Utils.getCurrentFunctionName()}]")
+        }
+    }
+
     // -------------------------------------------------------------------------
-    // Reset: make in-flight messages visible again
+    // Reset: make in-flight messages visible again (keeps packet id and stage)
     // -------------------------------------------------------------------------
 
     override fun resetInFlightMessages(clientId: String) {
@@ -493,23 +521,20 @@ class QueueStorePostgres(
         val payloadFormatIndicator = if (rs.wasNull()) null else payloadFormatIndicatorRaw
 
         val userPropsJson = rs.getString("user_properties")
-        val userProperties = if (!userPropsJson.isNullOrBlank()) {
-            try {
-                val json = io.vertx.core.json.JsonObject(userPropsJson)
-                json.map.mapNotNull { (k, v) -> if (v != null) k to v.toString() else null }.toMap()
-            } catch (e: Exception) {
-                null
-            }
-        } else null
+        // Ordered [key, value] array; rows written by older versions hold a JSON object
+        val userProperties = BrokerMessage.userPropertiesFromJson(userPropsJson)
+        val packetIdRaw = rs.getInt("packet_id")
+        val packetId = if (rs.wasNull()) null else packetIdRaw
+        val stage = if (packetId == null) 0 else rs.getInt("stage")
 
         return BrokerMessage(
             messageUuid = rs.getString("message_uuid"),
-            messageId = 0,
+            messageId = packetId ?: 0,
             topicName = rs.getString("topic"),
             payload = rs.getBytes("payload") ?: ByteArray(0),
             qosLevel = rs.getInt("qos"),
             isRetain = rs.getBoolean("retained"),
-            isDup = false,
+            isDup = stage >= 1, // sent before: re-delivery with DUP=1 ([MQTT-3.3.1-1])
             isQueued = true,
             clientId = rs.getString("publisher_id") ?: "",
             time = java.time.Instant.ofEpochMilli(rs.getLong("creation_time")),
@@ -518,7 +543,8 @@ class QueueStorePostgres(
             correlationData = rs.getBytes("correlation_data"),
             contentType = rs.getString("content_type"),
             payloadFormatIndicator = payloadFormatIndicator,
-            userProperties = userProperties
+            userProperties = userProperties,
+            deliveryStage = stage
         )
     }
 }

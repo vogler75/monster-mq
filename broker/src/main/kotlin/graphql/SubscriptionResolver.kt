@@ -273,7 +273,7 @@ class SubscriptionResolver(
                     contentType = message.contentType,
                     responseTopic = message.responseTopic,
                     payloadFormatIndicator = message.payloadFormatIndicator,
-                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                 )
 
                 synchronized(this) {
@@ -391,7 +391,7 @@ class SubscriptionResolver(
                     contentType = message.contentType,
                     responseTopic = message.responseTopic,
                     payloadFormatIndicator = message.payloadFormatIndicator,
-                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.key, it.value) }
+                    userProperties = message.userProperties?.map { at.rocworks.extensions.graphql.UserProperty(it.first, it.second) }
                 )
 
                 synchronized(this) {

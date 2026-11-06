@@ -26,7 +26,8 @@ class ZenohMessageEnvelopeTest {
             contentType = "application/octet-stream",
             responseTopic = "factory/replies",
             correlationData = byteArrayOf(3, 4, 5),
-            userProperties = mapOf("site" to "vienna")
+            // Ordered, with a duplicate key (MQTT 5 [MQTT-3.3.2-17], [MQTT-3.3.2-18])
+            userProperties = listOf("site" to "vienna", "tag" to "a", "tag" to "b")
         )
 
         val decoded = ZenohMessageEnvelope.decode(

@@ -50,7 +50,12 @@ class NatsServerTest {
                 "authenticate" -> {
                     val u = inv.getArgument<String>(0)
                     val p = inv.getArgument<String>(1)
-                    if (p == "secret") {
+                    if (p == "secret" && u == "slow") {
+                        // Asynchronous user store (e.g. a database lookup)
+                        val promise = io.vertx.core.Promise.promise<User?>()
+                        vertx.setTimer(200) { promise.complete(User(u, "secret", enabled = true)) }
+                        promise.future()
+                    } else if (p == "secret") {
                         Future.succeededFuture(User(u, "secret", enabled = true))
                     } else {
                         Future.succeededFuture(null)
@@ -320,6 +325,28 @@ class NatsServerTest {
         out.write("PING\r\n".toByteArray())
         out.flush()
         assertEquals("PONG", reader.readLine())
+
+        s.close()
+    }
+
+    // Commands sent in the same packet as CONNECT wait for an asynchronous authentication
+    @Test
+    fun testPipelinedCommandsWaitForAsyncAuthentication() {
+        val s = connectClient()
+        val out = s.getOutputStream()
+        val reader = BufferedReader(InputStreamReader(s.getInputStream()))
+
+        out.write("CONNECT {\"user\":\"slow\",\"pass\":\"secret\",\"verbose\":false}\r\nSUB allowed.a 1\r\nPUB allowed.a 3\r\nxyz\r\n".toByteArray())
+        out.flush()
+
+        // No Authorization Violation: SUB and PUB are processed after the authentication
+        assertEquals("MSG allowed.a 1 3", reader.readLine())
+        assertEquals("xyz", reader.readLine())
+
+        out.write("PING\r\n".toByteArray())
+        out.flush()
+        assertEquals("PONG", reader.readLine())
+        assertEquals(1, subscriptions["allowed/a"]?.size)
 
         s.close()
     }

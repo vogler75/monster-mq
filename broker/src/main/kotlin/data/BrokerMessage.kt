@@ -42,13 +42,17 @@ class BrokerMessage(
     val contentType: String? = null,
     val responseTopic: String? = null,
     val correlationData: ByteArray? = null,
-    val userProperties: Map<String, String>? = null,
+    // Ordered, duplicate keys allowed: forwarded unaltered and in order ([MQTT-3.3.2-17], [MQTT-3.3.2-18])
+    val userProperties: List<Pair<String, String>>? = null,
     val originNodeId: String? = null,
     // PeerLink extensions
     val peer: PeerForward? = null,
     val peerSource: String? = null,
     val isWill: Boolean = false,
-    val username: String? = null
+    val username: String? = null,
+    // Outbound QoS 1/2 state of a queued message, read from the queue store: 0 = not sent yet,
+    // 1 = PUBLISH sent with packet id messageId, 2 = PUBREC received (PUBREL pending)
+    val deliveryStage: Int = 0
 ): Serializable {
     
     init {
@@ -74,43 +78,63 @@ class BrokerMessage(
     
     companion object {
         fun getPayloadFromBase64(s: String): ByteArray = Base64.getDecoder().decode(s)
+
+        /** User properties as a JSON array of [key, value] pairs, keeping order and duplicate keys. */
+        fun userPropertiesToJson(props: List<Pair<String, String>>?): String? =
+            props?.let { list ->
+                io.vertx.core.json.JsonArray(list.map { io.vertx.core.json.JsonArray().add(it.first).add(it.second) }).encode()
+            }
+
+        /** Reads userPropertiesToJson output, and the JSON object format used by older versions. */
+        fun userPropertiesFromJson(json: String?): List<Pair<String, String>>? {
+            if (json.isNullOrBlank()) return null
+            return try {
+                when (val value = Json.decodeValue(json)) {
+                    is io.vertx.core.json.JsonArray -> value.mapNotNull { pair ->
+                        (pair as? io.vertx.core.json.JsonArray)?.takeIf { it.size() == 2 }
+                            ?.let { it.getValue(0).toString() to (it.getValue(1)?.toString() ?: "") }
+                    }
+                    is io.vertx.core.json.JsonObject -> value.map.mapNotNull { (k, v) -> if (v != null) k to v.toString() else null }
+                    else -> null
+                }?.ifEmpty { null }
+            } catch (e: Exception) {
+                null
+            }
+        }
         
         // Helper function to extract MQTT v5 properties from MqttPublishMessage
-        private fun extractProperties(message: MqttPublishMessage): MqttV5Properties {
-            val props = message.properties()
+        private fun extractProperties(message: MqttPublishMessage): MqttV5Properties =
+            extractProperties(message.properties())
+
+        // Shared by PUBLISH properties and Will Properties (MQTT 5.0 §3.1.3.2 uses the same ids)
+        private fun extractProperties(props: io.netty.handler.codec.mqtt.MqttProperties?): MqttV5Properties {
             return MqttV5Properties(
-                messageExpiryInterval = props?.getProperty(2)?.let {
-                    when (val value = it.value()) {
-                        is Int -> value.toLong()
-                        is Long -> value
-                        else -> null
-                    }
-                },
+                messageExpiryInterval = props?.getProperty(2)?.let { Utils.mqttUInt32(it.value()) },
                 payloadFormatIndicator = props?.getProperty(1)?.value() as? Int,
                 contentType = props?.getProperty(3)?.value() as? String,
                 responseTopic = props?.getProperty(8)?.value() as? String,
                 correlationData = props?.getProperty(9)?.value() as? ByteArray,
                 userProperties = run {
-                    val userProps = mutableMapOf<String, String>()
+                    val userProps = mutableListOf<Pair<String, String>>()
                     props?.listAll()?.forEach { p ->
                         if (p.propertyId() == 38) {
                             val value = p.value()
                             when (value) {
                                 is io.netty.handler.codec.mqtt.MqttProperties.StringPair -> {
-                                    userProps[value.key] = value.value
+                                    userProps.add(value.key to value.value)
                                 }
                                 is java.util.ArrayList<*> -> {
                                     // User Properties can be returned as ArrayList of StringPairs
                                     value.forEach { item ->
                                         if (item is io.netty.handler.codec.mqtt.MqttProperties.StringPair) {
-                                            userProps[item.key] = item.value
+                                            userProps.add(item.key to item.value)
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    if (userProps.isEmpty()) null else userProps.toMap()
+                    if (userProps.isEmpty()) null else userProps.toList()
                 }
             )
         }
@@ -123,7 +147,7 @@ class BrokerMessage(
         val contentType: String?,
         val responseTopic: String?,
         val correlationData: ByteArray?,
-        val userProperties: Map<String, String>?
+        val userProperties: List<Pair<String, String>>?
     )
     
     constructor(clientId: String, message: MqttPublishMessage): this(
@@ -169,7 +193,10 @@ class BrokerMessage(
         userProperties = extractProperties(message).userProperties
     )
 
-    constructor(clientId: String, message: MqttWill): this(
+    constructor(clientId: String, message: MqttWill): this(clientId, message, extractProperties(message.willProperties))
+
+    // Will message with its Will Properties (MQTT 5.0 §3.1.3.2: forwarded with the published will)
+    private constructor(clientId: String, message: MqttWill, props: MqttV5Properties): this(
         Utils.getUuid(),
         0,
         message.willTopic,
@@ -179,6 +206,12 @@ class BrokerMessage(
         false,
         false,
         clientId,
+        messageExpiryInterval = props.messageExpiryInterval,
+        payloadFormatIndicator = props.payloadFormatIndicator,
+        contentType = props.contentType,
+        responseTopic = props.responseTopic,
+        correlationData = props.correlationData,
+        userProperties = props.userProperties,
         isWill = true
     )
 
@@ -211,16 +244,17 @@ class BrokerMessage(
         contentType: String? = this.contentType,
         responseTopic: String? = this.responseTopic,
         correlationData: ByteArray? = this.correlationData,
-        userProperties: Map<String, String>? = this.userProperties,
+        userProperties: List<Pair<String, String>>? = this.userProperties,
         originNodeId: String? = this.originNodeId,
         peer: PeerForward? = this.peer,
         peerSource: String? = this.peerSource,
         isWill: Boolean = this.isWill,
-        username: String? = this.username
+        username: String? = this.username,
+        deliveryStage: Int = this.deliveryStage
     ): BrokerMessage = BrokerMessage(
         messageUuid, messageId, topicName, payload, qosLevel, isRetain, isDup, isQueued, clientId, senderId, time,
         messageExpiryInterval, payloadFormatIndicator, contentType, responseTopic, correlationData, userProperties, originNodeId,
-        peer, peerSource, isWill, username
+        peer, peerSource, isWill, username, deliveryStage
     )
 
     // The clone functions return this instance when nothing changes, BrokerMessage is immutable
@@ -315,6 +349,34 @@ class BrokerMessage(
     }
 
     private fun getQoS(): MqttQoS = MqttQoS.valueOf(qosLevel)
+
+    /**
+     * Size in bytes of the PUBLISH packet this message is encoded to for a subscriber, used to
+     * respect the client's Maximum Packet Size (MQTT 5.0 [MQTT-3.1.2-24]).
+     */
+    fun encodedPublishSize(mqtt5: Boolean, subscriptionIdentifiers: List<Int> = emptyList()): Long {
+        fun varIntSize(value: Long): Int = when {
+            value < 128 -> 1
+            value < 16_384 -> 2
+            value < 2_097_152 -> 3
+            else -> 4
+        }
+        fun utf8(s: String): Int = 2 + s.toByteArray(Charsets.UTF_8).size
+
+        var remaining = utf8(topicName).toLong() + (if (qosLevel > 0) 2 else 0) + payload.size
+        if (mqtt5) {
+            var props = 0L
+            if (messageExpiryInterval != null) props += 5
+            if (payloadFormatIndicator != null) props += 2
+            contentType?.let { props += 1 + utf8(it) }
+            responseTopic?.let { props += 1 + utf8(it) }
+            correlationData?.let { props += 3 + it.size }
+            userProperties?.forEach { (k, v) -> props += 1 + utf8(k) + utf8(v) }
+            subscriptionIdentifiers.forEach { props += 1 + varIntSize(it.toLong()) }
+            remaining += varIntSize(props) + props
+        }
+        return 1 + varIntSize(remaining) + remaining
+    }
 
     fun publishToEndpoint(endpoint: MqttEndpoint, qos: MqttQoS=getQoS(), subscriptionIdentifiers: List<Int> = emptyList(), dup: Boolean = isDup): Future<Int> {
         if (isExpired()) {

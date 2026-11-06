@@ -73,7 +73,16 @@ open class SessionHandler(
     private val subAddQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
     private val subDelQueue: BlockingQueue<MqttSubscription> = createSubscriptionQueue()
 
-    private val msgAddQueue: BlockingQueue<Pair<BrokerMessage, List<String>>> = createMessageQueue()
+    // Messages to write to the queue store. seq orders them against session deletion (delClient),
+    // see sessionDeletedSeq.
+    private data class QueuedMessage(val message: BrokerMessage, val clientIds: List<String>, val seq: Long)
+    private val msgAddQueue: BlockingQueue<QueuedMessage> = createMessageQueue()
+    private val queueSeq = AtomicLong(0)
+    // clientId -> (queueSeq at the time its session was deleted, wall clock time). The batch writer
+    // drops messages enqueued for a session before it was deleted (e.g. by Clean Start), otherwise
+    // they would land in the queue after the delete and be delivered to the new session
+    // (3.1.1 [MQTT-3.1.2-6], 5.0 [MQTT-3.1.2-4]). Entries are pruned after a minute.
+    private val sessionDeletedSeq = ConcurrentHashMap<String, Pair<Long, Long>>()
     private val msgDelQueue: BlockingQueue<Pair<String, String>> = createMessageQueue()
 
     // Use unified EventBus addresses
@@ -260,6 +269,8 @@ open class SessionHandler(
                 }
                 ClientStatus.DELETE -> {
                     clientStatus.remove(clientId)
+                    // Messages buffered for the deleted session must not reach a new session
+                    inFlightMessages.remove(clientId)
                     message.reply(true, deliveryOptions)
                 }
                 else -> {
@@ -478,7 +489,13 @@ open class SessionHandler(
         queueWorkerThread("SubAddQueue", subAddQueue, databaseBatchSize, sessionStore::addSubscriptions)
         queueWorkerThread("SubDelQueue", subDelQueue, databaseBatchSize, sessionStore::delSubscriptions)
 
-        queueWorkerThread("MsgAddQueue", msgAddQueue, databaseBatchSize) { block ->
+        queueWorkerThread("MsgAddQueue", msgAddQueue, databaseBatchSize) { queued ->
+            val block = queued.mapNotNull { item ->
+                val clientIds = if (sessionDeletedSeq.isEmpty()) item.clientIds
+                    else item.clientIds.filter { (sessionDeletedSeq[it]?.first ?: 0L) < item.seq }
+                if (clientIds.isEmpty()) null else Pair(item.message, clientIds)
+            }
+            if (block.isEmpty()) return@queueWorkerThread Future.succeededFuture<Void>()
             val future = queueStore.enqueueMessages(block)
             future.onComplete {
                 // After DB write completes, send triggers to all affected clients
@@ -753,20 +770,80 @@ open class SessionHandler(
         }
     }
 
+    // Timers that must outlive the connection are created on this verticle's context. A timer
+    // created on the MqttClient verticle's context is cancelled by Vert.x when that verticle is
+    // undeployed, which happens right after the connection is closed.
+    private fun onSessionContext(action: () -> Unit) {
+        val ctx = context
+        if (ctx == null || io.vertx.core.Vertx.currentContext() == ctx) action() else ctx.runOnContext { action() }
+    }
+
     fun scheduleSessionExpiry(clientId: String, expirySeconds: Long) {
-        cancelSessionExpiry(clientId)
-        val timerId = vertx.setTimer(expirySeconds * 1000) {
-            logger.info("Session expired for client [$clientId] after ${expirySeconds}s")
-            sessionExpiryTimers.remove(clientId)
-            delClient(clientId)
+        onSessionContext {
+            cancelSessionExpiryTimer(clientId)
+            val timerId = vertx.setTimer(expirySeconds * 1000) {
+                logger.info("Session expired for client [$clientId] after ${expirySeconds}s")
+                sessionExpiryTimers.remove(clientId)
+                // The session ends: a will still waiting for its Will Delay is published now (MQTT 5.0 §3.1.3.2.2)
+                publishPendingWill(clientId)
+                delClient(clientId)
+            }
+            sessionExpiryTimers[clientId] = timerId
         }
-        sessionExpiryTimers[clientId] = timerId
     }
 
     fun cancelSessionExpiry(clientId: String) {
+        cancelSessionExpiryTimer(clientId)
+    }
+
+    private fun cancelSessionExpiryTimer(clientId: String) {
         sessionExpiryTimers.remove(clientId)?.let { timerId ->
             vertx.cancelTimer(timerId)
             logger.fine { "Cancelled session expiry timer for client [$clientId]" }
+        }
+    }
+
+    // MQTT v5 Will Delay Interval: wills waiting to be published, by client id (MQTT 5.0 §3.1.3.2.2)
+    private data class PendingWill(val timerId: Long, val message: BrokerMessage)
+    private val pendingWills = ConcurrentHashMap<String, PendingWill>()
+
+    /**
+     * Publish the will message after the delay, unless a new connection for the session cancels it
+     * before (cancelPendingWill) or the session ends earlier (publishPendingWill).
+     */
+    fun scheduleWill(clientId: String, message: BrokerMessage, delaySeconds: Long) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let { vertx.cancelTimer(it.timerId) }
+            val timerId = vertx.setTimer(delaySeconds * 1000) {
+                val pending = pendingWills[clientId]
+                if (pending != null && pending.message === message) {
+                    pendingWills.remove(clientId)
+                    logger.fine { "Will Delay of ${delaySeconds}s expired for client [$clientId] - publishing will message" }
+                    publishMessage(message.copy(time = java.time.Instant.now()))
+                }
+            }
+            pendingWills[clientId] = PendingWill(timerId, message)
+        }
+    }
+
+    /** A new connection for the session was made before the Will Delay passed: the will is not sent [MQTT-3.1.3-9]. */
+    fun cancelPendingWill(clientId: String) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let {
+                vertx.cancelTimer(it.timerId)
+                logger.info("Client [$clientId] Reconnected within the Will Delay Interval - will message discarded")
+            }
+        }
+    }
+
+    /** The session ended before the Will Delay passed: publish the will now. */
+    fun publishPendingWill(clientId: String) {
+        onSessionContext {
+            pendingWills.remove(clientId)?.let {
+                vertx.cancelTimer(it.timerId)
+                logger.fine { "Session of client [$clientId] ended - publishing delayed will message" }
+                publishMessage(it.message.copy(time = java.time.Instant.now()))
+            }
         }
     }
 
@@ -1129,6 +1206,13 @@ open class SessionHandler(
     }
 
     fun delClient(clientId: String): Future<Void> {
+        // Messages still waiting for the batch writer belong to the deleted session
+        val now = System.currentTimeMillis()
+        sessionDeletedSeq[clientId] = Pair(queueSeq.incrementAndGet(), now)
+        if (sessionDeletedSeq.size > 1000) {
+            sessionDeletedSeq.entries.removeIf { now - it.value.second > 60_000 }
+        }
+
         // Clean up session expiry timers, QoS 2 state, and active client instances
         cancelSessionExpiry(clientId)
         clearIncomingQos2State(clientId)
@@ -1140,6 +1224,12 @@ open class SessionHandler(
 
         // Remove client from node mapping using replicator
         clientNodeMapping.remove(clientId)
+
+        // Stop routing to the deleted session right away. The store delete below reports the
+        // subscriptions only after the database round trip, and messages routed meanwhile would be
+        // delivered to the new (clean) session ([MQTT-3.1.2-4], [MQTT-3.1.2-6]). The callback still
+        // runs applySubscriptionDeleted for the topic-node mapping and the cluster events.
+        subscriptionManager.disconnectClient(clientId)
 
         val payload = JsonObject().put("ClientId", clientId).put("Status", ClientStatus.DELETE)
         vertx.eventBus().publish(clientStatusAddress, payload)
@@ -1210,11 +1300,18 @@ open class SessionHandler(
     }
 
     private fun enqueueMessage(message: BrokerMessage, clientIds: List<String>) {
+        // A live copy already delivered as retained message is not queued again
+        val targets = if (retainedDeliveryWindows.isEmpty()) clientIds else clientIds.filter { clientId ->
+            var keep = false
+            withLiveTopic(clientId, message) { keep = true }
+            keep
+        }
+        if (targets.isEmpty()) return
         if (enqueueMessages) {
             try {
-                msgAddQueue.add(Pair(message, clientIds))
+                msgAddQueue.add(QueuedMessage(message, targets, queueSeq.incrementAndGet()))
             } catch (e: IllegalStateException) {
-                logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${queueCapacityLabel(msgAddQueue)}). Message [${message.topicName}] to ${clientIds.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml or set it to 0 for an unbounded queue")
+                logger.severe("CRITICAL: Message queue overflow! Queue is full (${msgAddQueue.size}/${queueCapacityLabel(msgAddQueue)}). Message [${message.topicName}] to ${targets.size} clients will be LOST. Increase 'Queues.MessageQueueSize' in config.yaml or set it to 0 for an unbounded queue")
             }
         }
     }
@@ -1237,6 +1334,8 @@ open class SessionHandler(
     // Status-based message tracking methods
     fun markMessageDelivered(clientId: String, messageUuid: String) = queueStore.markMessageDelivered(clientId, messageUuid)
     fun resetInFlightMessages(clientId: String) = queueStore.resetInFlightMessages(clientId)
+    fun updateDeliveryState(clientId: String, messageUuid: String, packetId: Int, stage: Int) =
+        queueStore.updateDeliveryState(at.rocworks.stores.DeliveryState(clientId, messageUuid, packetId, stage))
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>) = queueStore.markMessagesInFlight(clientId, messageUuids)
     fun markMessageInFlight(clientId: String, messageUuid: String) = queueStore.markMessageInFlight(clientId, messageUuid)
     fun fetchNextPendingMessage(clientId: String) = queueStore.fetchNextPendingMessage(clientId)
@@ -1329,7 +1428,81 @@ open class SessionHandler(
     }
 
 
-    private fun sendMessageToClient(clientId: String, message: BrokerMessage) {
+    /**
+     * Open while retained messages are delivered after a SUBSCRIBE (the subscription is already
+     * active, #232). Live messages delivered to the client meanwhile record their topic, and a
+     * retained message for such a topic is skipped: it would be a duplicate or an older value than
+     * the live one. A live copy of a message the lookup already delivered is skipped as well.
+     */
+    private class RetainedDeliveryWindow {
+        // Topic filter and subscribe time (epoch millis) of each open window of the client
+        val filters = ArrayList<Pair<String, Long>>()
+        val liveTopics = HashSet<String>()
+        val retainedUuids = HashSet<String>()
+    }
+    private val retainedDeliveryWindows = ConcurrentHashMap<String, RetainedDeliveryWindow>()
+
+    private fun openRetainedDeliveryWindow(clientId: String, topicFilter: String): Pair<RetainedDeliveryWindow, Pair<String, Long>> {
+        val entry = Pair(topicFilter, System.currentTimeMillis())
+        val window = retainedDeliveryWindows.compute(clientId) { _, w ->
+            (w ?: RetainedDeliveryWindow()).also { synchronized(it) { it.filters.add(entry) } }
+        }!!
+        return Pair(window, entry)
+    }
+
+    private fun closeRetainedDeliveryWindow(clientId: String, entry: Pair<String, Long>) {
+        retainedDeliveryWindows.computeIfPresent(clientId) { _, w ->
+            synchronized(w) {
+                w.filters.remove(entry)
+                if (w.filters.isEmpty()) null else w
+            }
+        }
+    }
+
+    /**
+     * A retained message the broker accepted before the client subscribed, but routed after the
+     * subscription became active (e.g. publish bulk processing), is the retained state at subscribe
+     * time: its live copy keeps Retain = 1 ([MQTT-3.3.1-8], [MQTT-3.3.1-9]).
+     */
+    private fun acceptedBeforeSubscribe(clientId: String, msg: BrokerMessage): Boolean {
+        val window = retainedDeliveryWindows[clientId] ?: return false
+        val time = msg.time.toEpochMilli()
+        return synchronized(window) {
+            window.filters.any { (filter, start) -> time <= start && TopicTree.matches(filter, msg.topicName) }
+        }
+    }
+
+    /** Record a live message for an open retained delivery window; [deliver] runs under its lock to keep the order. */
+    private inline fun withLiveTopic(clientId: String, message: BrokerMessage, deliver: () -> Unit) {
+        val window = retainedDeliveryWindows[clientId]
+        if (window == null) {
+            deliver()
+        } else synchronized(window) {
+            if (message.messageUuid in window.retainedUuids) {
+                logger.finest { "Client [$clientId] Live message [${message.topicName}] skipped, already delivered as retained message" }
+            } else {
+                window.liveTopics.add(message.topicName)
+                deliver()
+            }
+        }
+    }
+
+    /** Deliver a retained message unless a live message for its topic was already delivered. */
+    private fun sendRetainedMessageToClient(clientId: String, window: RetainedDeliveryWindow, message: BrokerMessage) {
+        synchronized(window) {
+            if (message.topicName in window.liveTopics) {
+                logger.finest { "Client [$clientId] Retained message [${message.topicName}] skipped, live message already delivered" }
+            } else {
+                window.retainedUuids.add(message.messageUuid)
+                deliverMessageToClient(clientId, message)
+            }
+        }
+    }
+
+    private fun sendMessageToClient(clientId: String, message: BrokerMessage) =
+        withLiveTopic(clientId, message) { deliverMessageToClient(clientId, message) }
+
+    private fun deliverMessageToClient(clientId: String, message: BrokerMessage) {
         // All clients (internal and external) use eventBus with optional bulk messaging
         logger.finest { "Sending message to client '$clientId' on topic '${message.topicName}'" }
         if (!bulkMessagingEnabled) {
@@ -1545,22 +1718,24 @@ open class SessionHandler(
         }
 
         if (shouldSendRetained) {
-            // Retained messages are sent before the subscription is added, but must already
-            // carry its Subscription Identifier (MQTT 5.0 §3.3.4), which MqttClient looks up
-            subscriptionManager.setSubscriptionIdentifier(clientId, topicName, subscriptionId)
+            // The subscription is active (and SUBACK sent) before the retained lookup, which can take
+            // a while on a database store, so no live message published meanwhile is lost (#232).
+            // Retained messages may follow the SUBACK (MQTT 3.1.1 §3.8.4, 5.0 §3.8.4).
+            val (window, windowEntry) = openRetainedDeliveryWindow(clientId, topicName)
+            addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
+            command.reply(true)
             messageHandler.findRetainedMessages(topicName, 0) { message -> // TODO: max must be configurable
                 logger.finest { "Publish retained message [${message.topicName}] [${Utils.getCurrentFunctionName()}]" }
-                var effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
+                val effectiveMessage = if (qos.value() < message.qosLevel) message.cloneWithNewQoS(qos.value()) else message
                 
                 // MQTT 3.1.1 §3.3.1.3 / MQTT 5.0 §3.3.1.3: retain flag MUST be 1 on retained messages
                 // delivered at subscription time. The stored message already has isRetain=true, so no
                 // adjustment is needed here. RAP only affects the live-message forwarding path.
                 
-                sendMessageToClient(clientId, effectiveMessage)
+                sendRetainedMessageToClient(clientId, window, effectiveMessage)
             }.onComplete {
+                closeRetainedDeliveryWindow(clientId, windowEntry)
                 logger.finest { "Retained messages published [${it.result()}] [${Utils.getCurrentFunctionName()}]" }
-                addSubscription(MqttSubscription(clientId, topicName, qos, noLocal, retainHandling, retainAsPublished, subscriptionId))
-                command.reply(true)
             }
         } else {
             // Skip retained messages, just add subscription
@@ -1871,6 +2046,7 @@ open class SessionHandler(
      */
     private fun effectiveRetain(clientId: String, msg: BrokerMessage): Boolean {
         if (!msg.isRetain) return false
+        if (retainedDeliveryWindows.isNotEmpty() && acceptedBeforeSubscribe(clientId, msg)) return true
         return try {
             subscriptionManager.getRetainAsPublished(clientId, msg.topicName)
         } catch (e: Exception) {
@@ -2138,6 +2314,7 @@ open class SessionHandler(
             // unless the subscriber has RAP=true (MQTT 5.0 only).
             fun messageForClient(clientId: String, msg: BrokerMessage): BrokerMessage {
                 if (!msg.isRetain) return msg
+                if (retainedDeliveryWindows.isNotEmpty() && acceptedBeforeSubscribe(clientId, msg)) return msg
                 val rap = try { subscriptionManager.getRetainAsPublished(clientId, msg.topicName) } catch (e: Exception) { false }
                 return if (rap) msg else msg.cloneWithRetainFlag(false)
             }

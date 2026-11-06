@@ -1,7 +1,6 @@
 package at.rocworks.devices.opcuaserver
 
-import org.eclipse.milo.opcua.stack.core.NodeIds0
-import org.eclipse.milo.opcua.stack.core.NodeIds1
+import org.eclipse.milo.opcua.stack.core.NodeIds
 import org.eclipse.milo.opcua.stack.core.security.CertificateFactory
 import org.eclipse.milo.opcua.stack.core.security.CertificateGroup
 import org.eclipse.milo.opcua.stack.core.security.CertificateValidator
@@ -28,10 +27,10 @@ class ServerCertificateGroup(
     private val certificateValidator: CertificateValidator
 ) : CertificateGroup {
 
-    private val certTypeId: NodeId = NodeIds0.RsaSha256ApplicationCertificateType
+    private val certTypeId: NodeId = NodeIds.RsaSha256ApplicationCertificateType
 
     override fun getCertificateGroupId(): NodeId =
-        NodeIds1.ServerConfiguration_CertificateGroups_DefaultApplicationGroup
+        NodeIds.ServerConfiguration_CertificateGroups_DefaultApplicationGroup
 
     override fun getSupportedCertificateTypeIds(): List<NodeId> = listOf(certTypeId)
 

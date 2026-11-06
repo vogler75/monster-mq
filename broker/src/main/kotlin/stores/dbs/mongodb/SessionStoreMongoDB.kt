@@ -203,7 +203,8 @@ class SessionStoreMongoDB(
 
     override fun isPresent(clientId: String): Boolean {
         try {
-            val document = sessionsCollection.find(eq("client_id", clientId)).first()
+            // Only a persistent session (clean_session = false) is "present", see SessionStorePostgres.isPresent
+            val document = sessionsCollection.find(and(eq("client_id", clientId), eq("clean_session", false))).first()
             return document != null
         } catch (e: Exception) {
             logger.warning("Error while fetching client: ${e.message}")

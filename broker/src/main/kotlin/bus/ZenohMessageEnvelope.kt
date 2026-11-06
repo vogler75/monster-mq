@@ -29,7 +29,8 @@ object ZenohMessageEnvelope {
         .put("contentType", message.contentType)
         .put("responseTopic", message.responseTopic)
         .put("correlationData", message.correlationData?.let(Base64.getEncoder()::encodeToString))
-        .put("userProperties", message.userProperties?.let(::JsonObject))
+        // Ordered list of [key, value] pairs (duplicate keys allowed)
+        .put("userProperties", message.userProperties?.let { props -> io.vertx.core.json.JsonArray(props.map { io.vertx.core.json.JsonArray().add(it.first).add(it.second) }) })
         .apply {
             val peerSrc = message.peerSource ?: message.peer?.sourceNode
             if (peerSrc != null) {
@@ -45,8 +46,14 @@ object ZenohMessageEnvelope {
         return try {
             val json = JsonObject(String(attachment, Charsets.UTF_8))
             if (json.getInteger("version") != VERSION) return nativeMessage(topic, payload)
-            val properties = json.getJsonObject("userProperties")?.map
-                ?.mapValues { (_, value) -> value?.toString().orEmpty() }
+            val properties = when (val up = json.getValue("userProperties")) {
+                is io.vertx.core.json.JsonArray -> up.mapNotNull { pair ->
+                    (pair as? io.vertx.core.json.JsonArray)?.takeIf { it.size() == 2 }?.let { it.getValue(0).toString() to it.getValue(1)?.toString().orEmpty() }
+                }
+                // Envelopes written by older versions carry a JSON object
+                is JsonObject -> up.map.map { (key, value) -> key to value?.toString().orEmpty() }
+                else -> null
+            }
 
             Decoded(
                 origin = json.getString("origin"),

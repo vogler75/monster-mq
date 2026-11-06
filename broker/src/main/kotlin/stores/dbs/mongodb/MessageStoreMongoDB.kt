@@ -262,7 +262,14 @@ class MessageStoreMongoDB(
                     isRetain = it.getBoolean("retained"),
                     isQueued = false,
                     clientId = it.getString("client_id"),
-                    isDup = false
+                    isDup = false,
+                    time = (it.get("creation_time") as? Number)?.let { t -> java.time.Instant.ofEpochMilli(t.toLong()) } ?: java.time.Instant.now(),
+                    messageExpiryInterval = (it.get("message_expiry_interval") as? Number)?.toLong(),
+                    payloadFormatIndicator = (it.get("payload_format_indicator") as? Number)?.toInt(),
+                    contentType = it.getString("content_type"),
+                    responseTopic = it.getString("response_topic"),
+                    correlationData = (it.get("correlation_data") as? Binary)?.data,
+                    userProperties = BrokerMessage.userPropertiesFromJson(it.getString("user_properties"))
                 )
             }
         } catch (e: Exception) {
@@ -312,7 +319,13 @@ class MessageStoreMongoDB(
                     "client_id" to message.clientId,
                     "message_uuid" to message.messageUuid,
                     "creation_time" to message.time.toEpochMilli(),
-                    "message_expiry_interval" to message.messageExpiryInterval
+                    "message_expiry_interval" to message.messageExpiryInterval,
+                    // MQTT 5 properties of retained messages ([MQTT-3.3.2-17], [MQTT-3.3.2-20])
+                    "payload_format_indicator" to message.payloadFormatIndicator,
+                    "content_type" to message.contentType,
+                    "response_topic" to message.responseTopic,
+                    "correlation_data" to message.correlationData?.let { Binary(it) },
+                    "user_properties" to BrokerMessage.userPropertiesToJson(message.userProperties)
                 )
                 // Add fixed topic level fields
                 updateFieldsMap.putAll(getTopicLevelFields(message.topicName))
@@ -396,7 +409,12 @@ class MessageStoreMongoDB(
                     isQueued = false,
                     clientId = document.getString("client_id") ?: "",
                     time = java.time.Instant.ofEpochMilli(creationTime),
-                    messageExpiryInterval = messageExpiryInterval
+                    messageExpiryInterval = messageExpiryInterval,
+                    payloadFormatIndicator = (document.get("payload_format_indicator") as? Number)?.toInt(),
+                    contentType = document.getString("content_type"),
+                    responseTopic = document.getString("response_topic"),
+                    correlationData = (document.get("correlation_data") as? Binary)?.data,
+                    userProperties = BrokerMessage.userPropertiesFromJson(document.getString("user_properties"))
                 )
 
                 if (!callback(message)) {

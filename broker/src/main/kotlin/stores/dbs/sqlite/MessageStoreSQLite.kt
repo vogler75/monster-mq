@@ -27,6 +27,12 @@ class MessageStoreSQLite(
     private companion object {
         const val MAX_FIXED_TOPIC_LEVELS = 9
         val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
+        // MQTT 5 properties of retained messages ([MQTT-3.3.2-17], [MQTT-3.3.2-20])
+        val MQTT5_PROPERTY_COLUMNS = listOf(
+            "payload_format_indicator" to "INTEGER", "content_type" to "TEXT", "response_topic" to "TEXT",
+            "correlation_data" to "BLOB", "user_properties" to "TEXT"
+        )
+        const val MQTT5_SELECT = "payload_format_indicator, content_type, response_topic, correlation_data, user_properties"
 
         fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
             val levels = Utils.getTopicLevels(topicName)
@@ -103,7 +109,12 @@ class MessageStoreSQLite(
                 client_id TEXT, 
                 message_uuid TEXT,
                 creation_time INTEGER,
-                message_expiry_interval INTEGER
+                message_expiry_interval INTEGER,
+                payload_format_indicator INTEGER,
+                content_type TEXT,
+                response_topic TEXT,
+                correlation_data BLOB,
+                user_properties TEXT
             )
             """.trimIndent())
             .add("""
@@ -127,6 +138,10 @@ class MessageStoreSQLite(
                         val migrationsNeeded = mutableListOf<String>()
                         if (!hasCreationTime) migrationsNeeded.add("ALTER TABLE $tableName ADD COLUMN creation_time INTEGER")
                         if (!hasExpiryInterval) migrationsNeeded.add("ALTER TABLE $tableName ADD COLUMN message_expiry_interval INTEGER")
+                        val existing = rows.map { (it as JsonObject).getString("name") }.toSet()
+                        MQTT5_PROPERTY_COLUMNS.filter { it.first !in existing }.forEach { (column, type) ->
+                            migrationsNeeded.add("ALTER TABLE $tableName ADD COLUMN $column $type")
+                        }
                         
                         if (migrationsNeeded.isNotEmpty()) {
                             logger.info("Phase 5 migration: Adding ${migrationsNeeded.size} missing column(s) to $tableName")
@@ -159,7 +174,7 @@ class MessageStoreSQLite(
     }
 
     override fun get(topicName: String): BrokerMessage? {
-        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval FROM $tableName 
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval, $MQTT5_SELECT FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
         
@@ -186,7 +201,12 @@ class MessageStoreSQLite(
                     clientId = clientId,
                     isDup = false,
                     time = Instant.ofEpochMilli(creationTime),
-                    messageExpiryInterval = messageExpiryInterval
+                    messageExpiryInterval = messageExpiryInterval,
+                    payloadFormatIndicator = row.readLongOrNull("payload_format_indicator")?.toInt(),
+                    contentType = row.getString("content_type"),
+                    responseTopic = row.getString("response_topic"),
+                    correlationData = row.readBinary("correlation_data"),
+                    userProperties = BrokerMessage.userPropertiesFromJson(row.getString("user_properties"))
                 )
             } else {
                 null
@@ -201,7 +221,7 @@ class MessageStoreSQLite(
      * Async version of get() for better performance with GraphQL queries
      */
     override fun getAsync(topicName: String, callback: (BrokerMessage?) -> Unit) {
-        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval FROM $tableName 
+        val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval, $MQTT5_SELECT FROM $tableName 
                      WHERE topic = ?"""
         val params = JsonArray().add(topicName)
         
@@ -230,7 +250,12 @@ class MessageStoreSQLite(
                             clientId = clientId,
                             isDup = false,
                             time = Instant.ofEpochMilli(creationTime),
-                            messageExpiryInterval = messageExpiryInterval
+                            messageExpiryInterval = messageExpiryInterval,
+                            payloadFormatIndicator = row.readLongOrNull("payload_format_indicator")?.toInt(),
+                            contentType = row.getString("content_type"),
+                            responseTopic = row.getString("response_topic"),
+                            correlationData = row.readBinary("correlation_data"),
+                            userProperties = BrokerMessage.userPropertiesFromJson(row.getString("user_properties"))
                         )
                         callback(message)
                     } catch (e: Exception) {
@@ -253,8 +278,9 @@ class MessageStoreSQLite(
         val fixedColumns = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")
         val placeholders = FIXED_TOPIC_COLUMN_NAMES.joinToString(", ") { "?" }
         val sql = """INSERT INTO $tableName (topic, $fixedColumns, topic_r, topic_l,
-                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval) 
-                   VALUES (?, $placeholders, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval,
+                   $MQTT5_SELECT) 
+                   VALUES (?, $placeholders, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                    ON CONFLICT (topic) DO UPDATE 
                    SET time = excluded.time, 
                    payload_blob = excluded.payload_blob, 
@@ -264,7 +290,12 @@ class MessageStoreSQLite(
                    client_id = excluded.client_id, 
                    message_uuid = excluded.message_uuid,
                    creation_time = excluded.creation_time,
-                   message_expiry_interval = excluded.message_expiry_interval 
+                   message_expiry_interval = excluded.message_expiry_interval,
+                   payload_format_indicator = excluded.payload_format_indicator,
+                   content_type = excluded.content_type,
+                   response_topic = excluded.response_topic,
+                   correlation_data = excluded.correlation_data,
+                   user_properties = excluded.user_properties
                    """
 
         val batchParams = JsonArray()
@@ -294,6 +325,11 @@ class MessageStoreSQLite(
             params.add(message.messageUuid)
             params.add(message.time.toEpochMilli())
             params.add(message.messageExpiryInterval)
+            params.add(message.payloadFormatIndicator)
+            params.add(message.contentType)
+            params.add(message.responseTopic)
+            params.add(message.correlationData)
+            params.add(BrokerMessage.userPropertiesToJson(message.userProperties))
             
             batchParams.add(params)
         }
@@ -352,7 +388,7 @@ class MessageStoreSQLite(
                         " AND json_array_length(topic_r) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                     }
                 })
-        val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval " +
+        val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval, $MQTT5_SELECT " +
                   "FROM $tableName WHERE $where"
 
         val params = JsonArray()
@@ -392,7 +428,12 @@ class MessageStoreSQLite(
                     isQueued = false,
                     clientId = clientId,
                     time = java.time.Instant.ofEpochMilli(creationTime),
-                    messageExpiryInterval = messageExpiryInterval
+                    messageExpiryInterval = messageExpiryInterval,
+                    payloadFormatIndicator = rowObj.readLongOrNull("payload_format_indicator")?.toInt(),
+                    contentType = rowObj.getString("content_type"),
+                    responseTopic = rowObj.getString("response_topic"),
+                    correlationData = rowObj.readBinary("correlation_data"),
+                    userProperties = BrokerMessage.userPropertiesFromJson(rowObj.getString("user_properties"))
                 )
                 callback(message)
             }

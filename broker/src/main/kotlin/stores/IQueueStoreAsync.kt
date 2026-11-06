@@ -20,6 +20,8 @@ interface IQueueStoreAsync {
     fun markMessagesInFlight(clientId: String, messageUuids: List<String>): Future<Void>
     fun markMessageDelivered(clientId: String, messageUuid: String): Future<Void>
     fun resetInFlightMessages(clientId: String): Future<Void>
+    // Buffered and written in order before any later reset/fetch of the queue
+    fun updateDeliveryState(state: DeliveryState)
     fun purgeDeliveredMessages(): Future<Int>
     fun purgeExpiredMessages(): Future<Int>
 

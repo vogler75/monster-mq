@@ -29,6 +29,10 @@ class MessageStorePostgres(
         const val MAX_FIXED_TOPIC_LEVELS = 9
         val FIXED_TOPIC_COLUMN_NAMES = (0 until MAX_FIXED_TOPIC_LEVELS).map { "topic_${it+1}" }
         val ALL_PK_COLUMNS = FIXED_TOPIC_COLUMN_NAMES + "topic_r"
+        val MQTT5_PROPERTY_COLUMNS = listOf(
+            "payload_format_indicator INT", "content_type TEXT", "response_topic TEXT",
+            "correlation_data BYTEA", "user_properties TEXT"
+        )
 
         fun splitTopic(topicName: String): Triple<List<String>, List<String>, String> {
             val levels = Utils.getTopicLevels(topicName)
@@ -74,6 +78,11 @@ class MessageStorePostgres(
                         message_uuid VARCHAR(36),
                         creation_time BIGINT,
                         message_expiry_interval BIGINT,
+                        payload_format_indicator INT,
+                        content_type TEXT,
+                        response_topic TEXT,
+                        correlation_data BYTEA,
+                        user_properties TEXT,
                         PRIMARY KEY (topic)
                     )
                     """.trimIndent())
@@ -90,6 +99,10 @@ class MessageStorePostgres(
                         ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS message_expiry_interval BIGINT
                         """.trimIndent())
                         logger.fine("Phase 5 migration: Added expiry columns to $tableName")
+                        // MQTT 5 properties of retained messages ([MQTT-3.3.2-17], [MQTT-3.3.2-20])
+                        for (column in MQTT5_PROPERTY_COLUMNS) {
+                            statement.executeUpdate("ALTER TABLE $tableName ADD COLUMN IF NOT EXISTS $column")
+                        }
                     } catch (e: Exception) {
                         logger.fine("Phase 5 migration: Columns may already exist: ${e.message}")
                     }
@@ -126,7 +139,8 @@ class MessageStorePostgres(
     override fun get(topicName: String): BrokerMessage? {
         try {
             db.connection?.let { connection ->
-                val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid FROM $tableName 
+                val sql = """SELECT payload_blob, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval,
+                             payload_format_indicator, content_type, response_topic, correlation_data, user_properties FROM $tableName 
                              WHERE topic = ?"""
                 val resultVal = connection.prepareStatement(sql).use { preparedStatement ->
                     preparedStatement.setString(1, topicName)
@@ -147,7 +161,14 @@ class MessageStorePostgres(
                             isRetain = retained,
                             isQueued = false,
                             clientId = clientId,
-                            isDup = false
+                            isDup = false,
+                            time = resultSet.getObject(6)?.let { java.time.Instant.ofEpochMilli((it as Number).toLong()) } ?: java.time.Instant.now(),
+                            messageExpiryInterval = (resultSet.getObject(7) as Number?)?.toLong(),
+                            payloadFormatIndicator = (resultSet.getObject(8) as Number?)?.toInt(),
+                            contentType = resultSet.getString(9),
+                            responseTopic = resultSet.getString(10),
+                            correlationData = resultSet.getBytes(11),
+                            userProperties = BrokerMessage.userPropertiesFromJson(resultSet.getString(12))
                         )
                     } else null
                 }
@@ -177,8 +198,9 @@ class MessageStorePostgres(
 
     override fun addAll(messages: List<BrokerMessage>) {
         val sql = """INSERT INTO $tableName (topic, ${FIXED_TOPIC_COLUMN_NAMES.joinToString(", ")}, topic_r, topic_l,
-                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?, ?, ?) 
+                   time, payload_blob, payload_json, qos, retained, client_id, message_uuid, creation_time, message_expiry_interval,
+                   payload_format_indicator, content_type, response_topic, correlation_data, user_properties) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::JSONB, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                    ON CONFLICT (topic) DO UPDATE 
                    SET time = EXCLUDED.time, 
                    payload_blob = EXCLUDED.payload_blob, 
@@ -188,7 +210,12 @@ class MessageStorePostgres(
                    client_id = EXCLUDED.client_id, 
                    message_uuid = EXCLUDED.message_uuid,
                    creation_time = EXCLUDED.creation_time,
-                   message_expiry_interval = EXCLUDED.message_expiry_interval 
+                   message_expiry_interval = EXCLUDED.message_expiry_interval,
+                   payload_format_indicator = EXCLUDED.payload_format_indicator,
+                   content_type = EXCLUDED.content_type,
+                   response_topic = EXCLUDED.response_topic,
+                   correlation_data = EXCLUDED.correlation_data,
+                   user_properties = EXCLUDED.user_properties
                    """
 
         try {
@@ -230,6 +257,15 @@ class MessageStorePostgres(
                         } else {
                             preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 12, Types.BIGINT)
                         }
+                        if (message.payloadFormatIndicator != null) {
+                            preparedStatement.setInt(MAX_FIXED_TOPIC_LEVELS + 13, message.payloadFormatIndicator)
+                        } else {
+                            preparedStatement.setNull(MAX_FIXED_TOPIC_LEVELS + 13, Types.INTEGER)
+                        }
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 14, message.contentType)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 15, message.responseTopic)
+                        preparedStatement.setBytes(MAX_FIXED_TOPIC_LEVELS + 16, message.correlationData)
+                        preparedStatement.setString(MAX_FIXED_TOPIC_LEVELS + 17, BrokerMessage.userPropertiesToJson(message.userProperties))
                         preparedStatement.addBatch()
                     }
                     preparedStatement.executeBatch()
@@ -286,7 +322,8 @@ class MessageStorePostgres(
                                 " AND COALESCE(ARRAY_LENGTH(topic_r, 1),0) = " + (levels.size - MAX_FIXED_TOPIC_LEVELS)
                             }
                         })
-                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval " +
+                val sql = "SELECT topic, payload_blob, qos, client_id, message_uuid, creation_time, message_expiry_interval, " +
+                          "payload_format_indicator, content_type, response_topic, correlation_data, user_properties " +
                           "FROM $tableName WHERE $where"
                 logger.fine { "SQL: $sql [${Utils.getCurrentFunctionName()}]" }
                 connection.prepareStatement(sql).use { preparedStatement ->
@@ -321,7 +358,12 @@ class MessageStorePostgres(
                             isQueued = false,
                             clientId = clientId,
                             time = java.time.Instant.ofEpochMilli(creationTime),
-                            messageExpiryInterval = messageExpiryInterval
+                            messageExpiryInterval = messageExpiryInterval,
+                            payloadFormatIndicator = (resultSet.getObject(8) as? Number)?.toInt(),
+                            contentType = resultSet.getString(9),
+                            responseTopic = resultSet.getString(10),
+                            correlationData = resultSet.getBytes(11),
+                            userProperties = BrokerMessage.userPropertiesFromJson(resultSet.getString(12))
                         )
                         callback(message)
                     }

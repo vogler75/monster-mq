@@ -418,7 +418,7 @@ class Injector(
             }
         }
 
-        val userProps = mutableMapOf<String, String>()
+        val userProps = mutableListOf<Pair<String, String>>()
         val it = v.propIter()
         var contentType: String? = null
         var responseTopic: String? = null
@@ -432,13 +432,14 @@ class Injector(
                 PropUserProperty -> {
                     val pair = splitUserProperty(item.value)
                     if (pair != null) {
-                        userProps[String(pair.first, StandardCharsets.UTF_8)] = String(pair.second, StandardCharsets.UTF_8)
+                        userProps.add(String(pair.first, StandardCharsets.UTF_8) to String(pair.second, StandardCharsets.UTF_8))
                     }
                 }
             }
         }
         if (markReplicas) {
-            userProps[MARK_REPLICAS_KEY] = sourceNodeId
+            userProps.removeAll { it.first == MARK_REPLICAS_KEY }
+            userProps.add(MARK_REPLICAS_KEY to sourceNodeId)
         }
 
         val msg = BrokerMessage(
