@@ -2,7 +2,7 @@ package at.rocworks.devices.opcuaserver
 
 import at.rocworks.Utils
 import io.vertx.core.json.JsonObject
-import org.eclipse.milo.opcua.stack.core.NodeIds0
+import org.eclipse.milo.opcua.stack.core.NodeIds
 import org.eclipse.milo.opcua.stack.core.types.builtin.*
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger
 import java.time.Instant
@@ -183,12 +183,12 @@ class OpcUaDataConverter {
          */
         fun getOpcUaDataType(dataType: OpcUaServerDataType): NodeId {
             return when (dataType) {
-                OpcUaServerDataType.BINARY -> NodeIds0.ByteString
-                OpcUaServerDataType.TEXT -> NodeIds0.String
-                OpcUaServerDataType.NUMERIC -> NodeIds0.Double
-                OpcUaServerDataType.BOOLEAN -> NodeIds0.Boolean
-                OpcUaServerDataType.JSON -> NodeIds0.BaseDataType // Use generic type for JSON
-                OpcUaServerDataType.UNWRAPPED_JSON -> NodeIds0.BaseDataType // Use generic type for unwrapped JSON
+                OpcUaServerDataType.BINARY -> NodeIds.ByteString
+                OpcUaServerDataType.TEXT -> NodeIds.String
+                OpcUaServerDataType.NUMERIC -> NodeIds.Double
+                OpcUaServerDataType.BOOLEAN -> NodeIds.Boolean
+                OpcUaServerDataType.JSON -> NodeIds.BaseDataType // Use generic type for JSON
+                OpcUaServerDataType.UNWRAPPED_JSON -> NodeIds.BaseDataType // Use generic type for unwrapped JSON
             }
         }
     }

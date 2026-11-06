@@ -16,7 +16,7 @@ import org.eclipse.milo.opcua.sdk.client.identity.UsernameProvider
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaMonitoredItem
 import org.eclipse.milo.opcua.sdk.client.subscriptions.OpcUaSubscription
 import org.eclipse.milo.opcua.stack.core.AttributeId
-import org.eclipse.milo.opcua.stack.core.NodeIds0
+import org.eclipse.milo.opcua.stack.core.NodeIds
 import org.eclipse.milo.opcua.stack.core.security.CertificateValidator
 import org.eclipse.milo.opcua.stack.core.security.DefaultClientCertificateValidator
 import org.eclipse.milo.opcua.stack.core.security.MemoryCertificateQuarantine
@@ -879,7 +879,7 @@ class OpcUaConnector : AbstractVerticle() {
                                 org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn.Neither,
                                 listOf(
                                     org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId(
-                                        NodeIds0.Server,
+                                        NodeIds.Server,
                                         org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(1),
                                         null,
                                         org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName.NULL_VALUE
@@ -1055,10 +1055,10 @@ class OpcUaConnector : AbstractVerticle() {
                     logger.finest("Find $nodeStr | $item ($itemIdx) | $path")
 
                     val nodeId = when (nodeStr) {
-                        "Root" -> NodeIds0.RootFolder
-                        "Objects" -> NodeIds0.ObjectsFolder
-                        "Types" -> NodeIds0.TypesFolder
-                        "Views" -> NodeIds0.ViewsFolder
+                        "Root" -> NodeIds.RootFolder
+                        "Objects" -> NodeIds.ObjectsFolder
+                        "Types" -> NodeIds.TypesFolder
+                        "Views" -> NodeIds.ViewsFolder
                         else -> NodeId.parseOrNull(nodeStr)
                     }
 
@@ -1067,7 +1067,7 @@ class OpcUaConnector : AbstractVerticle() {
                             BrowseDescription(
                                 nodeId,
                                 BrowseDirection.Forward,
-                                NodeIds0.References,
+                                NodeIds.References,
                                 true,
                                 Unsigned.uint(NodeClass.Variable.value or NodeClass.Object.value),
                                 Unsigned.uint(BrowseResultMask.All.value)
@@ -1077,9 +1077,9 @@ class OpcUaConnector : AbstractVerticle() {
                         val refs = browseResult.references
                         if (refs != null) {
                             val filteredRefs = refs.filter {
-                                it.referenceTypeId == NodeIds0.Organizes ||
-                                it.referenceTypeId == NodeIds0.HasComponent ||
-                                it.referenceTypeId == NodeIds0.HasProperty
+                                it.referenceTypeId == NodeIds.Organizes ||
+                                it.referenceTypeId == NodeIds.HasComponent ||
+                                it.referenceTypeId == NodeIds.HasProperty
                             }
 
                             logger.finest("Find $nodeStr | $item ($itemIdx) | $path >>> Nodes: ${filteredRefs.joinToString { it.browseName.name ?: "unknown" }}")

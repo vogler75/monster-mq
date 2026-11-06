@@ -34,6 +34,19 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Azure SDK runtime used by langchain4j-azure-open-ai (azure-ai-openai is still
+                 1.0.0-beta.16 and pulls azure-core-http-netty 1.15 on Netty 4.1). 1.17 is on
+                 Netty 4.2, the same line as Vert.x 5. -->
+            <dependency>
+                <groupId>com.azure</groupId>
+                <artifactId>azure-core</artifactId>
+                <version>1.61.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.azure</groupId>
+                <artifactId>azure-core-http-netty</artifactId>
+                <version>1.17.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -380,37 +393,37 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-google-ai-gemini</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-anthropic</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-ollama</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-azure-open-ai</artifactId>
-            <version>1.12.2</version>
+            <version>1.23.0</version>
         </dependency>
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-mcp</artifactId>
-            <version>1.12.2-beta22</version>
+            <version>1.23.0-beta33</version>
         </dependency>
 
         <!-- Cron expression parsing -->
@@ -457,17 +470,17 @@
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>milo-sdk-client</artifactId>
-            <version>1.1.1</version>
+            <version>1.1.8</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>milo-sdk-server</artifactId>
-            <version>1.1.1</version>
+            <version>1.1.8</version>
         </dependency>
         <dependency>
             <groupId>org.eclipse.milo</groupId>
             <artifactId>milo-sdk-core</artifactId>
-            <version>1.1.1</version>
+            <version>1.1.8</version>
         </dependency>
 
         <!-- Apache PLC4X - Industrial Protocol Integration -->
