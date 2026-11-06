@@ -112,7 +112,7 @@ object LangChain4jFactory {
             "openai" -> OpenAiChatModel.builder()
                 .apiKey(apiKey)
                 .modelName(model)
-                .apply { config.endpoint?.let { baseUrl(it) } }
+                .apply { resolveOptionalEndpoint(config.endpoint)?.let { baseUrl(it) } }
                 .apply { if (shouldSetTemperature) temperature(config.temperature) }
                 .apply { config.maxTokens?.let { maxTokens(it) } }
                 .apply { effectiveTimeout?.let { timeout(Duration.ofSeconds(it)) } }
@@ -144,7 +144,7 @@ object LangChain4jFactory {
             }
 
             "llamacpp" -> {
-                val effectiveEndpoint = config.endpoint ?: "http://localhost:8080/v1"
+                val effectiveEndpoint = resolveOptionalEndpoint(config.endpoint) ?: "http://localhost:8080/v1"
                 OpenAiChatModel.builder()
                     .apiKey(apiKey.takeIf { !it.isNullOrBlank() } ?: "dummy-key")
                     .modelName(model)
@@ -157,7 +157,7 @@ object LangChain4jFactory {
             }
 
             "openrouter" -> {
-                val effectiveEndpoint = config.endpoint?.takeIf { it.isNotBlank() } ?: "https://openrouter.ai/api/v1"
+                val effectiveEndpoint = resolveOptionalEndpoint(config.endpoint) ?: "https://openrouter.ai/api/v1"
                 OpenAiChatModel.builder()
                     .apiKey(apiKey)
                     .modelName(model)
@@ -254,9 +254,9 @@ object LangChain4jFactory {
 
             "openai", "llamacpp", "openrouter" -> {
                 val baseUrl = when (config.provider.lowercase()) {
-                    "llamacpp" -> config.endpoint ?: "http://localhost:8080/v1"
-                    "openrouter" -> config.endpoint?.takeIf { it.isNotBlank() } ?: "https://openrouter.ai/api/v1"
-                    else -> config.endpoint
+                    "llamacpp" -> resolveOptionalEndpoint(config.endpoint) ?: "http://localhost:8080/v1"
+                    "openrouter" -> resolveOptionalEndpoint(config.endpoint) ?: "https://openrouter.ai/api/v1"
+                    else -> resolveOptionalEndpoint(config.endpoint)
                 }
                 OpenAiStreamingChatModel.builder()
                     .apiKey(apiKey.takeIf { it.isNotBlank() } ?: "dummy-key")
@@ -315,7 +315,7 @@ object LangChain4jFactory {
             "openai", "llamacpp", "openrouter" -> OpenAiEmbeddingModel.builder()
                 .apiKey(key)
                 .modelName(model ?: "text-embedding-3-small")
-                .apply { endpoint?.let { baseUrl(it) } }
+                .apply { resolveOptionalEndpoint(endpoint)?.let { baseUrl(it) } }
                 .timeout(timeout)
                 .build()
             "ollama" -> OllamaEmbeddingModel.builder()
@@ -403,6 +403,10 @@ object LangChain4jFactory {
         throw IllegalArgumentException("No API key found for provider '$provider'. " +
             "Configure it in: agent config, GenAI.Providers.$configKey.ApiKey, or env ${envVarName ?: "variable"}")
     }
+
+    // Expands ${VAR} in an optional custom endpoint; null if blank or a placeholder is unset
+    private fun resolveOptionalEndpoint(endpoint: String?): String? =
+        endpoint?.takeIf { it.isNotBlank() }?.let { resolveEnvVar(it) }?.takeIf { it.isNotBlank() }
 
     // Returns the resolved string, or null if a ${VAR} placeholder could not be substituted
     private fun resolveEnvVar(value: String): String? {
