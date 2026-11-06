@@ -59,26 +59,18 @@ class NatsClient(
         const val NATS_SERVER_VERSION = "2.10.0"
 
         fun deploy(vertx: Vertx, socket: NetSocket, sessionHandler: SessionHandler, userManager: UserManager) {
+            // The client verticle is deployed asynchronously on its own context; until start() has
+            // installed the handlers, data from the client would be dropped. Pause the socket so it
+            // is buffered, start() resumes it.
+            socket.pause()
             val client = NatsClient(socket, sessionHandler, userManager)
-            vertx.deployVerticle(client)
+            vertx.deployVerticle(client).onFailure { socket.close() }
         }
     }
 
     override fun start() {
         logger.info("Client [${displayId()}] Request to connect. Clean session [true] protocol [NATS] [startEndpoint]")
         logger.fine { "NATS client [$clientId] connected from ${socket.remoteAddress()}" }
-
-        // Send INFO
-        val info = JsonObject()
-            .put("server_id", "monstermq")
-            .put("server_name", "MonsterMQ")
-            .put("version", NATS_SERVER_VERSION)
-            .put("proto", 1)
-            .put("headers", true)
-            .put("max_payload", 1048576)
-            .put("jetstream", true)
-            .put("auth_required", userManager.isUserManagementEnabled())
-        writeLine("INFO ${info.encode()}")
 
         // Set up line-delimited parser
         parser = RecordParser.newDelimited("\r\n") { buffer ->
@@ -123,6 +115,20 @@ class NatsClient(
                 }
             }
         )
+
+        // Send INFO only now: a client answers it with CONNECT right away, so all handlers must be
+        // in place. Then resume the socket that NatsClient.deploy paused.
+        val info = JsonObject()
+            .put("server_id", "monstermq")
+            .put("server_name", "MonsterMQ")
+            .put("version", NATS_SERVER_VERSION)
+            .put("proto", 1)
+            .put("headers", true)
+            .put("max_payload", 1048576)
+            .put("jetstream", true)
+            .put("auth_required", userManager.isUserManagementEnabled())
+        writeLine("INFO ${info.encode()}")
+        socket.resume()
     }
 
     override fun stop() {
@@ -222,6 +228,10 @@ class NatsClient(
             return
         }
 
+        // Hold back the commands after CONNECT until the (possibly asynchronous) authentication is
+        // done. Pausing the socket alone is not enough: the parser would still emit the records it
+        // already has, e.g. a SUB sent in the same packet, and they would fail checkAuth().
+        parser.pause()
         socket.pause()
         userManager.authenticate(user, pass).onComplete { ar ->
             if (ar.succeeded() && ar.result() != null) {
@@ -230,6 +240,7 @@ class NatsClient(
                 if (verbose) writeLine("+OK")
                 registerSession()
                 socket.resume()
+                parser.resume()
             } else {
                 writeError("Authorization Violation")
                 socket.close()
