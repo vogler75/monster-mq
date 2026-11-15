@@ -1,0 +1,32 @@
+Release v1.8.37
+Built from commit: d0c15bf7
+Date: 2026-11-15 14:08:04
+
+Changes since v1.8.36:
+---
+d0c15bf7 fix(kafka): align Kafka server with edge port behaviour (#237)
+3b436a0d Merge pull request #236 from vogler75/fix/mqtt-compliance
+b57ac250 fix(nats): no lost or rejected commands at connection start
+1daac2b2 build: upgrade Milo to 1.1.8, LangChain4j to 1.23.0 and the Azure SDK runtime
+0a6da864 build: upgrade Vert.x to 5.2.3 (Netty 4.2.20)
+391e93bf test: remove WinCCOAArchiveGroupTest
+dee814bd Resolve environment variables in AI endpoints
+1e294226 fix(mqtt): close session and retained delivery races seen with remote database stores
+c523d1ad fix(mqtt): send Assigned Client Identifier for an empty client id
+acf0c5cd fix(mqtt): activate subscription before the retained message lookup
+2f909489 fix(mqtt): keep QoS 1/2 outbound delivery state across reconnects
+ea8f51b2 fix(mqtt): no PUBACK/PUBREC for queued PUBLISH drained on a closed connection
+39cbf4a2 fix(mqtt): keep MQTT 5 properties of retained messages in database stores
+361ab7e1 fix(mqtt): keep order and duplicate keys of MQTT 5 user properties
+a81e9ea2 fix(mqtt): client takeover and session cleanup races
+b7d11dac fix(mqtt): enforce client Maximum Packet Size and accept packets sent before CONNACK
+5c5c7d2f fix(mqtt): MQTT spec compliance for CONNECT, PUBLISH/SUBSCRIBE validation, PUBREC and will handling
+3b6defea docs: add user management and default credentials section to README
+e0384d27 perf(virtualtrees): make the disabled feature cost nothing
+fedc189d chore(config): add VirtualTopicTrees feature flag disabled by default
+c787397f feat(virtualtrees): wire virtual topic resolution to REST and MCP ingress
+5fd9bb30 Add virtual MQTT topic trees with subtree mounts (#217)
+ca55cac9 docs: add shared subscriptions implementation plan (#216)
+ff847791 Fix GraphQL WebSocket subscriptions ignoring connection_init auth token (#214)
+fb45f067 Fix Sparkplug B metric alias resolution
+3189df6b chore(version): prepare next version 1.8.37-dev
