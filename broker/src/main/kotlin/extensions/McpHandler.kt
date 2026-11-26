@@ -151,12 +151,16 @@ class McpHandler(
     fun handleRequest(request: JsonObject): Future<JsonObject> {
         val method = request.getString("method")
         val id = request.getValue("id")
-        val params = request.getJsonObject("params", JsonObject())
+        val params = (request.getValue("params") as? JsonObject) ?: JsonObject()
 
         logger.fine("Handling MCP request: method=$method, id=$id, params=$params")
 
         // Handle notifications (messages without id) - these should not return responses
         if (id == null) {
+            if (method.isNullOrBlank()) {
+                logger.fine("Ignoring MCP message without id or method")
+                return Future.succeededFuture(null)
+            }
             return handleNotification(method, params)
         }
 
@@ -195,7 +199,9 @@ class McpHandler(
     }
 
     /**
-     * Handles MCP notifications.
+     * Handles MCP notifications (one-way client-to-server JSON-RPC messages without an id).
+     * Per JSON-RPC 2.0 and MCP specifications, notifications never return a response and
+     * unrecognized or inapplicable notifications must be ignored gracefully.
      */
     private fun handleNotification(method: String, params: JsonObject): Future<JsonObject> {
         when (method) {
@@ -203,8 +209,12 @@ class McpHandler(
                 logger.info("Client initialized notification received")
             "notifications/cancelled" ->
                 logger.info("Request cancelled notification received")
+            "notifications/roots/list_changed" ->
+                logger.fine("Client roots list changed notification received (ignored - server does not use roots)")
+            "notifications/progress" ->
+                logger.fine("Progress notification received: $params")
             else ->
-                logger.severe("Unknown notification: $method")
+                logger.fine("Ignoring unhandled MCP notification: $method")
         }
 
         // Return null to indicate no response should be sent for notifications
